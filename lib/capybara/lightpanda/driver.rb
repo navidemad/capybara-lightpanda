@@ -129,6 +129,15 @@ module Capybara
         browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
       end
 
+      # -- Screenshots --
+      # Lightpanda has no rendering engine so screenshots are blank,
+      # but we handle the call gracefully so Rails' before_teardown
+      # (screenshot on failure) doesn't raise NotSupportedByDriverError.
+
+      def save_screenshot(path, **_options)
+        browser.screenshot(path: path)
+      end
+
       # -- Lifecycle --
 
       def reset!
