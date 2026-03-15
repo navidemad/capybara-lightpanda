@@ -14,7 +14,7 @@ module Capybara
 
       def browser
         @browser = nil if @browser && !browser_alive?
-        @browser ||= ::Lightpanda::Browser.new(@options)
+        @browser ||= Browser.new(@options)
       end
 
       def browser_alive?
@@ -119,7 +119,7 @@ module Capybara
       end
 
       def invalid_element_errors
-        [::Lightpanda::NodeNotFoundError, ::Lightpanda::NoExecutionContextError]
+        [NodeNotFoundError, NoExecutionContextError]
       end
 
       private

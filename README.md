@@ -2,7 +2,7 @@
 
 A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), the fast headless browser built in Zig.
 
-This gem provides a **production-ready** Capybara driver on top of the [`lightpanda`](https://github.com/marcoroth/lightpanda-ruby) Ruby client. It fills the gaps that make Lightpanda usable with real-world Rails test suites:
+This gem provides a **self-contained, production-ready** Capybara driver with a built-in CDP client. No external browser-client gem required — just install and go:
 
 - **Reliable navigation** — falls back to `document.readyState` polling when `Page.loadEventFired` doesn't fire (a known Lightpanda limitation on pages with complex JS)
 - **XPath polyfill** — auto-injected after each navigation so Capybara's internal XPath selectors work (`find`, `click_on`, `fill_in`, `assert_selector`, etc.)
@@ -11,10 +11,10 @@ This gem provides a **production-ready** Capybara driver on top of the [`lightpa
 
 ## Architecture
 
-Similar to how [Cuprite](https://github.com/rubycdp/cuprite) builds on [Ferrum](https://github.com/rubycdp/ferrum):
+Similar to how [Cuprite](https://github.com/rubycdp/cuprite) builds on [Ferrum](https://github.com/rubycdp/ferrum), but as a single gem:
 
 ```
-Capybara  →  capybara-lightpanda (this gem)  →  lightpanda (CDP client)  →  Lightpanda browser
+Capybara  →  capybara-lightpanda (driver + CDP client)  →  Lightpanda browser
 ```
 
 ## Installation
@@ -173,21 +173,20 @@ end
 
 ## How it works
 
-This gem applies targeted patches to the `lightpanda` gem via `Module#prepend`:
-
-| Patch | Target | Problem solved |
-|-------|--------|----------------|
-| `BrowserExt` | `Lightpanda::Browser#go_to` | Falls back to readyState polling when `Page.loadEventFired` never fires |
-| `CookiesExt` | `Lightpanda::Cookies#clear` | Catches `BrowserError` from unsupported `Network.clearBrowserCookies`, deletes cookies individually |
-| `XPathPolyfill` | Injected via driver `visit` | Provides `document.evaluate` + `XPathResult` shim for Capybara's XPath selectors |
-| `Driver` | New class | Complete Capybara driver with `set_cookie`, `clear_cookies`, `remove_cookie` |
+| Component | Description |
+|-----------|-------------|
+| `Browser` | High-level API with readyState polling fallback when `Page.loadEventFired` never fires |
+| `Cookies` | Catches `BrowserError` from unsupported `Network.clearBrowserCookies`, deletes cookies individually |
+| `XPathPolyfill` | Provides `document.evaluate` + `XPathResult` shim for Capybara's XPath selectors |
+| `Client` | CDP command dispatch over WebSocket with timeout and event subscription |
+| `Driver` | Complete Capybara driver with `set_cookie`, `clear_cookies`, `remove_cookie` |
+| `Node` | DOM interactions via JavaScript evaluation |
 
 ## Credits
 
 - [Lightpanda](https://lightpanda.io/) — the headless browser
-- [`lightpanda` gem](https://github.com/marcoroth/lightpanda-ruby) by [@marcoroth](https://github.com/marcoroth) — the Ruby CDP client this gem builds upon
 - [Capybara](https://github.com/teamcapybara/capybara) — the test framework
-- Inspired by the [Cuprite](https://github.com/rubycdp/cuprite) / [Ferrum](https://github.com/rubycdp/ferrum) architecture
+- Inspired by the [Cuprite](https://github.com/rubycdp/cuprite) / [Ferrum](https://github.com/rubycdp/ferrum) architecture and [`lightpanda-ruby`](https://github.com/marcoroth/lightpanda-ruby)
 
 ## Contributing
 

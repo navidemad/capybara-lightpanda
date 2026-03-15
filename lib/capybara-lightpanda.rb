@@ -1,18 +1,19 @@
 # frozen_string_literal: true
 
 require "capybara"
-require "lightpanda"
 
 require_relative "capybara/lightpanda/version"
+require_relative "capybara/lightpanda/errors"
+require_relative "capybara/lightpanda/options"
+require_relative "capybara/lightpanda/binary"
+require_relative "capybara/lightpanda/process"
+require_relative "capybara/lightpanda/client"
+require_relative "capybara/lightpanda/network"
+require_relative "capybara/lightpanda/cookies"
+require_relative "capybara/lightpanda/browser"
 require_relative "capybara/lightpanda/xpath_polyfill"
-require_relative "capybara/lightpanda/browser_ext"
-require_relative "capybara/lightpanda/cookies_ext"
 require_relative "capybara/lightpanda/node"
 require_relative "capybara/lightpanda/driver"
-
-# Apply patches to the lightpanda gem
-Lightpanda::Browser.prepend(Capybara::Lightpanda::BrowserExt)
-Lightpanda::Cookies.prepend(Capybara::Lightpanda::CookiesExt)
 
 module Capybara
   module Lightpanda

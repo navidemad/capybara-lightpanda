@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = "capybara-lightpanda"
   spec.version = Capybara::Lightpanda::VERSION
   spec.authors = ["Navid Emad"]
-  spec.email = ["navidemad@gmail.com"]
+  spec.email = ["design.navid@gmail.com"]
 
   spec.summary = "Capybara driver for the Lightpanda headless browser"
   spec.description = "A Capybara driver for Lightpanda, the fast headless browser built in Zig. " \
@@ -25,5 +25,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "capybara", ">= 3.0"
-  spec.add_dependency "lightpanda", ">= 0.1.0"
+  spec.add_dependency "concurrent-ruby", "~> 1.3"
+  spec.add_dependency "websocket-driver", "~> 0.8"
 end
