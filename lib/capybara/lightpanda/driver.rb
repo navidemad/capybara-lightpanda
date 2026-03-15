@@ -1,9 +1,15 @@
 # frozen_string_literal: true
 
+require "forwardable"
+
 module Capybara
   module Lightpanda
     class Driver < ::Capybara::Driver::Base
+      extend Forwardable
+
       attr_reader :app, :options
+
+      delegate %i[current_url title] => :browser
 
       def initialize(app, options = {})
         super()
@@ -25,11 +31,22 @@ module Capybara
 
       def visit(url)
         browser.go_to(url)
-        inject_xpath_polyfill
+        inject_lightpanda_js
       end
 
-      def current_url
-        browser.current_url
+      def back
+        browser.back
+        inject_lightpanda_js
+      end
+
+      def forward
+        browser.forward
+        inject_lightpanda_js
+      end
+
+      def refresh
+        browser.refresh
+        inject_lightpanda_js
       end
 
       def html
@@ -37,38 +54,14 @@ module Capybara
       end
       alias body html
 
-      def title
-        browser.title
-      end
-
       def find_xpath(selector)
-        nodes = browser.evaluate(<<~JS)
-          (function() {
-            var result = document.evaluate(
-              #{selector.inspect},
-              document,
-              null,
-              XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-              null
-            );
-            var nodes = [];
-            for (var i = 0; i < result.snapshotLength; i++) {
-              nodes.push(result.snapshotItem(i));
-            }
-            return nodes;
-          })()
-        JS
-
-        wrap_nodes(nodes || [])
+        object_ids = browser.find("xpath", selector)
+        object_ids.map { |oid| Node.new(self, oid) }
       end
 
       def find_css(selector)
-        count = browser.evaluate("document.querySelectorAll(#{selector.inspect}).length")
-        return [] if count.nil? || count.zero?
-
-        (0...count).map do |index|
-          Node.new(self, { selector: selector, index: index }, index)
-        end
+        object_ids = browser.find("css", selector)
+        object_ids.map { |oid| Node.new(self, oid) }
       end
 
       def evaluate_script(script, *_args)
@@ -79,6 +72,8 @@ module Capybara
         browser.execute(script)
         nil
       end
+
+      # -- Cookie Management --
 
       def set_cookie(name, value, **options)
         cookie_options = {}
@@ -99,7 +94,40 @@ module Capybara
         browser.cookies.remove(name: name, **options)
       end
 
+      # -- Frame Support --
+      # Passes Node objects (with remote_object_id) to Browser's frame stack.
+      # callFunctionOn on the iframe element scopes finding to its contentDocument.
+
+      def switch_to_frame(frame)
+        case frame
+        when :top
+          browser.clear_frames
+        when :parent
+          browser.pop_frame
+        else
+          browser.push_frame(frame)
+        end
+      end
+
+      # -- Modal/Dialog Support --
+
+      def accept_modal(type, **options, &block)
+        browser.accept_modal(type, text: options[:with])
+        block&.call
+        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+      end
+
+      def dismiss_modal(type, **options, &block)
+        browser.dismiss_modal(type)
+        block&.call
+        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+      end
+
+      # -- Lifecycle --
+
       def reset!
+        browser.clear_frames
+        browser.reset_modals
         browser.go_to("about:blank")
       rescue StandardError
         @browser = nil
@@ -118,24 +146,34 @@ module Capybara
         true
       end
 
+      # Expanded error list for Capybara retry logic (Cuprite pattern).
       def invalid_element_errors
-        [NodeNotFoundError, NoExecutionContextError]
+        [
+          NodeNotFoundError,
+          NoExecutionContextError,
+          ObsoleteNode,
+          MouseEventFailed,
+        ]
+      end
+
+      # Pause execution for interactive debugging.
+      def pause
+        if $stdin.tty?
+          $stderr.puts "\nPaused. Press Enter to continue."
+          $stdin.gets
+        else
+          $stderr.puts "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
+          trap("CONT") { } # rubocop:disable Lint/EmptyBlock
+          ::Process.kill("STOP", ::Process.pid)
+        end
       end
 
       private
 
-      def inject_xpath_polyfill
+      def inject_lightpanda_js
         browser.execute(XPathPolyfill::JS)
       rescue StandardError
         # Ignore if page isn't ready yet
-      end
-
-      def wrap_nodes(nodes)
-        return [] unless nodes.is_a?(Array)
-
-        nodes.map.with_index do |node_data, index|
-          Node.new(self, node_data, index)
-        end
       end
     end
   end

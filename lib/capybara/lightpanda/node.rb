@@ -3,226 +3,251 @@
 module Capybara
   module Lightpanda
     class Node < ::Capybara::Driver::Node
-      attr_reader :selector_info
+      attr_reader :remote_object_id
 
-      def initialize(driver, native, _index)
-        super(driver, native)
-        @selector_info = native
+      def initialize(driver, remote_object_id)
+        super(driver, remote_object_id)
+        @remote_object_id = remote_object_id
       end
 
       def text
-        evaluate_on("this.textContent")
+        call("function() { return this.textContent }")
       end
 
       def visible_text
-        evaluate_on("this.innerText")
+        call("function() { return this.innerText }")
       end
 
+      # Smart property/attribute getter (Cuprite pattern).
+      # Returns resolved URLs for src/href, raw attributes otherwise.
       def [](name)
-        evaluate_on("this.getAttribute(#{name.to_s.inspect})")
+        call(PROPERTY_OR_ATTRIBUTE_JS, name.to_s)
       end
 
       def value
-        evaluate_on(<<~JS)
-          (function(el) {
-            if (el.tagName === 'SELECT' && el.multiple) {
-              return Array.from(el.selectedOptions).map(o => o.value);
-            }
-            return el.value;
-          })(this)
-        JS
+        call(GET_VALUE_JS)
       end
 
       def style(styles)
         styles.each_with_object({}) do |style, result|
-          result[style] = evaluate_on("window.getComputedStyle(this).#{style}")
+          result[style] = call(GET_STYLE_JS, style)
         end
       end
 
       def click(_keys = [], **_options)
-        evaluate_on("this.click()")
+        call("function() { this.click() }")
       end
 
       def right_click(_keys = [], **_options)
-        evaluate_on("this.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true}))")
+        call("function() { this.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true})) }")
       end
 
       def double_click(_keys = [], **_options)
-        evaluate_on("this.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true}))")
+        call("function() { this.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true})) }")
       end
 
       def hover
-        evaluate_on("this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true}))")
+        call("function() { this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true})) }")
       end
 
       def set(value, **_options)
-        if tag_name == "input"
+        tag = tag_name
+        if tag == "input"
           type = self["type"]
           case type
           when "checkbox", "radio"
-            evaluate_on("this.checked = #{!!value}; this.dispatchEvent(new Event('change', {bubbles: true}))")
+            call(SET_CHECKBOX_JS, !!value)
           when "file"
             raise NotImplementedError, "File uploads not yet supported by Lightpanda"
           else
-            set_text_value(value)
+            call(SET_VALUE_JS, value.to_s)
           end
-        elsif tag_name == "textarea"
-          set_text_value(value)
+        elsif tag == "textarea"
+          call(SET_VALUE_JS, value.to_s)
         elsif self["contenteditable"]
-          evaluate_on("this.innerHTML = #{value.to_s.inspect}")
+          call("function(v) { this.innerHTML = v }", value.to_s)
         end
       end
 
       def select_option
-        evaluate_on(<<~JS)
-          this.selected = true;
-          this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
-        JS
+        call("function() { this.selected = true; if (this.parentElement) this.parentElement.dispatchEvent(new Event('change', {bubbles: true})) }")
       end
 
       def unselect_option
-        evaluate_on(<<~JS)
-          this.selected = false;
-          this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
-        JS
+        call("function() { this.selected = false; if (this.parentElement) this.parentElement.dispatchEvent(new Event('change', {bubbles: true})) }")
       end
 
       def send_keys(*args)
         args.each do |key|
           next unless key.is_a?(String)
 
-          evaluate_on(<<~JS)
-            this.focus();
-            this.value += #{key.inspect};
-            this.dispatchEvent(new Event('input', {bubbles: true}));
-          JS
+          call(APPEND_KEYS_JS, key)
         end
       end
 
       def tag_name
-        evaluate_on("this.tagName.toLowerCase()")
+        call("function() { return this.tagName.toLowerCase() }")
       end
 
       def visible?
-        selector = @selector_info[:selector]
-        index = @selector_info[:index]
-
-        driver.browser.evaluate(<<~JS)
-          (function() {
-            var el = document.querySelectorAll(#{selector.inspect})[#{index}];
-            if (!el) return false;
-            var style = window.getComputedStyle(el);
-            return style.display !== 'none' &&
-                   style.visibility !== 'hidden' &&
-                   el.offsetParent !== null;
-          })()
-        JS
+        call(VISIBLE_JS)
       end
 
       def checked?
-        evaluate_on("this.checked")
+        call("function() { return this.checked }")
       end
 
       def selected?
-        evaluate_on("this.selected")
+        call("function() { return this.selected }")
       end
 
       def disabled?
-        evaluate_on("this.disabled")
+        call("function() { return this.disabled }")
       end
 
       def readonly?
-        evaluate_on("this.readOnly")
+        call("function() { return this.readOnly }")
       end
 
       def multiple?
-        evaluate_on("this.multiple")
+        call("function() { return this.multiple }")
       end
 
       def path
-        evaluate_on(<<~JS)
-          (function(el) {
-            if (!el) return '';
-            var path = [];
-            while (el && el.nodeType === Node.ELEMENT_NODE) {
-              var selector = el.nodeName.toLowerCase();
-              if (el.id) {
-                selector += '#' + el.id;
-                path.unshift(selector);
-                break;
-              } else {
-                var sibling = el;
-                var nth = 1;
-                while (sibling = sibling.previousElementSibling) {
-                  if (sibling.nodeName.toLowerCase() === selector) nth++;
-                }
-                if (nth > 1) selector += ':nth-of-type(' + nth + ')';
-              }
-              path.unshift(selector);
-              el = el.parentNode;
-            }
-            return path.join(' > ');
-          })(this)
-        JS
+        call(GET_PATH_JS)
       end
 
       def find_xpath(selector)
-        driver.find_xpath(selector)
+        object_ids = driver.browser.find_within(@remote_object_id, "xpath", selector)
+        object_ids.map { |oid| self.class.new(driver, oid) }
       end
 
       def find_css(selector)
-        count = evaluate_on("this.querySelectorAll(#{selector.inspect}).length")
-        return [] if count.nil? || count.zero?
-
-        (0...count).map do |idx|
-          child_selector = "#{element_selector} #{selector}"
-          Node.new(driver, { selector: child_selector, index: idx }, idx)
-        end
+        object_ids = driver.browser.find_within(@remote_object_id, "css", selector)
+        object_ids.map { |oid| self.class.new(driver, oid) }
       end
 
       def ==(other)
-        other.is_a?(self.class) && selector_info == other.selector_info
+        other.is_a?(self.class) && remote_object_id == other.remote_object_id
       end
 
       private
 
-      def element_selector
-        if @selector_info.is_a?(Hash)
-          selector = @selector_info[:selector]
-          index = @selector_info[:index]
-          index.positive? ? "#{selector}:nth-of-type(#{index + 1})" : selector
+      # Centralized command dispatch via Runtime.callFunctionOn.
+      # The function runs with `this` bound to the DOM element by CDP.
+      # All JS function declarations are self-contained (no _lightpanda dependency)
+      # so they work in any execution context including iframes.
+      def call(function_declaration, *args)
+        driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
+      rescue BrowserError => e
+        case e.message
+        when /MouseEventFailed/i
+          raise MouseEventFailed.new(self, e.response&.dig("message"))
         else
-          "*"
+          raise
+        end
+      rescue JavaScriptError => e
+        case e.class_name
+        when "InvalidSelector"
+          raise InvalidSelector.new(e.message, nil, args.first)
+        else
+          raise
         end
       end
 
-      def set_text_value(value)
-        evaluate_on(<<~JS)
+      VISIBLE_JS = <<~JS.freeze
+        function() {
+          var tag = this.tagName;
+          if (tag === 'HEAD' || tag === 'head') return false;
+          var win = this.ownerDocument.defaultView || window;
+          var style = win.getComputedStyle(this);
+          if (style.display === 'none') return false;
+          if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+          if (this.offsetParent === null && style.position !== 'fixed' &&
+              tag !== 'BODY' && tag !== 'HTML' && tag !== 'body' && tag !== 'html') return false;
+          return true;
+        }
+      JS
+
+      PROPERTY_OR_ATTRIBUTE_JS = <<~JS.freeze
+        function(name) {
+          var tag = this.tagName.toLowerCase();
+          if ((tag === 'img' && name === 'src') ||
+              (tag === 'a' && name === 'href') ||
+              (tag === 'link' && name === 'href') ||
+              (tag === 'script' && name === 'src') ||
+              (tag === 'form' && name === 'action')) {
+            if (this.hasAttribute(name)) return this[name];
+            return null;
+          }
+          return this.getAttribute(name);
+        }
+      JS
+
+      GET_VALUE_JS = <<~JS.freeze
+        function() {
+          if (this.tagName === 'SELECT' && this.multiple) {
+            return Array.from(this.selectedOptions).map(function(o) { return o.value });
+          }
+          return this.value;
+        }
+      JS
+
+      SET_VALUE_JS = <<~JS.freeze
+        function(value) {
           this.focus();
-          this.value = #{value.to_s.inspect};
+          this.value = value;
           this.dispatchEvent(new Event('input', {bubbles: true}));
           this.dispatchEvent(new Event('change', {bubbles: true}));
-        JS
-      end
+        }
+      JS
 
-      def evaluate_on(expression)
-        selector = @selector_info[:selector]
-        index = @selector_info[:index]
+      SET_CHECKBOX_JS = <<~JS.freeze
+        function(value) {
+          this.checked = value;
+          this.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      JS
 
-        expr = expression.strip
-        expr = "return #{expr}" unless expr.start_with?("return ") || expr.include?("\n")
+      APPEND_KEYS_JS = <<~JS.freeze
+        function(key) {
+          this.focus();
+          this.value += key;
+          this.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+      JS
 
-        full_expression = <<~JS
-          (function() {
-            var elements = document.querySelectorAll(#{selector.inspect});
-            var el = elements[#{index}];
-            if (!el) return null;
-            return (function() { #{expr} }).call(el);
-          })()
-        JS
+      GET_STYLE_JS = <<~JS.freeze
+        function(prop) {
+          var win = this.ownerDocument.defaultView || window;
+          return win.getComputedStyle(this)[prop];
+        }
+      JS
 
-        driver.browser.evaluate(full_expression)
-      end
+      GET_PATH_JS = <<~JS.freeze
+        function() {
+          var el = this;
+          var path = [];
+          while (el && el.nodeType === Node.ELEMENT_NODE) {
+            var selector = el.nodeName.toLowerCase();
+            if (el.id) {
+              selector += '#' + el.id;
+              path.unshift(selector);
+              break;
+            } else {
+              var sibling = el;
+              var nth = 1;
+              while (sibling = sibling.previousElementSibling) {
+                if (sibling.nodeName.toLowerCase() === el.nodeName.toLowerCase()) nth++;
+              }
+              if (nth > 1) selector += ':nth-of-type(' + nth + ')';
+            }
+            path.unshift(selector);
+            el = el.parentNode;
+          }
+          return path.join(' > ');
+        }
+      JS
     end
   end
 end

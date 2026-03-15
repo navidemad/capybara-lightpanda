@@ -10,7 +10,7 @@ module Capybara
       end
 
       def all
-        result = browser.command("Network.getAllCookies")
+        result = browser.command("Network.getCookies")
 
         result["cookies"] || []
       end
@@ -41,16 +41,15 @@ module Capybara
         browser.command("Network.deleteCookies", **params)
       end
 
-      # Lightpanda responds to Network.clearBrowserCookies with InvalidParams
-      # AND kills the WebSocket connection (Connection reset by peer).
-      # Falls back to deleting cookies individually.
+      # Network.clearBrowserCookies is safe on Lightpanda >= v0.2.6.
+      # Fallback retained for older versions where it crashed the CDP connection.
       def clear
         browser.command("Network.clearBrowserCookies")
       rescue BrowserError
         begin
           all.each { |cookie| remove(name: cookie["name"], domain: cookie["domain"]) }
         rescue StandardError
-          # Connection already dead — silently ignore
+          # Connection already dead from clearBrowserCookies crash on old Lightpanda
         end
       end
     end

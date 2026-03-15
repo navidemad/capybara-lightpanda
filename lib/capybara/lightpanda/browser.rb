@@ -8,7 +8,7 @@ module Capybara
     class Browser
       extend Forwardable
 
-      attr_reader :options, :process, :client, :target_id, :session_id
+      attr_reader :options, :process, :client, :target_id, :session_id, :frame_stack
 
       delegate [:on, :off] => :client
 
@@ -20,6 +20,10 @@ module Capybara
         @session_id = nil
         @started = false
         @page_events_enabled = false
+        @modal_responses = []
+        @modal_messages = []
+        @modal_handler_installed = false
+        @frame_stack = []
 
         start
       end
@@ -59,6 +63,8 @@ module Capybara
         @client = nil
         @process = nil
         @started = false
+        @modal_handler_installed = false
+        @frame_stack.clear
       end
 
       def command(method, **params)
@@ -106,15 +112,15 @@ module Capybara
       end
 
       def back
-        page_command("Page.navigateToHistoryEntry", entryId: current_entry_id - 1)
+        wait_for_navigation { execute("history.back()") }
       end
 
       def forward
-        page_command("Page.navigateToHistoryEntry", entryId: current_entry_id + 1)
+        wait_for_navigation { execute("history.forward()") }
       end
 
       def refresh
-        page_command("Page.reload")
+        go_to(current_url)
       end
       alias reload refresh
 
@@ -131,15 +137,77 @@ module Capybara
       end
       alias html body
 
+      # Evaluate JS and return a serialized value.
       def evaluate(expression)
         response = page_command("Runtime.evaluate", expression: expression, returnByValue: true, awaitPromise: true)
 
         handle_evaluate_response(response)
       end
 
+      # Execute JS without returning a value.
       def execute(expression)
         page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
         nil
+      end
+
+      # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
+      def evaluate_with_ref(expression)
+        response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
+        raise JavaScriptError, response if response["exceptionDetails"]
+
+        result = response["result"]
+        return nil if result["type"] == "undefined"
+
+        result
+      end
+
+      # Call a function on a remote object via Runtime.callFunctionOn.
+      # Binds `this` to the DOM element referenced by remote_object_id.
+      def call_function_on(remote_object_id, function_declaration, *args, return_by_value: true)
+        params = {
+          objectId: remote_object_id,
+          functionDeclaration: function_declaration,
+          returnByValue: return_by_value,
+          awaitPromise: true,
+        }
+        params[:arguments] = args.map { |a| serialize_argument(a) } unless args.empty?
+
+        response = page_command("Runtime.callFunctionOn", **params)
+        raise JavaScriptError, response if response["exceptionDetails"]
+
+        result = response["result"]
+        return nil if result["type"] == "undefined"
+
+        return_by_value ? result["value"] : result
+      end
+
+      # Get properties of a remote object (used to extract array elements).
+      def get_object_properties(remote_object_id)
+        page_command("Runtime.getProperties", objectId: remote_object_id, ownProperties: true)
+      end
+
+      # Release a remote object reference to free V8 memory.
+      def release_object(remote_object_id)
+        page_command("Runtime.releaseObject", objectId: remote_object_id)
+      rescue BrowserError, NoExecutionContextError
+        # Object may already be released or context destroyed
+      end
+
+      # Find elements in the current context (top frame or active frame).
+      # Returns an array of remote object ID strings.
+      def find(method, selector)
+        if @frame_stack.empty?
+          find_in_document(method, selector)
+        else
+          find_in_frame(method, selector)
+        end
+      end
+
+      # Find child elements within a specific node.
+      # Returns an array of remote object ID strings.
+      def find_within(remote_object_id, method, selector)
+        result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
+        extract_node_object_ids(result)
       end
 
       def css(selector)
@@ -195,18 +263,157 @@ module Capybara
         @cookies ||= Cookies.new(self)
       end
 
+      # -- Frame Support --
+      # Frame stack stores Node objects (with remote_object_id).
+      # Finding scopes to the innermost frame via callFunctionOn on the iframe element.
+
+      def push_frame(node)
+        @frame_stack.push(node)
+      end
+
+      def pop_frame
+        @frame_stack.pop
+      end
+
+      def clear_frames
+        @frame_stack.clear
+      end
+
+      # -- Modal/Dialog Support --
+      # Page.handleJavaScriptDialog is not yet implemented in Lightpanda.
+      # This code is ready for when it's added upstream.
+
+      def prepare_modals
+        return if @modal_handler_installed
+
+        enable_page_events
+
+        on("Page.javascriptDialogOpening") do |params|
+          type = params["type"]
+          message = params["message"]
+          @modal_messages << { type: type, message: message }
+
+          response = @modal_responses.shift
+          begin
+            if response
+              accept_params = { accept: response[:accept] }
+              accept_params[:promptText] = response[:text] if response[:text]
+              page_command("Page.handleJavaScriptDialog", **accept_params)
+            else
+              page_command("Page.handleJavaScriptDialog", accept: type == "alert")
+            end
+          rescue BrowserError
+            # Page.handleJavaScriptDialog may not be implemented in Lightpanda yet
+          end
+        end
+
+        @modal_handler_installed = true
+      end
+
+      def accept_modal(type, text: nil)
+        prepare_modals
+        @modal_responses << { accept: true, text: text, type: type.to_s }
+      end
+
+      def dismiss_modal(type)
+        prepare_modals
+        @modal_responses << { accept: false, type: type.to_s }
+      end
+
+      def find_modal(type, wait: options.timeout)
+        deadline = monotonic_time + wait
+        loop do
+          msg = @modal_messages.find { |m| m[:type] == type.to_s }
+          if msg
+            @modal_messages.delete(msg)
+            return msg[:message]
+          end
+          break if monotonic_time > deadline
+
+          sleep 0.05
+        end
+        raise Capybara::ModalNotFound, "Unable to find modal dialog"
+      end
+
+      def reset_modals
+        @modal_responses.clear
+        @modal_messages.clear
+      end
+
       private
+
+      # JS function for finding elements within a node.
+      # Works in any execution context (top frame or iframe).
+      FIND_WITHIN_JS = <<~JS.freeze
+        function(method, selector) {
+          if (method === 'xpath') {
+            if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, this);
+            return [];
+          }
+          try { return Array.from(this.querySelectorAll(selector)); } catch(e) { return []; }
+        }
+      JS
+
+      # JS function for finding elements in an iframe's contentDocument.
+      FIND_IN_FRAME_JS = <<~JS.freeze
+        function(method, selector) {
+          var doc;
+          try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
+          if (!doc) return [];
+          if (method === 'xpath') {
+            if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, doc);
+            return [];
+          }
+          try { return Array.from(doc.querySelectorAll(selector)); } catch(e) { return []; }
+        }
+      JS
+
+      def find_in_document(method, selector)
+        js = if method == "xpath"
+          "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
+        else
+          "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } catch(e) { return []; } })()"
+        end
+        result = evaluate_with_ref(js)
+        extract_node_object_ids(result)
+      end
+
+      def find_in_frame(method, selector)
+        frame_node = @frame_stack.last
+        result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector, return_by_value: false)
+        extract_node_object_ids(result)
+      end
+
+      # Extract individual node objectIds from a remote array reference.
+      def extract_node_object_ids(result)
+        return [] unless result && result["objectId"]
+
+        props = get_object_properties(result["objectId"])
+        properties = props["result"] || []
+
+        ids = properties
+          .select { |p| p["name"] =~ /\A\d+\z/ }
+          .sort_by { |p| p["name"].to_i }
+          .filter_map { |p| p.dig("value", "objectId") }
+
+        release_object(result["objectId"])
+        ids
+      rescue StandardError
+        []
+      end
+
+      def serialize_argument(arg)
+        if arg.respond_to?(:remote_object_id)
+          { objectId: arg.remote_object_id }
+        else
+          { value: arg }
+        end
+      end
 
       def document_node_id
         result = page_command("DOM.getDocument")
 
         result.dig("root", "nodeId")
-      end
-
-      def current_entry_id
-        result = page_command("Page.getNavigationHistory")
-
-        result["currentIndex"]
       end
 
       def handle_evaluate_response(response)
@@ -218,14 +425,36 @@ module Capybara
         result["value"]
       end
 
+      # Wait for a navigation triggered by the given block.
+      # Uses the same loadEventFired + readyState fallback as go_to.
+      def wait_for_navigation
+        enable_page_events
+
+        loaded = Concurrent::Event.new
+        handler = proc { loaded.set }
+        @client.on("Page.loadEventFired", &handler)
+
+        yield
+
+        unless loaded.wait(@options.timeout)
+          poll_ready_state(@options.timeout)
+        end
+
+        @client.off("Page.loadEventFired", handler)
+      end
+
       def poll_ready_state(timeout)
-        deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + timeout
+        deadline = monotonic_time + timeout
         loop do
           ready = evaluate("document.readyState") rescue nil
           break if ready == "complete" || ready == "interactive"
-          break if ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) > deadline
+          break if monotonic_time > deadline
           sleep 0.1
         end
+      end
+
+      def monotonic_time
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
     end
   end
