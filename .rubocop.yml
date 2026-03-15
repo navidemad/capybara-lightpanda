@@ -1,6 +1,14 @@
 AllCops:
   TargetRubyVersion: 3.1
   NewCops: enable
+  SuggestExtensions: false
+
+Naming/FileName:
+  Exclude:
+    - lib/capybara-lightpanda.rb
+
+Style/Documentation:
+  Enabled: false
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes
@@ -13,3 +21,36 @@ Style/TrailingCommaInArrayLiteral:
 
 Layout/LineLength:
   Max: 120
+
+Metrics/ClassLength:
+  Exclude:
+    - lib/capybara/lightpanda/binary.rb
+    - lib/capybara/lightpanda/browser.rb
+    - lib/capybara/lightpanda/client/web_socket.rb
+    - lib/capybara/lightpanda/driver.rb
+    - lib/capybara/lightpanda/node.rb
+    - spec/**/*
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/AbcSize:
+  Max: 25
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/ParameterLists:
+  Max: 7
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*
+    - Rakefile
+
+Lint/EmptyBlock:
+  Exclude:
+    - spec/**/*
+
+Lint/UselessConstantScoping:
+  Enabled: false

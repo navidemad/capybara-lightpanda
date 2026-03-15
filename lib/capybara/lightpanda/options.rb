@@ -3,7 +3,7 @@
 module Capybara
   module Lightpanda
     class Options
-      DEFAULT_TIMEOUT = ENV.fetch("LIGHTPANDA_DEFAULT_TIMEOUT", 5).to_i
+      DEFAULT_TIMEOUT = ENV.fetch("LIGHTPANDA_DEFAULT_TIMEOUT", 15).to_i
       DEFAULT_PROCESS_TIMEOUT = ENV.fetch("LIGHTPANDA_PROCESS_TIMEOUT", 10).to_i
       DEFAULT_HOST = "127.0.0.1"
       DEFAULT_PORT = 9222
@@ -32,7 +32,7 @@ module Capybara
       end
 
       def to_h
-        {
+        h = {
           host: host,
           port: port,
           timeout: timeout,
@@ -40,8 +40,9 @@ module Capybara
           window_size: window_size,
           browser_path: browser_path,
           headless: headless,
-          ws_url: ws_url,
         }
+        h[:ws_url] = @ws_url if @ws_url
+        h
       end
     end
   end

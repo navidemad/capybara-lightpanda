@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "spec_helper"
+
 # Runs Capybara's cross-driver shared spec suite against Lightpanda.
 #
 # This exercises ~200 shared examples from Capybara itself — the same

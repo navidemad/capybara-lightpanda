@@ -26,9 +26,9 @@ module Capybara
       GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download/nightly"
 
       PLATFORMS = {
-        ["x86_64", "linux"] => "lightpanda-x86_64-linux",
-        ["aarch64", "darwin"] => "lightpanda-aarch64-macos",
-        ["arm64", "darwin"] => "lightpanda-aarch64-macos",
+        %w[x86_64 linux] => "lightpanda-x86_64-linux",
+        %w[aarch64 darwin] => "lightpanda-aarch64-macos",
+        %w[arm64 darwin] => "lightpanda-aarch64-macos",
       }.freeze
 
       class << self
@@ -40,16 +40,16 @@ module Capybara
           find || download
         end
 
-        def run(*)
-          stdout, stderr, status = Open3.capture3(path, *)
+        def run(*args)
+          stdout, stderr, status = Open3.capture3(path, *args)
 
           Result.new(stdout: stdout, stderr: stderr, status: status)
         rescue Errno::ENOENT
           raise BinaryNotFoundError, "Lightpanda binary not found"
         end
 
-        def exec(*)
-          Kernel.exec(path, *)
+        def exec(*args)
+          Kernel.exec(path, *args)
         end
 
         def fetch(url)

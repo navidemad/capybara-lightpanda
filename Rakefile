@@ -11,8 +11,15 @@ RSpec::Core::RakeTask.new("spec:shared") do |t|
 end
 
 RSpec::Core::RakeTask.new("spec:all") do |t|
-  t.pattern = "spec/features/**/*_spec.rb"
+  t.pattern = "spec/**/*_spec.rb"
 end
 
-task default: :spec
+RSpec::Core::RakeTask.new("spec:unit") do |t|
+  t.pattern = "spec/unit/**/*_spec.rb"
+end
+
+require "rubocop/rake_task"
+RuboCop::RakeTask.new
+
+task default: %i[spec:unit rubocop]
 task test: :spec

@@ -10,7 +10,7 @@ module Capybara
 
       attr_reader :options, :process, :client, :target_id, :session_id, :frame_stack
 
-      delegate [:on, :off] => :client
+      delegate %i[on off] => :client
 
       def initialize(options = {})
         @options = Options.new(options)
@@ -58,8 +58,16 @@ module Capybara
       end
 
       def quit
-        @client&.close rescue nil
-        @process&.stop rescue nil
+        begin
+          @client&.close
+        rescue StandardError
+          nil
+        end
+        begin
+          @process&.stop
+        rescue StandardError
+          nil
+        end
         @client = nil
         @process = nil
         @started = false
@@ -91,9 +99,7 @@ module Capybara
 
           result = page_command("Page.navigate", url: url)
 
-          unless loaded.wait(@options.timeout)
-            poll_ready_state(@options.timeout)
-          end
+          poll_ready_state(@options.timeout) unless loaded.wait(@options.timeout)
 
           @client.off("Page.loadEventFired", handler)
 
@@ -344,7 +350,7 @@ module Capybara
 
       # JS function for finding elements within a node.
       # Works in any execution context (top frame or iframe).
-      FIND_WITHIN_JS = <<~JS.freeze
+      FIND_WITHIN_JS = <<~JS
         function(method, selector) {
           if (method === 'xpath') {
             if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, this);
@@ -355,7 +361,7 @@ module Capybara
       JS
 
       # JS function for finding elements in an iframe's contentDocument.
-      FIND_IN_FRAME_JS = <<~JS.freeze
+      FIND_IN_FRAME_JS = <<~JS
         function(method, selector) {
           var doc;
           try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
@@ -370,17 +376,19 @@ module Capybara
 
       def find_in_document(method, selector)
         js = if method == "xpath"
-          "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
-        else
-          "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } catch(e) { return []; } })()"
-        end
+               "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
+             else
+               "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } " \
+                 "catch(e) { return []; } })()"
+             end
         result = evaluate_with_ref(js)
         extract_node_object_ids(result)
       end
 
       def find_in_frame(method, selector)
         frame_node = @frame_stack.last
-        result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector, return_by_value: false)
+        result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
+                                  return_by_value: false)
         extract_node_object_ids(result)
       end
 
@@ -392,9 +400,9 @@ module Capybara
         properties = props["result"] || []
 
         ids = properties
-          .select { |p| p["name"] =~ /\A\d+\z/ }
-          .sort_by { |p| p["name"].to_i }
-          .filter_map { |p| p.dig("value", "objectId") }
+              .select { |p| p["name"] =~ /\A\d+\z/ }
+              .sort_by { |p| p["name"].to_i }
+              .filter_map { |p| p.dig("value", "objectId") }
 
         release_object(result["objectId"])
         ids
@@ -436,9 +444,7 @@ module Capybara
 
         yield
 
-        unless loaded.wait(@options.timeout)
-          poll_ready_state(@options.timeout)
-        end
+        poll_ready_state(@options.timeout) unless loaded.wait(@options.timeout)
 
         @client.off("Page.loadEventFired", handler)
       end
@@ -446,9 +452,14 @@ module Capybara
       def poll_ready_state(timeout)
         deadline = monotonic_time + timeout
         loop do
-          ready = evaluate("document.readyState") rescue nil
-          break if ready == "complete" || ready == "interactive"
+          ready = begin
+            evaluate("document.readyState")
+          rescue StandardError
+            nil
+          end
+          break if %w[complete interactive].include?(ready)
           break if monotonic_time > deadline
+
           sleep 0.1
         end
       end

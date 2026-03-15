@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "spec_helper"
+
 # Comprehensive test suite for capybara-lightpanda.
 #
 # Tests use CSS selectors and direct DOM APIs to avoid depending on
@@ -279,17 +281,15 @@ RSpec.describe Capybara::Lightpanda::Driver do
     end
 
     it "raises JavaScriptError on thrown exceptions" do
-      expect {
+      expect do
         session.evaluate_script("throw new Error('test error')")
-      }.to raise_error(Capybara::Lightpanda::JavaScriptError)
+      end.to raise_error(Capybara::Lightpanda::JavaScriptError)
     end
 
     it "raises JavaScriptError with class name" do
-      begin
-        session.evaluate_script("throw new TypeError('bad type')")
-      rescue Capybara::Lightpanda::JavaScriptError => e
-        expect(e.class_name).to eq("TypeError")
-      end
+      session.evaluate_script("throw new TypeError('bad type')")
+    rescue Capybara::Lightpanda::JavaScriptError => e
+      expect(e.class_name).to eq("TypeError")
     end
 
     it "can manipulate the DOM" do
@@ -714,18 +714,19 @@ RSpec.describe Capybara::Lightpanda::Driver do
   describe "error handling" do
     it "raises JavaScriptError for JS exceptions" do
       session.visit("/lightpanda/js_test")
-      expect {
+      expect do
         session.evaluate_script("throw new Error('boom')")
-      }.to raise_error(Capybara::Lightpanda::JavaScriptError, /boom/)
+      end.to raise_error(Capybara::Lightpanda::JavaScriptError, /boom/)
     end
 
     it "raises NotImplementedError for file uploads" do
       session.visit("/lightpanda/form_test")
-      session.execute_script("var fi = document.createElement('input'); fi.type='file'; fi.id='file-input'; document.body.appendChild(fi)")
+      js = "var fi = document.createElement('input'); fi.type='file'; fi.id='file-input'; document.body.appendChild(fi)"
+      session.execute_script(js)
       file_input = session.find(:css, "#file-input", visible: false)
-      expect {
+      expect do
         file_input.set("/tmp/test.txt")
-      }.to raise_error(NotImplementedError, /File uploads/)
+      end.to raise_error(NotImplementedError, /File uploads/)
     end
   end
 
@@ -751,9 +752,9 @@ RSpec.describe Capybara::Lightpanda::Driver do
 
   describe "CDP error handling" do
     it "raises BrowserError on invalid commands" do
-      expect {
+      expect do
         browser.page_command("NonExistent.method")
-      }.to raise_error(Capybara::Lightpanda::BrowserError)
+      end.to raise_error(Capybara::Lightpanda::BrowserError)
     end
   end
 end

@@ -69,9 +69,7 @@ RSpec.configure do |config|
       /save_and_open_screenshot/,
     ].freeze
 
-    if metadata[:full_description]&.match?(Regexp.union(regexes))
-      metadata[:skip] = "Not supported by Lightpanda"
-    end
+    metadata[:skip] = "Not supported by Lightpanda" if metadata[:full_description]&.match?(Regexp.union(regexes))
   end
 
   config.around do |example|

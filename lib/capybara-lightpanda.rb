@@ -19,38 +19,20 @@ module Capybara
   module Lightpanda
     class << self
       def configure
-        yield(configuration) if block_given?
+        yield(options) if block_given?
       end
 
-      def configuration
-        @configuration ||= Configuration.new
-      end
-    end
-
-    class Configuration
-      attr_accessor :host, :port, :timeout, :process_timeout, :browser_path
-
-      def initialize
-        @host = "127.0.0.1"
-        @port = 9222
-        @timeout = 15
-        @process_timeout = 10
-        @browser_path = nil
+      def options
+        @options ||= Options.new
       end
 
-      def to_h
-        {
-          host: host,
-          port: port,
-          timeout: timeout,
-          process_timeout: process_timeout,
-          browser_path: browser_path,
-        }.compact
+      def reset_options!
+        @options = nil
       end
     end
   end
 end
 
 Capybara.register_driver(:lightpanda) do |app|
-  Capybara::Lightpanda::Driver.new(app, Capybara::Lightpanda.configuration.to_h)
+  Capybara::Lightpanda::Driver.new(app, Capybara::Lightpanda.options.to_h)
 end

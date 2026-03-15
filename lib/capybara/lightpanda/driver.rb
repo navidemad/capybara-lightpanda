@@ -80,7 +80,10 @@ module Capybara
         cookie_options[:domain] = options[:domain] if options[:domain]
         cookie_options[:path] = options[:path] if options[:path]
         cookie_options[:secure] = options[:secure] if options.key?(:secure)
-        cookie_options[:http_only] = options[:httpOnly] || options[:http_only] if options.key?(:httpOnly) || options.key?(:http_only)
+        if options.key?(:httpOnly) || options.key?(:http_only)
+          cookie_options[:http_only] =
+            options[:httpOnly] || options[:http_only]
+        end
         cookie_options[:expires] = options[:expires] if options[:expires]
 
         browser.cookies.set(name: name, value: value, **cookie_options)
@@ -163,11 +166,11 @@ module Capybara
       # Pause execution for interactive debugging.
       def pause
         if $stdin.tty?
-          $stderr.puts "\nPaused. Press Enter to continue."
+          warn "\nPaused. Press Enter to continue."
           $stdin.gets
         else
-          $stderr.puts "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
-          trap("CONT") { } # rubocop:disable Lint/EmptyBlock
+          warn "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
+          trap("CONT") {} # rubocop:disable Lint/EmptyBlock
           ::Process.kill("STOP", ::Process.pid)
         end
       end

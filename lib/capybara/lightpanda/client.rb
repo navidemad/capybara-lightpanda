@@ -111,7 +111,9 @@ module Capybara
         case message
         when /No node with given id found/i
           raise NodeNotFoundError, message
-        when /Cannot find context with specified id/i, /Execution context was destroyed/i, /Cannot find default execution context/i
+        when /Cannot find context with specified id/i,
+             /Execution context was destroyed/i,
+             /Cannot find default execution context/i
           raise NoExecutionContextError, message
         else
           raise BrowserError, error

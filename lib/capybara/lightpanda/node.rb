@@ -6,7 +6,7 @@ module Capybara
       attr_reader :remote_object_id
 
       def initialize(driver, remote_object_id)
-        super(driver, remote_object_id)
+        super
         @remote_object_id = remote_object_id
       end
 
@@ -29,9 +29,7 @@ module Capybara
       end
 
       def style(styles)
-        styles.each_with_object({}) do |style, result|
-          result[style] = call(GET_STYLE_JS, style)
-        end
+        styles.to_h { |style| [style, call(GET_STYLE_JS, style)] }
       end
 
       def click(_keys = [], **_options)
@@ -56,7 +54,7 @@ module Capybara
           type = self["type"]
           case type
           when "checkbox", "radio"
-            call(SET_CHECKBOX_JS, !!value)
+            call(SET_CHECKBOX_JS, value ? true : false)
           when "file"
             raise NotImplementedError, "File uploads not yet supported by Lightpanda"
           else
@@ -70,11 +68,11 @@ module Capybara
       end
 
       def select_option
-        call("function() { this.selected = true; if (this.parentElement) this.parentElement.dispatchEvent(new Event('change', {bubbles: true})) }")
+        call(SELECT_OPTION_JS)
       end
 
       def unselect_option
-        call("function() { this.selected = false; if (this.parentElement) this.parentElement.dispatchEvent(new Event('change', {bubbles: true})) }")
+        call(UNSELECT_OPTION_JS)
       end
 
       def send_keys(*args)
@@ -155,7 +153,7 @@ module Capybara
         end
       end
 
-      VISIBLE_JS = <<~JS.freeze
+      VISIBLE_JS = <<~JS
         function() {
           var tag = this.tagName;
           if (tag === 'HEAD' || tag === 'head') return false;
@@ -169,7 +167,7 @@ module Capybara
         }
       JS
 
-      PROPERTY_OR_ATTRIBUTE_JS = <<~JS.freeze
+      PROPERTY_OR_ATTRIBUTE_JS = <<~JS
         function(name) {
           var tag = this.tagName.toLowerCase();
           if ((tag === 'img' && name === 'src') ||
@@ -184,7 +182,7 @@ module Capybara
         }
       JS
 
-      GET_VALUE_JS = <<~JS.freeze
+      GET_VALUE_JS = <<~JS
         function() {
           if (this.tagName === 'SELECT' && this.multiple) {
             return Array.from(this.selectedOptions).map(function(o) { return o.value });
@@ -193,7 +191,7 @@ module Capybara
         }
       JS
 
-      SET_VALUE_JS = <<~JS.freeze
+      SET_VALUE_JS = <<~JS
         function(value) {
           this.focus();
           this.value = value;
@@ -202,14 +200,32 @@ module Capybara
         }
       JS
 
-      SET_CHECKBOX_JS = <<~JS.freeze
+      SELECT_OPTION_JS = <<~JS
+        function() {
+          this.selected = true;
+          if (this.parentElement) {
+            this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+        }
+      JS
+
+      UNSELECT_OPTION_JS = <<~JS
+        function() {
+          this.selected = false;
+          if (this.parentElement) {
+            this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+        }
+      JS
+
+      SET_CHECKBOX_JS = <<~JS
         function(value) {
           this.checked = value;
           this.dispatchEvent(new Event('change', {bubbles: true}));
         }
       JS
 
-      APPEND_KEYS_JS = <<~JS.freeze
+      APPEND_KEYS_JS = <<~JS
         function(key) {
           this.focus();
           this.value += key;
@@ -217,14 +233,14 @@ module Capybara
         }
       JS
 
-      GET_STYLE_JS = <<~JS.freeze
+      GET_STYLE_JS = <<~JS
         function(prop) {
           var win = this.ownerDocument.defaultView || window;
           return win.getComputedStyle(this)[prop];
         }
       JS
 
-      GET_PATH_JS = <<~JS.freeze
+      GET_PATH_JS = <<~JS
         function() {
           var el = this;
           var path = [];

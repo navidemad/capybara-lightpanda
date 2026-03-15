@@ -22,7 +22,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
 | **Browser** | browser.zig | Basic browser-level commands |
 | **CSS** | css.zig | Limited — no rendering engine, no `getComputedStyle` |
-| **DOM** | dom.zig | `getDocument`, `querySelector`, `querySelectorAll` confirmed working |
+| **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs |
 | **Fetch** | fetch.zig | Network interception at Fetch domain level |
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent` |
@@ -69,10 +69,21 @@ Network.getAllCookies         → does not exist; gem uses Network.getCookies
 ```
 Page.createIsolatedWorld     Page.getFrameTree
 Page.addScriptToEvaluateOnNewDocument  (STUBBED — accepts call, returns {identifier:"1"}, does nothing)
+Page.stopLoading             Page.close
 DOM.resolveNode              DOM.getBoxModel (zeros for padding/border/margin)
 DOM.describeNode             DOM.scrollIntoViewIfNeeded
+DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
+DOM.getContentQuads          DOM.requestChildNodes
+DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent
-Network.getCookies           Network.setCookies (batch)
+Network.setCookies (batch)   Network.getResponseBody
+Network.setExtraHTTPHeaders  Network.setCacheDisabled
+Runtime.addBinding           Runtime.runIfWaitingForDebugger
+Target.closeTarget           Target.createBrowserContext
+Target.disposeBrowserContext Target.getBrowserContexts
+Target.getTargetInfo         Target.setAutoAttach
+Target.setDiscoverTargets    Target.activateTarget
+Target.detachFromTarget      Target.sendMessageToTarget
 ```
 
 ## Known Bugs and Limitations
@@ -111,6 +122,7 @@ Network.getCookies           Network.setCookies (batch)
 
 ### Open Fix PRs (not yet merged)
 
+- **PR #1845**: Don't kill WebSocket on unknown domain/method errors (for #1843)
 - **PR #1836**: Fix AXValue integer→string serialization (for #1822)
 - **PR #1821**: Ignore partitionKey in cookie operations (for #1818)
 
@@ -118,7 +130,7 @@ Network.getCookies           Network.setCookies (batch)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
-| #1843 | CDP | Unrecognized CDP method kills WebSocket (confirmed reproduced) | ✓ |
+| #1843 | CDP | Unrecognized CDP method kills WebSocket (confirmed reproduced, fix: PR #1845) | ✓ |
 | #1839 | CDP | Session management assertion error in Playwright | |
 | #1838 | CDP | CRSession._onMessage crash in Playwright | |
 | #1832 | Navigation | `Page.navigate` response never sent on some sites | |
@@ -191,7 +203,7 @@ When writing CDP interactions, be aware of these divergences:
 1. **Event timing**: CDP events may arrive in different order than Chrome
 2. **Error responses**: Error messages/codes differ from Chrome's (e.g., `InvalidParams` instead of specific error codes)
 3. **Missing methods**: Not all methods within a domain are implemented; unsupported methods return errors
-4. **Parameter rejection**: Some Chrome-standard parameters (like `partitionKey` in `Network.deleteCookies`) are rejected
+4. **Parameter rejection**: `Network.deleteCookies` now accepts `partitionKey` in its struct but returns `NotImplemented` if non-null (PR #1821 would make it fully ignored)
 5. **Session management**: `Target.detachFromTarget` can leave pages unresponsive (#1819)
 6. **Frame tree**: Frame IDs may not match Playwright expectations (#1800)
 7. **Accessibility**: ARIA snapshots are more verbose than Chrome's (#1813)

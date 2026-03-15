@@ -20,8 +20,9 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] = spec.homepage
   spec.metadata["changelog_uri"] = "#{spec.homepage}/releases"
   spec.metadata["rubygems_mfa_required"] = "true"
+  spec.metadata["bug_tracker_uri"] = "#{spec.homepage}/issues"
 
-  spec.files = Dir["lib/**/*", "LICENSE.txt", "README.md"]
+  spec.files = Dir["lib/**/*", "LICENSE.txt", "README.md", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "capybara", ">= 3.0"
