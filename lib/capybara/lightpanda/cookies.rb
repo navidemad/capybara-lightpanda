@@ -45,7 +45,7 @@ module Capybara
       # Fallback retained for older versions where it crashed the CDP connection.
       def clear
         browser.command("Network.clearBrowserCookies")
-      rescue BrowserError
+      rescue BrowserError, TimeoutError, StandardError
         begin
           all.each { |cookie| remove(name: cookie["name"], domain: cookie["domain"]) }
         rescue StandardError

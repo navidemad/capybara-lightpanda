@@ -114,21 +114,24 @@ Network.getCookies           Network.setCookies (batch)
 - **PR #1836**: Fix AXValue integer→string serialization (for #1822)
 - **PR #1821**: Ignore partitionKey in cookie operations (for #1818)
 
-### Upstream Open Issues (verified 2026-03-15, all still open)
+### Upstream Open Issues (verified 2026-03-15)
 
-| Issue | Impact | Description |
-|---|---|---|
-| #1839 | CDP | Session management assertion error in Playwright |
-| #1838 | CDP | CRSession._onMessage crash in Playwright |
-| #1832 | Navigation | `Page.navigate` response never sent on some sites |
-| #1830 | Startup | Port-already-in-use not handled gracefully |
-| #1822 | CDP | AXValue.value serialized as integer instead of string |
-| #1819 | CDP | Page unresponsive after `Target.detachFromTarget` |
-| #1818 | Cookies | `Network.deleteCookies` rejects `partitionKey` parameter |
-| #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts |
-| #1801 | Navigation | `Page.navigate` never completes for Wikipedia |
-| #1800 | CDP | Playwright `connectOverCDP` fails: frame ID mismatch |
-| #1550 | Storage | Creating context with storage state fails |
+| Issue | Impact | Description | Filed by us |
+|---|---|---|---|
+| #1844 | Stability | CDP server unresponsive after ~80+ rapid commands | ✓ |
+| #1843 | CDP | Invalid CDP method corrupts connection state | ✓ |
+| #1842 | Frames | `callFunctionOn` iframe contentDocument crashes WebSocket | ✓ |
+| #1839 | CDP | Session management assertion error in Playwright | |
+| #1838 | CDP | CRSession._onMessage crash in Playwright | |
+| #1832 | Navigation | `Page.navigate` response never sent on some sites | |
+| #1830 | Startup | Port-already-in-use not handled gracefully | |
+| #1822 | CDP | AXValue.value serialized as integer instead of string | |
+| #1819 | CDP | Page unresponsive after `Target.detachFromTarget` | |
+| #1818 | Cookies | `Network.deleteCookies` rejects `partitionKey` parameter | |
+| #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
+| #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
+| #1800 | CDP | Playwright `connectOverCDP` fails: frame ID mismatch | |
+| #1550 | Storage | Creating context with storage state fails | |
 
 ### General Limitations
 

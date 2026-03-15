@@ -37,10 +37,20 @@ module Capybara
         return unless @pid
 
         begin
-          ::Process.kill("TERM", @pid)
+          ::Process.kill("TERM", -@pid) # Kill process group
+        rescue Errno::ESRCH, Errno::EPERM
+          # Process group already dead, try direct
+          begin
+            ::Process.kill("TERM", @pid)
+          rescue Errno::ESRCH
+            # Process already dead
+          end
+        end
+
+        begin
           ::Process.wait(@pid)
-        rescue Errno::ESRCH, Errno::ECHILD
-          # Process already dead
+        rescue Errno::ECHILD
+          # Already reaped
         end
 
         cleanup_pipes

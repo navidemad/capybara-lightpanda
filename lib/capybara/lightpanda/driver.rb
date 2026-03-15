@@ -34,12 +34,12 @@ module Capybara
         inject_lightpanda_js
       end
 
-      def back
+      def go_back
         browser.back
         inject_lightpanda_js
       end
 
-      def forward
+      def go_forward
         browser.forward
         inject_lightpanda_js
       end
@@ -130,6 +130,7 @@ module Capybara
         browser.reset_modals
         browser.go_to("about:blank")
       rescue StandardError
+        @browser&.quit
         @browser = nil
       end
 

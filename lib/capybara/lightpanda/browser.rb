@@ -58,8 +58,8 @@ module Capybara
       end
 
       def quit
-        @client&.close
-        @process&.stop
+        @client&.close rescue nil
+        @process&.stop rescue nil
         @client = nil
         @process = nil
         @started = false
