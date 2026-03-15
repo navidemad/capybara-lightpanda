@@ -90,6 +90,12 @@ module Capybara
       # Lightpanda may never fire Page.loadEventFired on complex JS pages
       # (lightpanda-io/browser#1801, #1832). When the event times out,
       # we poll document.readyState as a fallback.
+      #
+      # Page.navigate is sent asynchronously because Lightpanda may not
+      # return the command result until the page is fully loaded (unlike
+      # Chrome which returns immediately with frameId/loaderId). If we
+      # waited synchronously, the readyState fallback would never be
+      # reached on pages that fail to fully load.
       def go_to(url, wait: true)
         enable_page_events
 
@@ -99,13 +105,11 @@ module Capybara
           handler = proc { loaded.set }
           @client.on("Page.loadEventFired", &handler)
 
-          result = page_command("Page.navigate", url: url)
+          @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
 
           poll_ready_state(@options.timeout) unless loaded.wait(@options.timeout)
 
           @client.off("Page.loadEventFired", handler)
-
-          result
         else
           page_command("Page.navigate", url: url)
         end
@@ -487,9 +491,22 @@ module Capybara
 
       def poll_ready_state(timeout)
         deadline = monotonic_time + timeout
+        # Use a short per-evaluation timeout because Lightpanda may block
+        # all commands while navigating. Without this, a single evaluate()
+        # call would consume the entire @options.timeout, making the poll
+        # loop effectively a single attempt.
+        poll_cmd_timeout = [timeout / 5.0, 2].max
+
         loop do
           ready = begin
-            evaluate("document.readyState")
+            response = @client.command(
+              "Runtime.evaluate",
+              { expression: "document.readyState", returnByValue: true, awaitPromise: true },
+              session_id: @session_id,
+              timeout: poll_cmd_timeout,
+            )
+            result = response["result"]
+            result && result["value"]
           rescue StandardError
             nil
           end

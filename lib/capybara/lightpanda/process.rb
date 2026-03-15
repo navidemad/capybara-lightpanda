@@ -76,6 +76,32 @@ module Capybara
         @stderr_w.close
 
         wait_for_ready
+
+        # Drain stderr/stdout to prevent pipe buffer from filling up
+        # and blocking the Lightpanda process
+        start_drain_thread
+      end
+
+      def start_drain_thread
+        @drain_thread = Thread.new do
+          ios = [@stdout_r, @stderr_r].compact
+          loop do
+            ready = IO.select(ios, nil, nil, 0.5)
+            next unless ready
+
+            ready[0].each do |io|
+              io.read_nonblock(4096)
+            rescue IO::WaitReadable
+              # No data
+            rescue EOFError
+              ios.delete(io)
+            end
+
+            break if ios.empty?
+          rescue IOError
+            break
+          end
+        end
       end
 
       def spawn_process(binary_path)

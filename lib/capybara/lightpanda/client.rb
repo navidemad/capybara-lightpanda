@@ -23,7 +23,7 @@ module Capybara
         start_message_thread
       end
 
-      def command(method, params = {}, async: false, session_id: nil)
+      def command(method, params = {}, async: false, session_id: nil, timeout: nil)
         message = build_message(method, params, session_id: session_id)
 
         if async
@@ -36,8 +36,9 @@ module Capybara
 
         @ws.send_message(JSON.generate(message))
 
-        response = pending.value!(@options.timeout)
-        raise TimeoutError, "Command #{method} timed out after #{@options.timeout}s" if response.nil?
+        effective_timeout = timeout || @options.timeout
+        response = pending.value!(effective_timeout)
+        raise TimeoutError, "Command #{method} timed out after #{effective_timeout}s" if response.nil?
 
         handle_error(response) if response["error"]
 

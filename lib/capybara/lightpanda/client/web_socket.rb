@@ -19,6 +19,7 @@ module Capybara
           @thread = nil
           @status = :closed
           @messages = Queue.new
+          @driver_mutex = Mutex.new
 
           connect
         end
@@ -27,7 +28,7 @@ module Capybara
           raise DeadBrowserError, "WebSocket is not open" unless @status == :open
 
           @logger&.puts("\n\n▶ #{@logger.elapsed_time} #{message}")
-          @driver.text(message)
+          @driver_mutex.synchronize { @driver.text(message) }
         end
 
         def close
@@ -113,7 +114,7 @@ module Capybara
                 next unless @socket.wait_readable(0.1)
 
                 data = @socket.readpartial(4096)
-                @driver.parse(data)
+                @driver_mutex.synchronize { @driver.parse(data) }
               rescue IOError
                 @status = :closed
                 break
