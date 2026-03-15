@@ -9,7 +9,7 @@ require "uri"
 module Capybara
   module Lightpanda
     class Binary
-      Result = Struct.new(:stdout, :stderr, :status, keyword_init: true) do
+      Result = Struct.new(:stdout, :stderr, :status) do
         def success?
           status.success?
         end
@@ -40,16 +40,16 @@ module Capybara
           find || download
         end
 
-        def run(*args)
-          stdout, stderr, status = Open3.capture3(path, *args)
+        def run(*)
+          stdout, stderr, status = Open3.capture3(path, *)
 
           Result.new(stdout: stdout, stderr: stderr, status: status)
         rescue Errno::ENOENT
           raise BinaryNotFoundError, "Lightpanda binary not found"
         end
 
-        def exec(*args)
-          Kernel.exec(path, *args)
+        def exec(*)
+          Kernel.exec(path, *)
         end
 
         def fetch(url)

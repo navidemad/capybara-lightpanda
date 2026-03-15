@@ -93,8 +93,8 @@ module Capybara
         browser.cookies.clear
       end
 
-      def remove_cookie(name, **options)
-        browser.cookies.remove(name: name, **options)
+      def remove_cookie(name, **)
+        browser.cookies.remove(name: name, **)
       end
 
       # -- Frame Support --
