@@ -104,8 +104,11 @@ module Capybara
           browser.clear_frames
         when :parent
           browser.pop_frame
-        else
+        when Node
           browser.push_frame(frame)
+        else
+          # Capybara passes a Capybara::Node::Element; extract our driver Node
+          browser.push_frame(frame.base)
         end
       end
 

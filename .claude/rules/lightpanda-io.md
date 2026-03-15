@@ -118,9 +118,7 @@ Network.getCookies           Network.setCookies (batch)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
-| #1844 | Stability | CDP server unresponsive after ~80+ rapid commands | ✓ |
-| #1843 | CDP | Invalid CDP method corrupts connection state | ✓ |
-| #1842 | Frames | `callFunctionOn` iframe contentDocument crashes WebSocket | ✓ |
+| #1843 | CDP | Unrecognized CDP method kills WebSocket (confirmed reproduced) | ✓ |
 | #1839 | CDP | Session management assertion error in Playwright | |
 | #1838 | CDP | CRSession._onMessage crash in Playwright | |
 | #1832 | Navigation | `Page.navigate` response never sent on some sites | |
@@ -132,6 +130,13 @@ Network.getCookies           Network.setCookies (batch)
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
 | #1800 | CDP | Playwright `connectOverCDP` fails: frame ID mismatch | |
 | #1550 | Storage | Creating context with storage state fails | |
+
+### Closed Issues We Filed
+
+| Issue | Outcome |
+|---|---|
+| #1842 | Closed — was our driver bug (`switch_to_frame` passed Capybara wrapper instead of native Node) |
+| #1844 | Closed — cascading from #1843, not a real stability issue. 500+ commands work fine. |
 
 ### General Limitations
 

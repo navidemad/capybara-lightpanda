@@ -688,9 +688,22 @@ RSpec.describe Capybara::Lightpanda::Driver do
       expect(session.find(:css, "#main-heading").text).to eq("Main Page")
     end
 
-    # Finding inside iframes crashes Lightpanda's WebSocket on the current binary.
-    it "can find elements inside a frame" do
-      skip "contentDocument access crashes Lightpanda WebSocket"
+    it "finds elements inside a frame" do
+      sleep 0.5
+      frame = session.find(:css, "#test-frame")
+      driver.switch_to_frame(frame)
+      els = session.all(:css, "#frame-text", wait: 2)
+      expect(els.length).to eq(1)
+      expect(els.first.text).to eq("Inside the frame")
+      driver.switch_to_frame(:top)
+    end
+
+    it "switches back to top and finds main content" do
+      sleep 0.5
+      frame = session.find(:css, "#test-frame")
+      driver.switch_to_frame(frame)
+      driver.switch_to_frame(:top)
+      expect(session.find(:css, "#main-heading").text).to eq("Main Page")
     end
   end
 
