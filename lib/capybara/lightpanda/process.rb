@@ -4,6 +4,7 @@ module Capybara
   module Lightpanda
     class Process
       READY_PATTERN = /server running.*address=(\d+\.\d+\.\d+\.\d+:\d+)/
+      ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
       attr_reader :pid, :ws_url
 
@@ -22,15 +23,12 @@ module Capybara
 
         raise BinaryNotFoundError, "Lightpanda binary not found" unless binary_path
 
-        @stdout_r, @stdout_w = IO.pipe
-        @stderr_r, @stderr_w = IO.pipe
+        attempt_start(binary_path)
+      rescue ProcessTimeoutError => e
+        raise unless e.message.include?("already in use")
 
-        @pid = spawn_process(binary_path)
-
-        @stdout_w.close
-        @stderr_w.close
-
-        wait_for_ready
+        kill_process_on_port(@options.port)
+        attempt_start(binary_path)
       end
 
       def stop
@@ -67,6 +65,18 @@ module Capybara
       end
 
       private
+
+      def attempt_start(binary_path)
+        @stdout_r, @stdout_w = IO.pipe
+        @stderr_r, @stderr_w = IO.pipe
+
+        @pid = spawn_process(binary_path)
+
+        @stdout_w.close
+        @stderr_w.close
+
+        wait_for_ready
+      end
 
       def spawn_process(binary_path)
         args = build_args
@@ -109,6 +119,12 @@ module Capybara
                 @ws_url = "ws://#{match[1]}/"
                 throw(:ready)
               end
+
+              if output.match?(ADDRESS_IN_USE_PATTERN)
+                cleanup_failed_process
+                raise ProcessTimeoutError,
+                      "Lightpanda failed to start: port #{@options.port} is already in use"
+              end
             rescue IO::WaitReadable
               # No data available yet
             rescue EOFError
@@ -121,6 +137,38 @@ module Capybara
           raise ProcessTimeoutError,
                 "Lightpanda failed to start within #{@options.process_timeout} seconds.\nOutput: #{output}"
         end
+      end
+
+      def cleanup_failed_process
+        return unless @pid
+
+        begin
+          ::Process.wait(@pid, ::Process::WNOHANG)
+        rescue Errno::ECHILD
+          nil
+        end
+
+        cleanup_pipes
+        @pid = nil
+      end
+
+      def kill_process_on_port(port)
+        port = port.to_i
+        return if port <= 0
+
+        pids = `lsof -ti tcp:#{port} 2>/dev/null`.strip
+        return if pids.empty?
+
+        pids.split("\n").each do |pid_str|
+          pid = pid_str.strip.to_i
+          next if pid <= 0
+
+          ::Process.kill("TERM", pid)
+        rescue Errno::ESRCH, Errno::EPERM
+          nil
+        end
+
+        sleep 0.5
       end
 
       def cleanup_pipes

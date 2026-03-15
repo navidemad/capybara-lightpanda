@@ -29,6 +29,7 @@ Metrics/ClassLength:
     - lib/capybara/lightpanda/client/web_socket.rb
     - lib/capybara/lightpanda/driver.rb
     - lib/capybara/lightpanda/node.rb
+    - lib/capybara/lightpanda/process.rb
     - spec/**/*
 
 Metrics/MethodLength:
