@@ -13,6 +13,7 @@ module Capybara
         def initialize(url, options)
           @url = url
           @options = options
+          @logger = options.logger
           @socket = nil
           @driver = nil
           @thread = nil
@@ -25,6 +26,7 @@ module Capybara
         def send_message(message)
           raise DeadBrowserError, "WebSocket is not open" unless @status == :open
 
+          @logger&.puts("\n\n▶ #{@logger.elapsed_time} #{message}")
           @driver.text(message)
         end
 
@@ -84,6 +86,7 @@ module Capybara
           end
 
           @driver.on(:message) do |event|
+            @logger&.puts("    ◀ #{@logger.elapsed_time} #{event.data}\n")
             message = parse_message(event.data)
             @messages << message if message
           end

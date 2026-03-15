@@ -50,6 +50,8 @@ module Capybara
 
         attach_result = @client.command("Target.attachToTarget", { targetId: @target_id, flatten: true })
         @session_id = attach_result["sessionId"]
+
+        subscribe_to_console_logs
       end
 
       def restart
@@ -433,6 +435,15 @@ module Capybara
         ids
       rescue StandardError
         []
+      end
+
+      def subscribe_to_console_logs
+        logger = @options.logger
+        return unless logger
+
+        on("Runtime.consoleAPICalled") do |params|
+          params["args"]&.each { |r| logger.puts(r["value"]) }
+        end
       end
 
       def serialize_argument(arg)

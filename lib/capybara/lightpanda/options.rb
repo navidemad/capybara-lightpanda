@@ -9,7 +9,7 @@ module Capybara
       DEFAULT_PORT = 9222
       DEFAULT_WINDOW_SIZE = [1024, 768].freeze
 
-      attr_accessor :host, :port, :timeout, :process_timeout, :window_size, :browser_path, :headless
+      attr_accessor :host, :port, :timeout, :process_timeout, :window_size, :browser_path, :headless, :logger
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -21,6 +21,7 @@ module Capybara
         @browser_path = options[:browser_path]
         @headless = options.fetch(:headless, true)
         @ws_url = options[:ws_url]
+        @logger = parse_logger(options[:logger])
       end
 
       def ws_url
@@ -40,9 +41,20 @@ module Capybara
           window_size: window_size,
           browser_path: browser_path,
           headless: headless,
+          logger: logger,
         }
         h[:ws_url] = @ws_url if @ws_url
         h
+      end
+
+      private
+
+      def parse_logger(logger)
+        return logger if logger.is_a?(Logger)
+        return Logger.new(logger) if logger
+        return Logger.new($stdout.tap { |s| s.sync = true }) if ENV["LIGHTPANDA_DEBUG"]
+
+        Logger.new
       end
     end
   end
