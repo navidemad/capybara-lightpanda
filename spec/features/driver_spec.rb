@@ -520,6 +520,34 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
+  # Turbo-compatible form submission
+  # ───────────────────────────────────────────────
+
+  describe "Turbo-compatible form submission" do
+    before { session.visit("/lightpanda/turbo_form") }
+
+    it "fires submit event when clicking a button[type=submit]" do
+      session.find(:css, "#btn-save").click
+      expect(session.find(:css, "#submit-result").text).to include("intercepted")
+    end
+
+    it "passes correct submitter to the submit event" do
+      session.find(:css, "#btn-save").click
+      expect(session.find(:css, "#submit-result").text).to eq("intercepted:btn-save")
+    end
+
+    it "passes correct submitter for input[type=submit]" do
+      session.find(:css, "#input-submit").click
+      expect(session.find(:css, "#submit-result").text).to eq("intercepted:input-submit")
+    end
+
+    it "passes correct submitter for button with formaction" do
+      session.find(:css, "#btn-publish").click
+      expect(session.find(:css, "#submit-result").text).to eq("intercepted:btn-publish")
+    end
+  end
+
+  # ───────────────────────────────────────────────
   # Dynamic content
   # ───────────────────────────────────────────────
 

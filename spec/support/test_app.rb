@@ -270,6 +270,35 @@ class TestApp
     HTML
   end
 
+  # -- Turbo-compatible form submission test --
+  # Simulates Turbo intercepting a form submit event (prevents default, updates DOM).
+  # Verifies that clicking a submit button fires the submit event with correct submitter.
+
+  get "/lightpanda/turbo_form" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Turbo Form Test</title></head>
+        <body>
+          <form id="turbo-form" action="/lightpanda/form_result" method="post">
+            <input type="text" id="turbo-name" name="name" value="test">
+            <button type="submit" id="btn-save">Save</button>
+            <button type="submit" id="btn-publish" formaction="/lightpanda/publish">Publish</button>
+            <input type="submit" id="input-submit" value="Submit">
+          </form>
+          <div id="submit-result"></div>
+          <script>
+            document.getElementById('turbo-form').addEventListener('submit', function(e) {
+              e.preventDefault();
+              var submitterId = e.submitter ? e.submitter.id : 'none';
+              document.getElementById('submit-result').textContent = 'intercepted:' + submitterId;
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   # -- Page with multiple element types for tag_name testing --
 
   get "/lightpanda/elements" do

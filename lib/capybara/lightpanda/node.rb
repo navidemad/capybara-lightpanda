@@ -33,7 +33,8 @@ module Capybara
       end
 
       def click(_keys = [], **_options)
-        call("function() { this.click() }")
+        call(CLICK_JS)
+        driver.browser.wait_for_turbo
       end
 
       def right_click(_keys = [], **_options)
@@ -152,6 +153,28 @@ module Capybara
           raise
         end
       end
+
+      # Turbo-compatible click. For submit buttons, uses requestSubmit() which
+      # fires the `submit` event that Turbo intercepts. For other elements,
+      # falls back to standard HTMLElement.click().
+      CLICK_JS = <<~JS
+        function() {
+          var tag = this.tagName.toLowerCase();
+          var type = (this.type || '').toLowerCase();
+          var isSubmitBtn = ((tag === 'input' || tag === 'button') && type === 'submit') ||
+                            (tag === 'input' && type === 'image');
+
+          if (isSubmitBtn) {
+            var form = this.form;
+            if (form && typeof form.requestSubmit === 'function') {
+              form.requestSubmit(this);
+              return;
+            }
+          }
+
+          this.click();
+        }
+      JS
 
       VISIBLE_JS = <<~JS
         function() {

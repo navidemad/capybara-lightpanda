@@ -261,6 +261,31 @@ module Capybara
         end
       end
 
+      # Wait for any pending Turbo operations to complete.
+      # Returns immediately if Turbo is not loaded or has no pending work.
+      # Uses the tracking counters injected by index.js.
+      def wait_for_turbo
+        idle = evaluate(
+          "typeof window._lightpanda === 'undefined' || " \
+          "!window._lightpanda.turbo || window._lightpanda.turbo.idle()"
+        )
+        return if idle
+
+        deadline = monotonic_time + @options.timeout
+        loop do
+          sleep 0.05
+          idle = begin
+            evaluate("window._lightpanda.turbo.idle()")
+          rescue StandardError
+            true
+          end
+          break if idle
+          break if monotonic_time > deadline
+        end
+      rescue StandardError
+        # Page may have navigated (full page load), JS context lost — safe to continue
+      end
+
       def network
         @network ||= Network.new(self)
       end
