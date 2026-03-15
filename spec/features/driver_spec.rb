@@ -622,6 +622,148 @@ RSpec.describe Capybara::Lightpanda::Driver do
       rows = session.all(:xpath, "//tr[@class='row']")
       expect(rows.length).to eq(2)
     end
+
+    it "handles union operator" do
+      items = session.all(:xpath, "//h1 | //p")
+      expect(items.length).to be >= 2
+    end
+
+    it "handles contains()" do
+      el = session.find(:xpath, "//h1[contains(., 'Heading')]")
+      expect(el.tag_name).to eq("h1")
+    end
+
+    it "handles normalize-space()" do
+      el = session.find(:xpath, "//*[normalize-space(.) = 'Heading']")
+      expect(el.tag_name).to eq("h1")
+    end
+
+    it "handles not()" do
+      items = session.all(:xpath, "//h1[not(@class)]")
+      expect(items).not_to be_empty
+    end
+
+    it "handles and/or in predicates" do
+      items = session.all(:xpath, "//*[@id='heading' or @id='paragraph']")
+      expect(items.length).to eq(2)
+    end
+
+    it "handles descendant axis" do
+      items = session.all(:xpath, "//ul/descendant::li")
+      expect(items.length).to eq(3)
+    end
+
+    it "handles parent axis" do
+      el = session.find(:xpath, "//li/parent::ul")
+      expect(el.tag_name).to eq("ul")
+    end
+
+    it "handles following-sibling axis" do
+      items = session.all(:xpath, "//li[1]/following-sibling::li")
+      expect(items.length).to eq(2)
+    end
+
+    it "handles starts-with()" do
+      el = session.find(:xpath, "//*[starts-with(@id, 'head')]")
+      expect(el.tag_name).to eq("h1")
+    end
+
+    it "handles text() node test" do
+      el = session.find(:xpath, "//p[text()]", match: :first)
+      expect(el.text).not_to be_empty
+    end
+
+    it "handles position predicate" do
+      el = session.find(:xpath, "//li[1]")
+      expect(el.text).to eq("Item 1")
+    end
+
+    it "handles last()" do
+      el = session.find(:xpath, "//li[last()]")
+      expect(el.text).to eq("Item 3")
+    end
+
+    it "handles self:: axis" do
+      items = session.all(:xpath, "//li[self::li]")
+      expect(items.length).to eq(3)
+    end
+
+    it "handles ancestor:: axis" do
+      el = session.find(:xpath, "//li/ancestor::ul")
+      expect(el.tag_name).to eq("ul")
+    end
+
+    it "handles concat()" do
+      el = session.find(:xpath, "//*[contains(concat(' ', @class, ' '), ' item ')]", match: :first)
+      expect(el.tag_name).to eq("li")
+    end
+
+    it "handles translate() for case-insensitive match" do
+      xpath = "//*[translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', " \
+              "'abcdefghijklmnopqrstuvwxyz') = 'heading']"
+      el = session.find(:xpath, xpath)
+      expect(el.tag_name).to eq("h1")
+    end
+
+    it "handles count()" do
+      el = session.find(:xpath, "//ul[count(li) = 3]")
+      expect(el.tag_name).to eq("ul")
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Capybara DSL (relies on XPath evaluator)
+  # ───────────────────────────────────────────────
+
+  describe "Capybara DSL" do
+    it "fill_in finds input by label text" do
+      session.visit("/lightpanda/form_test")
+      session.fill_in("Name", with: "Test User")
+      expect(session.find(:css, "#name").value).to eq("Test User")
+    end
+
+    it "click_link finds link by text" do
+      session.visit("/lightpanda/simple")
+      session.click_link("Go to other page")
+      expect(session.title).to eq("Other Page")
+    end
+
+    it "click_button finds submit button by value" do
+      session.visit("/lightpanda/form_test")
+      session.fill_in("Name", with: "Test")
+      session.click_button("Submit")
+      expect(session).to have_css("#results")
+    end
+
+    it "find(:label) finds label by text" do
+      session.visit("/lightpanda/form_test")
+      el = session.find(:label, "Name")
+      expect(el.tag_name).to eq("label")
+    end
+
+    it "find(:link) finds link by text" do
+      session.visit("/lightpanda/simple")
+      el = session.find(:link, "Go to other page")
+      expect(el.tag_name).to eq("a")
+    end
+
+    it "find(:button) finds button by value" do
+      session.visit("/lightpanda/form_test")
+      el = session.find(:button, "Submit")
+      expect(el.tag_name).to eq("input")
+    end
+
+    it "find(:select) finds select by label text" do
+      session.visit("/lightpanda/form_test")
+      el = session.find(:select, "Favorite Color")
+      expect(el.tag_name).to eq("select")
+    end
+
+    it "find(:field) finds input by label text" do
+      session.visit("/lightpanda/form_test")
+      el = session.find(:field, "Name")
+      expect(el.tag_name).to eq("input")
+    end
   end
 
   # ───────────────────────────────────────────────
