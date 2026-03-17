@@ -59,6 +59,24 @@ module Capybara
         start
       end
 
+      # Recover after a WebSocket disconnect or process crash during navigation.
+      # Restarts the process if it died, then creates a fresh client and page.
+      def reconnect
+        @client&.close rescue nil
+
+        if @process && !@process.alive?
+          @process.stop rescue nil
+          @process.start
+        end
+
+        ws_url = @options.ws_url? ? @options.ws_url : @process&.ws_url
+        raise DeadBrowserError, "Cannot reconnect: no WebSocket URL" unless ws_url
+
+        @client = Client.new(ws_url, @options)
+        create_page
+        @page_events_enabled = false
+      end
+
       def quit
         begin
           @client&.close
@@ -96,10 +114,15 @@ module Capybara
       # Chrome which returns immediately with frameId/loaderId). If we
       # waited synchronously, the readyState fallback would never be
       # reached on pages that fail to fully load.
-      def go_to(url, wait: true)
+      #
+      # Uses a single shared deadline so the worst-case wait is 1x timeout,
+      # not 2x (lightpanda-io/browser#1849).
+      def go_to(url, wait: true, _retried: false)
         enable_page_events
 
         if wait
+          starting_url = current_url rescue nil
+          deadline = monotonic_time + @options.timeout
           loaded = Concurrent::Event.new
 
           handler = proc { loaded.set }
@@ -107,9 +130,35 @@ module Capybara
 
           @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
 
-          poll_ready_state(@options.timeout) unless loaded.wait(@options.timeout)
+          # Give loadEventFired a brief window (fast path), then fall back
+          # to readyState polling with the remaining budget.
+          unless loaded.wait([2, @options.timeout].min)
+            remaining = deadline - monotonic_time
+            poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+          end
 
           @client.off("Page.loadEventFired", handler)
+
+          # Lightpanda may kill the WebSocket or crash during complex page
+          # navigation (lightpanda-io/browser#1849, #1854). Reconnect and
+          # retry once. If the retry also crashes, raise a clear error
+          # instead of leaving the client in a dead state.
+          if @client.closed? && !_retried
+            begin
+              reconnect
+              remaining = deadline - monotonic_time
+              go_to(url, wait: remaining.positive?, _retried: true) if remaining.positive?
+            rescue DeadBrowserError
+              raise
+            rescue StandardError
+              # reconnect itself failed (process won't restart, port stuck, etc.)
+            end
+          end
+
+          if @client.closed?
+            reconnect rescue nil
+            raise DeadBrowserError, "Lightpanda crashed navigating to #{url}"
+          end
         else
           page_command("Page.navigate", url: url)
         end
@@ -478,18 +527,27 @@ module Capybara
       def wait_for_navigation
         enable_page_events
 
+        starting_url = current_url rescue nil
+        deadline = monotonic_time + @options.timeout
         loaded = Concurrent::Event.new
         handler = proc { loaded.set }
         @client.on("Page.loadEventFired", &handler)
 
         yield
 
-        poll_ready_state(@options.timeout) unless loaded.wait(@options.timeout)
+        unless loaded.wait([2, @options.timeout].min)
+          remaining = deadline - monotonic_time
+          poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+        end
 
         @client.off("Page.loadEventFired", handler)
       end
 
-      def poll_ready_state(timeout)
+      # Poll document.readyState as a fallback when Page.loadEventFired
+      # doesn't fire. When starting_url is provided, the poll ignores
+      # readyState values from the old page (e.g. about:blank reports
+      # "complete" while the new page is still loading in the background).
+      def poll_ready_state(timeout, loaded_event: nil, starting_url: nil)
         deadline = monotonic_time + timeout
         # Use a short per-evaluation timeout because Lightpanda may block
         # all commands while navigating. Without this, a single evaluate()
@@ -498,24 +556,36 @@ module Capybara
         poll_cmd_timeout = [timeout / 5.0, 2].max
 
         loop do
-          ready = begin
+          break if loaded_event&.set?
+          break if @client.closed?
+
+          state = begin
             response = @client.command(
               "Runtime.evaluate",
-              { expression: "document.readyState", returnByValue: true, awaitPromise: true },
+              { expression: POLL_STATE_JS, returnByValue: true, awaitPromise: true },
               session_id: @session_id,
-              timeout: poll_cmd_timeout,
+              timeout: poll_cmd_timeout
             )
-            result = response["result"]
-            result && result["value"]
+            response.dig("result", "value")
           rescue StandardError
             nil
           end
-          break if %w[complete interactive].include?(ready)
+
+          if state
+            ready = state["r"]
+            url = state["u"]
+            # Don't trust readyState if the URL hasn't changed yet — the
+            # old page's context may still report "complete".
+            url_changed = starting_url.nil? || url != starting_url
+            break if url_changed && %w[complete interactive].include?(ready)
+          end
           break if monotonic_time > deadline
 
           sleep 0.1
         end
       end
+
+      POLL_STATE_JS = '(function(){return{r:document.readyState,u:location.href}})()'.freeze
 
       def monotonic_time
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
