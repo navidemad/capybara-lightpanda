@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-17:
+All verified present in upstream as of 2026-03-18:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -121,6 +121,17 @@ LP.getStructuredData
 
 ### Recently Merged Fixes (v0.2.6 and post-v0.2.6 nightly)
 
+- **PR #1891**: Implement `Form.requestSubmit` — our `Node#click` CLICK_JS now has native support for this (merged 2026-03-18)
+- **PR #1885**: Fallback to Incumbent Context when Current Context is dangling — reduces "execution context destroyed" errors (merged 2026-03-18)
+- **PR #1902**: `Emulation.setUserAgentOverride` now logs when ignored instead of silent (merged 2026-03-18)
+- **PR #1899**: Only run idle tasks from root page (merged 2026-03-18)
+- **PR #1894**: SemanticTree: implement interactiveOnly filter and optimize token usage (merged 2026-03-18)
+- **PR #1893**: Expand rel's that trigger link onload (merged 2026-03-18)
+- **PR #1887**: Disable MutationObserver/IntersectionObserver weak refs — fixes #1887 stability issues (merged 2026-03-17)
+- **PR #1882**: Special-case `Window#onerror` per WHATWG spec (5-arg signature) (merged 2026-03-17)
+- **PR #1878**: Implement `window.event` property (merged 2026-03-17)
+- **PR #1877**: Support blob URLs in XHR and Fetch (merged 2026-03-17)
+- **Commit 58641335**: Close all CDP clients on shutdown — cleaner process termination (2026-03-17)
 - **PR #1872**: Graceful WS socket close — send CLOSE message on browser-initiated disconnect, continue on accept failures (merged 2026-03-17)
 - **PR #1883**: Show actionable error when server port is already in use (merged 2026-03-17)
 - **PR #1876**: Add click, fill, scroll MCP interaction tools (merged 2026-03-17)
@@ -156,12 +167,13 @@ LP.getStructuredData
 
 None currently tracked.
 
-### Upstream Open Issues (verified 2026-03-17)
+### Upstream Open Issues (verified 2026-03-18)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
-| #1887 | Stability | MutationObserver weak ref issues (disable observer weak ref) | |
-| #1848 | CDP | Multiclient: closing one CDP connection kills other active connections | |
+| #1900 | JS | `InputEvent` not dispatched on input/TextArea changes (could affect `SET_VALUE_JS` if merged) | |
+| #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
+| #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
 | #1839 | CDP | Session management assertion error in Playwright | |
 | #1838 | CDP | CRSession._onMessage crash in Playwright | |
 | #1832 | Navigation | `Page.navigate` response never sent on some sites | |
@@ -177,6 +189,8 @@ None currently tracked.
 | Issue | Outcome |
 |---|---|
 | #1849 | Closed (2026-03-16) — Fixed by PR #1850: CDP WebSocket no longer dies during complex navigation |
+| #1848 | Closed (2026-03-18) — Multiclient connection kills; re-filed as #1892 with more detail |
+| #1887 | Merged (2026-03-17) — PR disabled observer weak refs, fixing MutationObserver stability |
 | #1843 | Closed (2026-03-15) — Fixed by PR #1845: Unknown CDP methods no longer kill WebSocket |
 | #1842 | Closed — was our driver bug (`switch_to_frame` passed Capybara wrapper instead of native Node) |
 | #1844 | Closed — cascading from #1843, not a real stability issue. 500+ commands work fine. |
@@ -187,7 +201,7 @@ None currently tracked.
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
 - No `window.getComputedStyle()` (no CSS engine)
 - No `window.scrollTo()`, `element.scrollIntoView()` (no layout)
-- `MutationObserver` now available (PR #1870, reference counting) but has weak ref issues (#1887)
+- `MutationObserver` now available (PR #1870, reference counting; weak refs disabled by PR #1887)
 - `window.postMessage` across frames now works (PR #1817)
 - No WebSocket API in page context (CDP WebSocket is separate)
 - No Web Workers, Service Workers, SharedArrayBuffer
