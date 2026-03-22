@@ -38,7 +38,12 @@ module Capybara
 
         effective_timeout = timeout || @options.timeout
         response = pending.value!(effective_timeout)
-        raise TimeoutError, "Command #{method} timed out after #{effective_timeout}s" if response.nil?
+
+        if response.nil?
+          raise DeadBrowserError, "Browser closed during #{method}" if @ws.closed?
+
+          raise TimeoutError, "Command #{method} timed out after #{effective_timeout}s"
+        end
 
         handle_error(response) if response["error"]
 
@@ -56,9 +61,8 @@ module Capybara
       end
 
       def close
-        @running = false
-        @message_thread&.kill
         @ws&.close
+        @message_thread&.join(1) || @message_thread&.kill
         @subscriber.clear
         @pendings.clear
       end
@@ -82,15 +86,10 @@ module Capybara
       end
 
       def start_message_thread
-        @running = true
-
         @message_thread = Thread.new do
           Thread.current.abort_on_exception = true
 
-          while @running && !@ws.closed?
-            message = @ws.messages.pop
-            next unless message
-
+          while (message = @ws.messages.pop)
             handle_message(message)
           end
         end

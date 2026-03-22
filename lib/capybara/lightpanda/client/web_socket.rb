@@ -35,8 +35,9 @@ module Capybara
           return if @status == :closed
 
           @status = :closing
+          @messages.close
           @driver&.close
-          @thread&.kill
+          @thread&.join(1) || @thread&.kill
           @socket&.close
           @status = :closed
         end
@@ -53,6 +54,7 @@ module Capybara
           @socket.write(data)
         rescue Errno::EPIPE, Errno::ECONNRESET, IOError
           @status = :closed
+          @messages.close
         end
 
         private
@@ -90,14 +92,18 @@ module Capybara
             @logger&.puts("    ◀ #{@logger.elapsed_time} #{event.data}\n")
             message = parse_message(event.data)
             @messages << message if message
+          rescue ClosedQueueError
+            # Queue was closed during shutdown
           end
 
           @driver.on(:close) do
             @status = :closed
+            @messages.close
           end
 
           @driver.on(:error) do |event|
             @status = :error
+            @messages.close
 
             raise DeadBrowserError, "WebSocket error: #{event.message}"
           end
@@ -115,8 +121,9 @@ module Capybara
 
                 data = @socket.readpartial(4096)
                 @driver_mutex.synchronize { @driver.parse(data) }
-              rescue IOError
+              rescue Errno::ECONNRESET, Errno::EPIPE, IOError
                 @status = :closed
+                @messages.close
                 break
               end
             end
@@ -141,7 +148,7 @@ module Capybara
         end
 
         def parse_message(data)
-          JSON.parse(data)
+          JSON.parse(data, max_nesting: false)
         rescue JSON::ParserError => e
           warn "Failed to parse WebSocket message: #{e.message}"
 

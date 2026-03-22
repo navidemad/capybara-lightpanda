@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "logger"
+
 module Capybara
   module Lightpanda
     class Options
@@ -50,11 +52,11 @@ module Capybara
       private
 
       def parse_logger(logger)
-        return logger if logger.is_a?(Logger)
-        return Logger.new(logger) if logger
-        return Logger.new($stdout.tap { |s| s.sync = true }) if ENV["LIGHTPANDA_DEBUG"]
+        return logger if logger.is_a?(Capybara::Lightpanda::Logger)
+        return Capybara::Lightpanda::Logger.new(logger) if logger
+        return Capybara::Lightpanda::Logger.new($stdout.tap { |s| s.sync = true }) if ENV["LIGHTPANDA_DEBUG"]
 
-        Logger.new
+        Capybara::Lightpanda::Logger.new
       end
     end
   end
