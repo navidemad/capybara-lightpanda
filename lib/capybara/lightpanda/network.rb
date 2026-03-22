@@ -34,6 +34,21 @@ module Capybara
         @traffic.clear
       end
 
+      def headers=(headers)
+        @extra_headers = headers
+        browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
+      end
+
+      def add_headers(headers)
+        @extra_headers = (@extra_headers || {}).merge(headers)
+        browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
+      end
+
+      def clear_headers
+        @extra_headers = {}
+        browser.page_command("Network.setExtraHTTPHeaders", headers: {})
+      end
+
       def wait_for_idle(timeout: 5, connections: 0) # rubocop:disable Naming/PredicateMethod
         started_at = Time.now
 

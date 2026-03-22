@@ -73,6 +73,10 @@ module Capybara
         nil
       end
 
+      def evaluate_async_script(script, *_args)
+        browser.evaluate_async(script)
+      end
+
       # -- Cookie Management --
 
       def set_cookie(name, value, **options)
@@ -187,7 +191,9 @@ module Capybara
       private
 
       def inject_lightpanda_js
-        browser.execute(XPathPolyfill::JS)
+        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+          browser.execute(XPathPolyfill::JS)
+        end
       rescue StandardError
         # Ignore if page isn't ready yet
       end

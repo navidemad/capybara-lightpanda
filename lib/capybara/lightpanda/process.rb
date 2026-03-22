@@ -71,6 +71,7 @@ module Capybara
         @stderr_r, @stderr_w = IO.pipe
 
         @pid = spawn_process(binary_path)
+        register_finalizer(@pid)
 
         @stdout_w.close
         @stderr_w.close
@@ -195,6 +196,25 @@ module Capybara
         end
 
         sleep 0.5
+      end
+
+      # Class method so the finalizer proc doesn't capture `self` (which
+      # would prevent GC from ever running the finalizer).
+      class << self
+        private
+
+        def weak_kill(pid)
+          proc do
+            ::Process.kill("TERM", -pid)
+            ::Process.wait(pid)
+          rescue Errno::ESRCH, Errno::ECHILD, Errno::EPERM
+            nil
+          end
+        end
+      end
+
+      def register_finalizer(pid)
+        ObjectSpace.define_finalizer(self, self.class.send(:weak_kill, pid))
       end
 
       def cleanup_pipes

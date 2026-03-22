@@ -36,9 +36,9 @@ Capybara::SpecHelper.run_specs(
     skip "No drag and drop support"
   when /node #attach_file/, /attach_file/
     skip "File upload not supported by Lightpanda"
-  when /#evaluate_async_script/
-    skip "evaluate_async_script not implemented"
   when /matches_style/, /assert_style/
     skip "No CSS engine — getComputedStyle not available"
+  when /evaluate_async_script.*(passing elements|returning elements|context of the element)/
+    skip "Async scripts cannot pass/return DOM elements (returnByValue limitation)"
   end
 end

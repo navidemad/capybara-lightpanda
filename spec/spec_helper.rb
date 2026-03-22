@@ -47,9 +47,6 @@ RSpec.configure do |config|
       # No file upload support
       /attach_file/,
 
-      # No async script evaluation (not implemented in driver)
-      /evaluate_async_script/,
-
       # No shadow DOM
       /shadow_root/,
       /shadow dom/i,

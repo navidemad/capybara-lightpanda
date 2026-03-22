@@ -76,12 +76,9 @@ module Capybara
         call(UNSELECT_OPTION_JS)
       end
 
-      def send_keys(*args)
-        args.each do |key|
-          next unless key.is_a?(String)
-
-          call(APPEND_KEYS_JS, key)
-        end
+      def send_keys(*)
+        call("function() { this.focus() }")
+        driver.browser.keyboard.type(*)
       end
 
       def tag_name
@@ -137,7 +134,9 @@ module Capybara
       # All JS function declarations are self-contained (no _lightpanda dependency)
       # so they work in any execution context including iframes.
       def call(function_declaration, *args)
-        driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
+        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+          driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
+        end
       rescue BrowserError => e
         case e.message
         when /MouseEventFailed/i

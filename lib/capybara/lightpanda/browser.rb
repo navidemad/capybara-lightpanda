@@ -170,6 +170,22 @@ module Capybara
         nil
       end
 
+      # Evaluate async JS with a callback. The user's script receives
+      # a `arguments[arguments.length - 1]` callback to signal completion
+      # (matching Capybara's evaluate_async_script contract).
+      def evaluate_async(expression, wait: @options.timeout)
+        wrapped = <<~JS
+          new Promise(function(__resolve, __reject) {
+            var __timer = setTimeout(function() {
+              __reject(new Error('Async script timeout after #{(wait * 1000).to_i}ms'));
+            }, #{(wait * 1000).to_i});
+            var __done = function(val) { clearTimeout(__timer); __resolve(val); };
+            (function() { #{expression} }).call(null, __done);
+          })
+        JS
+        evaluate(wrapped)
+      end
+
       # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
       def evaluate_with_ref(expression)
         response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
@@ -300,6 +316,10 @@ module Capybara
         # Page may have navigated (full page load), JS context lost — safe to continue
       end
 
+      def keyboard
+        @keyboard ||= Keyboard.new(self)
+      end
+
       def network
         @network ||= Network.new(self)
       end
@@ -414,14 +434,16 @@ module Capybara
       JS
 
       def find_in_document(method, selector)
-        js = if method == "xpath"
-               "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
-             else
-               "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } " \
-                 "catch(e) { return []; } })()"
-             end
-        result = evaluate_with_ref(js)
-        extract_node_object_ids(result)
+        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+          js = if method == "xpath"
+                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
+               else
+                 "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } " \
+                   "catch(e) { return []; } })()"
+               end
+          result = evaluate_with_ref(js)
+          extract_node_object_ids(result)
+        end
       end
 
       def find_in_frame(method, selector)
