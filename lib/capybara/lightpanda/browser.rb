@@ -62,12 +62,8 @@ module Capybara
       # Recover after a WebSocket disconnect or process crash during navigation.
       # Restarts the process if it died, then creates a fresh client and page.
       def reconnect
-        @client&.close rescue nil
-
-        if @process && !@process.alive?
-          @process.stop rescue nil
-          @process.start
-        end
+        close_client_silently
+        restart_process_if_dead
 
         ws_url = @options.ws_url? ? @options.ws_url : @process&.ws_url
         raise DeadBrowserError, "Cannot reconnect: no WebSocket URL" unless ws_url
@@ -117,48 +113,11 @@ module Capybara
       #
       # Uses a single shared deadline so the worst-case wait is 1x timeout,
       # not 2x (lightpanda-io/browser#1849).
-      def go_to(url, wait: true, _retried: false)
+      def go_to(url, wait: true, retried: false)
         enable_page_events
 
         if wait
-          starting_url = current_url rescue nil
-          deadline = monotonic_time + @options.timeout
-          loaded = Concurrent::Event.new
-
-          handler = proc { loaded.set }
-          @client.on("Page.loadEventFired", &handler)
-
-          @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
-
-          # Give loadEventFired a brief window (fast path), then fall back
-          # to readyState polling with the remaining budget.
-          unless loaded.wait([2, @options.timeout].min)
-            remaining = deadline - monotonic_time
-            poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
-          end
-
-          @client.off("Page.loadEventFired", handler)
-
-          # Lightpanda may kill the WebSocket or crash during complex page
-          # navigation (lightpanda-io/browser#1849, #1854). Reconnect and
-          # retry once. If the retry also crashes, raise a clear error
-          # instead of leaving the client in a dead state.
-          if @client.closed? && !_retried
-            begin
-              reconnect
-              remaining = deadline - monotonic_time
-              go_to(url, wait: remaining.positive?, _retried: true) if remaining.positive?
-            rescue DeadBrowserError
-              raise
-            rescue StandardError
-              # reconnect itself failed (process won't restart, port stuck, etc.)
-            end
-          end
-
-          if @client.closed?
-            reconnect rescue nil
-            raise DeadBrowserError, "Lightpanda crashed navigating to #{url}"
-          end
+          wait_for_page_load(url, retried: retried)
         else
           page_command("Page.navigate", url: url)
         end
@@ -522,12 +481,83 @@ module Capybara
         result["value"]
       end
 
+      def wait_for_page_load(url, retried:)
+        starting_url = safe_current_url
+        deadline = monotonic_time + @options.timeout
+        loaded = Concurrent::Event.new
+
+        handler = proc { loaded.set }
+        @client.on("Page.loadEventFired", &handler)
+
+        @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
+
+        # Give loadEventFired a brief window (fast path), then fall back
+        # to readyState polling with the remaining budget.
+        unless loaded.wait([2, @options.timeout].min)
+          remaining = deadline - monotonic_time
+          poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+        end
+
+        @client.off("Page.loadEventFired", handler)
+        handle_navigation_crash(url, deadline, retried: retried)
+      end
+
+      # Lightpanda may kill the WebSocket or crash during complex page
+      # navigation (lightpanda-io/browser#1849, #1854). Reconnect and
+      # retry once. If the retry also crashes, raise a clear error
+      # instead of leaving the client in a dead state.
+      def handle_navigation_crash(url, deadline, retried:)
+        if @client.closed? && !retried
+          begin
+            reconnect
+            remaining = deadline - monotonic_time
+            go_to(url, wait: remaining.positive?, retried: true) if remaining.positive?
+          rescue DeadBrowserError
+            raise
+          rescue StandardError
+            # reconnect itself failed (process won't restart, port stuck, etc.)
+          end
+        end
+
+        return unless @client.closed?
+
+        begin
+          reconnect
+        rescue StandardError
+          nil
+        end
+        raise DeadBrowserError, "Lightpanda crashed navigating to #{url}"
+      end
+
+      def close_client_silently
+        @client&.close
+      rescue StandardError
+        nil
+      end
+
+      def restart_process_if_dead
+        return unless @process && !@process.alive?
+
+        begin
+          @process.stop
+        rescue StandardError
+          nil
+        end
+        @process.start
+      end
+
+      def safe_current_url
+        current_url
+      rescue StandardError
+        nil
+      end
+
       # Wait for a navigation triggered by the given block.
       # Uses the same loadEventFired + readyState fallback as go_to.
       def wait_for_navigation
         enable_page_events
 
-        starting_url = current_url rescue nil
+        starting_url = safe_current_url
         deadline = monotonic_time + @options.timeout
         loaded = Concurrent::Event.new
         handler = proc { loaded.set }
@@ -558,34 +588,30 @@ module Capybara
         loop do
           break if loaded_event&.set?
           break if @client.closed?
-
-          state = begin
-            response = @client.command(
-              "Runtime.evaluate",
-              { expression: POLL_STATE_JS, returnByValue: true, awaitPromise: true },
-              session_id: @session_id,
-              timeout: poll_cmd_timeout
-            )
-            response.dig("result", "value")
-          rescue StandardError
-            nil
-          end
-
-          if state
-            ready = state["r"]
-            url = state["u"]
-            # Don't trust readyState if the URL hasn't changed yet — the
-            # old page's context may still report "complete".
-            url_changed = starting_url.nil? || url != starting_url
-            break if url_changed && %w[complete interactive].include?(ready)
-          end
+          break if page_ready?(poll_cmd_timeout, starting_url)
           break if monotonic_time > deadline
 
           sleep 0.1
         end
       end
 
-      POLL_STATE_JS = '(function(){return{r:document.readyState,u:location.href}})()'.freeze
+      POLL_STATE_JS = "(function(){return{r:document.readyState,u:location.href}})()"
+
+      def page_ready?(cmd_timeout, starting_url)
+        response = @client.command(
+          "Runtime.evaluate",
+          { expression: POLL_STATE_JS, returnByValue: true, awaitPromise: true },
+          session_id: @session_id,
+          timeout: cmd_timeout
+        )
+        state = response.dig("result", "value")
+        return false unless state
+
+        url_changed = starting_url.nil? || state["u"] != starting_url
+        url_changed && %w[complete interactive].include?(state["r"])
+      rescue StandardError
+        false
+      end
 
       def monotonic_time
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
