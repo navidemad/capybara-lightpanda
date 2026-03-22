@@ -5,10 +5,10 @@ License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
 ## Architecture
 
-- Written in **Zig 0.15.2**, JS execution via **V8** (`zig-js-runtime`)
+- Written in **Zig 0.15.2**, JS execution via **V8**
 - HTML parsing: **html5ever** (standards-compliant, handles malformed HTML)
 - HTTP: **libcurl** (custom headers, proxies, TLS control)
-- No rendering engine: purely headless, no CSS layout/paint/compositing
+- CSS: **StyleManager** (introduced PR #1897, 2026-03-18) — partial CSS support, no full layout/paint/compositing
 - Platforms: Linux x86_64, macOS aarch64, Windows via WSL2
 
 ## CDP Server
@@ -21,7 +21,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
 | **Browser** | browser.zig | Basic browser-level commands |
-| **CSS** | css.zig | Limited — no rendering engine, no `getComputedStyle` |
+| **CSS** | css.zig | Limited — StyleManager added (PR #1897), `getComputedStyle` improving but CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs |
 | **Fetch** | fetch.zig | Network interception at Fetch domain level |
@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-18:
+All verified present in upstream as of 2026-03-22:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -70,7 +70,7 @@ Network.getAllCookies         → does not exist; gem uses Network.getCookies
 Page.createIsolatedWorld     Page.getFrameTree
 Page.addScriptToEvaluateOnNewDocument  (STUBBED — accepts call, returns {identifier:"1"}, does nothing)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
-DOM.resolveNode              DOM.getBoxModel (zeros for padding/border/margin)
+DOM.resolveNode              DOM.getBoxModel (now returns real getBoundingClientRect geometry)
 DOM.describeNode             DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes
@@ -109,9 +109,10 @@ LP.getStructuredData
    - This gem injects a JS polyfill that converts XPath to CSS selectors (~80% coverage)
    - Polyfill MUST be re-injected after every `visit` (JS context lost between navigations)
 
-4. **No rendering engine**
+4. **No rendering engine (CSS improving)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
-   - No `getComputedStyle`, no scroll/resize, no visual regression testing
+   - `getComputedStyle` partially working via StyleManager (PR #1897, #1933); full CSSOM PR #1797 still open
+   - No scroll/resize, no visual regression testing
    - `Page.getLayoutMetrics` returns hardcoded 1920x1080 values
    - `window.innerWidth`/`innerHeight` may not reflect emulation settings
 
@@ -121,6 +122,23 @@ LP.getStructuredData
 
 ### Recently Merged Fixes (v0.2.6 and post-v0.2.6 nightly)
 
+- **PR #1949**: Fix Page.getFrameTree on STARTUP when browser context and target exist — fixes #1800 frame ID mismatch (merged 2026-03-21)
+- **PR #1945**: Add validation to `replaceChildren` (merged 2026-03-21)
+- **PR #1944**: Fix `new URL('about:blank')` parsing (merged 2026-03-21)
+- **PR #1942**: Search for base page when resolving from about:blank — improves about:blank URL handling (merged 2026-03-21)
+- **PR #1939**: More aggressive timer cleanup — reduces timer leaks (merged 2026-03-21)
+- **PR #1933**: Optimize CSS visibility engine with lazy parsing and cache-friendly evaluation (merged 2026-03-20)
+- **PR #1929**: Send `Target.detachedFromTarget` event on detach — fixes #1819 (merged 2026-03-20)
+- **PR #1927**: Fetch `wait_until` parameter for page load options (merged 2026-03-20)
+- **PR #1925**: Return correct errors in promise rejections (merged 2026-03-20)
+- **PR #1918**: Add `adoptedStyleSheets` property to ShadowRoot (merged 2026-03-19)
+- **PR #1916**: Add `Request.signal` — AbortController support for fetch (merged 2026-03-19)
+- **PR #1915**: Improve unhandled rejection handling (merged 2026-03-19)
+- **PR #1911/1884**: Stub `navigator.permissions`, `navigator.storage`, `navigator.deviceMemory` — unblocks Cloudflare Turnstile (merged 2026-03-19)
+- **PR #1900**: Dispatch `InputEvent` on input/TextArea changes — native InputEvent support (merged 2026-03-18)
+- **PR #1898**: Keyboard events are now bubbling, cancelable, and composed (merged 2026-03-18)
+- **PR #1897**: Introduce StyleManager — foundation for CSS support (merged 2026-03-18)
+- **PR #1901**: Remove Origins (internal refactor) (merged 2026-03-20)
 - **PR #1891**: Implement `Form.requestSubmit` — our `Node#click` CLICK_JS now has native support for this (merged 2026-03-18)
 - **PR #1885**: Fallback to Incumbent Context when Current Context is dangling — reduces "execution context destroyed" errors (merged 2026-03-18)
 - **PR #1902**: `Emulation.setUserAgentOverride` now logs when ignored instead of silent (merged 2026-03-18)
@@ -165,23 +183,25 @@ LP.getStructuredData
 
 ### Open Fix PRs (not yet merged)
 
-None currently tracked.
+- **PR #1797**: Implement CSSOM and Enhanced Visibility Filtering — would significantly improve `getComputedStyle` and visibility detection
+- **PR #1926/1923**: Fix WebSocketDebuggerUrl returning 0.0.0.0 instead of 127.0.0.1 (Docker/remote scenario; does not affect our gem which parses stdout)
+- **PR #1946**: Encode non-UTF8 `Network.getResponseBody` in base64
 
-### Upstream Open Issues (verified 2026-03-18)
+### Upstream Open Issues (verified 2026-03-22)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
-| #1900 | JS | `InputEvent` not dispatched on input/TextArea changes (could affect `SET_VALUE_JS` if merged) | |
+| #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
+| #1952 | JS | `WebSocket` not defined in page context | |
+| #1922 | CDP | WebSocketDebuggerUrl returns `0.0.0.0` (Docker/remote only; we parse stdout, not affected) | |
 | #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
 | #1839 | CDP | Session management assertion error in Playwright | |
 | #1838 | CDP | CRSession._onMessage crash in Playwright | |
 | #1832 | Navigation | `Page.navigate` response never sent on some sites | |
 | #1830 | Startup | Port-already-in-use not handled gracefully (PR #1883 adds better error message, but no auto-recovery) | |
-| #1819 | CDP | Page unresponsive after `Target.detachFromTarget` | |
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
-| #1800 | CDP | Playwright `connectOverCDP` fails: frame ID mismatch | |
 | #1550 | Storage | Creating context with storage state fails | |
 
 ### Closed Issues We Filed
@@ -195,11 +215,19 @@ None currently tracked.
 | #1842 | Closed — was our driver bug (`switch_to_frame` passed Capybara wrapper instead of native Node) |
 | #1844 | Closed — cascading from #1843, not a real stability issue. 500+ commands work fine. |
 
+### Recently Closed Tracked Issues
+
+| Issue | Outcome |
+|---|---|
+| #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
+| #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
+| #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
+
 ### General Limitations
 
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
-- No `window.getComputedStyle()` (no CSS engine)
+- `window.getComputedStyle()` partially working — StyleManager (PR #1897) added basic CSS support; full CSSOM (PR #1797) still open
 - No `window.scrollTo()`, `element.scrollIntoView()` (no layout)
 - `MutationObserver` now available (PR #1870, reference counting; weak refs disabled by PR #1887)
 - `window.postMessage` across frames now works (PR #1817)
@@ -250,8 +278,8 @@ When writing CDP interactions, be aware of these divergences:
 2. **Error responses**: Error messages/codes differ from Chrome's (e.g., `InvalidParams` instead of specific error codes)
 3. **Missing methods**: Not all methods within a domain are implemented; unsupported methods return errors
 4. **Parameter rejection**: `Network.deleteCookies` now silently ignores `partitionKey` (PR #1821, merged 2026-03-16)
-5. **Session management**: `Target.detachFromTarget` can leave pages unresponsive (#1819)
-6. **Frame tree**: Frame IDs may not match Playwright expectations (#1800)
+5. **Session management**: `Target.detachFromTarget` now sends `detachedFromTarget` event (PR #1929, fixes #1819)
+6. **Frame tree**: Frame ID mismatch on STARTUP fixed (PR #1949, fixes #1800)
 7. **Accessibility**: ARIA snapshots are more verbose than Chrome's (#1813)
 
 ## Development Tips
