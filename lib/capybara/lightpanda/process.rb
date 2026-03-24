@@ -109,6 +109,7 @@ module Capybara
         args = build_args
 
         ::Process.spawn(
+          { "LIGHTPANDA_DISABLE_TELEMETRY" => "true" },
           binary_path, *args,
           out: @stdout_w,
           err: @stderr_w,
