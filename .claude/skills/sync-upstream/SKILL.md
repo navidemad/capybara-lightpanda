@@ -2,6 +2,8 @@
 name: sync-upstream
 description: Check Lightpanda upstream repo for CDP changes, fixed bugs, new issues, and opportunities to improve capybara-lightpanda. Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, or investigating whether a specific CDP behavior (like Page.loadEventFired, Network.clearBrowserCookies, XPathResult) has changed or been fixed. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods -- those are code tasks, not upstream investigations.
 user_invocable: true
+model: opus
+effort: max
 ---
 
 # Sync Upstream Lightpanda

@@ -40,6 +40,14 @@ module Capybara
           find || download
         end
 
+        # Always return the nightly binary, downloading if missing or stale.
+        # Skips PATH lookup so the system binary is never used.
+        def ensure_nightly(max_age: 86_400)
+          path = default_binary_path
+          download if !File.executable?(path) || (Time.now - File.mtime(path)) > max_age
+          path
+        end
+
         def run(*)
           stdout, stderr, status = Open3.capture3(path, *)
 

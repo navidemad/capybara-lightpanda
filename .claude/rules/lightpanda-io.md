@@ -8,7 +8,7 @@ License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 - Written in **Zig 0.15.2**, JS execution via **V8**
 - HTML parsing: **html5ever** (standards-compliant, handles malformed HTML)
 - HTTP: **libcurl** (custom headers, proxies, TLS control)
-- CSS: **StyleManager** (introduced PR #1897, 2026-03-18) — partial CSS support, no full layout/paint/compositing
+- CSS: **CSSOM** (PR #1797 merged 2026-03-23, built on StyleManager PR #1897) — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets; no full layout/paint/compositing
 - Platforms: Linux x86_64, macOS aarch64, Windows via WSL2
 
 ## CDP Server
@@ -21,7 +21,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
 | **Browser** | browser.zig | Basic browser-level commands |
-| **CSS** | css.zig | Limited — StyleManager added (PR #1897), `getComputedStyle` improving but CDP `CSS.getComputedStyleForNode` not yet implemented |
+| **CSS** | css.zig | CSSOM merged (PR #1797, 2026-03-23): `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs |
 | **Fetch** | fetch.zig | Network interception at Fetch domain level |
@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-22:
+All verified present in upstream as of 2026-03-24:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -86,7 +86,7 @@ Target.getTargets            Target.getTargetInfo        Target.setAutoAttach
 Target.setDiscoverTargets (stub)  Target.activateTarget (stub)
 Target.attachToBrowserTarget Target.detachFromTarget     Target.sendMessageToTarget
 LP.getSemanticTree           LP.getInteractiveElements
-LP.getStructuredData
+LP.getStructuredData         LP.waitForSelector
 ```
 
 ## Known Bugs and Limitations
@@ -109,9 +109,9 @@ LP.getStructuredData
    - This gem injects a JS polyfill that converts XPath to CSS selectors (~80% coverage)
    - Polyfill MUST be re-injected after every `visit` (JS context lost between navigations)
 
-4. **No rendering engine (CSS improving)**
+4. **No rendering engine (CSS much improved)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
-   - `getComputedStyle` partially working via StyleManager (PR #1897, #1933); full CSSOM PR #1797 still open
+   - `getComputedStyle` significantly improved: CSSOM merged (PR #1797, 2026-03-23) — `checkVisibility` now matches all active stylesheets (not just inline), `insertRule`/`deleteRule` work
    - No scroll/resize, no visual regression testing
    - `Page.getLayoutMetrics` returns hardcoded 1920x1080 values
    - `window.innerWidth`/`innerHeight` may not reflect emulation settings
@@ -122,6 +122,20 @@ LP.getStructuredData
 
 ### Recently Merged Fixes (v0.2.6 and post-v0.2.6 nightly)
 
+- **PR #1979**: Support (and prefer) dash-separated CLI arguments (merged 2026-03-24) — e.g. `--log-format` preferred over `--log_format`
+- **PR #1977**: Only check StyleSheet dirty flag at start of operation — CSS perf optimization (merged 2026-03-24)
+- **PR #1972**: Fix Expo Web crash by gracefully handling at-rules in CSSStyleSheet.insertRule (merged 2026-03-24)
+- **PR #1975**: Percent-encode pathname in URL.setPathname per URL spec (merged 2026-03-23)
+- **PR #1969**: Handle `appendAllChildren` mutating children list — DOM stability fix (merged 2026-03-23)
+- **PR #1968**: Handle nested `document.write` where parent gets deleted — DOM stability fix (merged 2026-03-23)
+- **PR #1967**: Anchor(...) CSS property normalization (merged 2026-03-23)
+- **PR #1964**: Add `Image.currentSrc` and `Media.currentSrc` (merged 2026-03-23)
+- **PR #1963**: Use double-queue for recursive navigation — navigation stability (merged 2026-03-23)
+- **PR #1959**: Expose `form.iterator()` (merged 2026-03-23)
+- **PR #1955**: Add `--advertise_host` option to serve command (merged 2026-03-23)
+- **PR #1948**: CDP: add `waitForSelector` to `lp.actions` (merged 2026-03-23)
+- **PR #1946**: Encode non-UTF8 `Network.getResponseBody` in base64 (merged 2026-03-23)
+- **PR #1797**: Implement CSSOM and Enhanced Visibility Filtering — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` now matches all active stylesheets (merged 2026-03-23)
 - **PR #1949**: Fix Page.getFrameTree on STARTUP when browser context and target exist — fixes #1800 frame ID mismatch (merged 2026-03-21)
 - **PR #1945**: Add validation to `replaceChildren` (merged 2026-03-21)
 - **PR #1944**: Fix `new URL('about:blank')` parsing (merged 2026-03-21)
@@ -183,16 +197,16 @@ LP.getStructuredData
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #1797**: Implement CSSOM and Enhanced Visibility Filtering — would significantly improve `getComputedStyle` and visibility detection
-- **PR #1926/1923**: Fix WebSocketDebuggerUrl returning 0.0.0.0 instead of 127.0.0.1 (Docker/remote scenario; does not affect our gem which parses stdout)
-- **PR #1946**: Encode non-UTF8 `Network.getResponseBody` in base64
+(None currently tracked — PR #1797 merged 2026-03-23, PR #1946 merged 2026-03-23, PRs #1926/#1923 closed without merge)
 
-### Upstream Open Issues (verified 2026-03-22)
+### Upstream Open Issues (verified 2026-03-24)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
+| #1962 | CDP | `Target.createTarget` fails with `-31998 TargetAlreadyLoaded` on second call (Stagehand; we only call once, low risk) | |
 | #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
 | #1952 | JS | `WebSocket` not defined in page context | |
+| #1932 | CDP | Missing Chromium-style discovery endpoints (`/json`, `/json/list`); doesn't affect us | |
 | #1922 | CDP | WebSocketDebuggerUrl returns `0.0.0.0` (Docker/remote only; we parse stdout, not affected) | |
 | #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
@@ -202,6 +216,7 @@ LP.getStructuredData
 | #1830 | Startup | Port-already-in-use not handled gracefully (PR #1883 adds better error message, but no auto-recovery) | |
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
+| #1738 | Crash | SIGSEGV when fetching nist.gov | |
 | #1550 | Storage | Creating context with storage state fails | |
 
 ### Closed Issues We Filed
@@ -227,7 +242,7 @@ LP.getStructuredData
 
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
-- `window.getComputedStyle()` partially working — StyleManager (PR #1897) added basic CSS support; full CSSOM (PR #1797) still open
+- `window.getComputedStyle()` significantly improved — CSSOM merged (PR #1797, 2026-03-23); `checkVisibility` matches all active stylesheets
 - No `window.scrollTo()`, `element.scrollIntoView()` (no layout)
 - `MutationObserver` now available (PR #1870, reference counting; weak refs disabled by PR #1887)
 - `window.postMessage` across frames now works (PR #1817)

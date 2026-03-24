@@ -23,8 +23,8 @@ Capybara.register_driver(:lightpanda) do |app|
   options = {
     timeout: 10,
     port: find_available_port,
+    browser_path: ENV["LIGHTPANDA_PATH"] || Capybara::Lightpanda::Binary.ensure_nightly,
   }
-  options[:browser_path] = ENV["LIGHTPANDA_PATH"] if ENV["LIGHTPANDA_PATH"]
   Capybara::Lightpanda::Driver.new(app, options)
 end
 
