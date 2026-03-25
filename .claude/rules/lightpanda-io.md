@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-24:
+All verified present in upstream as of 2026-03-25:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -122,6 +122,9 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Recently Merged Fixes (v0.2.6 and post-v0.2.6 nightly)
 
+- **PR #1984**: Fix `Form.requestSubmit(submitter)` not setting `SubmitEvent.submitter` (merged 2026-03-25) — `e.submitter` was always `null`; now correctly set per WHATWG spec. Critical for Turbo/Stimulus/Rails UJS that inspect `e.submitter` for `formaction`/`formmethod` overrides. Our `CLICK_JS` uses `form.requestSubmit(this)` and benefits directly.
+- **PR #1987**: Handle `Connection: close` without TLS `close_notify` (merged 2026-03-25) — fixes network errors on servers like ec.europa.eu that close TCP without TLS alert
+- **PR #1951**: MCP: add `detectForms` tool for structured form discovery (merged 2026-03-25)
 - **PR #1979**: Support (and prefer) dash-separated CLI arguments (merged 2026-03-24) — e.g. `--log-format` preferred over `--log_format`
 - **PR #1977**: Only check StyleSheet dirty flag at start of operation — CSS perf optimization (merged 2026-03-24)
 - **PR #1972**: Fix Expo Web crash by gracefully handling at-rules in CSSStyleSheet.insertRule (merged 2026-03-24)
@@ -199,7 +202,7 @@ LP.getStructuredData         LP.waitForSelector
 
 (None currently tracked — PR #1797 merged 2026-03-23, PR #1946 merged 2026-03-23, PRs #1926/#1923 closed without merge)
 
-### Upstream Open Issues (verified 2026-03-24)
+### Upstream Open Issues (verified 2026-03-25)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
