@@ -140,7 +140,7 @@ module Capybara
       end
 
       def refresh
-        go_to(current_url)
+        wait_for_navigation { page_command("Page.reload") }
       end
       alias reload refresh
 

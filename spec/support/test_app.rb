@@ -228,6 +228,23 @@ class TestApp
     request.cookies["lightpanda_test"] || "No cookie"
   end
 
+  # -- Cookie round-trip through redirect (tests PR #1889 HttpClient rework) --
+
+  get "/lightpanda/set_cookie_and_redirect" do
+    response.set_cookie("redirect_test", value: "survived_redirect", path: "/")
+    redirect "/lightpanda/get_test_cookie"
+  end
+
+  get "/lightpanda/set_samesite_cookie" do
+    response["Set-Cookie"] = "ss_strict=strict_val; Path=/; SameSite=Strict"
+    "SameSite cookie set"
+  end
+
+  get "/lightpanda/check_cookies" do
+    cookies = request.cookies.map { |k, v| "#{k}=#{v}" }.sort.join("; ")
+    cookies.empty? ? "No cookies" : cookies
+  end
+
   # -- Dynamic content page --
 
   get "/lightpanda/dynamic" do

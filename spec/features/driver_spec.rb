@@ -163,9 +163,61 @@ RSpec.describe Capybara::Lightpanda::Driver do
       expect(session).to have_css("body", text: "cookie_value")
     end
 
-    # Network.clearBrowserCookies crashes the WebSocket on Lightpanda < v0.2.6.
-    it "clears cookies" do
-      skip "Network.clearBrowserCookies crashes on pre-v0.2.6 binary"
+    it "clears cookies via Network.clearBrowserCookies" do
+      session.visit("/lightpanda/set_test_cookie")
+      cookies = browser.cookies.all
+      expect(cookies.any? { |c| c["name"] == "lightpanda_test" }).to be true
+
+      browser.cookies.clear
+      cookies_after = browser.cookies.all
+      expect(cookies_after).to be_empty
+    end
+
+    it "sets and gets cookies via CDP API" do
+      session.visit("/lightpanda/simple")
+      # Lightpanda requires domain for Network.setCookie
+      host = URI.parse(session.current_url).host
+      browser.cookies.set(name: "cdp_cookie", value: "cdp_value", domain: host)
+      cookie = browser.cookies.get("cdp_cookie")
+      expect(cookie).not_to be_nil
+      expect(cookie["value"]).to eq("cdp_value")
+    end
+
+    it "deletes a specific cookie via CDP API" do
+      session.visit("/lightpanda/simple")
+      host = URI.parse(session.current_url).host
+      browser.cookies.set(name: "to_delete", value: "bye", domain: host)
+      expect(browser.cookies.get("to_delete")).not_to be_nil
+
+      browser.cookies.remove(name: "to_delete", domain: host)
+      expect(browser.cookies.get("to_delete")).to be_nil
+    end
+
+    it "preserves cookies through a redirect" do
+      session.visit("/lightpanda/set_cookie_and_redirect")
+      # The 302 response sets a cookie, then redirects to /get_test_cookie.
+      # Verify the cookie exists in the browser's cookie jar.
+      cookie = browser.cookies.get("redirect_test")
+      expect(cookie).not_to be_nil, "Cookie set on 302 response not stored in browser"
+      expect(cookie["value"]).to eq("survived_redirect")
+    end
+
+    it "sends redirect-set cookies on the follow-up request" do
+      session.visit("/lightpanda/set_cookie_and_redirect")
+      body = session.evaluate_script("document.body.textContent").strip
+      # Pre-existing Lightpanda limitation (verified on v0.2.7 and nightly):
+      # cookies set via Set-Cookie on a 302 response are stored in the jar
+      # but not sent on the immediate follow-up request to the redirect target.
+      if body == "No cookie"
+        pending "Lightpanda stores redirect cookies but doesn't send them on follow-up request"
+      end
+      expect(body).to include("survived_redirect")
+    end
+
+    it "sends SameSite=Strict cookies on same-origin navigation" do
+      session.visit("/lightpanda/set_samesite_cookie")
+      session.visit("/lightpanda/check_cookies")
+      expect(session).to have_css("body", text: "ss_strict=strict_val")
     end
   end
 

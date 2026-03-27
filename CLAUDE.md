@@ -21,7 +21,7 @@ bundle exec rubocop -a                # Lint with auto-fix
 
 - All CDP classes live under `Capybara::Lightpanda` namespace (Browser, Client, Cookies, etc.)
 - `Browser#go_to` includes a `readyState` polling fallback — do not remove it. Lightpanda's `Page.loadEventFired` is unreliable.
-- `Browser#back`/`#forward` use JS `history.back()`/`history.forward()` because `Page.getNavigationHistory` and `Page.navigateToHistoryEntry` don't exist in Lightpanda. `Browser#refresh` uses `go_to(current_url)` because `Page.reload` doesn't exist either.
+- `Browser#back`/`#forward` use JS `history.back()`/`history.forward()` because `Page.getNavigationHistory` and `Page.navigateToHistoryEntry` don't exist in Lightpanda. `Browser#refresh` uses `Page.reload` (implemented upstream in PR #1992).
 - `Cookies#clear` catches `BrowserError` and falls back to deleting individually. `Network.clearBrowserCookies` is safe on >= v0.2.6, but the fallback remains for older versions.
 - `Cookies#all` uses `Network.getCookies` (NOT `getAllCookies` — that method doesn't exist in Lightpanda).
 - `javascripts/index.js` is injected after every navigation (`visit`, `back`, `forward`, `refresh`) — the JS context is lost between navigations. It contains only the XPath polyfill (`xpathFind` + `document.evaluate` shim). The `Driver` class handles re-injection; `Browser` does not.
@@ -36,7 +36,7 @@ These are browser-level limitations, not fixable in this gem:
 
 - No rendering engine → no screenshots, no `getComputedStyle`, no scroll/resize
 - `Page.loadEventFired` may never fire on complex JS pages
-- `Page.reload`, `Page.getNavigationHistory`, `Page.navigateToHistoryEntry` not implemented (worked around with JS)
+- `Page.getNavigationHistory`, `Page.navigateToHistoryEntry` not implemented (worked around with JS)
 - `Page.handleJavaScriptDialog` not implemented (no modal/dialog support)
 - `Page.addScriptToEvaluateOnNewDocument` stubbed (must manually re-inject JS after navigation)
 - `Network.getAllCookies` not implemented (use `Network.getCookies`)

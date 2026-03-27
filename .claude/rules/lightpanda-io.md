@@ -30,7 +30,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions |
 | **Network** | network.zig | Cookies, request/response interception |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG); NO reload/history/dialog methods |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992, adopted by gem); NO history/dialog methods |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
@@ -39,13 +39,13 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-25:
+All verified present in upstream as of 2026-03-27:
 
 ```
 Target.createTarget          Target.attachToTarget
 Page.enable                  Page.navigate
-Page.loadEventFired (event)  Page.getLayoutMetrics
-Page.captureScreenshot
+Page.reload                  Page.loadEventFired (event)
+Page.getLayoutMetrics        Page.captureScreenshot
 Runtime.evaluate             Runtime.callFunctionOn
 Runtime.getProperties        Runtime.releaseObject
 DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
@@ -57,7 +57,6 @@ Network.deleteCookies        Network.clearBrowserCookies (safe on >= v0.2.6)
 ### CDP Methods NOT Available (gem uses JS workarounds)
 
 ```
-Page.reload                  → gem uses go_to(current_url) instead
 Page.getNavigationHistory    → gem uses history.back()/history.forward() JS instead
 Page.navigateToHistoryEntry  → gem uses history.back()/history.forward() JS instead
 Page.handleJavaScriptDialog  → not in page.zig (modal code guarded with rescue BrowserError)
@@ -68,7 +67,7 @@ Network.getAllCookies         → does not exist; gem uses Network.getCookies
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
-Page.addScriptToEvaluateOnNewDocument  (STUBBED — accepts call, returns {identifier:"1"}, does nothing)
+Page.addScriptToEvaluateOnNewDocument  (STUBBED — PR #1993 open to make it real)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
 DOM.resolveNode              DOM.getBoxModel (now returns real getBoundingClientRect geometry)
 DOM.describeNode             DOM.scrollIntoViewIfNeeded
@@ -116,12 +115,35 @@ LP.getStructuredData         LP.waitForSelector
    - `Page.getLayoutMetrics` returns hardcoded 1920x1080 values
    - `window.innerWidth`/`innerHeight` may not reflect emulation settings
 
-5. **JavaScript context lost between navigations**
+5. **Cookies on redirects not sent on follow-up request**
+   - Cookies set via `Set-Cookie` on a 302 response are stored in the cookie jar
+   - But they are NOT included in the follow-up GET request to the redirect target
+   - Verified on v0.2.7 and nightly — pre-existing behavior, not a PR #1889 regression
+   - Workaround: after redirect, do a second navigation to the same URL if cookie-dependent
+
+6. **JavaScript context lost between navigations**
    - All injected JS (polyfills, custom functions) must be re-injected after each page load
    - Node references (objectIds) become invalid after navigation
 
-### Recently Merged Fixes (v0.2.6 and post-v0.2.6 nightly)
+### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #1889**: **Rework header/data callbacks in HttpClient** (merged 2026-03-27) — major refactor: disables libcurl built-in redirects, follows redirect chain explicitly in processMessages. Moves data callbacks to processMessages for thread safety. Could affect redirect behavior, cookie handling on redirects, and response timing.
+- **Commit 9068fe71**: **Fix SameSite cookies** (2026-03-27) — passes `cookie_origin` (top-level URL) instead of subrequest URL for SameSite evaluation. Fixes incorrect SameSite=Strict/Lax cookie inclusion on cross-origin subrequests.
+- **PR #2005**: MCP/CDP: unify node registration (merged 2026-03-27) — internal refactor
+- **PR #2002**: Support `FormDataEvent` (merged 2026-03-27) — enables `formdata` event handling in JS context
+- **PR #2011**: MCP fixes (merged 2026-03-27)
+- **PR #2009**: MCP: improve argument parsing error handling (merged 2026-03-27)
+- **PR #2008**: Fix dead code and error swallowing warnings (merged 2026-03-27)
+- **PR #1992**: **CDP: implement `Page.reload`** (merged 2026-03-26) — proper reload navigation via `NavigationKind.reload`. Accepts `ignoreCache` and `scriptToEvaluateOnLoad` params per CDP spec. Gem adopted via `page_command("Page.reload")` in `Browser#refresh`. Filed by us.
+- **PR #2004**: `ResizeObserver.unobserve` available in JS context (merged 2026-03-26)
+- **PR #2003**: `CanvasRenderingContext2D` canvas element access (merged 2026-03-26)
+- **PR #1998**: Improve authority parsing (merged 2026-03-26) — URL parsing improvements
+- **PR #1999**: Fix `--wait-until` default value (merged 2026-03-26)
+- **PR #1991**: Set v8::Signature on FunctionTemplates (merged 2026-03-26) — V8 binding correctness
+- **PR #1997**: Bump zig-v8 to v0.3.7 (merged 2026-03-26)
+- **PR #1990**: Remove CDP generic dispatcher (merged 2026-03-25) — internal refactor
+- **PR #1985**: Allow Document as root of IntersectionObserver (merged 2026-03-25)
+- **PR #1981**: Window cross-origin scripting improvements (merged 2026-03-25)
 - **PR #1984**: Fix `Form.requestSubmit(submitter)` not setting `SubmitEvent.submitter` (merged 2026-03-25) — `e.submitter` was always `null`; now correctly set per WHATWG spec. Critical for Turbo/Stimulus/Rails UJS that inspect `e.submitter` for `formaction`/`formmethod` overrides. Our `CLICK_JS` uses `form.requestSubmit(this)` and benefits directly.
 - **PR #1987**: Handle `Connection: close` without TLS `close_notify` (merged 2026-03-25) — fixes network errors on servers like ec.europa.eu that close TCP without TLS alert
 - **PR #1951**: MCP: add `detectForms` tool for structured form discovery (merged 2026-03-25)
@@ -200,17 +222,17 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-(None currently tracked — PR #1797 merged 2026-03-23, PR #1946 merged 2026-03-23, PRs #1926/#1923 closed without merge)
+- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (OPEN, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated in `pageNavigated` after context creation but before `frameNavigated`/`loadEventFired`. Also adds `Page.removeScriptToEvaluateOnNewDocument`. Would eliminate the need to re-inject XPath polyfill after every navigation.
 
-### Upstream Open Issues (verified 2026-03-25)
+### Upstream Open Issues (verified 2026-03-27)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
+| #2019 | CDP | Playwright CDP fails to connect on Bun (WebSocket closes with 1006); Bun-specific, doesn't affect us | |
 | #1962 | CDP | `Target.createTarget` fails with `-31998 TargetAlreadyLoaded` on second call (Stagehand; we only call once, low risk) | |
 | #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
 | #1952 | JS | `WebSocket` not defined in page context | |
 | #1932 | CDP | Missing Chromium-style discovery endpoints (`/json`, `/json/list`); doesn't affect us | |
-| #1922 | CDP | WebSocketDebuggerUrl returns `0.0.0.0` (Docker/remote only; we parse stdout, not affected) | |
 | #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
 | #1839 | CDP | Session management assertion error in Playwright | |
@@ -237,6 +259,7 @@ LP.getStructuredData         LP.waitForSelector
 
 | Issue | Outcome |
 |---|---|
+| #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
 | #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
 | #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
 | #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
@@ -249,6 +272,7 @@ LP.getStructuredData         LP.waitForSelector
 - No `window.scrollTo()`, `element.scrollIntoView()` (no layout)
 - `MutationObserver` now available (PR #1870, reference counting; weak refs disabled by PR #1887)
 - `window.postMessage` across frames now works (PR #1817)
+- No CORS enforcement (acknowledged in upstream README as of 2026-03-27)
 - No WebSocket API in page context (CDP WebSocket is separate)
 - No Web Workers, Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
@@ -286,7 +310,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: v0.2.6 (2026-03-14), also v0.2.5, v0.2.4, v0.2.3, v0.2.2 available
+- Latest release: v0.2.7 (2026-03-25), also v0.2.6, v0.2.5, v0.2.4, v0.2.3 available
 
 ## Differences from Chrome/Chromium CDP
 
