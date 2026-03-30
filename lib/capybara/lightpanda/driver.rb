@@ -31,26 +31,18 @@ module Capybara
 
       def visit(url)
         browser.go_to(url)
-        browser.verify_auto_scripts
-        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def go_back
         browser.back
-        browser.verify_auto_scripts
-        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def go_forward
         browser.forward
-        browser.verify_auto_scripts
-        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def refresh
         browser.refresh
-        browser.verify_auto_scripts
-        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def html
@@ -190,16 +182,6 @@ module Capybara
           trap("CONT") {} # rubocop:disable Lint/EmptyBlock
           ::Process.kill("STOP", ::Process.pid)
         end
-      end
-
-      private
-
-      def inject_lightpanda_js
-        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
-          browser.execute(XPathPolyfill::JS)
-        end
-      rescue StandardError
-        # Ignore if page isn't ready yet
       end
     end
   end

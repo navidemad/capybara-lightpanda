@@ -6,6 +6,10 @@ module Capybara
       READY_PATTERN = /server running.*address=(\d+\.\d+\.\d+\.\d+:\d+)/
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
+      # First nightly with Page.addScriptToEvaluateOnNewDocument (PR #1993, merged 2026-03-30).
+      # The gem relies on this for XPath polyfill auto-injection.
+      MINIMUM_NIGHTLY_BUILD = 5267
+
       attr_reader :pid, :ws_url
 
       def initialize(options)
@@ -23,6 +27,7 @@ module Capybara
 
         raise BinaryNotFoundError, "Lightpanda binary not found" unless binary_path
 
+        check_minimum_version(binary_path)
         attempt_start(binary_path)
       rescue ProcessTimeoutError => e
         raise unless e.message.include?("already in use")
@@ -65,6 +70,23 @@ module Capybara
       end
 
       private
+
+      def check_minimum_version(binary_path)
+        stdout, = Open3.capture3(binary_path, "version")
+        version = stdout.strip
+        build = version[/nightly\.(\d+)/, 1]&.to_i
+
+        return if build && build >= MINIMUM_NIGHTLY_BUILD
+
+        raise BinaryError,
+              "Lightpanda #{version} is too old. " \
+              "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
+              "(Page.addScriptToEvaluateOnNewDocument support). " \
+              "Update: curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/" \
+              "#{Binary.platform_binary} -o #{binary_path} && chmod +x #{binary_path}"
+      rescue Errno::ENOENT
+        # Binary not runnable — let attempt_start handle it
+      end
 
       def attempt_start(binary_path)
         @stdout_r, @stdout_w = IO.pipe
