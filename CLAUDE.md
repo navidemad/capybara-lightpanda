@@ -38,7 +38,7 @@ These are browser-level limitations, not fixable in this gem:
 - `Page.loadEventFired` may never fire on complex JS pages
 - `Page.getNavigationHistory`, `Page.navigateToHistoryEntry` not implemented (worked around with JS)
 - `Page.handleJavaScriptDialog` not implemented (no modal/dialog support)
-- `Page.addScriptToEvaluateOnNewDocument` stubbed (must manually re-inject JS after navigation)
+- `Page.addScriptToEvaluateOnNewDocument` now working (PR #1993 merged 2026-03-30) — can register scripts once at session creation instead of re-injecting after every navigation
 - `Network.getAllCookies` not implemented (use `Network.getCookies`)
 - `XPathResult` not implemented (polyfilled by this gem)
 - `Network.clearBrowserCookies` crashes on pre-v0.2.6 (safe on current nightly)

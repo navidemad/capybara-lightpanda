@@ -30,7 +30,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions |
 | **Network** | network.zig | Cookies, request/response interception |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992, adopted by gem); NO history/dialog methods |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992), addScriptToEvaluateOnNewDocument (PR #1993); NO history/dialog methods |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-27:
+All verified present in upstream as of 2026-03-30:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -67,7 +67,8 @@ Network.getAllCookies         → does not exist; gem uses Network.getCookies
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
-Page.addScriptToEvaluateOnNewDocument  (STUBBED — PR #1993 open to make it real)
+Page.addScriptToEvaluateOnNewDocument  (WORKING — PR #1993 merged 2026-03-30)
+Page.removeScriptToEvaluateOnNewDocument (PR #1993 merged 2026-03-30)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
 DOM.resolveNode              DOM.getBoxModel (now returns real getBoundingClientRect geometry)
 DOM.describeNode             DOM.scrollIntoViewIfNeeded
@@ -107,6 +108,7 @@ LP.getStructuredData         LP.waitForSelector
    - `document.evaluate` and the `XPathResult` interface do not exist in Lightpanda
    - This gem injects a JS polyfill that converts XPath to CSS selectors (~80% coverage)
    - Polyfill MUST be re-injected after every `visit` (JS context lost between navigations)
+   - **`Page.addScriptToEvaluateOnNewDocument` now works** (PR #1993, merged 2026-03-30) — could register polyfill once at session creation instead of re-injecting after every navigation
 
 4. **No rendering engine (CSS much improved)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
@@ -122,11 +124,14 @@ LP.getStructuredData         LP.waitForSelector
    - Workaround: after redirect, do a second navigation to the same URL if cookie-dependent
 
 6. **JavaScript context lost between navigations**
-   - All injected JS (polyfills, custom functions) must be re-injected after each page load
+   - All injected JS (polyfills, custom functions) must be re-injected after each page load — OR use `Page.addScriptToEvaluateOnNewDocument` for auto-injection (PR #1993, merged 2026-03-30)
    - Node references (objectIds) become invalid after navigation
 
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (merged 2026-03-30, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated in `pageNavigated` after context creation but before `frameNavigated`/`loadEventFired`. Also adds `Page.removeScriptToEvaluateOnNewDocument`. Eliminates need to re-inject XPath polyfill after every navigation.
+- **PR #2031**: Follow-up to #1993 — internal refactoring for addScriptToEvaluateOnNewDocument (merged 2026-03-30)
+- **PR #2026**: Add missing `InvalidAccessError` DOMException mapping (merged 2026-03-30)
 - **PR #1889**: **Rework header/data callbacks in HttpClient** (merged 2026-03-27) — major refactor: disables libcurl built-in redirects, follows redirect chain explicitly in processMessages. Moves data callbacks to processMessages for thread safety. Could affect redirect behavior, cookie handling on redirects, and response timing.
 - **Commit 9068fe71**: **Fix SameSite cookies** (2026-03-27) — passes `cookie_origin` (top-level URL) instead of subrequest URL for SameSite evaluation. Fixes incorrect SameSite=Strict/Lax cookie inclusion on cross-origin subrequests.
 - **PR #2005**: MCP/CDP: unify node registration (merged 2026-03-27) — internal refactor
@@ -222,9 +227,10 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (OPEN, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated in `pageNavigated` after context creation but before `frameNavigated`/`loadEventFired`. Also adds `Page.removeScriptToEvaluateOnNewDocument`. Would eliminate the need to re-inject XPath polyfill after every navigation.
+- **PR #2032**: **Improve/Fix CDP navigation event order** (OPEN) — major change: `Page.frameNavigated` fires on header response (earlier than current), new explicit DOMContentLoaded/load events, context clear+reset between page and frame navigation. Could affect our `Page.loadEventFired` timing and readyState fallback behavior. Monitor closely.
+- **PR #2039**: **fix(cdp): auto-close existing target on createTarget** (OPEN) — addresses #1962. When `Target.createTarget` is called with an existing target, auto-closes it instead of returning `TargetAlreadyLoaded` error. Low risk for us (we only call createTarget once), but adds resilience.
 
-### Upstream Open Issues (verified 2026-03-27)
+### Upstream Open Issues (verified 2026-03-30)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
