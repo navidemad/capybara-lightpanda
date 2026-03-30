@@ -31,22 +31,26 @@ module Capybara
 
       def visit(url)
         browser.go_to(url)
-        inject_lightpanda_js
+        browser.verify_auto_scripts
+        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def go_back
         browser.back
-        inject_lightpanda_js
+        browser.verify_auto_scripts
+        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def go_forward
         browser.forward
-        inject_lightpanda_js
+        browser.verify_auto_scripts
+        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def refresh
         browser.refresh
-        inject_lightpanda_js
+        browser.verify_auto_scripts
+        inject_lightpanda_js unless browser.auto_scripts?
       end
 
       def html

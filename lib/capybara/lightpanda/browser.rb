@@ -24,6 +24,7 @@ module Capybara
         @modal_messages = []
         @modal_handler_installed = false
         @frame_stack = []
+        @scripts_auto_injected = false
 
         start
       end
@@ -52,6 +53,22 @@ module Capybara
         @session_id = attach_result["sessionId"]
 
         subscribe_to_console_logs
+        register_auto_scripts
+      end
+
+      # Confirm that Page.addScriptToEvaluateOnNewDocument actually executed
+      # the script. Older Lightpanda builds stub the method (register succeeds
+      # but script never runs), so we verify once after the first navigation.
+      def verify_auto_scripts
+        return unless @scripts_auto_injected == :pending
+
+        @scripts_auto_injected = evaluate("typeof _lightpanda !== 'undefined'") == true
+      rescue StandardError
+        @scripts_auto_injected = false
+      end
+
+      def auto_scripts?
+        @scripts_auto_injected == true
       end
 
       def restart
@@ -469,6 +486,13 @@ module Capybara
         ids
       rescue StandardError
         []
+      end
+
+      def register_auto_scripts
+        page_command("Page.addScriptToEvaluateOnNewDocument", source: XPathPolyfill::JS)
+        @scripts_auto_injected = :pending
+      rescue StandardError
+        @scripts_auto_injected = false
       end
 
       def subscribe_to_console_logs
