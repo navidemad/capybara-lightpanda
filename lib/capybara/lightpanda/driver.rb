@@ -136,6 +136,9 @@ module Capybara
 
       def save_screenshot(path, **_options)
         browser.screenshot(path: path)
+      rescue BinaryError, BinaryNotFoundError
+        # Browser can't start (e.g., version too old) — don't crash teardown
+        nil
       end
 
       # -- Lifecycle --

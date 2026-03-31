@@ -24,7 +24,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **CSS** | css.zig | CSSOM merged (PR #1797, 2026-03-23): `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs |
-| **Fetch** | fetch.zig | Network interception at Fetch domain level |
+| **Fetch** | fetch.zig | Network interception: `enable`, `disable`, `continueRequest`, `failRequest`, `fulfillRequest`, `continueWithAuth`; events: `requestPaused`, `authRequired` |
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
@@ -79,7 +79,12 @@ Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
 Network.setExtraHTTPHeaders  Network.setCacheDisabled (stub)
 Network.setUserAgentOverride (stub)
-Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
+Runtime.enable               Runtime.addBinding
+Runtime.runIfWaitingForDebugger (stub)
+DOM.enable                   CSS.enable
+Fetch.enable                 Fetch.disable
+Fetch.continueRequest        Fetch.failRequest
+Fetch.fulfillRequest         Fetch.continueWithAuth
 Target.closeTarget           Target.createBrowserContext
 Target.disposeBrowserContext Target.getBrowserContexts
 Target.getTargets            Target.getTargetInfo        Target.setAutoAttach
@@ -129,6 +134,11 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #2044**: HTTP: add connect code into auth challenge detection (merged 2026-03-30) — improves HTTP auth handling
+- **PR #2028**: Protect transfer.kill() the way transfer.abort() is protected (merged 2026-03-30) — network stability improvement
+- **PR #2024**: Rework finalizers (merged 2026-03-30) — internal memory management refactor
+- **PR #2022/#2033**: Cache canvas 2D context and lock context type per spec (merged 2026-03-30) — spec compliance
+- **PR #2021**: Fix `navigator.languages` to include base language per spec (merged 2026-03-30) — e.g. returns `["en-US", "en"]` instead of just `["en-US"]`
 - **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (merged 2026-03-30, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated in `pageNavigated` after context creation but before `frameNavigated`/`loadEventFired`. Also adds `Page.removeScriptToEvaluateOnNewDocument`. Eliminates need to re-inject XPath polyfill after every navigation.
 - **PR #2031**: Follow-up to #1993 — internal refactoring for addScriptToEvaluateOnNewDocument (merged 2026-03-30)
 - **PR #2026**: Add missing `InvalidAccessError` DOMException mapping (merged 2026-03-30)
@@ -228,9 +238,11 @@ LP.getStructuredData         LP.waitForSelector
 ### Open Fix PRs (not yet merged)
 
 - **PR #2032**: **Improve/Fix CDP navigation event order** (OPEN) — major change: `Page.frameNavigated` fires on header response (earlier than current), new explicit DOMContentLoaded/load events, context clear+reset between page and frame navigation. Could affect our `Page.loadEventFired` timing and readyState fallback behavior. Monitor closely.
-- **PR #2039**: **fix(cdp): auto-close existing target on createTarget** (OPEN) — addresses #1962. When `Target.createTarget` is called with an existing target, auto-closes it instead of returning `TargetAlreadyLoaded` error. Low risk for us (we only call createTarget once), but adds resilience.
+- **PR #2036**: **Removing remaining CDP generic** (OPEN) — internal refactor removing generic CDP dispatcher code. Could change error messages/codes on unsupported methods.
+- **PR #2035**: **Add `--user-agent` flag for full User-Agent override** (OPEN) — CLI flag for setting User-Agent. Could be useful for our driver if we want to customize UA.
+- **PR #2046/#2040**: **URL resolve path scheme fixes** (OPEN) — URL parsing improvements for path scheme resolution.
 
-### Upstream Open Issues (verified 2026-03-30)
+### Upstream Open Issues (verified 2026-03-31)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
@@ -248,6 +260,7 @@ LP.getStructuredData         LP.waitForSelector
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
 | #1738 | Crash | SIGSEGV when fetching nist.gov | |
+| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
 | #1550 | Storage | Creating context with storage state fails | |
 
 ### Closed Issues We Filed
@@ -268,6 +281,7 @@ LP.getStructuredData         LP.waitForSelector
 | #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
 | #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
 | #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
+| #2039 | Closed (2026-03-30) — PR closed without merging. Was auto-close existing target on createTarget. Issue #1962 remains open. |
 | #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
 
 ### General Limitations
