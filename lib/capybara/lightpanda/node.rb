@@ -153,9 +153,11 @@ module Capybara
         end
       end
 
-      # Turbo-compatible click. For submit buttons, uses requestSubmit() which
-      # fires the `submit` event that Turbo intercepts. For other elements,
-      # falls back to standard HTMLElement.click().
+      # Turbo-compatible click. When Turbo is loaded and a submit button is clicked,
+      # bypasses Turbo's fetch-based form submission (which fails in Lightpanda) by
+      # using fetch() + document.write() to POST the form and render the response.
+      # When Turbo is not loaded, uses requestSubmit() to fire the submit event.
+      # For non-submit elements, falls back to standard HTMLElement.click().
       CLICK_JS = <<~JS
         function() {
           var tag = this.tagName.toLowerCase();
@@ -165,7 +167,32 @@ module Capybara
 
           if (isSubmitBtn) {
             var form = this.form;
-            if (form && typeof form.requestSubmit === 'function') {
+            if (!form) { this.click(); return; }
+
+            if (typeof Turbo !== 'undefined') {
+              var formData = new FormData(form);
+              var submitterName = this.getAttribute('name');
+              if (submitterName) formData.append(submitterName, this.getAttribute('value') || '');
+
+              var action = this.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
+              try { action = new URL(action, window.location.href).href; } catch(e) {}
+              var method = (this.getAttribute('formmethod') || form.getAttribute('method') || 'GET').toUpperCase();
+
+              var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
+              if (method === 'GET') {
+                var sep = action.indexOf('?') >= 0 ? '&' : '?';
+                action = action + sep + new URLSearchParams(formData).toString();
+              } else {
+                opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+                opts.body = new URLSearchParams(formData);
+              }
+
+              return fetch(action, opts).then(function(r) { return r.text(); }).then(function(html) {
+                document.open(); document.write(html); document.close();
+              });
+            }
+
+            if (typeof form.requestSubmit === 'function') {
               form.requestSubmit(this);
               return;
             }

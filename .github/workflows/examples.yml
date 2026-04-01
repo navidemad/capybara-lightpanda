@@ -1,0 +1,35 @@
+name: Examples
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which examples to run"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - plain
+          - turbo
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby: ["3.2", "3.3", "4.0"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Install Lightpanda
+        run: |
+          curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
+          chmod +x lightpanda
+          sudo mv lightpanda /usr/local/bin/
+          lightpanda --version
+      - name: Run examples
+        run: bundle exec rake examples:${{ inputs.suite }}

@@ -316,6 +316,74 @@ class TestApp
     HTML
   end
 
+  # -- Turbo compatibility test pages --
+  # Uses a mock Turbo global to test the gem's Turbo workarounds without a CDN dependency.
+
+  get "/lightpanda/turbo_drive" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Turbo Drive Test</title></head>
+        <body>
+          <h1 id="page-title">Drive Page</h1>
+          <a href="/lightpanda/other" id="drive-link">Go to Other</a>
+          <script>
+            window.Turbo = { session: { drive: true } };
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/turbo_form_submit" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Turbo Form Test</title></head>
+        <body>
+          <h1>Turbo Form</h1>
+          <form id="turbo-test-form" action="/lightpanda/turbo_form_result" method="post">
+            <input type="text" id="turbo-name" name="name" value="">
+            <button type="submit" id="turbo-submit">Submit</button>
+            <button type="submit" id="turbo-save" name="action" value="save">Save</button>
+            <button type="submit" id="turbo-alt" formaction="/lightpanda/turbo_form_alt_result">Alt Submit</button>
+          </form>
+          <script>
+            window.Turbo = { session: { drive: false } };
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  post "/lightpanda/turbo_form_result" do
+    name = Rack::Utils.escape_html(params["name"] || "")
+    action = Rack::Utils.escape_html(params["action"] || "")
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Form Result</title></head>
+        <body>
+          <h1>Result</h1>
+          <p id="result-name">#{name}</p>
+          <p id="result-action">#{action}</p>
+        </body>
+      </html>
+    HTML
+  end
+
+  post "/lightpanda/turbo_form_alt_result" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Alt Result</title></head>
+        <body>
+          <h1 id="alt-result">Alt action reached</h1>
+        </body>
+      </html>
+    HTML
+  end
+
   # -- Page with multiple element types for tag_name testing --
 
   get "/lightpanda/elements" do

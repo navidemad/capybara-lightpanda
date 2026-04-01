@@ -208,9 +208,7 @@ RSpec.describe Capybara::Lightpanda::Driver do
       # Pre-existing Lightpanda limitation (verified on v0.2.7 and nightly):
       # cookies set via Set-Cookie on a 302 response are stored in the jar
       # but not sent on the immediate follow-up request to the redirect target.
-      if body == "No cookie"
-        pending "Lightpanda stores redirect cookies but doesn't send them on follow-up request"
-      end
+      pending "Lightpanda stores redirect cookies but doesn't send them on follow-up request" if body == "No cookie"
       expect(body).to include("survived_redirect")
     end
 
@@ -596,6 +594,39 @@ RSpec.describe Capybara::Lightpanda::Driver do
     it "passes correct submitter for button with formaction" do
       session.find(:css, "#btn-publish").click
       expect(session.find(:css, "#submit-result").text).to eq("intercepted:btn-publish")
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Turbo compatibility (Drive disabler + fetch submit)
+  # ───────────────────────────────────────────────
+
+  describe "Turbo compatibility" do
+    it "auto-disables Turbo Drive when Turbo is present" do
+      session.visit("/lightpanda/turbo_drive")
+      sleep 0.2 # give poller time to detect Turbo
+      result = session.evaluate_script("Turbo.session.drive")
+      expect(result).to eq(false)
+    end
+
+    it "submits forms via fetch when Turbo is present" do
+      session.visit("/lightpanda/turbo_form_submit")
+      session.find(:css, "#turbo-name").set("Test User")
+      session.find(:css, "#turbo-submit").click
+      expect(session).to have_css("#result-name", text: "Test User")
+    end
+
+    it "includes submitter name/value in fetch submission" do
+      session.visit("/lightpanda/turbo_form_submit")
+      session.find(:css, "#turbo-name").set("Test")
+      session.find(:css, "#turbo-save").click
+      expect(session).to have_css("#result-action", text: "save")
+    end
+
+    it "respects formaction attribute on submit button" do
+      session.visit("/lightpanda/turbo_form_submit")
+      session.find(:css, "#turbo-alt").click
+      expect(session).to have_css("#alt-result", text: "Alt action reached")
     end
   end
 

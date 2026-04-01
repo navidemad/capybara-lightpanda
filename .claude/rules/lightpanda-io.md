@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-03-30:
+All verified present in upstream as of 2026-04-01:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -101,6 +101,7 @@ LP.getStructuredData         LP.waitForSelector
 1. **`Page.loadEventFired` unreliable** (#1801, #1832)
    - May never fire on complex JS pages, Wikipedia, certain French real estate sites
    - **#1849 fixed** (PR #1850, merged 2026-03-16): WebSocket no longer dies during complex navigation, so readyState polling now works reliably as a fallback
+   - **PR #2032** (merged 2026-03-30) reordered navigation events: `Loaded` (= `Page.loadEventFired`) now fires after DOMContentLoaded, at the very end of the navigation sequence. This is closer to Chrome's behavior and may improve reliability, but #1801/#1832 remain open.
    - This gem works around it with `document.readyState` polling fallback in `Browser#go_to`
    - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable (#1801, #1832 still open)
 
@@ -132,14 +133,35 @@ LP.getStructuredData         LP.waitForSelector
    - All injected JS (polyfills, custom functions) must be re-injected after each page load — OR use `Page.addScriptToEvaluateOnNewDocument` for auto-injection (PR #1993, merged 2026-03-30)
    - Node references (objectIds) become invalid after navigation
 
+7. **Turbo Drive / Turbo form submission broken — `document.body` is read-only**
+   - **Root cause**: `HTMLDocument.body` accessor in `src/browser/webapi/HTMLDocument.zig:254` has no setter (`bridge.accessor(HTMLDocument.getBody, null, .{})`). `document.body = newBody` silently fails.
+   - **Turbo Drive**: fetches page via JS `fetch()`, extracts `<body>`, tries `document.body = newBody` → fails → page blanks. Gem auto-disables Drive via `Turbo.session.drive = false` polled from injected JS.
+   - **Turbo form submission in frames**: Turbo intercepts `requestSubmit()`, does a fetch POST, tries to extract matching `<turbo-frame>` from response and replace it via DOM manipulation → fails with JsException. Gem bypasses by using `fetch()` + `document.write()` for submit buttons when Turbo is detected.
+   - **Turbo Frames (GET navigation)**: Work correctly — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element, which works.
+   - **Potential upstream fix**: Add `setBody()` to HTMLDocument.zig (spec: https://html.spec.whatwg.org/multipage/dom.html#dom-document-body). Would fix Turbo Drive and likely Turbo Stream rendering.
+   - **Turbo Streams**: Not supported. Depend on Turbo's form submission pipeline completing. Even if `document.body` setter were fixed, streams use `<turbo-stream>` custom elements with `connectedCallback` which may have additional issues.
+
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #2014**: **build: add check step to verify compilation** (merged 2026-04-01) — CI improvement, no runtime impact
+- **PR #2064**: **Improve network naming consistency** (merged 2026-04-01) — internal refactor: `Runtime.zig` renamed to `Network.zig` in HTTP client code. No CDP-level changes.
+- **PR #2061**: **Add `Element.ariaAtomic` and `Element.ariaLive` properties** (merged 2026-04-01) — ARIAMixin attribute reflection on Element per ARIA spec. Improves accessibility support.
+- **PR #2060**: **Add `HTMLAnchorElement.rel` property** (merged 2026-04-01) — string `rel` accessor on anchor elements (the `relList` DOMTokenList was already implemented).
+- **PR #2057**: **Add `HTMLElement.title` property** (merged 2026-04-01) — getter/setter reflecting the `title` HTML attribute. Our `Node#[]` uses `getAttribute` so no impact, but `element.title` now works in JS.
+- **PR #2046/2065**: **Fix URL resolve path scheme** (merged 2026-04-01) — fixes URL resolution for paths with scheme prefixes per URL spec. Could affect URL handling in navigation.
+- **PR #2055**: **Add `HTMLElement.dir` and `HTMLElement.lang` properties** (merged 2026-03-31) — attribute-backed accessors on HTMLElement and HTMLDocument.
+- **PR #2054**: **`URLSearchParams`: support passing arrays to constructor** (merged 2026-03-31) — spec compliance for URLSearchParams.
+- **PR #2051**: **Provide a failing callback to ValueSerializer for host objects** (merged 2026-03-31) — prevents V8 assertion failure when serializing Zig DOM objects. Fixes crash path (returns error instead of panic).
+- **PR #2052**: **Expand the lifetime of the XHR reference** (merged 2026-03-31) — fixes race condition where V8 could drop XHR reference before HTTP start callback. Prevents use-after-free crashes.
+- **PR #2047**: **Add `--wait-selector`, `--wait-script` and `--wait-script-file` options to fetch** (merged 2026-03-31) — CLI-only, no CDP impact.
+- **PR #2036**: **Removing remaining CDP generic** (merged 2026-03-31) — internal refactor removing generic CDP dispatcher code. BrowserContext and Command are now non-generic. No method-level changes, but error messages/codes for unsupported methods may differ.
+- **PR #2032**: **Improve/Fix CDP navigation event order** (merged 2026-03-30) — **MAJOR CHANGE**: `Page.frameNavigated` now fires on header response (earlier than before). New explicit DOMContentLoaded/Loaded events separated from `pageNavigated`. Context clear+reset now happens after main page navigation but before frame creation. New event flow: `Start Page Navigation → Response Received → End Page Navigation → context clear+reset → Start Frame Navigation → Response Received → End Frame Navigation → DOMContentLoaded → Loaded`. Our `Page.loadEventFired` listener should still work since "Loaded" fires at the end. ReadyState fallback remains essential.
 - **PR #2044**: HTTP: add connect code into auth challenge detection (merged 2026-03-30) — improves HTTP auth handling
 - **PR #2028**: Protect transfer.kill() the way transfer.abort() is protected (merged 2026-03-30) — network stability improvement
 - **PR #2024**: Rework finalizers (merged 2026-03-30) — internal memory management refactor
 - **PR #2022/#2033**: Cache canvas 2D context and lock context type per spec (merged 2026-03-30) — spec compliance
 - **PR #2021**: Fix `navigator.languages` to include base language per spec (merged 2026-03-30) — e.g. returns `["en-US", "en"]` instead of just `["en-US"]`
-- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (merged 2026-03-30, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated in `pageNavigated` after context creation but before `frameNavigated`/`loadEventFired`. Also adds `Page.removeScriptToEvaluateOnNewDocument`. Eliminates need to re-inject XPath polyfill after every navigation.
+- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (merged 2026-03-30, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated after context clear+reset but before frames and DOMContentLoaded (post PR #2032 event reorder). Also adds `Page.removeScriptToEvaluateOnNewDocument`. Eliminates need to re-inject XPath polyfill after every navigation.
 - **PR #2031**: Follow-up to #1993 — internal refactoring for addScriptToEvaluateOnNewDocument (merged 2026-03-30)
 - **PR #2026**: Add missing `InvalidAccessError` DOMException mapping (merged 2026-03-30)
 - **PR #1889**: **Rework header/data callbacks in HttpClient** (merged 2026-03-27) — major refactor: disables libcurl built-in redirects, follows redirect chain explicitly in processMessages. Moves data callbacks to processMessages for thread safety. Could affect redirect behavior, cookie handling on redirects, and response timing.
@@ -237,19 +259,21 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2032**: **Improve/Fix CDP navigation event order** (OPEN) — major change: `Page.frameNavigated` fires on header response (earlier than current), new explicit DOMContentLoaded/load events, context clear+reset between page and frame navigation. Could affect our `Page.loadEventFired` timing and readyState fallback behavior. Monitor closely.
-- **PR #2036**: **Removing remaining CDP generic** (OPEN) — internal refactor removing generic CDP dispatcher code. Could change error messages/codes on unsupported methods.
+- **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Major new capability once merged.
+- **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
+- **PR #2050**: **Fix null pointer SIGSEGV from `GetAlignedPointerFromInternalField`** (OPEN) — prevents crash when JS libraries (Sentry, Clarity, GTM) probe DOM APIs with uninitialized internal fields. Related to #1738 (now closed). Would fix crashes on sites like wishket.com, naver.com.
 - **PR #2035**: **Add `--user-agent` flag for full User-Agent override** (OPEN) — CLI flag for setting User-Agent. Could be useful for our driver if we want to customize UA.
-- **PR #2046/#2040**: **URL resolve path scheme fixes** (OPEN) — URL parsing improvements for path scheme resolution.
 
-### Upstream Open Issues (verified 2026-03-31)
+### Upstream Open Issues (verified 2026-04-01)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
+| #2020 | Crash | Crash on load event dispatch on kitandace.com — `Image` element as event target causes GPF in `asEventTarget()`. SIGSEGV in serve mode. | |
+| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
 | #2019 | CDP | Playwright CDP fails to connect on Bun (WebSocket closes with 1006); Bun-specific, doesn't affect us | |
 | #1962 | CDP | `Target.createTarget` fails with `-31998 TargetAlreadyLoaded` on second call (Stagehand; we only call once, low risk) | |
 | #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
-| #1952 | JS | `WebSocket` not defined in page context | |
+| #1952 | JS | `WebSocket` not defined in page context (PR #2063 WIP to fix) | |
 | #1932 | CDP | Missing Chromium-style discovery endpoints (`/json`, `/json/list`); doesn't affect us | |
 | #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
@@ -259,8 +283,6 @@ LP.getStructuredData         LP.waitForSelector
 | #1830 | Startup | Port-already-in-use not handled gracefully (PR #1883 adds better error message, but no auto-recovery) | |
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
-| #1738 | Crash | SIGSEGV when fetching nist.gov | |
-| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
 | #1550 | Storage | Creating context with storage state fails | |
 
 ### Closed Issues We Filed
@@ -278,10 +300,12 @@ LP.getStructuredData         LP.waitForSelector
 
 | Issue | Outcome |
 |---|---|
+| #1738 | Closed (2026-04-01) — SIGSEGV when fetching nist.gov. Fixed in latest nightly. Related SIGSEGV issues remain (PR #2050 open for Sentry/GTM crash path). |
 | #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
 | #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
 | #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
 | #2039 | Closed (2026-03-30) — PR closed without merging. Was auto-close existing target on createTarget. Issue #1962 remains open. |
+| #2040 | Closed — PR closed without merging; URL resolve path scheme work completed in PR #2046/2065 (merged 2026-04-01) |
 | #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
 
 ### General Limitations
@@ -293,7 +317,7 @@ LP.getStructuredData         LP.waitForSelector
 - `MutationObserver` now available (PR #1870, reference counting; weak refs disabled by PR #1887)
 - `window.postMessage` across frames now works (PR #1817)
 - No CORS enforcement (acknowledged in upstream README as of 2026-03-27)
-- No WebSocket API in page context (CDP WebSocket is separate)
+- No WebSocket API in page context yet (CDP WebSocket is separate) — PR #2063 WIP to add `WebSocket` WebAPI
 - No Web Workers, Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
 - File upload not supported (`input[type=file]` operations will fail)

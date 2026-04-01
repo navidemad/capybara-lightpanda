@@ -19,6 +19,11 @@ Style/TrailingCommaInHashLiteral:
 Style/TrailingCommaInArrayLiteral:
   EnforcedStyleForMultiline: consistent_comma
 
+Style/OneClassPerFile:
+  Enabled: true
+  Exclude:
+    - examples/**/*.rb
+
 Layout/LineLength:
   Max: 120
 
@@ -31,12 +36,17 @@ Metrics/ClassLength:
     - lib/capybara/lightpanda/node.rb
     - lib/capybara/lightpanda/process.rb
     - spec/**/*
+    - examples/**/*.rb
 
 Metrics/MethodLength:
   Max: 30
+  Exclude:
+    - examples/**/*.rb
 
 Metrics/AbcSize:
   Max: 25
+  Exclude:
+    - examples/**/*.rb
 
 Metrics/CyclomaticComplexity:
   Max: 10
@@ -48,6 +58,7 @@ Metrics/BlockLength:
   Exclude:
     - spec/**/*
     - Rakefile
+    - examples/**/*.rb
 
 Lint/EmptyBlock:
   Exclude:

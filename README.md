@@ -110,15 +110,28 @@ end
 
 ## What works
 
-- Navigation (`visit`)
-- JavaScript execution (V8 engine)
-- `fill_in`, `click_on`, `click_link`, `click_button`
-- `assert_selector`, `assert_no_selector`, `assert_text`
-- `assert_current_path`
-- `assert_difference`, `assert_no_difference`
-- Cookie set/get/clear via CDP
-- Turbo frames (basic loading)
-- Forms (text inputs, selects, checkboxes, radio buttons)
+- Navigation (`visit`, `click_link`, `go_back`, `go_forward`, `refresh`)
+- JavaScript execution (V8 engine) — `evaluate_script`, `execute_script`, `evaluate_async_script`
+- Forms — `fill_in`, `click_button`, `select`, `choose`, `check`, `uncheck`
+- Finding — `find`, `all`, `within`, CSS and XPath selectors
+- Matchers — `assert_selector`, `assert_text`, `assert_current_path`, `has_field?`, `has_select?`
+- Cookies — set/get/clear/remove via CDP
+- Frames — `within_frame`, scoped finding
+- Keyboard — `send_keys` with modifiers and special keys
+- Network — traffic tracking, custom headers, idle waiting
+
+### Turbo Rails support
+
+The gem handles Turbo-enabled Rails apps transparently:
+
+| Feature | Status | How |
+|---------|--------|-----|
+| **Turbo Frames** | Works natively | Lazy-loading (`src=`), scoped link navigation |
+| **Turbo Drive** | Auto-disabled | Gem disables Drive (body replacement fails in Lightpanda) — standard link navigation restored |
+| **Form submission** | Auto-handled | When Turbo is present, forms submit via `fetch()` + `document.write()` to bypass Turbo's interception |
+| **Turbo Streams** | Not supported | Depends on Turbo's fetch pipeline which Lightpanda can't render |
+
+**Root cause**: Lightpanda's `document.body` is read-only — Turbo Drive's body replacement and frame form responses can't be applied. The gem works around this automatically.
 
 ## Known limitations
 
@@ -132,6 +145,7 @@ These are Lightpanda browser limitations, not driver limitations:
 | Complex Stimulus controllers | Some may not execute fully |
 | XPath axes/functions | Polyfill covers ~80% of Capybara usage |
 | File uploads | Not yet supported |
+| Turbo Streams | Not supported (Turbo's fetch-then-render pipeline) |
 
 ## Benchmark
 
