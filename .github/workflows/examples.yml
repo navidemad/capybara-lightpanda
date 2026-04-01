@@ -30,6 +30,6 @@ jobs:
           curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
           chmod +x lightpanda
           sudo mv lightpanda /usr/local/bin/
-          lightpanda --version
+          lightpanda version
       - name: Run examples
         run: bundle exec rake examples:${{ inputs.suite }}
