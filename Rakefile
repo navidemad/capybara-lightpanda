@@ -27,8 +27,10 @@ namespace :examples do
     %w[rails_minitest_example.rb rails_rspec_example.rb].each do |file|
       path = File.join("examples", file)
       puts "\n=== #{file} ==="
-      sh "ruby #{path}" do |ok, _|
-        abort "#{file} failed" unless ok
+      Bundler.with_unbundled_env do
+        sh "ruby #{path}" do |ok, _|
+          abort "#{file} failed" unless ok
+        end
       end
     end
   end
@@ -38,8 +40,10 @@ namespace :examples do
     %w[rails_turbo_minitest_example.rb rails_turbo_rspec_example.rb].each do |file|
       path = File.join("examples", file)
       puts "\n=== #{file} ==="
-      sh "ruby #{path}" do |ok, _|
-        abort "#{file} failed" unless ok
+      Bundler.with_unbundled_env do
+        sh "ruby #{path}" do |ok, _|
+          abort "#{file} failed" unless ok
+        end
       end
     end
   end
