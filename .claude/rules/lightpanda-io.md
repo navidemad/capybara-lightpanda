@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-04-01:
+All verified present in upstream as of 2026-04-03:
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -143,6 +143,14 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #2075**: **use proxy for integration tests** (merged 2026-04-03) — CI only, no runtime impact.
+- **PR #2074**: **Store TAO in IdentityMap** (merged 2026-04-03) — internal memory management: stores tree-accessible objects in IdentityMap. No API changes.
+- **PR #2073**: **stricter Page.isSameOrigin** (merged 2026-04-02) — **SECURITY FIX**: origin comparison now properly validates full origin. Previously `https://origin.com` could match `https://origin.com.attacker.com`. No impact on our gem (we don't do cross-origin navigation tricks).
+- **PR #2069**: **Move finalizers to pure reference counting** (merged 2026-04-02) — internal memory management refactor. All finalizers now use pure reference counting instead of mixed weak-ref/RC approach. Should improve stability.
+- **PR #2071**: **Relax assertion on httpclient abort** (merged 2026-04-02) — stability fix: relaxes an assertion that could trigger during HTTP client abort. Prevents potential crashes during network error recovery.
+- **PR #2066**: **mcp: improve navigation reliability and add CDP support** (merged 2026-04-03) — MCP-focused: fixes inactivity timeout handling, handles `CDPWaitResult.done` instead of `unreachable`. Server-side fix for CDP wait results — could indirectly improve stability.
+- **PR #2068**: **markdown: simplify and optimize anchor rendering** (merged 2026-04-02) — MCP markdown output only.
+- **PR #2067**: **percent encode version query string for crash report** (merged 2026-04-01) — internal telemetry fix.
 - **PR #2014**: **build: add check step to verify compilation** (merged 2026-04-01) — CI improvement, no runtime impact
 - **PR #2064**: **Improve network naming consistency** (merged 2026-04-01) — internal refactor: `Runtime.zig` renamed to `Network.zig` in HTTP client code. No CDP-level changes.
 - **PR #2061**: **Add `Element.ariaAtomic` and `Element.ariaLive` properties** (merged 2026-04-01) — ARIAMixin attribute reflection on Element per ARIA spec. Improves accessibility support.
@@ -259,15 +267,18 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
+- **PR #2078**: **WIP: Worker** (OPEN, WIP) — Web Workers implementation starting. Would fix #2017. Major new capability.
+- **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** (OPEN) — fixes bug where multiple `attachToTarget` calls return the same session ID (breaking Playwright). Our gem only calls `attachToTarget` once per page, but this fix improves CDP spec compliance. Adds `alt_session_id` slot for second attach.
+- **PR #2070**: **mcp: Add hover, press, selectOption, setChecked** (OPEN) — MCP interaction tools. No CDP impact.
 - **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Major new capability once merged.
 - **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
-- **PR #2050**: **Fix null pointer SIGSEGV from `GetAlignedPointerFromInternalField`** (OPEN) — prevents crash when JS libraries (Sentry, Clarity, GTM) probe DOM APIs with uninitialized internal fields. Related to #1738 (now closed). Would fix crashes on sites like wishket.com, naver.com.
 - **PR #2035**: **Add `--user-agent` flag for full User-Agent override** (OPEN) — CLI flag for setting User-Agent. Could be useful for our driver if we want to customize UA.
 
-### Upstream Open Issues (verified 2026-04-01)
+### Upstream Open Issues (verified 2026-04-03)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
+| #2072 | MCP | MCP server exits immediately — incompatible with Claude Code persistent sessions. Doesn't affect CDP mode or our gem. | |
 | #2020 | Crash | Crash on load event dispatch on kitandace.com — `Image` element as event target causes GPF in `asEventTarget()`. SIGSEGV in serve mode. | |
 | #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
 | #2019 | CDP | Playwright CDP fails to connect on Bun (WebSocket closes with 1006); Bun-specific, doesn't affect us | |
@@ -283,6 +294,8 @@ LP.getStructuredData         LP.waitForSelector
 | #1830 | Startup | Port-already-in-use not handled gracefully (PR #1883 adds better error message, but no auto-recovery) | |
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
+| #2017 | JS | Implement Worker and SharedWorker (PR #2078 WIP) | |
+| #2015 | JS | Implement CORS mechanism | |
 | #1550 | Storage | Creating context with storage state fails | |
 
 ### Closed Issues We Filed
@@ -304,6 +317,7 @@ LP.getStructuredData         LP.waitForSelector
 | #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
 | #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
 | #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
+| #2050 | Closed (2026-04-01) — PR closed without merging. Null pointer SIGSEGV fix for Sentry/GTM crash path. Issue #1738 already closed separately. |
 | #2039 | Closed (2026-03-30) — PR closed without merging. Was auto-close existing target on createTarget. Issue #1962 remains open. |
 | #2040 | Closed — PR closed without merging; URL resolve path scheme work completed in PR #2046/2065 (merged 2026-04-01) |
 | #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
@@ -318,7 +332,7 @@ LP.getStructuredData         LP.waitForSelector
 - `window.postMessage` across frames now works (PR #1817)
 - No CORS enforcement (acknowledged in upstream README as of 2026-03-27)
 - No WebSocket API in page context yet (CDP WebSocket is separate) — PR #2063 WIP to add `WebSocket` WebAPI
-- No Web Workers, Service Workers, SharedArrayBuffer
+- No Web Workers, Service Workers, SharedArrayBuffer (PR #2078 WIP for Worker support)
 - No `localStorage`/`sessionStorage` persistence across sessions
 - File upload not supported (`input[type=file]` operations will fail)
 
@@ -354,7 +368,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: v0.2.7 (2026-03-25), also v0.2.6, v0.2.5, v0.2.4, v0.2.3 available
+- Latest release: v0.2.8 (2026-04-02), also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available
 
 ## Differences from Chrome/Chromium CDP
 
