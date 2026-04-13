@@ -346,8 +346,14 @@ module Capybara
       end
 
       # -- Modal/Dialog Support --
-      # Page.handleJavaScriptDialog is not yet implemented in Lightpanda.
-      # This code is ready for when it's added upstream.
+      # Lightpanda auto-dismisses dialogs in headless mode: alert→OK,
+      # confirm→false, prompt→null. Page.javascriptDialogOpening fires
+      # (since 2026-04-03), so we capture messages for find_modal, but
+      # Page.handleJavaScriptDialog always errors with "No dialog is showing"
+      # and we never call it (the dispatch thread cannot make synchronous
+      # CDP calls without deadlocking). @modal_responses is retained so
+      # accept_modal/dismiss_modal preserve their API contract; the
+      # accept/dismiss choice is informational only.
 
       def prepare_modals
         return if @modal_handler_installed
@@ -355,22 +361,8 @@ module Capybara
         enable_page_events
 
         on("Page.javascriptDialogOpening") do |params|
-          type = params["type"]
-          message = params["message"]
-          @modal_messages << { type: type, message: message }
-
-          response = @modal_responses.shift
-          begin
-            if response
-              accept_params = { accept: response[:accept] }
-              accept_params[:promptText] = response[:text] if response[:text]
-              page_command("Page.handleJavaScriptDialog", **accept_params)
-            else
-              page_command("Page.handleJavaScriptDialog", accept: type == "alert")
-            end
-          rescue BrowserError
-            # Page.handleJavaScriptDialog may not be implemented in Lightpanda yet
-          end
+          @modal_messages << { type: params["type"], message: params["message"] }
+          @modal_responses.shift
         end
 
         @modal_handler_installed = true
