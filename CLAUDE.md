@@ -28,7 +28,7 @@ bundle exec rubocop -a                # Lint with auto-fix
 - Node identity uses CDP remote object IDs (`Runtime.callFunctionOn` with `this` binding). All node operations route through a single `call` method for centralized error handling. JS function declarations are self-contained constants (no `_lightpanda` dependency) so they work in any execution context including iframes.
 - `Node#[]` returns resolved URLs for `src`/`href`/`action` attributes via `PROPERTY_OR_ATTRIBUTE_JS` (matching Capybara's expected semantics).
 - Frame switching stores Node objects in `Browser#frame_stack`. Finding within frames uses `callFunctionOn` on the iframe element to scope to its `contentDocument`. XPath finding in iframes requires the polyfill (only available in top frame).
-- Modal handling (`accept_modal`/`dismiss_modal`) depends on `Page.handleJavaScriptDialog` CDP support — not yet implemented in Lightpanda (code is guarded with `rescue BrowserError`).
+- Modal handling captures dialog messages via the `Page.javascriptDialogOpening` event (emitted upstream since 2026-04-03). Dialogs auto-dismiss in headless Lightpanda — alert→OK, confirm→false, prompt→null. The handler does NOT call `Page.handleJavaScriptDialog` (it errors with "No dialog is showing", and calling it from the dispatch thread deadlocks). `accept_modal(:alert)` and `dismiss_modal(:confirm|:prompt)` work correctly; `accept_modal(:confirm|:prompt)` cannot influence the JS return value (auto-dismiss has already returned the dismiss outcome).
 
 ## Lightpanda Browser Limitations
 

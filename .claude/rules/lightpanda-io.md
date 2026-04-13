@@ -30,7 +30,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions |
 | **Network** | network.zig | Cookies, request/response interception |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992), addScriptToEvaluateOnNewDocument (PR #1993); NO history/dialog methods |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992), addScriptToEvaluateOnNewDocument (PR #1993), `handleJavaScriptDialog` exists but always errors (auto-dismiss, commit 7208934b 2026-04-06), `javascriptDialogOpening` event NOW EMITTED (commit 95f80c96 2026-04-03); NO history methods |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
@@ -59,8 +59,25 @@ Network.deleteCookies        Network.clearBrowserCookies (safe on >= v0.2.6)
 ```
 Page.getNavigationHistory    → gem uses history.back()/history.forward() JS instead
 Page.navigateToHistoryEntry  → gem uses history.back()/history.forward() JS instead
-Page.handleJavaScriptDialog  → not in page.zig (modal code guarded with rescue BrowserError)
 Network.getAllCookies         → does not exist; gem uses Network.getCookies
+```
+
+### CDP Methods Partially Implemented (event but no handler)
+
+```
+Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS (commit 7208934b, 2026-04-06) but
+                                always returns "-32000 No dialog is showing" because
+                                dialogs auto-dismiss in headless mode. The
+                                Page.javascriptDialogOpening EVENT IS NOW EMITTED
+                                (commit 95f80c96, 2026-04-03). Gem captures messages
+                                in the event handler but does NOT call
+                                handleJavaScriptDialog — calling synchronous CDP
+                                commands from the dispatch thread deadlocks the
+                                client. accept_modal(:alert) and dismiss_modal()
+                                work; accept_modal(:confirm|:prompt) cannot override
+                                the auto-dismiss return value.
+Network.setUserAgentOverride → stub, logs "ignored" (PR #2139 open to implement)
+Emulation.setUserAgentOverride → stub, logs "ignored" (PR #2153 open to implement)
 ```
 
 ### Available CDP Methods (not yet used by this gem)
@@ -143,6 +160,47 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #2153**: **Emulation.setUserAgentOverride implementation** (OPEN, 2026-04-13) — follow-up to #2139, would actually implement what's currently a no-op stub.
+- **PR #2149**: **Basic protocol support for WebSocket** (OPEN, 2026-04-13) — adds protocol header negotiation to in-page WebSocket. Companion to PR #2063.
+- **PR #2150**: **Add EventCounts API** (OPEN, 2026-04-13) — `performance.eventCounts` Web Performance API.
+- **PR #2144**: **Console group support** (merged 2026-04-12) — `console.group`/`groupCollapsed`/`groupEnd` now work; relevant for sites that depend on console formatting.
+- **PR #2143**: **CI: invalidate snapshot cache on src/browser/webapi change** (merged 2026-04-12) — CI only.
+- **PR #2139**: **CDP change useragent** (OPEN, 2026-04-11) — implements `Network.setUserAgentOverride` (currently a stub).
+- **PR #2138**: **Map zig error.RangeError to JS RangeError** (OPEN, 2026-04-11) — proper exception mapping.
+- **PR #2137**: **Handle http response with closed socket** (OPEN, 2026-04-11) — network stability fix.
+- **PR #2136**: **Re-enable debug allocator in debug** (merged 2026-04-11) — debug builds only, no runtime impact on release.
+- **PR #2135**: **On Page cleanup, capture next linked list node before releasing MO** (OPEN, 2026-04-11) — MutationObserver cleanup ordering fix.
+- **PR #2134**: **Cache-Control public by default** (OPEN, 2026-04-10) — HTTP caching default change.
+- **PR #2133**: **CDP /json endpoints** (merged 2026-04-10) — adds `/json/version` (with enriched fields) and `/json/list` (Chromium-style discovery). **Closes #1932.** Doesn't affect our gem (we connect via WebSocket directly), but improves Puppeteer/Playwright/OpenClaw compatibility.
+- **PR #2131**: **update page URL and location on pushState/replaceState** (merged 2026-04-10) — **SPA SUPPORT FIX**: `history.pushState()` and `replaceState()` now update `page.url` and reinitialize `window._location`. Previously `location.pathname` returned the old path after pushState, breaking SPA routing detection. Our `current_url` (calls `window.location.href` via JS) was returning the OLD URL on SPA route changes — this is now fixed.
+- **PR #2132**: **Track html5ever Rust sources as cargo step inputs** (merged 2026-04-10) — build system fix.
+- **PR #2130**: **Add arena buckets to ArenaPool** (merged 2026-04-10) — memory perf.
+- **PR #2129**: **Non utf8 querystring encoding** (merged 2026-04-10) — proper encoding for non-UTF8 form data per spec.
+- **PR #2128**: **Use v8 snapshot cache with WPT** (merged 2026-04-10) — startup perf.
+- **PR #2127**: **CI: use cache for snapshots** (merged 2026-04-10) — CI only.
+- **PR #2125**: **Add `--cookies-file` flag for session persistence** (OPEN, 2026-04-10) — CLI feature, would enable cookie persistence across runs.
+- **PR #2123**: **Use proper link text in markdown dump for block-content anchors** (merged 2026-04-10) — MCP markdown only.
+- **PR #2121**: **HTTP: add default write callback to prevent stdout pollution** (merged 2026-04-10) — fixes log noise.
+- **PR #2120**: **Run e2e-test with pre-generated snapshot** (merged 2026-04-09) — CI only.
+- **PR #2119**: **CI: send wpt completion** (merged 2026-04-10) — CI only.
+- **PR #2117**: **Initialize snapshot before network** (merged 2026-04-10) — startup ordering fix.
+- **PR #2116**: **Force aggressive GC on v8 after snapshot creation** (merged 2026-04-10) — memory perf.
+- **PR #2115**: **Move memoryPressureNotification call on session.resetPage** (merged 2026-04-10) — memory perf.
+- **PR #2114**: **Update README** (merged 2026-04-09) — docs only.
+- **PR #2113**: **Improvements to IpFilters** (merged 2026-04-09) — security feature for IP allowlist/blocklist.
+- **PR #2112**: **Reduce size of Telemetry.Lightpanda** (merged 2026-04-09) — telemetry payload reduction.
+- **PR #2111**: **Fix typos** (merged 2026-04-09) — no functional impact.
+- **PR #2110**: **Cache: add log filter to garbage file test** (merged 2026-04-08) — internal testing.
+- **PR #2107**: **Update zig-v8 deps** (merged 2026-04-08) — V8 binding update.
+- **PR #2106**: **Simplifies NodeList.foreach** (merged 2026-04-08) — internal refactor.
+- **PR #2105**: **Better handle v8 callback with no valid context** (merged 2026-04-10) — fixes v8 callback crash path; relevant since our gem makes many `Runtime.callFunctionOn` calls.
+- **PR #2104**: **Add IP filter** (merged 2026-04-10) — IP allowlist/blocklist for outgoing requests.
+- **PR #2102**: **Use encoding_rs on non-UTF-8 html to convert to utf-8** (merged 2026-04-08) — better charset handling for non-UTF-8 pages.
+- **PR #2100**: **Allow user agent override with restrictions** (merged 2026-04-08) — adds CLI `--user-agent` and `--user-agent-suffix` flags. Rejects strings containing "mozilla" (no impersonation). Always sends `Sec-CH-UA: "Lightpanda";v="1"` hint header. **Note**: this is CLI-only; CDP `Network.setUserAgentOverride` is still a stub (PR #2139 open).
+- **PR #2099**: **Clear identity before forcing finalizers** (merged 2026-04-07) — finalizer ordering fix.
+- **PR #2097**: **Config: remove mcp version flag and simplify usage** (merged 2026-04-07) — MCP CLI only.
+- **Commit 95f80c96**: **Emit Page.javascriptDialogOpening CDP events for JS dialogs** (2026-04-03) — **MAJOR FOR US**: dialog events are now emitted when JS calls `alert()`/`confirm()`/`prompt()`. Our `prepare_modals` listener (`Page.javascriptDialogOpening` handler in browser.rb:357) will now actually fire and capture messages, enabling `find_modal` to return them. The dialogs still auto-dismiss in headless mode, so accept/dismiss commands error (see commit 7208934b below).
+- **Commit 7208934b**: **Return CDP error from handleJavaScriptDialog instead of silent no-op** (2026-04-06) — `Page.handleJavaScriptDialog` now returns explicit `-32000 No dialog is showing` error because dialogs auto-dismiss before clients can respond. Our existing `rescue BrowserError` guard around the call is correct — do NOT remove it.
 - **PR #2075**: **use proxy for integration tests** (merged 2026-04-03) — CI only, no runtime impact.
 - **PR #2074**: **Store TAO in IdentityMap** (merged 2026-04-03) — internal memory management: stores tree-accessible objects in IdentityMap. No API changes.
 - **PR #2073**: **stricter Page.isSameOrigin** (merged 2026-04-02) — **SECURITY FIX**: origin comparison now properly validates full origin. Previously `https://origin.com` could match `https://origin.com.attacker.com`. No impact on our gem (we don't do cross-origin navigation tricks).
@@ -267,31 +325,37 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
+- **PR #2153**: **Emulation.setUserAgentOverride implementation** (OPEN, 2026-04-13) — follow-up to #2139, would actually implement the no-op stub.
+- **PR #2150**: **Add EventCounts API** (OPEN, 2026-04-13) — `performance.eventCounts` Web Performance API.
+- **PR #2149**: **Basic protocol support for WebSocket** (OPEN, 2026-04-13) — WebSocket subprotocol header negotiation.
+- **PR #2142**: **Encode form data based on the form/document encoding** (OPEN, 2026-04-11) — proper non-UTF-8 form encoding.
+- **PR #2139**: **CDP change useragent** (OPEN, 2026-04-11) — implements `Network.setUserAgentOverride`. Would let our gem set UA without restarting the browser.
+- **PR #2138**: **Map zig error.RangeError to JS RangeError** (OPEN, 2026-04-11).
+- **PR #2137**: **Handle http response with closed socket** (OPEN, 2026-04-11) — network stability fix.
+- **PR #2135**: **MutationObserver cleanup ordering fix** (OPEN, 2026-04-11).
+- **PR #2134**: **Cache-Control public by default** (OPEN, 2026-04-10).
+- **PR #2125**: **Add `--cookies-file` flag for session persistence** (OPEN, 2026-04-10) — CLI feature.
+- **PR #2098**: **Comptime CLI builder and parser** (OPEN, 2026-04-07) — CLI internal refactor.
+- **PR #2096**: **Cross-origin window property by-pass with accessCheckCallback** (OPEN, DRAFT, 2026-04-07).
+- **PR #2079**: **Layering HTTP Client** (OPEN, 2026-04-03) — HTTP client refactor.
 - **PR #2078**: **WIP: Worker** (OPEN, WIP) — Web Workers implementation starting. Would fix #2017. Major new capability.
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** (OPEN) — fixes bug where multiple `attachToTarget` calls return the same session ID (breaking Playwright). Our gem only calls `attachToTarget` once per page, but this fix improves CDP spec compliance. Adds `alt_session_id` slot for second attach.
 - **PR #2070**: **mcp: Add hover, press, selectOption, setChecked** (OPEN) — MCP interaction tools. No CDP impact.
 - **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Major new capability once merged.
 - **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
-- **PR #2035**: **Add `--user-agent` flag for full User-Agent override** (OPEN) — CLI flag for setting User-Agent. Could be useful for our driver if we want to customize UA.
 
-### Upstream Open Issues (verified 2026-04-03)
+### Upstream Open Issues (verified 2026-04-13)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
-| #2072 | MCP | MCP server exits immediately — incompatible with Claude Code persistent sessions. Doesn't affect CDP mode or our gem. | |
-| #2020 | Crash | Crash on load event dispatch on kitandace.com — `Image` element as event target causes GPF in `asEventTarget()`. SIGSEGV in serve mode. | |
 | #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
-| #2019 | CDP | Playwright CDP fails to connect on Bun (WebSocket closes with 1006); Bun-specific, doesn't affect us | |
 | #1962 | CDP | `Target.createTarget` fails with `-31998 TargetAlreadyLoaded` on second call (Stagehand; we only call once, low risk) | |
 | #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
-| #1952 | JS | `WebSocket` not defined in page context (PR #2063 WIP to fix) | |
-| #1932 | CDP | Missing Chromium-style discovery endpoints (`/json`, `/json/list`); doesn't affect us | |
+| #1952 | JS | `WebSocket` not defined in page context (PR #2063 + PR #2149 WIP to fix) | |
 | #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
 | #1839 | CDP | Session management assertion error in Playwright | |
 | #1838 | CDP | CRSession._onMessage crash in Playwright | |
-| #1832 | Navigation | `Page.navigate` response never sent on some sites | |
-| #1830 | Startup | Port-already-in-use not handled gracefully (PR #1883 adds better error message, but no auto-recovery) | |
 | #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
 | #2017 | JS | Implement Worker and SharedWorker (PR #2078 WIP) | |
@@ -313,6 +377,12 @@ LP.getStructuredData         LP.waitForSelector
 
 | Issue | Outcome |
 |---|---|
+| #1832 | Closed (2026-04-09) — `Page.navigate` response never sent on guy-hoquet.com. Likely fixed by network/event refactors. Our readyState fallback was already handling this; remove fallback only with caution since #1801 (Wikipedia) is still open. |
+| #1830 | Closed (2026-04-10) — Port-already-in-use now handled gracefully. PR #1883 adds clear error message. |
+| #1932 | Closed (2026-04-08) — Fixed by PR #2133: `/json/version` and `/json/list` Chromium discovery endpoints now implemented. Doesn't affect our gem. |
+| #2020 | Closed (2026-04-08) — kitandace.com `Image` event target SIGSEGV. Likely fixed by finalizer refactors (#2069, #2099). |
+| #2019 | Closed (2026-04-08) — Bun WebSocket connect issue. Bun-specific, never affected us. |
+| #2072 | Closed (2026-04-03) — MCP server exits immediately. MCP-only, never affected our CDP-based gem. |
 | #1738 | Closed (2026-04-01) — SIGSEGV when fetching nist.gov. Fixed in latest nightly. Related SIGSEGV issues remain (PR #2050 open for Sentry/GTM crash path). |
 | #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
 | #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
@@ -368,7 +438,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: v0.2.8 (2026-04-02), also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available
+- Latest release: v0.2.8 (2026-04-02). No newer release tag yet — heavy nightly activity since (PRs #2095–#2153). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available.
 
 ## Differences from Chrome/Chromium CDP
 
