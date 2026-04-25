@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-04-22 (post PR #2200 Page→Frame internal rename; CDP dispatch names unchanged):
+All verified present in upstream as of 2026-04-23 (dispatch enums re-checked after #2211 Page-container merge; CDP dispatch names unchanged):
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -158,16 +158,30 @@ LP.getStructuredData         LP.waitForSelector
    - All injected JS (polyfills, custom functions) must be re-injected after each page load — OR use `Page.addScriptToEvaluateOnNewDocument` for auto-injection (PR #1993, merged 2026-03-30)
    - Node references (objectIds) become invalid after navigation
 
-7. **Turbo Drive / Turbo form submission broken — `document.body` is read-only**
-   - **Root cause**: `HTMLDocument.body` accessor in `src/browser/webapi/HTMLDocument.zig:254` has no setter (`bridge.accessor(HTMLDocument.getBody, null, .{})`). `document.body = newBody` silently fails.
-   - **Turbo Drive**: fetches page via JS `fetch()`, extracts `<body>`, tries `document.body = newBody` → fails → page blanks. Gem auto-disables Drive via `Turbo.session.drive = false` polled from injected JS.
-   - **Turbo form submission in frames**: Turbo intercepts `requestSubmit()`, does a fetch POST, tries to extract matching `<turbo-frame>` from response and replace it via DOM manipulation → fails with JsException. Gem bypasses by using `fetch()` + `document.write()` for submit buttons when Turbo is detected.
-   - **Turbo Frames (GET navigation)**: Work correctly — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element, which works.
-   - **Potential upstream fix**: Add `setBody()` to HTMLDocument.zig (spec: https://html.spec.whatwg.org/multipage/dom.html#dom-document-body). Would fix Turbo Drive and likely Turbo Stream rendering.
-   - **Turbo Streams**: Not supported. Depend on Turbo's form submission pipeline completing. Even if `document.body` setter were fixed, streams use `<turbo-stream>` custom elements with `connectedCallback` which may have additional issues.
+7. **Turbo Drive — RESOLVED via gem-side `#id` selector polyfill (2026-04-25)**
+   - **History**: `document.body = newBody` setter was missing → fixed by PR #2215 (merged 2026-04-23, shipped in nightly 2026-04-24). After that landed, removing the gem's `Turbo.session.drive = false` disabler still broke 2/9 real-Rails link-navigation specs. Turbo Drive's pipeline (`fetch → DOMParser → body.replaceWith`) was running cleanly — body was replaced, URL updated, events fired — but `expect(page).to have_css("#page-title", ...)` returned no match.
+   - **Real root cause**: Lightpanda's CSS selector engine has a bug where `querySelector('#id')` / `querySelectorAll('#id')` returns `null` / `[]` after the body is mutated via `innerHTML` and then replaced via `replaceWith` (or twice via `replaceWith`). `getElementById('id')` and `[id="id"]` always work; only the `#id` shorthand is broken. Bug triggers in Turbo Drive's snapshot-then-swap path because `PageRenderer.replaceBody` populates a new body via `innerHTML` before `document.body.replaceWith(newBody)`. Pure single `replaceWith` on an unmodified body does not trigger the bug.
+   - **Repro** (`/tmp/bug_when.rb`): a 12-row matrix shows only the modify-then-replace pattern breaks `#id`; tag-with-id (`h1#id`), descendant from class (`.cls h1`), and attribute equals (`[id="id"]`) keep working.
+   - **Gem fix (2026-04-25)**: `lib/capybara/lightpanda/javascripts/index.js` patches `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` to rewrite `#id` → `[id="id"]` in user-supplied selectors before delegating to the native engine. The rewriter walks the selector char-by-char, tracks bracket depth and quoted strings so it leaves attribute values like `[href="#frag"]` untouched, and supports compound selectors (`h1.foo#bar.baz`), pseudo-class arguments (`:not(#x)`), commas, and Unicode/escape identifier chars. 19/19 unit cases pass.
+   - **Verification (2026-04-25)**: `bundle exec rake spec` → 134/134 (1 unrelated pending cookies-on-redirect). `ruby examples/rails_turbo_rspec_example.rb` → 9/9 with Turbo Drive **enabled** against real Rails+Turbo 8.0.12.
+   - **Disabler removed**: the `Turbo.session.drive = false` auto-disabler IIFE that was at `javascripts/index.js:48-63` is gone. Turbo Drive runs natively. The previous disabler-asserting spec at `driver_spec.rb:605` was replaced with a polyfill regression test.
+   - **Remaining gem workaround**: `fetch()` + `document.write()` submit bypass in `CLICK_JS` (`lib/capybara/lightpanda/node.rb:161-203`). Form-submit tests route through this; left in place pending a separate investigation.
+   - **Upstream issue**: not yet filed. Minimal repro (`/tmp/bug_when.rb`) is ready. Once filed, link the issue here so the polyfill can be removed if/when upstream fixes the selector engine.
+   - **Turbo Frames (GET navigation)**: Already work — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element.
 
 ### Recently Merged Fixes (v0.2.7 and nightly)
 
+- **PR #2223**: **Fix canada.ca problem** (merged 2026-04-23) — CDN bot-protection hardening. No direct impact on our gem.
+- **PR #2221**: **Default command 'serve' for backwards compatibility** (merged 2026-04-23) — running `lightpanda` with no subcommand now defaults to `serve` again. Our `Process` already passes `serve` explicitly, so no change, but keeps older configs working.
+- **PR #2218**: **Add `navigator.userAgentData`** (merged 2026-04-23) — Chrome-only UA Client Hints API. Exposes same data as `Sec-Ch-Ua`. Improves compat on Google properties that probe for it. Side-effects: allows `OffscreenCanvas` in Workers; demotes "load"/"DOMContentLoaded" JS exception log level from error→warn.
+- **PR #2217**: **Clamp `CSSStyleSheet.insertRule` index** (merged 2026-04-23) — closes #2214. Out-of-bounds insert indexes (seen in FullCalendar via React SPAs) are now clamped instead of raising `IndexSizeError`. Stability win for some React apps.
+- **PR #2216**: **Placeholder handlers for `Audits.enable`/`disable`** (merged 2026-04-23) — partial fix for #2177. Puppeteer/Playwright clients that probe Audits no longer hit `UnknownDomain`. No gem impact (we don't use Audits).
+- **PR #2215**: **Add setter for `document.body`** (merged 2026-04-23, filed by us as issue #2213; shipped in nightly 2026-04-24) — previously `document.body = newBody` was silently no-op because the HTMLDocument accessor had no setter. Implementation at `src/browser/webapi/HTMLDocument.zig:64` parses HTML as a fragment and `replaceChild`/`appendChild` on the document element. **Setter is on `HTMLDocument.prototype`, not `Document.prototype`. String-path works; element-path stringifies the element to "[object HTMLBodyElement]" and parses that as HTML (Lightpanda only handles strings, not WebIDL `HTMLElement | null`).** Necessary but not sufficient for Turbo Drive — a separate Lightpanda CSS-engine bug (`querySelector('#id')` failing after body modify+replace) was the actual blocker, now worked around with a gem-side selector rewriter. Disabler has been removed; Drive runs natively. See Known Bug #7.
+- **PR #2212**: **cdp: promote `<label>` to checkbox/radio for CSS-hidden inputs** (merged 2026-04-22) — CDP click events on a `<label>` for a visually-hidden `<input type="checkbox">`/`radio` now route to the real input. Design-system-friendly (MUI, Bootstrap 5). Our `Node#click` uses `HTMLElement.click()` via JS not CDP input events, so this mainly matters if we ever switch to `Input.dispatchMouseEvent`.
+- **PR #2211**: **Introduce Page (container)** (merged 2026-04-23) — follow-up to #2200 Frame rename. Introduces a `Page` container type owning multiple `Frame`s, setting up for multi-page Session support. Internal refactor, no CDP method changes.
+- **PR #2210**: **build: move `snapshot_creator` and `legacy_test` to `extras` step** (merged 2026-04-22) — build reorganization only.
+- **PR #2208**: **More Worker APIs** (merged 2026-04-23) — continued Worker API surface expansion. Workers still WIP (#2017/#2078).
+- **PR #2098**: **Comptime CLI builder and parser** (merged 2026-04-23) — CLI internal refactor. Accepts both `_` and `-` separators (e.g. `--log-format` and `--log_format`).
 - **PR #2209**: **build: port sqlite3 to zig build system** (merged 2026-04-22) — build/toolchain migration. No runtime impact.
 - **PR #2198**: **`Cookie`: require label boundary when matching domain attribute** (merged 2026-04-22) — **SECURITY FIX**: domain matching now enforces label boundary so `sub.evil-example.com` cannot match a cookie for `example.com`. No impact on our gem's CDP cookie APIs but improves spec compliance for cookies set in-page.
 - **PR #2200**: **Page → Frame internal rename** (merged 2026-04-22) — large internal rename of `Page` type to `Frame` (and `page.frames` to `page.child_frames`). CDP dispatch enum names in `src/cdp/domains/page.zig` are unchanged (`Page.navigate`, `Page.reload`, etc.). Precursor to upcoming multi-page Session work (follow-up PR #2211 open).
@@ -371,16 +385,16 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2212**: **cdp: promote `<label>` to checkbox/radio for CSS-hidden inputs** (OPEN, 2026-04-21) — when clicking a visually-hidden `<input type="checkbox">` via CDP, click events are routed to the associated `<label>` instead. Could affect our Node#click behavior for design systems that hide the real input (Material UI, Bootstrap 5, etc.). Monitor.
-- **PR #2211**: **Introduce Page (container)** (OPEN, 2026-04-21) — follow-up to #2200. Introduces a `Page` container type that owns multiple `Frame`s, setting up for multi-page Session support. Internal refactor, no CDP method changes expected.
-- **PR #2210**: **build: move snapshot_creator and legacy_test to `extras` step** (OPEN, 2026-04-21) — build reorganization only.
-- **PR #2208**: **More Worker APIs** (OPEN, 2026-04-21) — continued Worker API surface expansion. Complements merged #2193/#2201.
+- **PR #2226**: **Setup timeout via tcp keepalive** (OPEN, 2026-04-23) — adds TCP keepalive for long-running CDP/HTTP connections. Could help with our own navigation timeouts if adopted.
+- **PR #2224**: **Define v8 functions directly on console instance** (OPEN, 2026-04-23) — internal JS-binding refactor.
+- **PR #2222**: **Try to make a flaky test more robust** (OPEN, 2026-04-23) — test-only.
+- **PR #2220**: **Add `getEntriesByType` and `getEntriesByName` to PerformanceObserver entries** (OPEN, 2026-04-23) — performance observer spec compliance.
+- **PR #2219**: **Remove unused imports** (OPEN, 2026-04-23) — cleanup only.
 - **PR #2203**: **Common httpclient** (OPEN, 2026-04-21) — factoring out common HTTP client code. Internal refactor.
 - **PR #2172**: **Improve safety of Node.replaceChild and Element.replaceWith** (OPEN, 2026-04-16) — DOM manipulation stability.
 - **PR #2171**: **Expand body types for `new Response(...)`** (OPEN, 2026-04-16) — Response constructor accepts more body types.
 - **PR #2170**: **Avoid double free on decoder error** (OPEN, 2026-04-16) — memory safety.
 - **PR #2157**: **Feat: add full SVG DOM support** (OPEN, 2026-04-14) — SVG DOM. Could affect form icon rendering and tests that interact with SVG elements.
-- **PR #2098**: **Comptime CLI builder and parser** (OPEN, 2026-04-07) — CLI internal refactor.
 - **PR #2096**: **Cross-origin window property by-pass with accessCheckCallback** (OPEN, DRAFT, 2026-04-07).
 - **PR #2079**: **Layering HTTP Client** (OPEN, 2026-04-03) — HTTP client refactor.
 - **PR #2078**: **WIP: Worker** (OPEN, WIP) — Web Workers implementation starting. Would fix #2017. Major new capability.
@@ -389,7 +403,7 @@ LP.getStructuredData         LP.waitForSelector
 - **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Largely superseded by PR #2149 (merged) for protocol negotiation, but full WebSocket API still needs this PR.
 - **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
 
-### Upstream Open Issues (verified 2026-04-22)
+### Upstream Open Issues (verified 2026-04-23)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
@@ -416,6 +430,7 @@ LP.getStructuredData         LP.waitForSelector
 
 | Issue | Outcome |
 |---|---|
+| #2213 | Closed (2026-04-23) — Fixed by PR #2215: `HTMLDocument.body` setter implemented. Potentially unblocks Turbo Drive; test before removing gem's Drive disabler. |
 | #1849 | Closed (2026-03-16) — Fixed by PR #1850: CDP WebSocket no longer dies during complex navigation |
 | #1848 | Closed (2026-03-18) — Multiclient connection kills; re-filed as #1892 with more detail |
 | #1887 | Merged (2026-03-17) — PR disabled observer weak refs, fixing MutationObserver stability |
@@ -489,7 +504,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: v0.2.8 (2026-04-02). No newer release tag yet — heavy nightly activity since (PRs #2095–#2212). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available.
+- Latest release: v0.2.8 (2026-04-02). No newer release tag yet — heavy nightly activity since (PRs #2095–#2226). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available.
 
 ## Differences from Chrome/Chromium CDP
 
