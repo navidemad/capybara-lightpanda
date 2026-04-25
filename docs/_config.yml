@@ -5,4 +5,5 @@ show_downloads: false
 google_analytics:
 
 repository: navidemad/capybara-lightpanda
-url: https://navidemad.github.io/capybara-lightpanda
+url: https://navidemad.github.io
+baseurl: /capybara-lightpanda
