@@ -1,0 +1,8 @@
+title: Capybara::Lightpanda
+description: A self-contained Capybara driver for the Lightpanda headless browser.
+theme: jekyll-theme-cayman
+show_downloads: false
+google_analytics:
+
+repository: navidemad/capybara-lightpanda
+url: https://navidemad.github.io/capybara-lightpanda
