@@ -39,8 +39,6 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-04-25 (dispatch enums re-checked after #2229 WebDriver/Page sync; CDP dispatch names unchanged across releases 0.2.8 → 0.2.9):
-
 ```
 Target.createTarget          Target.attachToTarget
 Page.enable                  Page.navigate
@@ -169,311 +167,27 @@ LP.getStructuredData         LP.waitForSelector
    - **Upstream fix in flight (PR #2244, OPEN, 2026-04-25, filed by us)**: root-cause patch in `Frame.getElementByIdFromNode`. The fast path used by the selector engine for `#id` only checked the `lookup` map; after a body removal the original `<h1>` lived in `_removed_ids` and the new `<h1>` was never re-registered, so `lookup.get(id)` missed and `getElementByIdFromNode` returned null. The fix mirrors the existing `Document.getElementById` / `ShadowRoot.getElementById` recovery: on a `lookup` miss, walk `removed_ids` + the scope root and re-register. Adds an HTML test asserting `querySelector('#id')`, `querySelectorAll('#id')`, and `getElementById('id')` all agree after duplicate removal. Once merged, the gem-side `querySelector{,All}` rewriter polyfill can be removed.
    - **Turbo Frames (GET navigation)**: Already work — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element.
 
-### Recently Merged Fixes (v0.2.7 → v0.2.9 and nightly)
-
-- **Release 0.2.9** (2026-04-24) — first formal release tag since 0.2.8 (2026-04-02). Bundles all merges from 2026-04-02 through 2026-04-24, including the body-setter (#2215), CSSOM polish (#2217), `navigator.userAgentData` (#2218), Audits placeholder (#2216), AXNodeId-as-string (#2232), TCP-keepalive timeout (#2226), per-tick errdefer cleanup (#2227), and the empty-location UAF fix (#2234). New asset matrix: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus Arch packages (`*.pkg.tar.zst`).
-- **PR #2239**: **Fix a test-only use-after-free** (merged 2026-04-24) — only surfaces when running an isolated test; arena bucket reuse hides it during full suites. Test-only impact.
-- **PR #2236**: **cli: allow optional positional arguments in command builder** (merged 2026-04-24) — CLI parser feature, no CDP impact.
-- **PR #2234**: **Fix a use-after-free on an empty (and invalid) location** (merged 2026-04-24) — improves WPT `/fetch/api/redirect/redirect-empty-location.any.html`. Stability fix on redirect handling for empty `Location:` headers; a navigation that previously could UAF now exits cleanly.
-- **PR #2232**: **cdp: AXNodeId is a string per spec** (merged 2026-04-24) — Accessibility CDP fix per spec; aligns Lightpanda with the Chrome devtools-protocol type for AXNodeId vs DOM.NodeId. Fixes go-rod compat. We don't use Accessibility, no gem impact.
-- **PR #2231**: **ci: refacto release workflow + Arch linux package build** (merged 2026-04-24) — CI/release plumbing only. Renames `nightly.yml` → `release.yml`, adds Arch package emit on tag.
-- **PR #2230**: **Update `go run ws/main.go` to new `go run runner/main.go -serve`** (merged 2026-04-24) — internal test runner update; no gem impact.
-- **PR #2229**: **Update WebDriver to use Page** (merged 2026-04-24) — internal: WebDriver tests pulled in line with the #2200/#2211 Page-container refactor. No CDP method changes.
-- **PR #2227**: **Improve various errdefer flows** (merged 2026-04-24) — addresses release-overflow paths during partial Frame.init failure. Specifically prevents Frame double-free when navigation init fails partway through. Stability win.
-- **PR #2226**: **Setup timeout via tcp keepalive** (merged 2026-04-24) — was OPEN at last sync. Adds TCP keepalive on long-running CDP/HTTP sockets so hung peers (or NAT timeouts) surface as connection failures rather than infinite waits. macOS uses TCP_KEEPALIVE, Linux uses TCP_KEEPIDLE. Could indirectly help the gem's long-lived WebSocket connection during slow navigations.
-- **PR #2224**: **Define v8 functions directly on console instance** (merged 2026-04-23) — was OPEN at last sync. Internal V8 binding cleanup; no behavior change.
-- **PR #2222**: **try to make a flaky test more robust** (merged 2026-04-23) — was OPEN at last sync. Test-only.
-- **PR #2220**: **Add `getEntriesByType` and `getEntriesByName` to PerformanceObserver entry list** (merged 2026-04-24) — was OPEN at last sync. PerformanceObserver spec compliance.
-- **PR #2219**: **Remove unused imports** (merged 2026-04-23) — was OPEN at last sync. Cleanup only.
-- **PR #2223**: **Fix canada.ca problem** (merged 2026-04-23) — CDN bot-protection hardening. No direct impact on our gem.
-- **PR #2221**: **Default command 'serve' for backwards compatibility** (merged 2026-04-23) — running `lightpanda` with no subcommand now defaults to `serve` again. Our `Process` already passes `serve` explicitly, so no change, but keeps older configs working.
-- **PR #2218**: **Add `navigator.userAgentData`** (merged 2026-04-23) — Chrome-only UA Client Hints API. Exposes same data as `Sec-Ch-Ua`. Improves compat on Google properties that probe for it. Side-effects: allows `OffscreenCanvas` in Workers; demotes "load"/"DOMContentLoaded" JS exception log level from error→warn.
-- **PR #2217**: **Clamp `CSSStyleSheet.insertRule` index** (merged 2026-04-23) — closes #2214. Out-of-bounds insert indexes (seen in FullCalendar via React SPAs) are now clamped instead of raising `IndexSizeError`. Stability win for some React apps.
-- **PR #2216**: **Placeholder handlers for `Audits.enable`/`disable`** (merged 2026-04-23) — partial fix for #2177. Puppeteer/Playwright clients that probe Audits no longer hit `UnknownDomain`. No gem impact (we don't use Audits).
-- **PR #2215**: **Add setter for `document.body`** (merged 2026-04-23, filed by us as issue #2213; shipped in nightly 2026-04-24) — previously `document.body = newBody` was silently no-op because the HTMLDocument accessor had no setter. Implementation at `src/browser/webapi/HTMLDocument.zig:64` parses HTML as a fragment and `replaceChild`/`appendChild` on the document element. **Setter is on `HTMLDocument.prototype`, not `Document.prototype`. String-path works; element-path stringifies the element to "[object HTMLBodyElement]" and parses that as HTML (Lightpanda only handles strings, not WebIDL `HTMLElement | null`).** Necessary but not sufficient for Turbo Drive — a separate Lightpanda CSS-engine bug (`querySelector('#id')` failing after body modify+replace) was the actual blocker, now worked around with a gem-side selector rewriter. Disabler has been removed; Drive runs natively. See Known Bug #7.
-- **PR #2212**: **cdp: promote `<label>` to checkbox/radio for CSS-hidden inputs** (merged 2026-04-22) — CDP click events on a `<label>` for a visually-hidden `<input type="checkbox">`/`radio` now route to the real input. Design-system-friendly (MUI, Bootstrap 5). Our `Node#click` uses `HTMLElement.click()` via JS not CDP input events, so this mainly matters if we ever switch to `Input.dispatchMouseEvent`.
-- **PR #2211**: **Introduce Page (container)** (merged 2026-04-23) — follow-up to #2200 Frame rename. Introduces a `Page` container type owning multiple `Frame`s, setting up for multi-page Session support. Internal refactor, no CDP method changes.
-- **PR #2210**: **build: move `snapshot_creator` and `legacy_test` to `extras` step** (merged 2026-04-22) — build reorganization only.
-- **PR #2208**: **More Worker APIs** (merged 2026-04-23) — continued Worker API surface expansion. Workers still WIP (#2017/#2078).
-- **PR #2098**: **Comptime CLI builder and parser** (merged 2026-04-23) — CLI internal refactor. Accepts both `_` and `-` separators (e.g. `--log-format` and `--log_format`).
-- **PR #2209**: **build: port sqlite3 to zig build system** (merged 2026-04-22) — build/toolchain migration. No runtime impact.
-- **PR #2198**: **`Cookie`: require label boundary when matching domain attribute** (merged 2026-04-22) — **SECURITY FIX**: domain matching now enforces label boundary so `sub.evil-example.com` cannot match a cookie for `example.com`. No impact on our gem's CDP cookie APIs but improves spec compliance for cookies set in-page.
-- **PR #2200**: **Page → Frame internal rename** (merged 2026-04-22) — large internal rename of `Page` type to `Frame` (and `page.frames` to `page.child_frames`). CDP dispatch enum names in `src/cdp/domains/page.zig` are unchanged (`Page.navigate`, `Page.reload`, etc.). Precursor to upcoming multi-page Session work (follow-up PR #2211 open).
-- **PR #2201**: **More worker APIs** (merged 2026-04-21) — expands WebAPIs exposed to Workers (building on PR #2193). Workers still WIP per #2017/#2078; doesn't yet affect our gem (no page-level Worker support).
-- **PR #2205**: **Add timing fields to CDP Network messages** (merged 2026-04-21) — `requestTime`/`timestamp`/`wallTime` added to a few `Network.*` events. Our gem doesn't consume Network events, but improves Chrome spec compliance.
-- **PR #2204**: **Shrink screenshot.png** (merged 2026-04-21) — reduces the static placeholder PNG size. No behavior change for `save_screenshot`.
-- **PR #2202**: **Add error-callback on shared buffer clone from v8** (merged 2026-04-21) — prevents V8 assertion crash when structured-cloning shared buffers. Stability improvement.
-- **PR #2197**: **cdp: implement a fake `Page.printToPDF`** (merged 2026-04-20) — returns embedded static PDF blob. Could let us add `save_pdf` support if Capybara ever wants it; no current action needed.
-- **PR #2193**: **Enable more WebAPIs for Workers** (merged 2026-04-20) — supersedes older Worker API surface work. Building towards #2017/#2078.
-- **PR #2196**: **sqlite build integration** (merged 2026-04-21) — build dependency management. No runtime impact.
-- **PR #2189**: **`setTimeout`/`setInterval` accept `DOMString` handler** (merged 2026-04-20) — spec compliance; string handlers now parsed via `Function(...)`. Relevant if page JS uses `setTimeout("code", 100)` style.
-- **PR #2190**: **Remove remaining "legacy" async tests** (merged 2026-04-20) — test-only.
-- **PR #2184**: **ax: route AXNode.Writer scratch allocations through a dedicated arena** (merged 2026-04-20) — accessibility perf; reduces allocator pressure during ariaSnapshot.
-- **PR #2192**: **Fix `document.writeln` test** (merged 2026-04-20) — test fix for #2188.
-- **PR #2188**: **Implement `document.writeln`** (merged 2026-04-18) — adds `document.writeln()` WebAPI. Useful for legacy sites; no gem action needed.
-- **PR #2183**: **Add WPT extensions** (merged 2026-04-18) — Web Platform Tests infra only.
-- **PR #2181**: **Support more types in `new Blob(...)`** (merged 2026-04-18) — Blob constructor spec compliance.
-- **PR #2180**: **Update html5ever and other Rust dependencies** (merged 2026-04-18) — HTML parser upgrade. Monitor for parsing regressions in nightly.
-- **PR #2185**: **Improve Cookie parsing rules** (merged 2026-04-18) — `__Secure-` prefix protection, allows tabs in cookie values per spec. Improves interop with sites setting modern cookies.
-- **PR #2179**: **WebSocket fixes** (merged 2026-04-18) — **CLOSES #1952**: in-page `WebSocket` API is now defined. Pages that construct `new WebSocket(...)` no longer throw `ReferenceError`. No gem-side change needed; removes a common cause of test failures on pages with websocket-heavy JS.
-- **PR #2182**: **Fix ariaSnapshot noise vs Chromium** (merged 2026-04-17) — reduces aria snapshot output from 1231 → 184 lines on wikipedia.org. Addresses #1813. Accessibility.ariaSnapshot is now much cleaner.
-- **PR #2169**: **`--cookie`/`--cookie-jar` flags for session persistence** (merged 2026-04-16) — CLI-only feature, follow-up to #2125. Load cookies from file at start, save at end of fetch. Doesn't affect our gem (we connect via CDP), but useful for CLI-based cookie reuse.
-- **PR #2164**: **Fix `Page.createIsolatedWorld`** (merged 2026-04-16) — now returns the correct `executionContextId` from the v8 inspector. Previously broken. Could enable our gem to inject the XPath polyfill in an isolated world (avoiding conflicts with page scripts), though `addScriptToEvaluateOnNewDocument` already works for our current needs.
-- **PR #2167**: **Improve finalizer code** (merged 2026-04-15) — memory management stability, protects against `resolve_ptr_reuse` via flag.
-- **PR #2168**: **Quiet test warnings** (merged 2026-04-15) — test-only.
-- **PR #2165**: **On page reset, reset IsolatedWorld identity** (merged 2026-04-15) — companion to #2164.
-- **PR #2163**: **Return promise on `media.play()`** (merged 2026-04-15) — spec compliance for HTMLMediaElement.
-- **PR #2162**: **Safety check around cache get** (merged 2026-04-15) — stability.
-- **PR #2161**: **Various crash fixes** (merged 2026-04-14) — important stability bundle: double-buffers to_load list so load callbacks can register new loadable elements without invalidating iteration; switches opaque origin assertion to debug-only; keeps terminated workers in page tracking (prevents leaking context); cleanly shuts down context on page.init error.
-- **PR #2160**: **Remove unnecessary flag clear** (merged 2026-04-14) — internal.
-- **PR #2159**: **Acquire reference on document font** (merged 2026-04-14) — FontFace lifecycle stability.
-- **PR #2158**: **`WS.close` returns DOMException** (merged 2026-04-14) — in-page WebSocket API spec compliance.
-- **PR #2156**: **CDP: accept `LID-` as requestId prefix** (merged 2026-04-14) — follow-up to #2154 for loaderId/requestId compat.
-- **PR #2155**: **Fetch cookie jar scope** (merged 2026-04-14) — cookies only sent for `credentials: 'include'` and same-origin modes per spec.
-- **PR #2154**: **Improve loaderId and requestId compatibility** (merged 2026-04-13) — loaderId is now per-document (changes on navigation), requestId has distinct format. Improves CDP spec compliance.
-- **PR #2153**: **Emulation.setUserAgentOverride implementation** (merged 2026-04-14) — was a no-op stub; now actually implements UA override. Follow-up to #2139.
-- **PR #2151**: **TextDecoder streaming stop** (merged 2026-04-13) — streaming decode fix.
-- **PR #2150**: **Add EventCounts API** (merged 2026-04-13) — `performance.eventCounts` Web Performance API.
-- **PR #2149**: **Basic protocol support for WebSocket** (merged 2026-04-13) — subprotocol header negotiation on in-page WebSocket.
-- **PR #2148**: **Correctly treat view's offset as byte offset** (merged 2026-04-13) — ArrayBufferView offset spec fix.
-- **PR #2144**: **Console group support** (merged 2026-04-12) — `console.group`/`groupCollapsed`/`groupEnd` now work; relevant for sites that depend on console formatting.
-- **PR #2143**: **CI: invalidate snapshot cache on src/browser/webapi change** (merged 2026-04-12) — CI only.
-- **PR #2142**: **Encode form data based on form/document encoding** (merged 2026-04-13) — proper non-UTF-8 form encoding.
-- **PR #2139**: **CDP change useragent** (merged ~2026-04-11) — implements `Network.setUserAgentOverride` (was a stub). Combined with #2153, both UA override paths now work.
-- **PR #2138**: **Map zig error.RangeError to JS RangeError** (merged 2026-04-13) — proper exception mapping.
-- **PR #2137**: **Handle http response with closed socket** (merged 2026-04-13) — network stability fix.
-- **PR #2136**: **Re-enable debug allocator in debug** (merged 2026-04-11) — debug builds only, no runtime impact on release.
-- **PR #2135**: **On Page cleanup, capture next linked list node before releasing MO** (merged 2026-04-13) — MutationObserver cleanup ordering fix.
-- **PR #2134**: **Cache-Control public by default** (merged 2026-04-14) — HTTP caching default change.
-- **PR #2133**: **CDP /json endpoints** (merged 2026-04-10) — adds `/json/version` (with enriched fields) and `/json/list` (Chromium-style discovery). **Closes #1932.** Doesn't affect our gem (we connect via WebSocket directly), but improves Puppeteer/Playwright/OpenClaw compatibility.
-- **PR #2131**: **update page URL and location on pushState/replaceState** (merged 2026-04-10) — **SPA SUPPORT FIX**: `history.pushState()` and `replaceState()` now update `page.url` and reinitialize `window._location`. Previously `location.pathname` returned the old path after pushState, breaking SPA routing detection. Our `current_url` (calls `window.location.href` via JS) was returning the OLD URL on SPA route changes — this is now fixed.
-- **PR #2132**: **Track html5ever Rust sources as cargo step inputs** (merged 2026-04-10) — build system fix.
-- **PR #2130**: **Add arena buckets to ArenaPool** (merged 2026-04-10) — memory perf.
-- **PR #2129**: **Non utf8 querystring encoding** (merged 2026-04-10) — proper encoding for non-UTF8 form data per spec.
-- **PR #2128**: **Use v8 snapshot cache with WPT** (merged 2026-04-10) — startup perf.
-- **PR #2127**: **CI: use cache for snapshots** (merged 2026-04-10) — CI only.
-- **PR #2125**: **Add `--cookies-file` flag for session persistence** (OPEN, 2026-04-10) — CLI feature, would enable cookie persistence across runs.
-- **PR #2123**: **Use proper link text in markdown dump for block-content anchors** (merged 2026-04-10) — MCP markdown only.
-- **PR #2121**: **HTTP: add default write callback to prevent stdout pollution** (merged 2026-04-10) — fixes log noise.
-- **PR #2120**: **Run e2e-test with pre-generated snapshot** (merged 2026-04-09) — CI only.
-- **PR #2119**: **CI: send wpt completion** (merged 2026-04-10) — CI only.
-- **PR #2117**: **Initialize snapshot before network** (merged 2026-04-10) — startup ordering fix.
-- **PR #2116**: **Force aggressive GC on v8 after snapshot creation** (merged 2026-04-10) — memory perf.
-- **PR #2115**: **Move memoryPressureNotification call on session.resetPage** (merged 2026-04-10) — memory perf.
-- **PR #2114**: **Update README** (merged 2026-04-09) — docs only.
-- **PR #2113**: **Improvements to IpFilters** (merged 2026-04-09) — security feature for IP allowlist/blocklist.
-- **PR #2112**: **Reduce size of Telemetry.Lightpanda** (merged 2026-04-09) — telemetry payload reduction.
-- **PR #2111**: **Fix typos** (merged 2026-04-09) — no functional impact.
-- **PR #2110**: **Cache: add log filter to garbage file test** (merged 2026-04-08) — internal testing.
-- **PR #2107**: **Update zig-v8 deps** (merged 2026-04-08) — V8 binding update.
-- **PR #2106**: **Simplifies NodeList.foreach** (merged 2026-04-08) — internal refactor.
-- **PR #2105**: **Better handle v8 callback with no valid context** (merged 2026-04-10) — fixes v8 callback crash path; relevant since our gem makes many `Runtime.callFunctionOn` calls.
-- **PR #2104**: **Add IP filter** (merged 2026-04-10) — IP allowlist/blocklist for outgoing requests.
-- **PR #2102**: **Use encoding_rs on non-UTF-8 html to convert to utf-8** (merged 2026-04-08) — better charset handling for non-UTF-8 pages.
-- **PR #2100**: **Allow user agent override with restrictions** (merged 2026-04-08) — adds CLI `--user-agent` and `--user-agent-suffix` flags. Rejects strings containing "mozilla" (no impersonation). Always sends `Sec-CH-UA: "Lightpanda";v="1"` hint header. **Note**: this is CLI-only; CDP `Network.setUserAgentOverride` is still a stub (PR #2139 open).
-- **PR #2099**: **Clear identity before forcing finalizers** (merged 2026-04-07) — finalizer ordering fix.
-- **PR #2097**: **Config: remove mcp version flag and simplify usage** (merged 2026-04-07) — MCP CLI only.
-- **Commit 95f80c96**: **Emit Page.javascriptDialogOpening CDP events for JS dialogs** (2026-04-03) — **MAJOR FOR US**: dialog events are now emitted when JS calls `alert()`/`confirm()`/`prompt()`. Our `prepare_modals` listener (`Page.javascriptDialogOpening` handler in browser.rb:357) will now actually fire and capture messages, enabling `find_modal` to return them. The dialogs still auto-dismiss in headless mode, so accept/dismiss commands error (see commit 7208934b below).
-- **Commit 7208934b**: **Return CDP error from handleJavaScriptDialog instead of silent no-op** (2026-04-06) — `Page.handleJavaScriptDialog` now returns explicit `-32000 No dialog is showing` error because dialogs auto-dismiss before clients can respond. Our existing `rescue BrowserError` guard around the call is correct — do NOT remove it.
-- **PR #2075**: **use proxy for integration tests** (merged 2026-04-03) — CI only, no runtime impact.
-- **PR #2074**: **Store TAO in IdentityMap** (merged 2026-04-03) — internal memory management: stores tree-accessible objects in IdentityMap. No API changes.
-- **PR #2073**: **stricter Page.isSameOrigin** (merged 2026-04-02) — **SECURITY FIX**: origin comparison now properly validates full origin. Previously `https://origin.com` could match `https://origin.com.attacker.com`. No impact on our gem (we don't do cross-origin navigation tricks).
-- **PR #2069**: **Move finalizers to pure reference counting** (merged 2026-04-02) — internal memory management refactor. All finalizers now use pure reference counting instead of mixed weak-ref/RC approach. Should improve stability.
-- **PR #2071**: **Relax assertion on httpclient abort** (merged 2026-04-02) — stability fix: relaxes an assertion that could trigger during HTTP client abort. Prevents potential crashes during network error recovery.
-- **PR #2066**: **mcp: improve navigation reliability and add CDP support** (merged 2026-04-03) — MCP-focused: fixes inactivity timeout handling, handles `CDPWaitResult.done` instead of `unreachable`. Server-side fix for CDP wait results — could indirectly improve stability.
-- **PR #2068**: **markdown: simplify and optimize anchor rendering** (merged 2026-04-02) — MCP markdown output only.
-- **PR #2067**: **percent encode version query string for crash report** (merged 2026-04-01) — internal telemetry fix.
-- **PR #2014**: **build: add check step to verify compilation** (merged 2026-04-01) — CI improvement, no runtime impact
-- **PR #2064**: **Improve network naming consistency** (merged 2026-04-01) — internal refactor: `Runtime.zig` renamed to `Network.zig` in HTTP client code. No CDP-level changes.
-- **PR #2061**: **Add `Element.ariaAtomic` and `Element.ariaLive` properties** (merged 2026-04-01) — ARIAMixin attribute reflection on Element per ARIA spec. Improves accessibility support.
-- **PR #2060**: **Add `HTMLAnchorElement.rel` property** (merged 2026-04-01) — string `rel` accessor on anchor elements (the `relList` DOMTokenList was already implemented).
-- **PR #2057**: **Add `HTMLElement.title` property** (merged 2026-04-01) — getter/setter reflecting the `title` HTML attribute. Our `Node#[]` uses `getAttribute` so no impact, but `element.title` now works in JS.
-- **PR #2046/2065**: **Fix URL resolve path scheme** (merged 2026-04-01) — fixes URL resolution for paths with scheme prefixes per URL spec. Could affect URL handling in navigation.
-- **PR #2055**: **Add `HTMLElement.dir` and `HTMLElement.lang` properties** (merged 2026-03-31) — attribute-backed accessors on HTMLElement and HTMLDocument.
-- **PR #2054**: **`URLSearchParams`: support passing arrays to constructor** (merged 2026-03-31) — spec compliance for URLSearchParams.
-- **PR #2051**: **Provide a failing callback to ValueSerializer for host objects** (merged 2026-03-31) — prevents V8 assertion failure when serializing Zig DOM objects. Fixes crash path (returns error instead of panic).
-- **PR #2052**: **Expand the lifetime of the XHR reference** (merged 2026-03-31) — fixes race condition where V8 could drop XHR reference before HTTP start callback. Prevents use-after-free crashes.
-- **PR #2047**: **Add `--wait-selector`, `--wait-script` and `--wait-script-file` options to fetch** (merged 2026-03-31) — CLI-only, no CDP impact.
-- **PR #2036**: **Removing remaining CDP generic** (merged 2026-03-31) — internal refactor removing generic CDP dispatcher code. BrowserContext and Command are now non-generic. No method-level changes, but error messages/codes for unsupported methods may differ.
-- **PR #2032**: **Improve/Fix CDP navigation event order** (merged 2026-03-30) — **MAJOR CHANGE**: `Page.frameNavigated` now fires on header response (earlier than before). New explicit DOMContentLoaded/Loaded events separated from `pageNavigated`. Context clear+reset now happens after main page navigation but before frame creation. New event flow: `Start Page Navigation → Response Received → End Page Navigation → context clear+reset → Start Frame Navigation → Response Received → End Frame Navigation → DOMContentLoaded → Loaded`. Our `Page.loadEventFired` listener should still work since "Loaded" fires at the end. ReadyState fallback remains essential.
-- **PR #2044**: HTTP: add connect code into auth challenge detection (merged 2026-03-30) — improves HTTP auth handling
-- **PR #2028**: Protect transfer.kill() the way transfer.abort() is protected (merged 2026-03-30) — network stability improvement
-- **PR #2024**: Rework finalizers (merged 2026-03-30) — internal memory management refactor
-- **PR #2022/#2033**: Cache canvas 2D context and lock context type per spec (merged 2026-03-30) — spec compliance
-- **PR #2021**: Fix `navigator.languages` to include base language per spec (merged 2026-03-30) — e.g. returns `["en-US", "en"]` instead of just `["en-US"]`
-- **PR #1993**: **CDP: implement `Page.addScriptToEvaluateOnNewDocument`** (merged 2026-03-30, filed by us) — replaces the hardcoded stub with a working implementation. Scripts stored on `BrowserContext`, evaluated after context clear+reset but before frames and DOMContentLoaded (post PR #2032 event reorder). Also adds `Page.removeScriptToEvaluateOnNewDocument`. Eliminates need to re-inject XPath polyfill after every navigation.
-- **PR #2031**: Follow-up to #1993 — internal refactoring for addScriptToEvaluateOnNewDocument (merged 2026-03-30)
-- **PR #2026**: Add missing `InvalidAccessError` DOMException mapping (merged 2026-03-30)
-- **PR #1889**: **Rework header/data callbacks in HttpClient** (merged 2026-03-27) — major refactor: disables libcurl built-in redirects, follows redirect chain explicitly in processMessages. Moves data callbacks to processMessages for thread safety. Could affect redirect behavior, cookie handling on redirects, and response timing.
-- **Commit 9068fe71**: **Fix SameSite cookies** (2026-03-27) — passes `cookie_origin` (top-level URL) instead of subrequest URL for SameSite evaluation. Fixes incorrect SameSite=Strict/Lax cookie inclusion on cross-origin subrequests.
-- **PR #2005**: MCP/CDP: unify node registration (merged 2026-03-27) — internal refactor
-- **PR #2002**: Support `FormDataEvent` (merged 2026-03-27) — enables `formdata` event handling in JS context
-- **PR #2011**: MCP fixes (merged 2026-03-27)
-- **PR #2009**: MCP: improve argument parsing error handling (merged 2026-03-27)
-- **PR #2008**: Fix dead code and error swallowing warnings (merged 2026-03-27)
-- **PR #1992**: **CDP: implement `Page.reload`** (merged 2026-03-26) — proper reload navigation via `NavigationKind.reload`. Accepts `ignoreCache` and `scriptToEvaluateOnLoad` params per CDP spec. Gem adopted via `page_command("Page.reload")` in `Browser#refresh`. Filed by us.
-- **PR #2004**: `ResizeObserver.unobserve` available in JS context (merged 2026-03-26)
-- **PR #2003**: `CanvasRenderingContext2D` canvas element access (merged 2026-03-26)
-- **PR #1998**: Improve authority parsing (merged 2026-03-26) — URL parsing improvements
-- **PR #1999**: Fix `--wait-until` default value (merged 2026-03-26)
-- **PR #1991**: Set v8::Signature on FunctionTemplates (merged 2026-03-26) — V8 binding correctness
-- **PR #1997**: Bump zig-v8 to v0.3.7 (merged 2026-03-26)
-- **PR #1990**: Remove CDP generic dispatcher (merged 2026-03-25) — internal refactor
-- **PR #1985**: Allow Document as root of IntersectionObserver (merged 2026-03-25)
-- **PR #1981**: Window cross-origin scripting improvements (merged 2026-03-25)
-- **PR #1984**: Fix `Form.requestSubmit(submitter)` not setting `SubmitEvent.submitter` (merged 2026-03-25) — `e.submitter` was always `null`; now correctly set per WHATWG spec. Critical for Turbo/Stimulus/Rails UJS that inspect `e.submitter` for `formaction`/`formmethod` overrides. Our `CLICK_JS` uses `form.requestSubmit(this)` and benefits directly.
-- **PR #1987**: Handle `Connection: close` without TLS `close_notify` (merged 2026-03-25) — fixes network errors on servers like ec.europa.eu that close TCP without TLS alert
-- **PR #1951**: MCP: add `detectForms` tool for structured form discovery (merged 2026-03-25)
-- **PR #1979**: Support (and prefer) dash-separated CLI arguments (merged 2026-03-24) — e.g. `--log-format` preferred over `--log_format`
-- **PR #1977**: Only check StyleSheet dirty flag at start of operation — CSS perf optimization (merged 2026-03-24)
-- **PR #1972**: Fix Expo Web crash by gracefully handling at-rules in CSSStyleSheet.insertRule (merged 2026-03-24)
-- **PR #1975**: Percent-encode pathname in URL.setPathname per URL spec (merged 2026-03-23)
-- **PR #1969**: Handle `appendAllChildren` mutating children list — DOM stability fix (merged 2026-03-23)
-- **PR #1968**: Handle nested `document.write` where parent gets deleted — DOM stability fix (merged 2026-03-23)
-- **PR #1967**: Anchor(...) CSS property normalization (merged 2026-03-23)
-- **PR #1964**: Add `Image.currentSrc` and `Media.currentSrc` (merged 2026-03-23)
-- **PR #1963**: Use double-queue for recursive navigation — navigation stability (merged 2026-03-23)
-- **PR #1959**: Expose `form.iterator()` (merged 2026-03-23)
-- **PR #1955**: Add `--advertise_host` option to serve command (merged 2026-03-23)
-- **PR #1948**: CDP: add `waitForSelector` to `lp.actions` (merged 2026-03-23)
-- **PR #1946**: Encode non-UTF8 `Network.getResponseBody` in base64 (merged 2026-03-23)
-- **PR #1797**: Implement CSSOM and Enhanced Visibility Filtering — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` now matches all active stylesheets (merged 2026-03-23)
-- **PR #1949**: Fix Page.getFrameTree on STARTUP when browser context and target exist — fixes #1800 frame ID mismatch (merged 2026-03-21)
-- **PR #1945**: Add validation to `replaceChildren` (merged 2026-03-21)
-- **PR #1944**: Fix `new URL('about:blank')` parsing (merged 2026-03-21)
-- **PR #1942**: Search for base page when resolving from about:blank — improves about:blank URL handling (merged 2026-03-21)
-- **PR #1939**: More aggressive timer cleanup — reduces timer leaks (merged 2026-03-21)
-- **PR #1933**: Optimize CSS visibility engine with lazy parsing and cache-friendly evaluation (merged 2026-03-20)
-- **PR #1929**: Send `Target.detachedFromTarget` event on detach — fixes #1819 (merged 2026-03-20)
-- **PR #1927**: Fetch `wait_until` parameter for page load options (merged 2026-03-20)
-- **PR #1925**: Return correct errors in promise rejections (merged 2026-03-20)
-- **PR #1918**: Add `adoptedStyleSheets` property to ShadowRoot (merged 2026-03-19)
-- **PR #1916**: Add `Request.signal` — AbortController support for fetch (merged 2026-03-19)
-- **PR #1915**: Improve unhandled rejection handling (merged 2026-03-19)
-- **PR #1911/1884**: Stub `navigator.permissions`, `navigator.storage`, `navigator.deviceMemory` — unblocks Cloudflare Turnstile (merged 2026-03-19)
-- **PR #1900**: Dispatch `InputEvent` on input/TextArea changes — native InputEvent support (merged 2026-03-18)
-- **PR #1898**: Keyboard events are now bubbling, cancelable, and composed (merged 2026-03-18)
-- **PR #1897**: Introduce StyleManager — foundation for CSS support (merged 2026-03-18)
-- **PR #1901**: Remove Origins (internal refactor) (merged 2026-03-20)
-- **PR #1891**: Implement `Form.requestSubmit` — our `Node#click` CLICK_JS now has native support for this (merged 2026-03-18)
-- **PR #1885**: Fallback to Incumbent Context when Current Context is dangling — reduces "execution context destroyed" errors (merged 2026-03-18)
-- **PR #1902**: `Emulation.setUserAgentOverride` now logs when ignored instead of silent (merged 2026-03-18)
-- **PR #1899**: Only run idle tasks from root page (merged 2026-03-18)
-- **PR #1894**: SemanticTree: implement interactiveOnly filter and optimize token usage (merged 2026-03-18)
-- **PR #1893**: Expand rel's that trigger link onload (merged 2026-03-18)
-- **PR #1887**: Disable MutationObserver/IntersectionObserver weak refs — fixes #1887 stability issues (merged 2026-03-17)
-- **PR #1882**: Special-case `Window#onerror` per WHATWG spec (5-arg signature) (merged 2026-03-17)
-- **PR #1878**: Implement `window.event` property (merged 2026-03-17)
-- **PR #1877**: Support blob URLs in XHR and Fetch (merged 2026-03-17)
-- **Commit 58641335**: Close all CDP clients on shutdown — cleaner process termination (2026-03-17)
-- **PR #1872**: Graceful WS socket close — send CLOSE message on browser-initiated disconnect, continue on accept failures (merged 2026-03-17)
-- **PR #1883**: Show actionable error when server port is already in use (merged 2026-03-17)
-- **PR #1876**: Add click, fill, scroll MCP interaction tools (merged 2026-03-17)
-- **PR #1873**: Add default messages for all DOMException error codes (merged 2026-03-16)
-- **PR #1870**: MutationObserver/IntersectionObserver now use reference counting (merged 2026-03-16)
-- **PR #1864**: CDP click events now trusted (`isTrusted: true`) (merged 2026-03-16, fixes #1864)
-- **PR #1863**: Add missing `disable` method to Security, Inspector, Performance CDP domains (merged 2026-03-16)
-- **PR #1846**: Fix use-after-free with certain CDP scripts (origin takeover) (merged 2026-03-16, fixes #1846)
-- **PR #1817**: window.postMessage across frames (merged 2026-03-16)
-- **PR #1850**: Fix CDP WebSocket connection dying during complex page navigation (merged 2026-03-16, fixes #1849) — filed by us
-- **PR #1845**: Don't kill WebSocket on unknown domain/method errors (merged 2026-03-15, fixes #1843) — filed by us
-- **PR #1821**: Ignore partitionKey in cookie operations (merged 2026-03-16, fixes #1818)
-- **PR #1836**: Fix AXValue integer→string serialization (merged 2026-03-16, fixes #1822)
-- **PR #1852**: Fix DOMParser error document handling (merged 2026-03-15)
-- **PR #1851**: Fix fetch() to reject with TypeError on network errors (merged 2026-03-15)
-- **PR #1823**: Remove frame double-free on navigate error (merged 2026-03-14, in v0.2.6)
-- **PR #1810**: Ensure valid cookie isn't interpreted as null (merged 2026-03-13, in v0.2.6)
-- **PR #1824**: Fix memory leak in Option.getText() (merged 2026-03-14, in v0.2.6)
-- **Cookie parsing on redirect** (commit 51e90f59, 2026-03-12): Fix cookie handling during HTTP redirects
-- **Frame navigation improvements** (commits 9c7ecf22, 768c3a53, bfe2065b, cabd62b4, 2026-03-05–06): Target-aware navigation, optimized about:blank, improved sub-navigation
-- **Dynamic inline script execution** (commit ec9a2d81, 2026-03-08): Execute dynamically inserted `<script>` elements
-- **Origin-based frame data sharing** (commit 94ce5edd, 2026-03-08): Same-origin frames share V8 data
-- **Page.captureScreenshot added** (commit 8672232e, 2026-03-09): Dummy 1920x1080 PNG
-- **Page.getLayoutMetrics added** (commit d669d5c1, 2026-03-09): Hardcoded 1920x1080
-- **LP.getSemanticTree** (commit 0f46277b, 2026-03-06): Native semantic DOM extraction for AI agents
-- **LP.getInteractiveElements** (commit a417c73b, 2026-03-09): List interactive page elements
-- **LP.getStructuredData** (commit 22d31b15, 2026-03-10): Extract structured data from pages
-- **Charset detection** (commit 3dcdaa0a, 2026-03-14): Detect charset from first 1024 bytes of HTML
-- **window.structuredClone** (commit 4f8a6b62, 2026-03-12): Added structuredClone API
-- **Anchor/form target attribute** (commit ee637c36, 2026-03-11): Navigation respects `target` attribute on links and forms
-
 ### Open Fix PRs (not yet merged)
 
-- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (OPEN, 2026-04-25, **filed by us**) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
-- **PR #2243**: **Propagate CLI parsing errors** (OPEN, 2026-04-24) — CLI error handling, no gem impact.
-- **PR #2242**: **Brave's Rust adblock integration + various misc small fixes** (OPEN, 2026-04-24) — community-contributed (LLM-assisted). Adblock filtering on outgoing requests. Author flags as untested for Lightpanda; treat as speculative until reviewed by core team.
-- **PR #2241**: **browser: bound per-tick memory growth on JS-heavy pages** (OPEN, 2026-04-24) — caps `HttpClient.processMessages` at 16 completions per tick and fires `memoryPressureNotification(.moderate)` once a second from `Runner._wait`. Repro is `lightpanda fetch --dump html --wait-ms 30000 https://github.com/features/copilot`: before, the wait loop stalled inside one HTTP tick for 10+ seconds while RSS grew ~190 MB/s (OOM). After, growth drops to ~100 MB/s and the process exits at the deadline. Our gem uses CDP not fetch, but if the cap also lands on the CDP path it should harden long-lived sessions on heavy SPAs.
-- **PR #2238**: **Release `.deb` package** (OPEN, 2026-04-24) — Debian package build. No runtime impact.
-- **PR #2237**: **window.open** (OPEN, 2026-04-24) — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups, WPT tests). No automatic gem impact, but if Capybara tests open popups they'd previously have errored — now they'd work for the duration of the parent page.
-- **PR #2235**: **`fetch`: add support for `--script` option** (OPEN, 2026-04-24) — addresses `--script <file>` request from #2056. CLI-only.
-- **PR #2233**: **Custom elements** (OPEN, 2026-04-24) — adds `adoptedCallback`, passes namespace (`null`) to `attributeChangedCallback`, supports `new MyElement()` direct instantiation. The last piece depends on a zig-v8-fork PR. Web Components support improvement.
-- **PR #2203**: **Common httpclient** (OPEN, 2026-04-21) — factoring out common HTTP client code. Internal refactor.
-- **PR #2172**: **Improve safety of Node.replaceChild and Element.replaceWith** (OPEN, 2026-04-16) — DOM manipulation stability.
-- **PR #2171**: **Expand body types for `new Response(...)`** (OPEN, 2026-04-16) — Response constructor accepts more body types.
-- **PR #2170**: **Avoid double free on decoder error** (OPEN, 2026-04-16) — memory safety.
-- **PR #2157**: **Feat: add full SVG DOM support** (OPEN, 2026-04-14) — SVG DOM. Could affect form icon rendering and tests that interact with SVG elements.
-- **PR #2096**: **Cross-origin window property by-pass with accessCheckCallback** (OPEN, DRAFT, 2026-04-07).
-- **PR #2079**: **Layering HTTP Client** (OPEN, 2026-04-03) — HTTP client refactor.
-- **PR #2078**: **WIP: Worker** (OPEN, WIP) — Web Workers implementation starting. Would fix #2017. Major new capability.
-- **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** (OPEN) — fixes bug where multiple `attachToTarget` calls return the same session ID (breaking Playwright). Our gem only calls `attachToTarget` once per page, but this fix improves CDP spec compliance. Adds `alt_session_id` slot for second attach.
-- **PR #2070**: **mcp: Add hover, press, selectOption, setChecked** (OPEN) — MCP interaction tools. No CDP impact.
-- **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Largely superseded by PR #2149 (merged) for protocol negotiation, but full WebSocket API still needs this PR.
-- **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
+- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (filed by us) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
+- **PR #2241**: **browser: bound per-tick memory growth on JS-heavy pages** — caps `HttpClient.processMessages` at 16 completions per tick and fires `memoryPressureNotification(.moderate)` once a second from `Runner._wait`. Our gem uses CDP not fetch, but if the cap also lands on the CDP path it should harden long-lived sessions on heavy SPAs.
+- **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
+- **PR #2172**: **Improve safety of Node.replaceChild and Element.replaceWith** — DOM manipulation stability; Turbo Drive exercises both paths.
+- **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
+- **PR #2078**: **WIP: Worker** — Web Workers implementation starting. Would fix #2017. Major new capability if/when shipped.
+- **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
 
-### Upstream Open Issues (verified 2026-04-25; all 18 tracked issues still open, no newly-filed issues touch our gem since #2214/#2206)
+### Upstream Open Issues That Affect This Gem
 
-| Issue | Impact | Description | Filed by us |
-|---|---|---|---|
-| #2206 | CLI | `--max-timeout` flag request for `lightpanda fetch`. CLI-only, no CDP impact | |
-| #2187 | CDP | **`Runtime.evaluate` after click-driven navigation fails with "Cannot find default execution context"**. DIRECTLY RELEVANT: our `Node#call` already wraps in `Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1)` and the driver's `invalid_element_errors` includes `NoExecutionContextError`. Keep retry logic until this is fixed. | |
-| #2178 | JS | Passkeys / WebAuthn support request. Unlikely to affect system tests but blocks auth flows that rely on it | |
-| #2177 | CDP | `Audits.enable` returns UnknownDomain (puppeteer-core v24.41.0) — Puppeteer-only; doesn't affect our gem | |
-| #2175 | JS/CDP | **Implement `<input type="file">` support**. Aligned with our existing `NotImplementedError` in `Node#set` for file inputs. Tracking this issue validates the explicit error we raise | |
-| #2173 | Crash | `TargetClosedError` navigating to stage.ragflow.io (React app) via CDP — browser crashes. Our `handle_navigation_crash` reconnect logic covers this, but would appear as `DeadBrowserError` after retry | |
-| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds | |
-| #1962 | CDP | `Target.createTarget` fails with `-31998 TargetAlreadyLoaded` on second call (Stagehand; we only call once, low risk) | |
-| #1953 | CDP | Missing console API coverage breaks `console.log` interception | |
-| #1892 | CDP | Multiclient: closing one CDP connection kills all other active connections (re-filed from #1848) | |
-| #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login) | |
-| #1839 | CDP | Session management assertion error in Playwright | |
-| #1838 | CDP | CRSession._onMessage crash in Playwright | |
-| #1816 | Crash | Segfault in serve mode with jQuery Migrate scripts | |
-| #1801 | Navigation | `Page.navigate` never completes for Wikipedia | |
-| #2017 | JS | Implement Worker and SharedWorker (PR #2078 WIP) | |
-| #2015 | JS | Implement CORS mechanism | |
-| #1550 | Storage | Creating context with storage state fails | |
-
-### Closed Issues We Filed
-
-| Issue | Outcome |
-|---|---|
-| #2213 | Closed (2026-04-23) — Fixed by PR #2215: `HTMLDocument.body` setter implemented. Potentially unblocks Turbo Drive; test before removing gem's Drive disabler. |
-| #1849 | Closed (2026-03-16) — Fixed by PR #1850: CDP WebSocket no longer dies during complex navigation |
-| #1848 | Closed (2026-03-18) — Multiclient connection kills; re-filed as #1892 with more detail |
-| #1887 | Merged (2026-03-17) — PR disabled observer weak refs, fixing MutationObserver stability |
-| #1843 | Closed (2026-03-15) — Fixed by PR #1845: Unknown CDP methods no longer kill WebSocket |
-| #1842 | Closed — was our driver bug (`switch_to_frame` passed Capybara wrapper instead of native Node) |
-| #1844 | Closed — cascading from #1843, not a real stability issue. 500+ commands work fine. |
-
-### Recently Closed Tracked Issues
-
-| Issue | Outcome |
-|---|---|
-| #1952 | Closed (2026-04-17) — Fixed by PR #2179 (WebSocket fixes). In-page `WebSocket` API is now defined. Pages using websockets no longer throw `ReferenceError` at construction. |
-| #1832 | Closed (2026-04-09) — `Page.navigate` response never sent on guy-hoquet.com. Likely fixed by network/event refactors. Our readyState fallback was already handling this; remove fallback only with caution since #1801 (Wikipedia) is still open. |
-| #1830 | Closed (2026-04-10) — Port-already-in-use now handled gracefully. PR #1883 adds clear error message. |
-| #1932 | Closed (2026-04-08) — Fixed by PR #2133: `/json/version` and `/json/list` Chromium discovery endpoints now implemented. Doesn't affect our gem. |
-| #2020 | Closed (2026-04-08) — kitandace.com `Image` event target SIGSEGV. Likely fixed by finalizer refactors (#2069, #2099). |
-| #2019 | Closed (2026-04-08) — Bun WebSocket connect issue. Bun-specific, never affected us. |
-| #2072 | Closed (2026-04-03) — MCP server exits immediately. MCP-only, never affected our CDP-based gem. |
-| #1738 | Closed (2026-04-01) — SIGSEGV when fetching nist.gov. Fixed in latest nightly. Related SIGSEGV issues remain (PR #2050 open for Sentry/GTM crash path). |
-| #1922 | Closed (2026-03-27) — WebSocketDebuggerUrl 0.0.0.0 issue resolved. Docker/remote only; never affected us. |
-| #1900 | Merged (2026-03-18) — `InputEvent` now dispatched natively on input/TextArea changes. Our `SET_VALUE_JS` uses programmatic `.value =` which should NOT trigger native events (Chrome behavior), but monitor for double-event issues. |
-| #1819 | Closed (2026-03-20) — Fixed by PR #1929: `Target.detachFromTarget` now sends `detachedFromTarget` event properly |
-| #2050 | Closed (2026-04-01) — PR closed without merging. Null pointer SIGSEGV fix for Sentry/GTM crash path. Issue #1738 already closed separately. |
-| #2039 | Closed (2026-03-30) — PR closed without merging. Was auto-close existing target on createTarget. Issue #1962 remains open. |
-| #2040 | Closed — PR closed without merging; URL resolve path scheme work completed in PR #2046/2065 (merged 2026-04-01) |
-| #1800 | Closed (2026-03-21) — Fixed by PR #1949: Frame ID mismatch in `Page.getFrameTree` resolved |
+| Issue | Impact | Description |
+|---|---|---|
+| #2187 | CDP | **`Runtime.evaluate` after click-driven navigation fails with "Cannot find default execution context"**. DIRECTLY RELEVANT: our `Node#call` already wraps in `Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1)` and the driver's `invalid_element_errors` includes `NoExecutionContextError`. Keep retry logic until this is fixed. |
+| #2175 | JS/CDP | **Implement `<input type="file">` support**. Aligned with our existing `NotImplementedError` in `Node#set` for file inputs. |
+| #2173 | Crash | `TargetClosedError` navigating to React apps via CDP — browser crashes. Our `handle_navigation_crash` reconnect logic covers this, but would appear as `DeadBrowserError` after retry. |
+| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds. |
+| #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
+| #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
+| #2017 | JS | Implement Worker and SharedWorker (PR #2078 WIP). |
 
 ### General Limitations
 
@@ -521,7 +235,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.2.9 (2026-04-24). Tags now drop the `v` prefix (`0.2.9`, `0.2.8`); pre-2026-04 tags still use `v` (`v0.2.6`, `v0.2.5`). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available. New asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus `lightpanda-0.2.9-1-{aarch64,x86_64}.pkg.tar.zst` (Arch).
+- Latest release: 0.2.9 (2026-04-24). Tags now drop the `v` prefix (`0.2.9`, `0.2.8`); pre-2026-04 tags still use `v` (`v0.2.6`, `v0.2.5`). Asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus `lightpanda-0.2.9-1-{aarch64,x86_64}.pkg.tar.zst` (Arch).
 
 ## Differences from Chrome/Chromium CDP
 

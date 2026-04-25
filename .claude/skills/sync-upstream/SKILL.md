@@ -101,13 +101,18 @@ New Lightpanda capabilities that could unlock features in our driver (e.g., fram
 
 ## Step 4: Update Rules File
 
-If there are meaningful changes, update `.claude/rules/lightpanda-io.md`:
-- Move closed issues out of the "Open Issues" table
-- Add newly discovered issues
-- Update CDP method support notes
-- Update limitation notes for anything that's been fixed
-- Flag methods in "CDP Methods Used by This Gem" that don't actually exist upstream
-- Add newly available methods to "Available CDP Methods" section
+If there are meaningful changes, update `.claude/rules/lightpanda-io.md`. The doc is a **current-state reference, not a git log** — keep it short and focused on what affects gem behavior today.
+
+- When an upstream issue closes, **delete its row** from the `Upstream Open Issues That Affect This Gem` table — do not move it to a "Closed Issues" section (that section no longer exists).
+- Add newly discovered open issues only if they touch gem-relevant behavior (CDP methods we use, navigation, cookies, JS context, crashes). Skip CLI-only, Puppeteer-only, Stagehand-only, MCP-only, build/CI, and pure-internal-refactor issues.
+- Update CDP method support notes (move methods between Used / NOT Available / Partially Implemented / Recently Implemented / Available-but-unused).
+- Update limitation notes for anything that's been fixed.
+- Flag methods in "CDP Methods Used by This Gem" that don't actually exist upstream.
+- Add newly available methods to "Available CDP Methods" section.
+
+**Do not add a chronological "Recently Merged Fixes" changelog.** When a merged PR changes gem-relevant behavior, edit the affected section inline (e.g., add the PR number to the relevant Known Bug, CDP Methods sub-table, or General Limitations bullet) and stop. PRs that don't change gem behavior — internal refactors, CI, MCP, build, CLI-only flags, test-only changes — must not be recorded in this file.
+
+**Do not add "Closed Issues We Filed" or "Recently Closed Tracked Issues" tables.** Closed issues that no longer affect gem behavior should be deleted, not archived.
 
 **Important**: Only update facts you've verified. Don't speculatively mark issues as fixed without confirmation.
 
