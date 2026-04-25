@@ -1,0 +1,84 @@
+{{- /* Hugo 0.160+ table context: .THead and .TBody are slices of rows; each
+       row is a slice of cells with .Text (rendered HTML) and .Alignment. */ -}}
+{{- $headerRows := .THead -}}
+{{- $bodyRows   := .TBody -}}
+{{- $headers    := slice -}}
+{{- if gt (len $headerRows) 0 }}{{ $headers = index $headerRows 0 }}{{ end -}}
+
+{{- /* Detect "Time" / "Speed" columns by header text */ -}}
+{{- $timeCol := -1 -}}
+{{- $speedCol := -1 -}}
+{{- range $i, $h := $headers -}}
+  {{- $name := lower (trim (plainify $h.Text) " ") -}}
+  {{- if eq $name "time"  }}{{ $timeCol  = $i }}{{ end -}}
+  {{- if eq $name "speed" }}{{ $speedCol = $i }}{{ end -}}
+{{- end -}}
+
+{{- /* Pre-pass: max numeric value per visualizable column */ -}}
+{{- $maxTime := 0.0 -}}
+{{- $maxSpeed := 0.0 -}}
+{{- range $bodyRows -}}
+  {{- if ge $timeCol 0 -}}
+    {{- $cell := index . $timeCol -}}
+    {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+    {{- if gt (len $m) 0 -}}
+      {{- $v := float (index $m 0) -}}
+      {{- if gt $v $maxTime }}{{ $maxTime = $v }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if ge $speedCol 0 -}}
+    {{- $cell := index . $speedCol -}}
+    {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+    {{- if gt (len $m) 0 -}}
+      {{- $v := float (index $m 0) -}}
+      {{- if gt $v $maxSpeed }}{{ $maxSpeed = $v }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $hasBars := or (gt $maxTime 0.0) (gt $maxSpeed 0.0) -}}
+
+<table{{ if $hasBars }} class="bench"{{ end }}>
+  <thead>
+    {{- range $headerRows }}
+      <tr>
+        {{- range . -}}
+          <th{{ with .Alignment }} style="text-align:{{ . }}"{{ end }}>{{ .Text | safeHTML }}</th>
+        {{- end }}
+      </tr>
+    {{- end }}
+  </thead>
+  <tbody>
+    {{- range $i, $row := $bodyRows }}
+      <tr>
+        {{- range $j, $cell := $row -}}
+          {{- $pct := -1.0 -}}
+          {{- $kind := "" -}}
+          {{- if and (eq $j $speedCol) (gt $maxSpeed 0.0) -}}
+            {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+            {{- if gt (len $m) 0 -}}
+              {{- $v := float (index $m 0) -}}
+              {{- $pct = mul (div $v $maxSpeed) 100 -}}
+              {{- $kind = "speed" -}}
+            {{- end -}}
+          {{- else if and (eq $j $timeCol) (gt $maxTime 0.0) -}}
+            {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+            {{- if gt (len $m) 0 -}}
+              {{- $v := float (index $m 0) -}}
+              {{- $pct = mul (div $v $maxTime) 100 -}}
+              {{- $kind = "time" -}}
+            {{- end -}}
+          {{- end -}}
+          {{- if ge $pct 0.0 -}}
+            <td class="bar bar--{{ $kind }}" style="--bar:{{ printf "%.1f" $pct }}%"{{ with $cell.Alignment }} data-align="{{ . }}"{{ end }}>
+              <span class="bar__num">{{ $cell.Text | safeHTML }}</span>
+              <span class="bar__track" aria-hidden="true"><span class="bar__fill"></span></span>
+            </td>
+          {{- else -}}
+            <td{{ with $cell.Alignment }} style="text-align:{{ . }}"{{ end }}>{{ $cell.Text | safeHTML }}</td>
+          {{- end -}}
+        {{- end }}
+      </tr>
+    {{- end }}
+  </tbody>
+</table>

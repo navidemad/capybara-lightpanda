@@ -9,3 +9,5 @@
 /tmp/
 *.gem
 .ruby-lsp/
+*.png
+.playwright-mcp/

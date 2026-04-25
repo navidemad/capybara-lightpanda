@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ .Site.Title }} — Cuprite, replaced.</title>
+  <meta name="description" content="{{ .Site.Params.description }}">
+  <meta property="og:title" content="{{ .Site.Title }} — Cuprite, replaced.">
+  <meta property="og:description" content="{{ .Site.Params.description }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Funnel+Sans:wght@300..800&family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&display=swap">
+  <link rel="stylesheet" href="{{ "css/style.css" | relURL }}">
+</head>
+<body>
+
+  <a href="#main" class="skip">Skip to content</a>
+
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav__inner wrap">
+      <a class="nav__brand" href="#top" aria-label="Capybara::Lightpanda home">
+        <span class="nav__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12c0-4.5 3.6-8 8.5-8 3 0 5 1.6 6 3.4M21 12c0 4.5-3.6 8-8.5 8-3 0-5-1.6-6-3.4"/>
+            <circle cx="9" cy="11" r="1.1" fill="currentColor"/>
+            <circle cx="15" cy="13" r="1.1" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="nav__name">capybara<span class="nav__sep">::</span><em>lightpanda</em></span>
+      </a>
+      <nav class="nav__links" aria-label="Primary">
+        <a href="#migrate">Migrate</a>
+        <a href="#stack">Stack</a>
+        <a href="#benchmark">Benchmark</a>
+        <a href="#install">Install</a>
+        <a class="nav__ext" href="{{ .Site.Params.github_url }}">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero wrap" id="top" aria-labelledby="hero-title">
+    <p class="eyebrow">
+      <span class="eyebrow__dot" aria-hidden="true"></span>
+      <span>Ruby&nbsp;gem</span>
+      <span class="eyebrow__div" aria-hidden="true">/</span>
+      <span>Capybara&nbsp;driver</span>
+      <span class="eyebrow__div" aria-hidden="true">/</span>
+      <span>MIT</span>
+      <span class="eyebrow__div" aria-hidden="true">/</span>
+      <span>Rails&nbsp;7&nbsp;&amp;&nbsp;8</span>
+    </p>
+
+    <h1 class="hero__title" id="hero-title">
+      <span class="hero__line">Faster system tests</span>
+      <span class="hero__line">for <em>Rails</em>,</span>
+      <span class="hero__line hero__line--accent">without Chromium.</span>
+    </h1>
+
+    <p class="hero__lede">
+      A drop-in <strong>Capybara driver</strong> that swaps <code>cuprite</code> for
+      <a href="https://github.com/lightpanda-io/browser" rel="noopener">Lightpanda</a> —
+      a brand-new headless browser written in <em>Zig</em> with <em>V8</em>. No rendering engine,
+      no multi-process Chromium boot, no two-gigabyte CI runners. Just CDP and the bytes you actually need.
+    </p>
+
+    <div class="hero__cta">
+      <a class="btn btn--primary" href="{{ .Site.Params.github_url }}">
+        <span>Source on GitHub</span>
+        <span class="btn__arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="btn btn--ghost" href="{{ .Site.Params.rubygems_url }}">
+        <span>gem on RubyGems</span>
+        <span class="btn__arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="btn btn--text" href="#migrate">Read the migration ↘</a>
+    </div>
+
+    <ul class="stats" aria-label="Lightpanda performance vs Chrome">
+      <li class="stat">
+        <span class="stat__num">9<span class="stat__x">×</span></span>
+        <span class="stat__label">Faster than Chrome headless</span>
+        <span class="stat__foot">933&nbsp;pages, AWS&nbsp;m5.large</span>
+      </li>
+      <li class="stat stat--green">
+        <span class="stat__num">16<span class="stat__x">×</span></span>
+        <span class="stat__label">Less memory used</span>
+        <span class="stat__foot">Same workload, same machine</span>
+      </li>
+      <li class="stat stat--gold">
+        <span class="stat__num">0<span class="stat__x">&nbsp;</span></span>
+        <span class="stat__label">Bytes of Chromium shipped</span>
+        <span class="stat__foot">Zig&nbsp;0.15 · V8 · html5ever</span>
+      </li>
+    </ul>
+
+    <p class="hero__source">
+      Benchmarks reproduced from <a href="https://lightpanda.io/" rel="noopener">lightpanda.io</a> —
+      gem-side numbers in the <a href="#benchmark">benchmark</a> below.
+    </p>
+  </section>
+
+  <section class="swap wrap" id="stack" aria-labelledby="swap-title">
+    <header class="section__head">
+      <span class="section__no">01</span>
+      <h2 class="section__title" id="swap-title">The swap</h2>
+      <p class="section__deck">
+        Cuprite drives Chromium over CDP. Solid — but every test boots a multi-process rendering engine
+        you don't actually need for headless work. <strong>capybara-lightpanda</strong> keeps the protocol,
+        drops the engine.
+      </p>
+    </header>
+
+    <div class="swap__grid">
+      <article class="stack stack--before" aria-label="Before: Chrome stack">
+        <header class="stack__head">
+          <span class="stack__tag">Before</span>
+          <span class="stack__weight">~ 280 MB&nbsp;RSS / test</span>
+        </header>
+        <ol class="stack__layers">
+          <li class="layer layer--app">Capybara</li>
+          <li class="layer layer--mid">cuprite</li>
+          <li class="layer layer--mid">ferrum (CDP client)</li>
+          <li class="layer layer--heavy">
+            <span class="layer__name">Chromium</span>
+            <span class="layer__sub">multi-process · Blink · V8 · Skia · …</span>
+          </li>
+        </ol>
+        <p class="stack__note">Boots the entire Chromium rendering pipeline for every <em>headless</em> test.</p>
+      </article>
+
+      <div class="swap__arrow" aria-hidden="true">
+        <svg viewBox="0 0 80 24" width="80" height="24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h70"/>
+          <path d="M62 4l10 8-10 8"/>
+        </svg>
+        <span>swap</span>
+      </div>
+
+      <article class="stack stack--after" aria-label="After: Lightpanda stack">
+        <header class="stack__head">
+          <span class="stack__tag stack__tag--accent">After</span>
+          <span class="stack__weight">~ 17 MB&nbsp;RSS / test</span>
+        </header>
+        <ol class="stack__layers">
+          <li class="layer layer--app">Capybara</li>
+          <li class="layer layer--mid">capybara-lightpanda <span class="layer__pill">CDP&nbsp;client</span></li>
+          <li class="layer layer--light">
+            <span class="layer__name">Lightpanda</span>
+            <span class="layer__sub">Zig · V8 · html5ever · libcurl</span>
+          </li>
+        </ol>
+        <p class="stack__note">A single binary. No rendering engine. JS where you need it, network where you need it.</p>
+      </article>
+    </div>
+
+    <figure class="quote">
+      <blockquote>
+        <p>“Not a Chromium fork. Not a WebKit patch. <em>A new browser, written in Zig.</em>”</p>
+      </blockquote>
+      <figcaption>— <a href="https://github.com/lightpanda-io/browser" rel="noopener">lightpanda-io/browser</a></figcaption>
+    </figure>
+  </section>
+
+  <main id="main" class="content wrap">
+    <div class="content__inner">
+      {{ .Content }}
+    </div>
+  </main>
+
+  <section class="matrix wrap" id="capabilities" aria-labelledby="matrix-title">
+    <header class="section__head">
+      <span class="section__no">04</span>
+      <h2 class="section__title" id="matrix-title">What works, what doesn't</h2>
+      <p class="section__deck">
+        Lightpanda is a headless browser by design — no layout, no paint, no compositor.
+        Here's the honest matrix for system-test authors.
+      </p>
+    </header>
+
+    <div class="matrix__grid">
+      <ul class="matrix__col matrix__col--ok" aria-label="Supported">
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Visit, click, fill, submit, navigate, history</li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>CSS &amp; XPath selectors (XPath polyfilled)</li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Cookies, headers, redirects, network</li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Turbo Drive, Turbo Frames, Stimulus</li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span><code>execute_script</code>, <code>evaluate_script</code></li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>iframes, frame switching</li>
+        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>JS&nbsp;dialogs (<code>accept_modal&nbsp;:alert</code>, <code>dismiss_modal</code>)</li>
+      </ul>
+      <ul class="matrix__col matrix__col--no" aria-label="Not supported">
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Real screenshots <span class="muted">(no compositor)</span></li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Visual regression / pixel tests</li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Scroll, resize, full <code>getComputedStyle</code></li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>File uploads <span class="muted">(<code>input[type=file]</code>)</span></li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Service Workers, Web Workers</li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>WebAuthn / passkeys</li>
+        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Anything that needs layout to be correct</li>
+      </ul>
+    </div>
+
+    <p class="matrix__foot">
+      Need pixels? Keep <code>cuprite</code> for visual specs and let <code>lightpanda</code> own the rest.
+      You can run both side by side — only the driver changes.
+    </p>
+  </section>
+
+  <footer class="colophon" id="colophon">
+    <div class="colophon__inner wrap">
+      <div class="colophon__col">
+        <span class="colophon__heading">capybara::lightpanda</span>
+        <p>A self-contained Capybara driver. CDP client, process supervisor, polyfills — all in one gem. MIT licensed.</p>
+      </div>
+      <div class="colophon__col">
+        <span class="colophon__heading">Powered by</span>
+        <p>
+          <a href="https://github.com/lightpanda-io/browser">Lightpanda</a> ·
+          <a href="https://github.com/teamcapybara/capybara">Capybara</a> ·
+          <a href="https://chromedevtools.github.io/devtools-protocol/">CDP</a> ·
+          <a href="https://ziglang.org/">Zig</a> ·
+          <a href="https://v8.dev/">V8</a>
+        </p>
+      </div>
+      <div class="colophon__col">
+        <span class="colophon__heading">Composed with</span>
+        <p>Bricolage Grotesque, Funnel Sans &amp; JetBrains Mono. Built with <a href="https://gohugo.io/">Hugo</a>, hosted on <a href="https://pages.github.com/">GitHub Pages</a>.</p>
+      </div>
+    </div>
+    <div class="colophon__rule" aria-hidden="true"></div>
+    <div class="colophon__base wrap">
+      <span>© MMXXVI</span>
+      <span>Made for Ruby developers who'd rather be writing tests than waiting on them.</span>
+      <a href="{{ .Site.Params.github_url }}">github ↗</a>
+    </div>
+  </footer>
+
+</body>
+</html>

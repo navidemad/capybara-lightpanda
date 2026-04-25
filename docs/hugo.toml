@@ -1,0 +1,20 @@
+baseURL = "https://navidemad.github.io/capybara-lightpanda/"
+languageCode = "en-us"
+title = "Capybara::Lightpanda"
+enableRobotsTXT = true
+disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]
+
+[params]
+description = "A self-contained Capybara driver for the Lightpanda headless browser."
+github_url = "https://github.com/navidemad/capybara-lightpanda"
+rubygems_url = "https://rubygems.org/gems/capybara-lightpanda"
+
+[markup.goldmark.renderer]
+unsafe = true
+
+[markup.highlight]
+noClasses = false
+style = "github"
+
+[outputs]
+home = ["HTML"]
