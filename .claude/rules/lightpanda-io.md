@@ -39,7 +39,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 ### CDP Methods Used by This Gem
 
-All verified present in upstream as of 2026-04-23 (dispatch enums re-checked after #2211 Page-container merge; CDP dispatch names unchanged):
+All verified present in upstream as of 2026-04-25 (dispatch enums re-checked after #2229 WebDriver/Page sync; CDP dispatch names unchanged across releases 0.2.8 → 0.2.9):
 
 ```
 Target.createTarget          Target.attachToTarget
@@ -166,11 +166,25 @@ LP.getStructuredData         LP.waitForSelector
    - **Verification (2026-04-25)**: `bundle exec rake spec` → 134/134 (1 unrelated pending cookies-on-redirect). `ruby examples/rails_turbo_rspec_example.rb` → 9/9 with Turbo Drive **enabled** against real Rails+Turbo 8.0.12.
    - **Disabler removed**: the `Turbo.session.drive = false` auto-disabler IIFE that was at `javascripts/index.js:48-63` is gone. Turbo Drive runs natively. The previous disabler-asserting spec at `driver_spec.rb:605` was replaced with a polyfill regression test.
    - **Remaining gem workaround**: `fetch()` + `document.write()` submit bypass in `CLICK_JS` (`lib/capybara/lightpanda/node.rb:161-203`). Form-submit tests route through this; left in place pending a separate investigation.
-   - **Upstream issue**: not yet filed. Minimal repro (`/tmp/bug_when.rb`) is ready. Once filed, link the issue here so the polyfill can be removed if/when upstream fixes the selector engine.
+   - **Upstream fix in flight (PR #2244, OPEN, 2026-04-25, filed by us)**: root-cause patch in `Frame.getElementByIdFromNode`. The fast path used by the selector engine for `#id` only checked the `lookup` map; after a body removal the original `<h1>` lived in `_removed_ids` and the new `<h1>` was never re-registered, so `lookup.get(id)` missed and `getElementByIdFromNode` returned null. The fix mirrors the existing `Document.getElementById` / `ShadowRoot.getElementById` recovery: on a `lookup` miss, walk `removed_ids` + the scope root and re-register. Adds an HTML test asserting `querySelector('#id')`, `querySelectorAll('#id')`, and `getElementById('id')` all agree after duplicate removal. Once merged, the gem-side `querySelector{,All}` rewriter polyfill can be removed.
    - **Turbo Frames (GET navigation)**: Already work — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element.
 
-### Recently Merged Fixes (v0.2.7 and nightly)
+### Recently Merged Fixes (v0.2.7 → v0.2.9 and nightly)
 
+- **Release 0.2.9** (2026-04-24) — first formal release tag since 0.2.8 (2026-04-02). Bundles all merges from 2026-04-02 through 2026-04-24, including the body-setter (#2215), CSSOM polish (#2217), `navigator.userAgentData` (#2218), Audits placeholder (#2216), AXNodeId-as-string (#2232), TCP-keepalive timeout (#2226), per-tick errdefer cleanup (#2227), and the empty-location UAF fix (#2234). New asset matrix: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus Arch packages (`*.pkg.tar.zst`).
+- **PR #2239**: **Fix a test-only use-after-free** (merged 2026-04-24) — only surfaces when running an isolated test; arena bucket reuse hides it during full suites. Test-only impact.
+- **PR #2236**: **cli: allow optional positional arguments in command builder** (merged 2026-04-24) — CLI parser feature, no CDP impact.
+- **PR #2234**: **Fix a use-after-free on an empty (and invalid) location** (merged 2026-04-24) — improves WPT `/fetch/api/redirect/redirect-empty-location.any.html`. Stability fix on redirect handling for empty `Location:` headers; a navigation that previously could UAF now exits cleanly.
+- **PR #2232**: **cdp: AXNodeId is a string per spec** (merged 2026-04-24) — Accessibility CDP fix per spec; aligns Lightpanda with the Chrome devtools-protocol type for AXNodeId vs DOM.NodeId. Fixes go-rod compat. We don't use Accessibility, no gem impact.
+- **PR #2231**: **ci: refacto release workflow + Arch linux package build** (merged 2026-04-24) — CI/release plumbing only. Renames `nightly.yml` → `release.yml`, adds Arch package emit on tag.
+- **PR #2230**: **Update `go run ws/main.go` to new `go run runner/main.go -serve`** (merged 2026-04-24) — internal test runner update; no gem impact.
+- **PR #2229**: **Update WebDriver to use Page** (merged 2026-04-24) — internal: WebDriver tests pulled in line with the #2200/#2211 Page-container refactor. No CDP method changes.
+- **PR #2227**: **Improve various errdefer flows** (merged 2026-04-24) — addresses release-overflow paths during partial Frame.init failure. Specifically prevents Frame double-free when navigation init fails partway through. Stability win.
+- **PR #2226**: **Setup timeout via tcp keepalive** (merged 2026-04-24) — was OPEN at last sync. Adds TCP keepalive on long-running CDP/HTTP sockets so hung peers (or NAT timeouts) surface as connection failures rather than infinite waits. macOS uses TCP_KEEPALIVE, Linux uses TCP_KEEPIDLE. Could indirectly help the gem's long-lived WebSocket connection during slow navigations.
+- **PR #2224**: **Define v8 functions directly on console instance** (merged 2026-04-23) — was OPEN at last sync. Internal V8 binding cleanup; no behavior change.
+- **PR #2222**: **try to make a flaky test more robust** (merged 2026-04-23) — was OPEN at last sync. Test-only.
+- **PR #2220**: **Add `getEntriesByType` and `getEntriesByName` to PerformanceObserver entry list** (merged 2026-04-24) — was OPEN at last sync. PerformanceObserver spec compliance.
+- **PR #2219**: **Remove unused imports** (merged 2026-04-23) — was OPEN at last sync. Cleanup only.
 - **PR #2223**: **Fix canada.ca problem** (merged 2026-04-23) — CDN bot-protection hardening. No direct impact on our gem.
 - **PR #2221**: **Default command 'serve' for backwards compatibility** (merged 2026-04-23) — running `lightpanda` with no subcommand now defaults to `serve` again. Our `Process` already passes `serve` explicitly, so no change, but keeps older configs working.
 - **PR #2218**: **Add `navigator.userAgentData`** (merged 2026-04-23) — Chrome-only UA Client Hints API. Exposes same data as `Sec-Ch-Ua`. Improves compat on Google properties that probe for it. Side-effects: allows `OffscreenCanvas` in Workers; demotes "load"/"DOMContentLoaded" JS exception log level from error→warn.
@@ -385,11 +399,14 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2226**: **Setup timeout via tcp keepalive** (OPEN, 2026-04-23) — adds TCP keepalive for long-running CDP/HTTP connections. Could help with our own navigation timeouts if adopted.
-- **PR #2224**: **Define v8 functions directly on console instance** (OPEN, 2026-04-23) — internal JS-binding refactor.
-- **PR #2222**: **Try to make a flaky test more robust** (OPEN, 2026-04-23) — test-only.
-- **PR #2220**: **Add `getEntriesByType` and `getEntriesByName` to PerformanceObserver entries** (OPEN, 2026-04-23) — performance observer spec compliance.
-- **PR #2219**: **Remove unused imports** (OPEN, 2026-04-23) — cleanup only.
+- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (OPEN, 2026-04-25, **filed by us**) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
+- **PR #2243**: **Propagate CLI parsing errors** (OPEN, 2026-04-24) — CLI error handling, no gem impact.
+- **PR #2242**: **Brave's Rust adblock integration + various misc small fixes** (OPEN, 2026-04-24) — community-contributed (LLM-assisted). Adblock filtering on outgoing requests. Author flags as untested for Lightpanda; treat as speculative until reviewed by core team.
+- **PR #2241**: **browser: bound per-tick memory growth on JS-heavy pages** (OPEN, 2026-04-24) — caps `HttpClient.processMessages` at 16 completions per tick and fires `memoryPressureNotification(.moderate)` once a second from `Runner._wait`. Repro is `lightpanda fetch --dump html --wait-ms 30000 https://github.com/features/copilot`: before, the wait loop stalled inside one HTTP tick for 10+ seconds while RSS grew ~190 MB/s (OOM). After, growth drops to ~100 MB/s and the process exits at the deadline. Our gem uses CDP not fetch, but if the cap also lands on the CDP path it should harden long-lived sessions on heavy SPAs.
+- **PR #2238**: **Release `.deb` package** (OPEN, 2026-04-24) — Debian package build. No runtime impact.
+- **PR #2237**: **window.open** (OPEN, 2026-04-24) — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups, WPT tests). No automatic gem impact, but if Capybara tests open popups they'd previously have errored — now they'd work for the duration of the parent page.
+- **PR #2235**: **`fetch`: add support for `--script` option** (OPEN, 2026-04-24) — addresses `--script <file>` request from #2056. CLI-only.
+- **PR #2233**: **Custom elements** (OPEN, 2026-04-24) — adds `adoptedCallback`, passes namespace (`null`) to `attributeChangedCallback`, supports `new MyElement()` direct instantiation. The last piece depends on a zig-v8-fork PR. Web Components support improvement.
 - **PR #2203**: **Common httpclient** (OPEN, 2026-04-21) — factoring out common HTTP client code. Internal refactor.
 - **PR #2172**: **Improve safety of Node.replaceChild and Element.replaceWith** (OPEN, 2026-04-16) — DOM manipulation stability.
 - **PR #2171**: **Expand body types for `new Response(...)`** (OPEN, 2026-04-16) — Response constructor accepts more body types.
@@ -403,7 +420,7 @@ LP.getStructuredData         LP.waitForSelector
 - **PR #2063**: **WebSocket WebAPI** (OPEN, WIP) — implements in-page `WebSocket` API using libcurl. Would fix #1952. Largely superseded by PR #2149 (merged) for protocol negotiation, but full WebSocket API still needs this PR.
 - **PR #2062**: **Add `XMLHttpRequest.timeout` with curl enforcement** (OPEN) — JS-visible timeout property for XHR, enforced via CURLOPT_TIMEOUT_MS.
 
-### Upstream Open Issues (verified 2026-04-23)
+### Upstream Open Issues (verified 2026-04-25; all 18 tracked issues still open, no newly-filed issues touch our gem since #2214/#2206)
 
 | Issue | Impact | Description | Filed by us |
 |---|---|---|---|
@@ -504,7 +521,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: v0.2.8 (2026-04-02). No newer release tag yet — heavy nightly activity since (PRs #2095–#2226). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available.
+- Latest release: 0.2.9 (2026-04-24). Tags now drop the `v` prefix (`0.2.9`, `0.2.8`); pre-2026-04 tags still use `v` (`v0.2.6`, `v0.2.5`). Also v0.2.7, v0.2.6, v0.2.5, v0.2.4 available. New asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus `lightpanda-0.2.9-1-{aarch64,x86_64}.pkg.tar.zst` (Arch).
 
 ## Differences from Chrome/Chromium CDP
 
