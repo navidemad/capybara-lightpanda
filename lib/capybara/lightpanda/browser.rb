@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "forwardable"
+require "uri"
 require "concurrent-ruby"
 
 module Capybara
@@ -25,9 +26,17 @@ module Capybara
         @modal_handler_installed = false
         @frame_stack = []
         @frames = Concurrent::Hash.new
+        @visited_origins = Concurrent::Set.new
 
         start
       end
+
+      # Set of `scheme://host:port` strings the browser has navigated to during
+      # this session. Used by Cookies#clear to enumerate cookies across all
+      # domains: Lightpanda's `Network.getCookies` (no urls param) is scoped
+      # to the current page's origin, so without tracked origins we'd miss
+      # cookies set on previously-visited domains.
+      attr_reader :visited_origins
 
       def start
         return if @started
@@ -126,6 +135,8 @@ module Capybara
         else
           page_command("Page.navigate", url: url)
         end
+
+        record_visited_origin(url)
       end
       alias goto go_to
 
@@ -870,6 +881,19 @@ module Capybara
 
       def monotonic_time
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+      end
+
+      # Capture `scheme://host:port` from a navigated URL so Cookies#clear can
+      # enumerate cookies across all visited domains. Skips opaque URLs
+      # (about:blank, data:, etc.) and any URI parser failure.
+      def record_visited_origin(url)
+        uri = URI.parse(url)
+        return unless uri.scheme && uri.host
+
+        port = uri.port || (uri.scheme == "https" ? 443 : 80)
+        @visited_origins << "#{uri.scheme}://#{uri.host}:#{port}"
+      rescue URI::InvalidURIError, NoMethodError
+        nil
       end
     end
   end

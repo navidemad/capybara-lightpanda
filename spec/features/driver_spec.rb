@@ -166,7 +166,7 @@ RSpec.describe Capybara::Lightpanda::Driver do
     it "clears cookies via Network.clearBrowserCookies" do
       session.visit("/lightpanda/set_test_cookie")
       cookies = browser.cookies.all
-      expect(cookies.any? { |c| c["name"] == "lightpanda_test" }).to be true
+      expect(cookies.any? { |c| c.name == "lightpanda_test" }).to be true
 
       browser.cookies.clear
       cookies_after = browser.cookies.all
@@ -180,7 +180,7 @@ RSpec.describe Capybara::Lightpanda::Driver do
       browser.cookies.set(name: "cdp_cookie", value: "cdp_value", domain: host)
       cookie = browser.cookies.get("cdp_cookie")
       expect(cookie).not_to be_nil
-      expect(cookie["value"]).to eq("cdp_value")
+      expect(cookie.value).to eq("cdp_value")
     end
 
     it "deletes a specific cookie via CDP API" do
@@ -199,7 +199,7 @@ RSpec.describe Capybara::Lightpanda::Driver do
       # Verify the cookie exists in the browser's cookie jar.
       cookie = browser.cookies.get("redirect_test")
       expect(cookie).not_to be_nil, "Cookie set on 302 response not stored in browser"
-      expect(cookie["value"]).to eq("survived_redirect")
+      expect(cookie.value).to eq("survived_redirect")
     end
 
     it "sends redirect-set cookies on the follow-up request" do
