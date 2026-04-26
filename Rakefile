@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "English"
 require "rspec/core/rake_task"
 
 RSpec::Core::RakeTask.new(:spec) do |t|
@@ -33,7 +34,7 @@ namespace :spec do
     FileUtils.mkdir_p(logs_dir)
 
     pattern = ENV["ONLY"] || "spec/**/*_spec.rb"
-    files = Dir[pattern].sort
+    files = Dir[pattern]
     abort "No spec files matched #{pattern}" if files.empty?
 
     if ENV["CLEAR"] == "1" && File.exist?(progress_path)
@@ -45,7 +46,7 @@ namespace :spec do
 
     save = lambda do
       FileUtils.mkdir_p(File.dirname(progress_path))
-      File.write(progress_path, JSON.pretty_generate(progress) + "\n")
+      File.write(progress_path, "#{JSON.pretty_generate(progress)}\n")
     end
 
     failed = []
@@ -75,10 +76,10 @@ namespace :spec do
         if entry.nil?                    then "never run"
         elsif entry["sha"] != sha        then "file changed"
         elsif entry["status"] == "failed" then "previously failed (--only-failures)"
-        else                                  "stale: #{entry['status']}"
+        else "stale: #{entry['status']}"
         end
 
-      log_path = File.join(logs_dir, file.tr("/", "_") + ".log")
+      log_path = File.join(logs_dir, "#{file.tr('/', '_')}.log")
       puts ""
       puts "#{pos} RUN    #{file}  (#{reason})"
       puts "         log → #{log_path}"
@@ -87,7 +88,7 @@ namespace :spec do
       rspec_cmd = ["bundle", "exec", "rspec", file, "--format", "documentation"]
       rspec_cmd << "--only-failures" if only_failures
       ok = File.open(log_path, "w") do |log|
-        IO.popen([*rspec_cmd, err: %i[child out]]) do |io|
+        IO.popen([*rspec_cmd, { err: %i[child out] }]) do |io|
           io.each_line do |line|
             $stdout.write(line)
             $stdout.flush
@@ -95,7 +96,7 @@ namespace :spec do
             summary_line = line.strip if line =~ /\A\d+ examples?,/
           end
         end
-        $?.success?
+        $CHILD_STATUS.success?
       end
       duration = (Time.now - started).round(2)
 
@@ -105,13 +106,17 @@ namespace :spec do
         "duration" => duration,
         "log" => log_path,
         "ran_at" => Time.now.iso8601,
-        "summary" => summary_line
+        "summary" => summary_line,
       }
       save.call
       ran << file
       status_tag = ok ? "PASS" : "FAIL"
       puts "#{pos} #{status_tag}   #{file}  (#{duration}s)  #{summary_line}"
-      puts "         running totals — passed: #{ran.size - failed.size}  failed: #{failed.size + (ok ? 0 : 1)}  skipped: #{skipped.size}  remaining: #{total - idx - 1}"
+      passed_so_far = ran.size - failed.size
+      failed_so_far = failed.size + (ok ? 0 : 1)
+      remaining = total - idx - 1
+      puts "         running totals — passed: #{passed_so_far}  failed: #{failed_so_far}  " \
+           "skipped: #{skipped.size}  remaining: #{remaining}"
       next if ok
 
       failed << file

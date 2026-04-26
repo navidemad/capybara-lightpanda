@@ -449,11 +449,7 @@ module Capybara
 
           sleep 0.05
         end
-        if last_message
-          raise Capybara::ModalNotFound,
-                "Unable to find modal dialog with #{text} - found '#{last_message}' instead."
-        end
-        raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
+        raise_modal_not_found(text, last_message)
       end
 
       def reset_modals
@@ -462,6 +458,14 @@ module Capybara
       end
 
       private
+
+      def raise_modal_not_found(text, last_message)
+        if last_message
+          raise Capybara::ModalNotFound,
+                "Unable to find modal dialog with #{text} - found '#{last_message}' instead."
+        end
+        raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
+      end
 
       # JS function for finding elements within a node.
       # Works in any execution context (top frame or iframe).
@@ -614,17 +618,14 @@ module Capybara
         return nil if result["type"] == "undefined"
         return nil if result["subtype"] == "null"
 
-        if result["subtype"] == "node" && result["objectId"]
-          { "__lightpanda_node__" => result["objectId"] }
-        elsif %w[boolean number string].include?(result["type"])
-          result["value"]
-        elsif result["subtype"] == "array" && result["objectId"]
-          serialize_remote_array(result["objectId"])
-        elsif result["type"] == "object" && result["objectId"]
-          serialize_remote_object(result["objectId"])
-        else
-          result["value"]
+        object_id = result["objectId"]
+        if object_id
+          return { "__lightpanda_node__" => object_id } if result["subtype"] == "node"
+          return serialize_remote_array(object_id) if result["subtype"] == "array"
+          return serialize_remote_object(object_id) if result["type"] == "object"
         end
+
+        result["value"]
       end
 
       # Re-fetch a remote object as JSON-serializable value for plain objects/arrays.

@@ -87,42 +87,17 @@ module Capybara
       end
 
       def set(value, **_options)
-        tag = tag_name
-        if tag == "input"
-          type = self["type"]
-          case type
-          when "checkbox", "radio"
-            call(SET_CHECKBOX_JS, value ? true : false)
-          when "file"
-            raise NotImplementedError, "File uploads not yet supported by Lightpanda"
-          when "date"
-            call(SET_VALUE_JS, format_date_value(value))
-          when "time"
-            call(SET_VALUE_JS, format_time_value(value))
-          when "datetime-local"
-            call(SET_VALUE_JS, format_datetime_value(value))
-          else
-            str = value.to_s
-            # HTML implicit-submission: a trailing \n in a text-like input is
-            # like the user pressing Enter — submits the form when there's a
-            # default submit button OR exactly one text control. Strip the \n,
-            # set the value, then route through Capybara's click flow on the
-            # synthesized/found default button so CLICK_JS's fetch+swap runs.
-            if str.end_with?("\n") && %w[text email password url tel search number].include?(type)
-              call(SET_VALUE_JS, truncate_to_maxlength(str.chomp))
-              implicit_submit
-            else
-              call(SET_VALUE_JS, truncate_to_maxlength(str))
-            end
-          end
-        elsif tag == "textarea"
+        case tag_name
+        when "input"
+          fill_input(value)
+        when "textarea"
           call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
-        elsif call(EDITABLE_HOST_JS)
+        else
           # `contenteditable` cascades through descendants. Check
           # `isContentEditable`, then fall back to walking ancestors for
-          # `contenteditable` since Lightpanda doesn't expose the
-          # property on every element.
-          call("function(v) { this.innerHTML = v }", value.to_s)
+          # `contenteditable` since Lightpanda doesn't expose the property on
+          # every element. EDITABLE_HOST_JS encapsulates that check.
+          call("function(v) { this.innerHTML = v }", value.to_s) if call(EDITABLE_HOST_JS)
         end
       end
 
@@ -245,6 +220,40 @@ module Capybara
       # (same fetch+swap as CLICK_JS, but without a submitter).
       def implicit_submit
         call(IMPLICIT_SUBMIT_JS)
+      end
+
+      TEXT_LIKE_INPUT_TYPES = %w[text email password url tel search number].freeze
+      private_constant :TEXT_LIKE_INPUT_TYPES
+
+      def fill_input(value)
+        type = self["type"]
+        case type
+        when "checkbox", "radio"
+          call(SET_CHECKBOX_JS, value ? true : false)
+        when "file"
+          raise NotImplementedError, "File uploads not yet supported by Lightpanda"
+        when "date"
+          call(SET_VALUE_JS, format_date_value(value))
+        when "time"
+          call(SET_VALUE_JS, format_time_value(value))
+        when "datetime-local"
+          call(SET_VALUE_JS, format_datetime_value(value))
+        else
+          fill_text_input(type, value.to_s)
+        end
+      end
+
+      # HTML implicit-submission: a trailing \n in a text-like input is like the
+      # user pressing Enter — submits the form when there's a default submit
+      # button OR exactly one text control. Strip the \n, set the value, then
+      # route through IMPLICIT_SUBMIT_JS so CLICK_JS's fetch+swap runs.
+      def fill_text_input(type, str)
+        if str.end_with?("\n") && TEXT_LIKE_INPUT_TYPES.include?(type)
+          call(SET_VALUE_JS, truncate_to_maxlength(str.chomp))
+          implicit_submit
+        else
+          call(SET_VALUE_JS, truncate_to_maxlength(str))
+        end
       end
 
       # Format helpers for Date/Time/DateTime values passed to date/time/datetime-local
