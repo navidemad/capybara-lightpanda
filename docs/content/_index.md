@@ -7,7 +7,7 @@ If you already drive Capybara with `cuprite`, the architecture you've chosen is 
 ```ruby
 # Gemfile — same group, additional gem
 group :test do
-  gem "cuprite"           # keep for visual specs / pixel diffs
+  gem "cuprite" # keep for visual specs / pixel diffs
   gem "capybara-lightpanda"
 end
 ```
@@ -17,18 +17,12 @@ Wire the driver in your test setup. In Rails 7+ / Rails 8 with system tests:
 ```ruby
 require "capybara-lightpanda"
 
-Capybara::Lightpanda.configure do |config|
-  config.host    = "127.0.0.1"
-  config.port    = 9222
-  config.timeout = 15
-end
-
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :lightpanda
 end
 ```
 
-Install the browser once (or use the official Docker image):
+Install the browser once:
 
 ```bash
 # macOS
@@ -47,8 +41,6 @@ The dual-driver pattern lets your CI keep cuprite for the few specs that need pi
 # spec/support/capybara.rb (or test/support/...)
 if ENV["BROWSER"] == "lightpanda"
   require "capybara-lightpanda"
-
-  Capybara::Lightpanda.configure { |c| c.timeout = 15 }
 
   Capybara.default_driver    = :lightpanda
   Capybara.javascript_driver = :lightpanda
@@ -73,7 +65,7 @@ bundle exec rails test test/system/
   </span>
 </aside>
 
-In **GitHub Actions** the dual-lane pattern is two short jobs that share a checkout. Drop the binary in once and gate on the env var:
+In **GitHub Actions** the dual-lane pattern is two short jobs that share a checkout.<br>Drop the binary in once and gate on the env var:
 
 ```yaml
 # .github/workflows/system_tests.yml
@@ -98,7 +90,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: "3.3", bundler-cache: true }
-      - run: bundle exec rails test test/system/   # cuprite / chrome lane
+      - run: bundle exec rails test test/system/ # cuprite / chrome lane
 ```
 
 ### `page.driver` — same surface
@@ -126,10 +118,10 @@ evaluate_script "document.title"
 
 Honest numbers from a Rails 8.1 app — Turbo + Stimulus, 24 DOM-only system tests on an M-series laptop:
 
-| Driver         | Tests     | Time   | RSS / worker |
-|----------------|-----------|--------|--------------|
-| **Lightpanda** | 24 / 24   | 6.89s  | **~17 MB**   |
-| **Chrome**     | 24 / 24   | 7.09s  | ~280 MB      |
+| Driver         | Tests   | Time  | RSS / worker |
+| -------------- | ------- | ----- | ------------ |
+| **Lightpanda** | 24 / 24 | 6.89s | **~17 MB**   |
+| **Chrome**     | 24 / 24 | 7.09s | ~280 MB      |
 
 **Identical results.** On a 24-test suite the wall-clock margin is small — Capybara's own wait time dominates, just as it does on Chrome — so don't read the 3% as "the speed claim." The win that pays for itself is the right column:
 
@@ -138,4 +130,3 @@ Honest numbers from a Rails 8.1 app — Turbo + Stimulus, 24 DOM-only system tes
 - **Less flake.** Removing the Chromium boot removes one of the loudest sources of CI noise.
 
 The upstream **9× / 16×** numbers on this page are reproduced from [lightpanda.io](https://lightpanda.io/) — a 933-page synthetic crawl on AWS m5.large. They show the ceiling at scale; the table above shows the floor on a real Rails suite.
-

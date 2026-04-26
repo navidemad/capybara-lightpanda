@@ -421,8 +421,9 @@
           <span class="section__title-text">What works, what doesn't</span>
         </h2>
         <p class="section__deck">
-          Lightpanda is a headless browser by design — no layout, no paint, no
-          compositor. Here's the honest matrix for system-test authors.
+          Lightpanda is a headless browser by design —
+          <strong>no layout, no paint, no compositor.</strong><br />Here's the
+          <strong>honest</strong> matrix for system-test authors.
         </p>
       </header>
 
@@ -432,11 +433,40 @@
             <tr>
               <th scope="col">Capability</th>
               <th scope="col"><code>cuprite</code></th>
-              <th scope="col" class="matrix__th--us"><code>lightpanda</code></th>
+              <th scope="col" class="matrix__th--us">
+                <code>lightpanda</code>
+              </th>
               <th scope="col">Notes</th>
             </tr>
           </thead>
           <tbody>
+            <tr class="matrix__group">
+              <td colspan="4">
+                Performance — where lightpanda earns its place
+              </td>
+            </tr>
+            <tr class="matrix__row--accent">
+              <th scope="row">Memory per session</th>
+              <td>~250&nbsp;MB</td>
+              <td><strong>~10&nbsp;MB</strong></td>
+              <td>
+                <span class="matrix__win">25× less</span>
+                the whole point
+              </td>
+            </tr>
+            <tr class="matrix__row--accent">
+              <th scope="row">Cold-start time</th>
+              <td>~1.5&nbsp;s</td>
+              <td><strong>&lt;200&nbsp;ms</strong></td>
+              <td>
+                <span class="matrix__win">7× faster</span>
+                per worker process
+              </td>
+            </tr>
+
+            <tr class="matrix__group">
+              <td colspan="4">Core test surface — at parity</td>
+            </tr>
             <tr>
               <th scope="row">Visit, click, fill, submit, navigate, history</th>
               <td><span class="check" aria-label="yes">✓</span></td>
@@ -462,7 +492,9 @@
               <td>—</td>
             </tr>
             <tr>
-              <th scope="row"><code>execute_script</code> / <code>evaluate_script</code></th>
+              <th scope="row">
+                <code>execute_script</code> / <code>evaluate_script</code>
+              </th>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td>—</td>
@@ -473,35 +505,27 @@
               <td><span class="check" aria-label="yes">✓</span></td>
               <td>—</td>
             </tr>
+
+            <tr class="matrix__group">
+              <td colspan="4">
+                Browser-engine features — keep cuprite if you need these
+              </td>
+            </tr>
             <tr>
               <th scope="row">JS dialogs</th>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="partial" aria-label="partial">~</span></td>
-              <td><code>accept_modal :alert</code>, <code>dismiss_modal</code></td>
+              <td>
+                <code>accept_modal :alert</code>, <code>dismiss_modal</code>
+              </td>
             </tr>
             <tr>
-              <th scope="row">Real screenshots</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="cross" aria-label="no">✕</span></td>
-              <td>no compositor</td>
-            </tr>
-            <tr>
-              <th scope="row">Visual regression / pixel tests</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="cross" aria-label="no">✕</span></td>
-              <td>keep cuprite for these</td>
-            </tr>
-            <tr>
-              <th scope="row">Scroll, resize, full <code>getComputedStyle</code></th>
+              <th scope="row">
+                Scroll, resize, full <code>getComputedStyle</code>
+              </th>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="partial" aria-label="partial">~</span></td>
               <td>CSSOM landed; no layout</td>
-            </tr>
-            <tr>
-              <th scope="row">File uploads <span class="muted">(<code>input[type=file]</code>)</span></th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="cross" aria-label="no">✕</span></td>
-              <td>raises <code>NotImplementedError</code></td>
             </tr>
             <tr>
               <th scope="row">Web Workers</th>
@@ -510,22 +534,31 @@
               <td>limited APIs</td>
             </tr>
             <tr>
+              <th scope="row">Real screenshots</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="dash" aria-label="out of scope">—</span></td>
+              <td>no compositor (by design)</td>
+            </tr>
+            <tr>
+              <th scope="row">Visual regression / pixel tests</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="dash" aria-label="out of scope">—</span></td>
+              <td>keep cuprite for these</td>
+            </tr>
+            <tr>
+              <th scope="row">
+                File uploads
+                <span class="muted">(<code>input[type=file]</code>)</span>
+              </th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="dash" aria-label="not yet">—</span></td>
+              <td>upstream tracking</td>
+            </tr>
+            <tr>
               <th scope="row">Service Workers, WebAuthn</th>
               <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="cross" aria-label="no">✕</span></td>
-              <td>—</td>
-            </tr>
-            <tr class="matrix__row--accent">
-              <th scope="row">Memory per session</th>
-              <td>~250&nbsp;MB</td>
-              <td><strong>~10&nbsp;MB</strong></td>
-              <td>the whole point</td>
-            </tr>
-            <tr class="matrix__row--accent">
-              <th scope="row">Cold-start time</th>
-              <td>~1.5&nbsp;s</td>
-              <td><strong>&lt;200&nbsp;ms</strong></td>
-              <td>per worker process</td>
+              <td><span class="dash" aria-label="out of scope">—</span></td>
+              <td>browser-engine territory</td>
             </tr>
           </tbody>
         </table>
@@ -582,18 +615,18 @@
                   Gate it on an env var so your existing driver stays the
                   default.
                 </p>
-                {{ transform.Highlight `# spec/support/capybara.rb · or test/support/...
-if ENV["BROWSER"] == "lightpanda"
-  require "capybara-lightpanda"
-  Capybara.javascript_driver = :lightpanda
-end` "ruby" "" }}
+                {{ transform.Highlight `# spec/support/capybara.rb · or
+                test/support/... if ENV["BROWSER"] == "lightpanda" require
+                "capybara-lightpanda" Capybara.javascript_driver = :lightpanda
+                end` "ruby" "" }}
               </div>
             </li>
             <li class="beta__step-row">
               <span class="beta__step-no" aria-hidden="true">3</span>
               <div class="beta__step-body">
                 <p class="beta__step-line">Run one suite. Decide.</p>
-                {{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails test test/system/` "console" "" }}
+                {{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails
+                test test/system/` "console" "" }}
               </div>
             </li>
           </ol>

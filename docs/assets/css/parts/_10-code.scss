@@ -7,6 +7,8 @@
   border: 1px solid var(--ink-line);
   overflow: hidden;
   position: relative;
+  width: max-content;
+  max-width: 100%;
 }
 @media (min-width: 1100px) {
   .content__inner > pre,

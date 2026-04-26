@@ -40,8 +40,24 @@
   border: 0;
   padding: 0;
 }
+.matrix__table thead .matrix__th--us {
+  background: color-mix(in oklab, var(--bamboo) 10%, var(--ink-3));
+  border-bottom: 1px solid
+    color-mix(in oklab, var(--bamboo) 40%, var(--ink-line));
+}
 .matrix__table thead .matrix__th--us code {
-  color: var(--ruby);
+  color: var(--bamboo);
+  font-weight: 600;
+}
+.matrix__table tbody td:nth-child(3) {
+  background: color-mix(in oklab, var(--bamboo) 4%, transparent);
+}
+.matrix__table tbody td:nth-child(2) {
+  color: var(--paper-mute);
+}
+.matrix__table tbody td:nth-child(2) .check {
+  background: color-mix(in oklab, var(--bamboo) 10%, transparent);
+  color: color-mix(in oklab, var(--bamboo) 60%, var(--paper-mute));
 }
 .matrix__table tbody th {
   text-align: left;
@@ -72,7 +88,7 @@
   border-bottom: 0;
 }
 .matrix__table tbody tr:hover {
-  background: color-mix(in oklab, var(--ruby) 4%, transparent);
+  background: color-mix(in oklab, var(--bamboo) 4%, transparent);
 }
 .matrix__table tbody tr.matrix__row--accent {
   background: color-mix(in oklab, var(--gold) 3%, transparent);
@@ -81,8 +97,48 @@
   background: color-mix(in oklab, var(--gold) 6%, transparent);
 }
 .matrix__table tbody tr.matrix__row--accent strong {
-  color: var(--gold);
-  font-weight: 600;
+  color: var(--bamboo);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* group subheading rows */
+.matrix__table tbody tr.matrix__group td {
+  padding: 18px 18px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  background: var(--ink-3);
+  border-bottom: 1px solid var(--ink-line);
+}
+.matrix__table tbody tr.matrix__group:hover {
+  background: var(--ink-3);
+}
+.matrix__table tbody tr.matrix__group:hover td {
+  background: var(--ink-3);
+}
+.matrix__table tbody tr.matrix__group + tr th,
+.matrix__table tbody tr.matrix__group + tr td {
+  padding-top: 14px;
+}
+
+/* perf-win chip */
+.matrix__win {
+  display: inline-block;
+  margin-right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: color-mix(in oklab, var(--bamboo) 18%, transparent);
+  color: var(--bamboo);
+  border: 1px solid color-mix(in oklab, var(--bamboo) 35%, transparent);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .matrix__table tbody th code,
 .matrix__table tbody td code {
@@ -134,6 +190,7 @@
     padding: 4px 0;
     border: 0;
     text-align: left;
+    background: transparent;
   }
   .matrix__table tbody td:nth-child(2)::before {
     content: "cuprite: ";
@@ -141,12 +198,25 @@
   }
   .matrix__table tbody td:nth-child(3)::before {
     content: "lightpanda: ";
-    color: var(--paper-faint);
+    color: var(--bamboo);
+    font-weight: 600;
   }
   .matrix__table tbody td:nth-child(2),
   .matrix__table tbody td:nth-child(3) {
     text-align: left;
     width: auto;
+  }
+  .matrix__table tbody tr.matrix__group {
+    padding: 18px 16px 6px;
+    background: var(--ink-3);
+  }
+  .matrix__table tbody tr.matrix__group td {
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+  .matrix__table tbody tr.matrix__group td::before {
+    content: none;
   }
 }
 .matrix__col {
@@ -217,6 +287,19 @@
   background: color-mix(in oklab, var(--ruby) 18%, transparent);
   color: var(--ruby);
   font-size: 11px;
+}
+.dash {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--paper-faint);
+  background: color-mix(in oklab, var(--paper-faint) 6%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--paper-faint) 35%, transparent);
 }
 .muted {
   color: var(--paper-faint);

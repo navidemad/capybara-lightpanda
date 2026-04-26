@@ -1,6 +1,7 @@
 /* ---------- tables ---------- */
 .content table {
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 28px 0 40px;
   font-family: var(--mono);
@@ -84,8 +85,7 @@
   position: relative;
   display: inline-block;
   vertical-align: middle;
-  width: calc(100% - 100px);
-  max-width: 360px;
+  width: 180px;
   height: 10px;
   background:
     repeating-linear-gradient(
@@ -127,4 +127,3 @@
     transition: none;
   }
 }
-
