@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body class="docs-body">
+
+  <a href="#main" class="skip">Skip to content</a>
+  <div class="scroll-progress" aria-hidden="true"><span></span></div>
+
+  {{ partial "nav.html" . }}
+
+  <main class="docs wrap wrap--wide" id="main">
+    <header class="docs__head">
+      <p class="docs__eyebrow">
+        <span class="docs__eyebrow-glyph" aria-hidden="true">§</span>
+        <span class="docs__eyebrow-text">Reference</span>
+      </p>
+      <h1 class="docs__title">{{ .Title }}</h1>
+      <p class="docs__lede">{{ .Description }}</p>
+      <p class="docs__meta">
+        <a href="{{ "/" | relURL }}" class="docs__back">← Back to overview</a>
+        <span aria-hidden="true">·</span>
+        <a href="{{ .Site.Params.github_url }}/blob/main/README.md" rel="noopener">README on GitHub ↗</a>
+      </p>
+    </header>
+
+    <div class="docs__layout">
+      <aside class="docs__toc" aria-label="Table of contents">
+        <p class="docs__toc-eyebrow">On this page</p>
+        {{ .TableOfContents }}
+      </aside>
+
+      <article class="docs__article">
+        {{ .Content }}
+      </article>
+    </div>
+  </main>
+
+  <footer class="docs__footer">
+    <div class="wrap wrap--wide">
+      <p>
+        <a href="{{ "/" | relURL }}">capybara-lightpanda</a>
+        <span aria-hidden="true">·</span>
+        <a href="{{ .Site.Params.github_url }}" rel="noopener">GitHub</a>
+        <span aria-hidden="true">·</span>
+        <a href="{{ .Site.Params.rubygems_url }}" rel="noopener">RubyGems</a>
+        <span aria-hidden="true">·</span>
+        <span>MIT licensed · 2026</span>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    /* highlight active TOC link as user scrolls */
+    (function () {
+      const toc = document.querySelector('.docs__toc');
+      if (!toc) return;
+      const links = [...toc.querySelectorAll('a[href^="#"]')];
+      const idToLink = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+      const targets = [...idToLink.keys()]
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+      if (!targets.length) return;
+
+      let activeId = null;
+      const setActive = (id) => {
+        if (id === activeId) return;
+        activeId = id;
+        links.forEach((a) => a.classList.remove('is-active'));
+        const a = idToLink.get(id);
+        if (a) a.classList.add('is-active');
+      };
+
+      const io = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (visible) setActive(visible.target.id);
+        },
+        { rootMargin: '-20% 0px -65% 0px', threshold: [0, 1] }
+      );
+      targets.forEach((t) => io.observe(t));
+    })();
+
+    /* GH stars badge */
+    (function () {
+      const el = document.querySelector('[data-gh-stars]');
+      if (!el) return;
+      const repo = el.getAttribute('data-gh-stars');
+      const cacheKey = 'gh-stars:' + repo;
+      const cached = sessionStorage.getItem(cacheKey);
+      const apply = (n) => {
+        if (n == null) return;
+        const fmt = n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+        el.textContent = fmt;
+      };
+      if (cached) {
+        try { apply(JSON.parse(cached)); } catch (_) {}
+      }
+      fetch('https://api.github.com/repos/' + repo, { headers: { Accept: 'application/vnd.github+json' } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data || data.stargazers_count == null) return;
+          sessionStorage.setItem(cacheKey, JSON.stringify(data.stargazers_count));
+          apply(data.stargazers_count);
+        })
+        .catch(() => {});
+    })();
+  </script>
+</body>
+</html>

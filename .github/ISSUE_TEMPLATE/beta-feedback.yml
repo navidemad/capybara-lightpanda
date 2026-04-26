@@ -1,0 +1,121 @@
+name: "Beta feedback — something didn't work"
+description: A spec failed, hung, or behaved differently than Cuprite. Tell us what we should look at.
+title: "[beta] "
+labels: ["beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying `capybara-lightpanda` in beta. Quick context up front saves a round trip — most of these fields take seconds.
+        If you'd rather discuss before filing, head to [Discussions](https://github.com/navidemad/capybara-lightpanda/discussions).
+
+  - type: textarea
+    id: what-broke
+    attributes:
+      label: What broke?
+      description: One or two sentences — the symptom is enough. The repro goes below.
+      placeholder: "`expect(page).to have_css('#user-menu')` times out on the dashboard spec, only with `BROWSER=lightpanda`. Same spec passes on Cuprite."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal repro
+      description: A failing snippet, the exact command you ran, or a small Rails app. Smallest thing that reproduces is fine.
+      render: ruby
+      placeholder: |
+        # spec/system/dashboard_spec.rb
+        it "shows the user menu" do
+          sign_in user
+          visit dashboard_path
+          expect(page).to have_css("#user-menu")
+        end
+    validations:
+      required: false
+
+  - type: textarea
+    id: cuprite-parity
+    attributes:
+      label: Cuprite parity check
+      description: Did the same spec pass on Cuprite (or another driver) with no other changes?
+      placeholder: "Yes — passes on Cuprite, fails on lightpanda. Switching is one env var."
+    validations:
+      required: true
+
+  - type: input
+    id: rails-version
+    attributes:
+      label: Rails version
+      placeholder: "8.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: ruby-version
+    attributes:
+      label: Ruby version
+      placeholder: "3.3.6"
+    validations:
+      required: true
+
+  - type: input
+    id: capybara-version
+    attributes:
+      label: Capybara version
+      placeholder: "3.40.0"
+    validations:
+      required: true
+
+  - type: input
+    id: gem-version
+    attributes:
+      label: capybara-lightpanda version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: lightpanda-version
+    attributes:
+      label: Lightpanda binary
+      description: Output of `lightpanda --version`, or "nightly YYYY-MM-DD".
+      placeholder: "nightly 2026-04-24"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stack
+    attributes:
+      label: Front-end stack on the page
+      multiple: true
+      options:
+        - Plain Rails (no Turbo)
+        - Turbo Drive
+        - Turbo Frames
+        - Turbo Streams
+        - Stimulus
+        - Hotwire morphing (turbo-rails ≥ 8.0)
+        - Importmap
+        - jsbundling-rails / esbuild
+        - React / Vue / other SPA
+        - Other (describe in repro)
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Stack trace, screenshot if useful, or `lightpanda` output. Trim noise — paste what's load-bearing.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Quick checks
+      options:
+        - label: I'm running on Lightpanda nightly or `>= 0.2.6` (older versions are not supported by the gem)
+          required: true
+        - label: This is reproducible — not a one-time flake
+          required: false

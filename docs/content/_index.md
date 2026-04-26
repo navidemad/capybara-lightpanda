@@ -67,6 +67,14 @@ BROWSER=lightpanda bundle exec rails test test/system/
 bundle exec rails test test/system/
 ```
 
+<aside class="md-callout md-callout--rollback" role="note">
+  <span class="md-callout__glyph" aria-hidden="true">↺</span>
+  <span class="md-callout__body">
+    <strong>Rollback is the env var.</strong>
+    Drop <code>BROWSER=lightpanda</code> and your suite returns to Cuprite. <code>Gemfile.lock</code> is the only persistent change — no Capybara registration is touched outside the <code>if</code> branch above.
+  </span>
+</aside>
+
 In **GitHub Actions** the dual-lane pattern is two short jobs that share a checkout. Drop the binary in once and gate on the env var:
 
 ```yaml
@@ -116,34 +124,14 @@ execute_script "window.example = 'hi'"
 evaluate_script "document.title"
 ```
 
-## Compatibility &amp; status
-
-| Component   | Required           | Tested with           |
-|-------------|--------------------|-----------------------|
-| Ruby        | ≥ 3.3              | 3.3, 4.0              |
-| Capybara    | ≥ 3.0              | 3.40+                 |
-| Rails       | _(driver-agnostic)_ | 7.x, 8.0, 8.1        |
-| Lightpanda  | nightly or ≥ 0.2.6 | nightly (2026-04-24)  |
-
-**Status.** `0.1.0` — public beta. The CDP surface is stable; Lightpanda upstream is moving fast and changes land here often. Released under the **MIT** license.
-
-**Where the driver falls back to a workaround** (so you know what you're trusting):
-
-- **XPath** — polyfilled in JS (~80% selector coverage). Native `XPathResult` doesn't exist in Lightpanda yet.
-- **Navigation** — `Page.loadEventFired` is unreliable upstream, so the gem polls `document.readyState` as a fallback.
-- **History** — `back` / `forward` route through `history.back()` / `forward()` JS (the CDP methods are missing upstream).
-- **Cookies** — `Network.clearBrowserCookies` works on ≥ 0.2.6; older binaries fall back to per-cookie deletes.
-
-If a spec hits something genuinely unsupported (file uploads, real screenshots), the driver raises `Capybara::NotImplementedError` so you can `skip` it cleanly. The full matrix is in [§06](#capabilities).
-
 ## In your test suite
 
 Honest numbers from a Rails 8.1 app — Turbo + Stimulus, 24 DOM-only system tests on an M-series laptop:
 
-| Driver         | Tests     | Time   | Speed         | RSS / worker |
-|----------------|-----------|--------|---------------|--------------|
-| **Lightpanda** | 24 / 24   | 6.89s  | 3.48 tests/s  | **~17 MB**   |
-| **Chrome**     | 24 / 24   | 7.09s  | 3.38 tests/s  | ~280 MB      |
+| Driver         | Tests     | Time   | RSS / worker |
+|----------------|-----------|--------|--------------|
+| **Lightpanda** | 24 / 24   | 6.89s  | **~17 MB**   |
+| **Chrome**     | 24 / 24   | 7.09s  | ~280 MB      |
 
 **Identical results.** On a 24-test suite the wall-clock margin is small — Capybara's own wait time dominates, just as it does on Chrome — so don't read the 3% as "the speed claim." The win that pays for itself is the right column:
 
@@ -153,14 +141,3 @@ Honest numbers from a Rails 8.1 app — Turbo + Stimulus, 24 DOM-only system tes
 
 The upstream **9× / 16×** numbers on this page are reproduced from [lightpanda.io](https://lightpanda.io/) — a 933-page synthetic crawl on AWS m5.large. They show the ceiling at scale; the table above shows the floor on a real Rails suite.
 
-## Documentation
-
-- [README](https://github.com/navidemad/capybara-lightpanda/blob/main/README.md) — installation, configuration, full API
-- [CHANGELOG](https://github.com/navidemad/capybara-lightpanda/blob/main/CHANGELOG.md) — release notes
-- [Examples](https://github.com/navidemad/capybara-lightpanda/tree/main/examples) — runnable Rails demos covering both **RSpec** and **Minitest**, with and without **Turbo**:
-  - [`rails_minitest_example.rb`](https://github.com/navidemad/capybara-lightpanda/blob/main/examples/rails_minitest_example.rb) — Rails system test with Minitest
-  - [`rails_rspec_example.rb`](https://github.com/navidemad/capybara-lightpanda/blob/main/examples/rails_rspec_example.rb) — Rails system spec with RSpec
-  - [`rails_turbo_minitest_example.rb`](https://github.com/navidemad/capybara-lightpanda/blob/main/examples/rails_turbo_minitest_example.rb) — Rails + Turbo Drive/Frames with Minitest
-  - [`rails_turbo_rspec_example.rb`](https://github.com/navidemad/capybara-lightpanda/blob/main/examples/rails_turbo_rspec_example.rb) — Rails + Turbo Drive/Frames with RSpec
-- [Issues](https://github.com/navidemad/capybara-lightpanda/issues) — bug reports and feature requests
-- [Lightpanda upstream](https://github.com/lightpanda-io/browser) — the browser that powers this driver

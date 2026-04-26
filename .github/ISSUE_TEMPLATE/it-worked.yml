@@ -1,0 +1,58 @@
+name: "Beta success — it worked on my suite"
+description: Your suite (or part of it) ran cleanly. Help us learn where lightpanda fits — and maybe go on the trusted-by panel.
+title: "[beta-success] "
+labels: ["beta-success"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks — these reports help future testers more than you'd think.
+        The more concrete the numbers, the more useful. Skip anything you can't share.
+
+  - type: textarea
+    id: what-app
+    attributes:
+      label: What kind of app?
+      description: Rails version, Turbo version, rough size. No need to name names.
+      placeholder: "Rails 8.0.5 · Turbo 8.0.12 · ~280 system tests · monolith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Numbers
+      description: Tests run · time on Cuprite vs lightpanda · memory if you measured.
+      placeholder: |
+        184 / 184 passed
+        Cuprite:    62.4 s · ~290 MB / worker
+        Lightpanda: 18.7 s · ~19 MB / worker
+        CI runner: GitHub Actions ubuntu-latest, parallelism 4 → 12
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: What's running on lightpanda?
+      description: Whole suite? A subset? Anything you kept on Cuprite (visual / file-upload / screenshots)?
+      placeholder: |
+        - All non-visual specs run on lightpanda
+        - Kept Cuprite for 6 visual-regression specs and 2 file-upload flows
+    validations:
+      required: false
+
+  - type: textarea
+    id: surprises
+    attributes:
+      label: Anything surprising?
+      description: A spec that "shouldn't have worked" but did? A flake that disappeared? A workaround you rolled?
+    validations:
+      required: false
+
+  - type: input
+    id: contact
+    attributes:
+      label: Public credit (optional)
+      description: Company / project name + URL if we may add you to a "Rails suites in beta" panel. Leave blank for anonymous.
+      placeholder: "Acme Inc · https://acme.example"
+    validations:
+      required: false

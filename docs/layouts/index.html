@@ -1,501 +1,1056 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="{{ .Site.LanguageCode }}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ .Site.Title }} — Cuprite, replaced.</title>
-  <meta name="description" content="{{ .Site.Params.description }}">
-  <meta property="og:title" content="{{ .Site.Title }} — Cuprite, replaced.">
-  <meta property="og:description" content="{{ .Site.Params.description }}">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121212'/%3E%3Ctext x='16' y='22' font-family='Georgia, serif' font-size='20' font-weight='700' fill='%23E11D48' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Funnel+Sans:wght@300..800&family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&display=swap">
-  <link rel="stylesheet" href="{{ "css/style.css" | relURL }}?v={{ now.Unix }}">
-</head>
-<body>
+  <head>
+    {{ partial "head.html" . }}
+  </head>
+  <body>
+    <a href="#main" class="skip">Skip to content</a>
 
-  <a href="#main" class="skip">Skip to content</a>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="scroll-progress" aria-hidden="true"><span></span></div>
 
-  <div class="grid-bg" aria-hidden="true"></div>
-  <div class="scroll-progress" aria-hidden="true"><span></span></div>
+    {{ partial "nav.html" . }}
 
-  <header class="nav">
-    <div class="nav__inner wrap wrap--wide">
-      <a class="nav__brand" href="#top" aria-label="capybara-lightpanda home">
-        <span class="nav__ruby" role="img" aria-label="Ruby on Rails">
-          <span class="nav__ruby-mark"></span>
-        </span>
-        <span class="nav__wordmark">
-          <span class="nav__name">capybara<span class="nav__sep" aria-hidden="true">-</span><em>lightpanda</em></span>
-          <span class="nav__tag">Capybara driver · headless</span>
-        </span>
-        <span class="nav__mark" aria-hidden="true">
-          <img src="https://cdn.lightpanda.io/assets/images/logo/lpd-logo.png" alt="" width="44" height="44">
-        </span>
-      </a>
-      <nav class="nav__links" aria-label="Primary">
-        <a href="#stack">Stack</a>
-        <a href="#pair-with-cuprite">Pair</a>
-        <a href="#compatibility--status">Compat</a>
-        <a href="#in-your-test-suite">Benchmark</a>
-        <a href="#documentation">Docs</a>
-        <a class="nav__gh" href="{{ .Site.Params.github_url }}" rel="noopener" aria-label="View capybara-lightpanda on GitHub">
-          <svg class="nav__gh-mark" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="currentColor">
-            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-          </svg>
-          <span class="nav__gh-label">Star</span>
-          <span class="nav__gh-divider" aria-hidden="true"></span>
-          <span class="nav__gh-meta">
-            <svg class="nav__gh-star" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="currentColor">
-              <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/>
-            </svg>
-            <span class="nav__gh-count" data-gh-stars="navidemad/capybara-lightpanda" aria-label="GitHub stars">—</span>
-          </span>
-        </a>
-      </nav>
-    </div>
-  </header>
+    <section class="hero wrap wrap--wide" id="top" aria-labelledby="hero-title">
+      <div class="hero__grid" aria-hidden="true">
+        <i style="--x: 7; --y: 2; --d: 0.4s"></i>
+        <i style="--x: 13; --y: 5; --d: 1.8s"></i>
+        <i style="--x: 21; --y: 1; --d: 3.1s"></i>
+        <i style="--x: 3; --y: 7; --d: 2.4s"></i>
+        <i style="--x: 18; --y: 8; --d: 0.9s"></i>
+        <i style="--x: 25; --y: 4; --d: 4.2s"></i>
+        <i style="--x: 11; --y: 9; --d: 5.5s"></i>
+        <i style="--x: 28; --y: 6; --d: 6.7s"></i>
+        <i style="--x: 5; --y: 11; --d: 3.8s"></i>
+        <i style="--x: 23; --y: 11; --d: 7.4s"></i>
+      </div>
+      <div class="hero__main">
+        <p class="hero__beta">
+          <span class="hero__beta-dot" aria-hidden="true"></span>
+          <span class="hero__beta-label">v0.1.0 · public beta</span>
+          <span class="hero__beta-sep" aria-hidden="true">·</span>
+          <a class="hero__beta-link" href="#join-beta"
+            >we want your feedback <span aria-hidden="true">↘</span></a
+          >
+        </p>
+        <h1 class="hero__title" id="hero-title">
+          <span class="hero__line"
+            >Faster system tests for
+            <span class="rails-mark" role="img" aria-label="Rails"></span
+            >,</span
+          >
+          <span class="hero__line hero__line--accent">without Chromium.</span>
+        </h1>
 
-  <section class="hero wrap wrap--wide" id="top" aria-labelledby="hero-title">
-    <div class="hero__main">
-      <h1 class="hero__title" id="hero-title">
-        <span class="hero__line">Faster system tests for <span class="rails-mark" role="img" aria-label="Rails"></span>,</span>
-        <span class="hero__line hero__line--accent">without Chromium.</span>
-      </h1>
+        <div class="hero__intro">
+          <p class="hero__lede">
+            A Capybara driver that speaks CDP to
+            <a href="https://github.com/lightpanda-io/browser" rel="noopener"
+              >Lightpanda</a
+            >
+            — the same way <code>cuprite</code> speaks CDP to Chromium. If
+            you've already shipped a Rails app on Cuprite, the architecture is
+            identical; only the binary at the other end of the WebSocket
+            changes.
+          </p>
 
-      <p class="hero__lede">
-        If you already ship CI tests with <code>cuprite</code>, you've picked the right architecture.
-        <strong>capybara-lightpanda</strong> is the <em>headless-only sibling</em> — same CDP,
-        swapped onto <a href="https://github.com/lightpanda-io/browser" rel="noopener">Lightpanda</a><span class="gh-pill gh-pill--inline" aria-label="Lightpanda stars on GitHub"><svg class="gh-pill__gh" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="currentColor"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><svg class="gh-pill__star" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg><span data-gh-stars="lightpanda-io/browser">—</span></span>.
-        No rendering engine, no multi-process Chromium boot, no two-gigabyte CI runners.
-        Just the bytes you actually need.
-      </p>
+          <p class="hero__positioning">
+            <span>Keep <code>cuprite</code> for visual specs.</span>
+            <span
+              >Run <strong>capybara-lightpanda</strong> for the headless
+              rest.</span
+            >
+            <span>Stop fighting flaky <em>Turbo Drive</em> specs.</span>
+            <span class="hero__positioning-foot">Only the driver changes.</span>
+          </p>
+        </div>
 
-      <p class="hero__positioning">
-        <span>Keep <code>cuprite</code> for visual specs.</span>
-        <span>Run <strong>capybara-lightpanda</strong> for the headless rest.</span>
-        <span class="hero__positioning-foot">Only the driver changes.</span>
-      </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary" href="{{ .Site.Params.github_url }}">
+            <span>Source on GitHub</span>
+            <span class="btn__arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="btn btn--ghost" href="{{ .Site.Params.rubygems_url }}">
+            <span>gem on RubyGems</span>
+            <span class="btn__arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="btn btn--text" href="#join-beta">Join the beta ↘</a>
+        </div>
 
-      <div class="hero__cta">
-        <a class="btn btn--primary" href="{{ .Site.Params.github_url }}">
-          <span>Source on GitHub</span>
-          <span class="btn__arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="btn btn--ghost" href="{{ .Site.Params.rubygems_url }}">
-          <span>gem on RubyGems</span>
-          <span class="btn__arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="btn btn--text" href="#pair-with-cuprite">See how to pair them ↘</a>
+        <aside
+          class="hero__receipts"
+          aria-label="Receipts — honest numbers from a real Rails suite"
+        >
+          <p class="hero__receipts-eyebrow">
+            <span class="hero__receipts-eyebrow-glyph" aria-hidden="true"
+              >§</span
+            >
+            Receipts · honest numbers from a real suite
+          </p>
+          <ol class="hero__receipts-list">
+            <li class="receipt">
+              <span class="receipt__num">17<em>&thinsp;MB</em></span>
+              <span class="receipt__head">RSS / worker</span>
+              <span class="receipt__foot">Chrome: ~280 MB</span>
+            </li>
+            <li class="receipt">
+              <span class="receipt__num"
+                >24<small>&thinsp;/&thinsp;24</small></span
+              >
+              <span class="receipt__head">tests passing</span>
+              <span class="receipt__foot">parity, no skips</span>
+            </li>
+            <li class="receipt">
+              <span class="receipt__num">6.89<em>&thinsp;s</em></span>
+              <span class="receipt__head">wall clock</span>
+              <span class="receipt__foot">Chrome: 7.09 s</span>
+            </li>
+          </ol>
+          <p class="hero__receipts-cite">
+            Rails 8.1 · Turbo + Stimulus · 24 system tests · M-series laptop ·
+            full table in
+            <a href="#in-your-test-suite">§04 Suite</a>
+          </p>
+        </aside>
       </div>
 
-      <p class="hero__source">
-        Benchmarks reproduced from <a href="https://lightpanda.io/" rel="noopener">lightpanda.io</a> —
-        gem-side numbers in the <a href="#in-your-test-suite">benchmark</a> below.
+      <a class="hero__scroll" href="#why" aria-label="Scroll to next section">
+        <span class="hero__scroll-label">scroll</span>
+        <span class="hero__scroll-arrow" aria-hidden="true">
+          <svg
+            viewBox="0 0 16 16"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M8 3v9" />
+            <path d="M4 8l4 4 4-4" />
+          </svg>
+        </span>
+      </a>
+    </section>
+
+    <section class="why wrap wrap--wide" id="why" aria-labelledby="why-title">
+      <header class="section__head why__head">
+        <span class="section__no">01</span>
+        <div class="why__head-stack">
+          <h2 class="section__title" id="why-title">Why this engine</h2>
+          <p class="why__epigraph">
+            Not a Chromium fork. Not a WebKit patch. <em>A new browser.</em>
+            <a
+              class="why__epigraph-cite"
+              href="https://github.com/lightpanda-io/browser"
+              rel="noopener"
+            >
+              <svg
+                class="why__epigraph-cite-gh"
+                viewBox="0 0 16 16"
+                width="11"
+                height="11"
+                aria-hidden="true"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                />
+              </svg>
+              lightpanda-io/browser
+              <span class="gh-pill" aria-label="Upstream stars on GitHub">
+                <svg
+                  class="gh-pill__star"
+                  viewBox="0 0 16 16"
+                  width="10"
+                  height="10"
+                  aria-hidden="true"
+                  fill="currentColor"
+                >
+                  <path
+                    d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"
+                  />
+                </svg>
+                <span data-gh-stars="lightpanda-io/browser">—</span>
+              </span>
+            </a>
+          </p>
+        </div>
+      </header>
+
+      <aside
+        class="why__trusted-strip"
+        aria-label="Production users of the Lightpanda engine"
+      >
+        <p class="why__trusted-strip-eyebrow">
+          <span class="why__trusted-strip-glyph" aria-hidden="true">§</span>
+          Also powers
+        </p>
+        <ul class="why__trusted-strip-list">
+          <li>
+            <img
+              src="https://cdn.lightpanda.io/website/assets/images/partners/vercel.svg"
+              alt="Vercel"
+              loading="lazy"
+              height="18"
+            />
+          </li>
+          <li>
+            <img
+              src="https://cdn.lightpanda.io/website/assets/images/partners/dust.svg"
+              alt="Dust"
+              loading="lazy"
+              height="18"
+            />
+          </li>
+          <li>
+            <img
+              src="https://cdn.lightpanda.io/website/assets/images/partners/openclaw.svg"
+              alt="OpenClaw"
+              loading="lazy"
+              height="18"
+            />
+          </li>
+          <li>
+            <img
+              src="https://cdn.lightpanda.io/website/assets/images/partners/trigger.dev.svg"
+              alt="Trigger.dev"
+              loading="lazy"
+              height="18"
+            />
+          </li>
+        </ul>
+      </aside>
+
+      <div class="why__grid">
+        <dl class="why__pillars">
+          <div class="pillar">
+            <span class="pillar__no" aria-hidden="true">i</span>
+            <dt class="pillar__title">
+              Built from scratch
+              <span class="pillar__tag">new</span>
+            </dt>
+            <dd class="pillar__body">
+              Designed for the work tests actually do — automation, not
+              browsing. No legacy of human-facing assumptions.
+            </dd>
+          </div>
+          <div class="pillar">
+            <span class="pillar__no" aria-hidden="true">ii</span>
+            <dt class="pillar__title">
+              Zig <span class="pillar__plus" aria-hidden="true">+</span> V8
+              <span class="pillar__tag">stack</span>
+            </dt>
+            <dd class="pillar__body">
+              Low-level systems language paired with Chrome's JavaScript engine.
+              Native cold-start, native concurrency.
+            </dd>
+          </div>
+          <div class="pillar">
+            <span class="pillar__no" aria-hidden="true">iii</span>
+            <dt class="pillar__title">
+              Headless by design
+              <span class="pillar__tag">pure</span>
+            </dt>
+            <dd class="pillar__body">
+              No rendering engine, no compositor — every byte spent on what your
+              tests actually need.
+            </dd>
+          </div>
+        </dl>
+
+        <ul class="why__stats" aria-label="Lightpanda performance vs Chrome">
+          <li class="stat">
+            <span class="stat__num">9<span class="stat__x">×</span></span>
+            <span class="stat__label">Faster than Chrome headless</span>
+            <span
+              class="stat__bench"
+              aria-label="Lightpanda 5 seconds versus Chromium 46 seconds"
+            >
+              <b class="bench__a">5&thinsp;s</b>
+              <span class="bench__bar" style="--p: 11%"><i></i></span>
+              <b class="bench__b">46&thinsp;s</b>
+            </span>
+          </li>
+          <li class="stat stat--green">
+            <span class="stat__num">16<span class="stat__x">×</span></span>
+            <span class="stat__label">Less memory used</span>
+            <span
+              class="stat__bench"
+              aria-label="Lightpanda 123 megabytes versus Chromium 2 gigabytes"
+            >
+              <b class="bench__a">123&thinsp;MB</b>
+              <span class="bench__bar" style="--p: 6%"><i></i></span>
+              <b class="bench__b">2&thinsp;GB</b>
+            </span>
+          </li>
+          <li class="stat stat--gold">
+            <span class="stat__num">0<span class="stat__x">&nbsp;</span></span>
+            <span class="stat__label">Bytes of Chromium shipped</span>
+            <span class="stat__foot">A single static binary</span>
+          </li>
+        </ul>
+      </div>
+
+      <p class="why__source">
+        Benchmarks ·
+        <a href="https://lightpanda.io/" rel="noopener">lightpanda.io</a> ·
+        933&nbsp;pages · AWS&nbsp;m5.large
       </p>
-    </div>
+    </section>
+
+    <section
+      class="swap wrap wrap--wide"
+      id="stack"
+      aria-labelledby="swap-title"
+    >
+      <header class="section__head">
+        <span class="section__no">02</span>
+        <h2 class="section__title" id="swap-title">The split</h2>
+        <p class="section__deck">
+          <strong>cuprite</strong> drives Chromium for real rendering.
+          <strong>capybara-lightpanda</strong>
+          speaks the same CDP on a leaner runtime — sized for headless tests.
+          Run them side by side; each owns the specs it's best at.
+        </p>
+      </header>
+
+      <div class="swap__compare">
+        <div class="swap__shared">
+          <p class="swap__shared-tag">
+            <span class="swap__shared-glyph" aria-hidden="true">§</span>
+            Shared · same Capybara API on both sides
+          </p>
+          <div class="swap__shared-card">
+            <span class="swap__shared-name">Capybara</span>
+            <span class="swap__shared-sub"
+              >visit · click · fill_in · assert_selector · …</span
+            >
+          </div>
+        </div>
+
+        <div class="swap__split" aria-hidden="true">
+          <span class="swap__split-rule"></span>
+          <span class="swap__split-label">the split happens below</span>
+          <span class="swap__split-rule"></span>
+        </div>
+
+        <div class="swap__halves">
+          <article
+            class="stack stack--before"
+            aria-label="Headless + visual stack"
+          >
+            <header class="stack__head">
+              <span class="stack__tag">Headless + visual</span>
+              <span class="stack__weight">~ 280 MB&nbsp;RSS / test</span>
+            </header>
+            <ol class="stack__layers">
+              <li class="layer layer--mid">
+                cuprite <span class="layer__pill">ferrum&nbsp;CDP</span>
+              </li>
+              <li class="layer layer--heavy">
+                <span class="layer__name">Chromium</span>
+                <span class="layer__sub"
+                  >multi-process · Blink · V8 · Skia · …</span
+                >
+              </li>
+            </ol>
+            <p class="stack__note">
+              Boots the entire Chromium pipeline for every
+              <em>headless</em> test.
+            </p>
+          </article>
+
+          <article class="stack stack--after" aria-label="Headless-only stack">
+            <header class="stack__head">
+              <span class="stack__tag stack__tag--accent">Headless only</span>
+              <span class="stack__weight">~ 17 MB&nbsp;RSS / test</span>
+            </header>
+            <ol class="stack__layers">
+              <li class="layer layer--mid">
+                capybara-lightpanda
+                <span class="layer__pill">CDP&nbsp;client</span>
+              </li>
+              <li class="layer layer--light">
+                <span class="layer__name">Lightpanda</span>
+                <span class="layer__sub">Zig · V8 · html5ever · libcurl</span>
+              </li>
+            </ol>
+            <p class="stack__note">
+              A single binary. No rendering engine. JS where you need it.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <main id="main" class="content wrap wrap--wide">
+      <div class="content__inner">{{ .Content }}</div>
+    </main>
+
+    <section
+      class="matrix wrap wrap--wide"
+      id="capabilities"
+      aria-labelledby="matrix-title"
+    >
+      <header class="section__head">
+        <span class="section__no">05</span>
+        <h2 class="section__title" id="matrix-title">
+          What works, what doesn't
+        </h2>
+        <p class="section__deck">
+          Lightpanda is a headless browser by design — no layout, no paint, no
+          compositor. Here's the honest matrix for system-test authors.
+        </p>
+      </header>
+
+      <div class="matrix__grid">
+        <ul class="matrix__col matrix__col--ok" aria-label="Supported">
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>Visit, click, fill, submit, navigate, history</div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>CSS &amp; XPath selectors (XPath polyfilled)</div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>Cookies, headers, redirects, network</div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>Turbo Drive, Turbo Frames, Stimulus</div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div><code>execute_script</code>, <code>evaluate_script</code></div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>iframes, frame switching</div>
+          </li>
+          <li class="matrix__row">
+            <span class="check" aria-hidden="true">✓</span>
+            <div>
+              JS&nbsp;dialogs (<code>accept_modal&nbsp;:alert</code>,
+              <code>dismiss_modal</code>)
+            </div>
+          </li>
+        </ul>
+        <ul class="matrix__col matrix__col--no" aria-label="Not supported">
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>
+              Real screenshots <span class="muted">(no compositor)</span>
+            </div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>Visual regression / pixel tests</div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>Scroll, resize, full <code>getComputedStyle</code></div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>
+              File uploads
+              <span class="muted">(<code>input[type=file]</code>)</span>
+            </div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>Service Workers, Web Workers</div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>WebAuthn / passkeys</div>
+          </li>
+          <li class="matrix__row">
+            <span class="cross" aria-hidden="true">✕</span>
+            <div>Anything that needs layout to be correct</div>
+          </li>
+        </ul>
+      </div>
+
+      <p class="matrix__foot">
+        Need pixels? Keep <code>cuprite</code> for visual specs and let
+        <code>lightpanda</code> own the rest.<br />You can run both side by side
+        — only the driver changes.
+      </p>
+    </section>
+
+    <section
+      class="beta wrap wrap--wide"
+      id="join-beta"
+      aria-labelledby="beta-title"
+    >
+      <span class="beta__stamp" aria-hidden="true">
+        <span class="beta__stamp-ring"></span>
+        <span class="beta__stamp-tick beta__stamp-tick--n">·</span>
+        <span class="beta__stamp-tick beta__stamp-tick--e">·</span>
+        <span class="beta__stamp-tick beta__stamp-tick--s">·</span>
+        <span class="beta__stamp-tick beta__stamp-tick--w">·</span>
+        <span class="beta__stamp-core">
+          <span class="beta__stamp-mark">v0.1</span>
+          <span class="beta__stamp-sub">open beta</span>
+        </span>
+      </span>
+      <header class="section__head">
+        <span class="section__no">06</span>
+        <h2 class="section__title" id="beta-title">Help us ship 1.0</h2>
+        <p class="section__deck">
+          <strong>capybara-lightpanda</strong> is in public beta. Real Rails
+          suites are how we find the edges. The cost to try it is one Gemfile
+          line and one env var — the cost to abandon it is unsetting that env
+          var.
+        </p>
+      </header>
+
+      <div class="beta__grid">
+        <article class="beta__try" aria-labelledby="beta-try-title">
+          <header class="beta__try-head">
+            <span class="beta__step" aria-hidden="true">i</span>
+            <h3 class="beta__try-title" id="beta-try-title">
+              Try it in 5 minutes
+            </h3>
+          </header>
+          <ol class="beta__steps">
+            <li class="beta__step-row">
+              <span class="beta__step-no" aria-hidden="true">1</span>
+              <div class="beta__step-body">
+                <p class="beta__step-line">
+                  Add to your <code>Gemfile</code>, in the
+                  <code>:test</code> group.
+                </p>
+                <pre
+                  class="beta__code"
+                ><code><span class="beta__tok-c">gem</span> <span class="beta__tok-s">"capybara-lightpanda"</span></code></pre>
+              </div>
+            </li>
+            <li class="beta__step-row">
+              <span class="beta__step-no" aria-hidden="true">2</span>
+              <div class="beta__step-body">
+                <p class="beta__step-line">
+                  Gate it on an env var so your existing driver stays the
+                  default.
+                </p>
+                <pre
+                  class="beta__code"
+                ><code><span class="beta__tok-c"># spec/support/capybara.rb · or test/support/...</span>
+<span class="beta__tok-k">if</span> ENV[<span class="beta__tok-s">"BROWSER"</span>] == <span class="beta__tok-s">"lightpanda"</span>
+  <span class="beta__tok-c">require</span> <span class="beta__tok-s">"capybara-lightpanda"</span>
+  Capybara.javascript_driver = <span class="beta__tok-sym">:lightpanda</span>
+<span class="beta__tok-k">end</span></code></pre>
+              </div>
+            </li>
+            <li class="beta__step-row">
+              <span class="beta__step-no" aria-hidden="true">3</span>
+              <div class="beta__step-body">
+                <p class="beta__step-line">Run one suite. Decide.</p>
+                <pre
+                  class="beta__code"
+                ><code><span class="beta__tok-p">$</span> BROWSER=lightpanda bundle exec rails test test/system/</code></pre>
+              </div>
+            </li>
+          </ol>
+          <p class="beta__rollback">
+            <span class="beta__rollback-glyph" aria-hidden="true">↺</span>
+            <span
+              ><strong>Rollback in 30&nbsp;s.</strong> Drop the env var — your
+              suite goes back to Cuprite. <code>Gemfile.lock</code> is the only
+              persistent change.</span
+            >
+          </p>
+        </article>
+
+        <aside class="beta__ask" aria-labelledby="beta-ask-title">
+          <header class="beta__ask-head">
+            <span class="beta__step" aria-hidden="true">ii</span>
+            <h3 class="beta__ask-title" id="beta-ask-title">
+              What we'd love to hear
+            </h3>
+          </header>
+          <ol class="beta__questions">
+            <li class="beta__q">
+              <span class="beta__q-no" aria-hidden="true">Q1</span>
+              <span class="beta__q-text"
+                >Did your <strong>auth flow</strong> (sign-in, sign-up, password
+                reset) work end-to-end?</span
+              >
+            </li>
+            <li class="beta__q">
+              <span class="beta__q-no" aria-hidden="true">Q2</span>
+              <span class="beta__q-text"
+                >Any <strong>Turbo Stream / Turbo Frame</strong> behavior that
+                diverged from Cuprite?</span
+              >
+            </li>
+            <li class="beta__q">
+              <span class="beta__q-no" aria-hidden="true">Q3</span>
+              <span class="beta__q-text"
+                >How much <strong>CI memory</strong> did you free up — and could
+                you raise parallelism?</span
+              >
+            </li>
+          </ol>
+
+          <div class="beta__ctas">
+            <a
+              class="btn btn--primary"
+              href="{{ .Site.Params.github_url }}/issues/new?template=beta-feedback.yml"
+              rel="noopener"
+            >
+              <span>Open a beta issue</span>
+              <span class="btn__arrow" aria-hidden="true">↗</span>
+            </a>
+            <a
+              class="btn btn--ghost"
+              href="{{ .Site.Params.github_url }}/discussions"
+              rel="noopener"
+            >
+              <span>Discussions</span>
+              <span class="btn__arrow" aria-hidden="true">↗</span>
+            </a>
+            <a
+              class="btn btn--text"
+              href="{{ .Site.Params.github_url }}/blob/main/BETA_TESTING.md"
+              rel="noopener"
+            >
+              BETA_TESTING.md ↗
+            </a>
+          </div>
+
+          <p class="beta__pact">
+            <span class="beta__pact-glyph" aria-hidden="true">§</span>
+            Maintainer pact · I triage beta-tagged issues within 48&nbsp;h. If a
+            workaround exists, you'll get it the same day. If we don't support
+            something, the driver raises
+            <code>Capybara::NotImplementedError</code> so you can
+            <code>skip</code> it cleanly and keep moving.
+          </p>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="endrail wrap wrap--wide">
+      <div class="endrail__inner">
+        <div class="endrail__brand">
+          <span class="endrail__mark" aria-hidden="true"></span>
+          <span class="endrail__name"
+            >capybara<span class="endrail__sep">::</span
+            ><em>lightpanda</em></span
+          >
+        </div>
+        <nav class="endrail__links" aria-label="Resources">
+          <a href="{{ .Site.Params.github_url }}" rel="noopener">github</a>
+          <span aria-hidden="true">·</span>
+          <a href="{{ .Site.Params.rubygems_url }}" rel="noopener">rubygems</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/lightpanda-io/browser" rel="noopener"
+            >lightpanda</a
+          >
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/teamcapybara/capybara" rel="noopener"
+            >capybara</a
+          >
+        </nav>
+        <p class="endrail__sig">
+          <span>v0.1.0 · public beta</span>
+          <span aria-hidden="true">·</span>
+          <span>MIT licensed</span>
+          <span aria-hidden="true">·</span>
+          <span>2026</span>
+        </p>
+      </div>
+    </footer>
 
     <nav class="hero__index" aria-label="Chapter index">
       <ol>
-        <li><a href="#stack"><span>01</span><em>Split</em></a></li>
-        <li><a href="#pair-with-cuprite"><span>02</span><em>Pair</em></a></li>
-        <li><a href="#compatibility--status"><span>03</span><em>Compat</em></a></li>
-        <li><a href="#in-your-test-suite"><span>04</span><em>Suite</em></a></li>
-        <li><a href="#documentation"><span>05</span><em>Docs</em></a></li>
-        <li><a href="#capabilities"><span>06</span><em>Matrix</em></a></li>
+        <li>
+          <a href="#why"><span>01</span><em>Why</em></a>
+        </li>
+        <li>
+          <a href="#stack"><span>02</span><em>Split</em></a>
+        </li>
+        <li>
+          <a href="#pair-with-cuprite"><span>03</span><em>Pair</em></a>
+        </li>
+        <li>
+          <a href="#in-your-test-suite"><span>04</span><em>Suite</em></a>
+        </li>
+        <li>
+          <a href="#capabilities"><span>05</span><em>Matrix</em></a>
+        </li>
+        <li>
+          <a href="#join-beta"><span>06</span><em>Beta</em></a>
+        </li>
       </ol>
       <span class="hero__index-arrow" aria-hidden="true">↓</span>
     </nav>
 
-    <aside class="hero__aside">
-      <figure class="hero__quote" aria-label="Lightpanda manifesto">
-        <blockquote>
-          <p>“Not a Chromium fork. Not a WebKit patch. <em>A&nbsp;new&nbsp;browser.</em>”</p>
-        </blockquote>
-        <figcaption>
-          <span class="hero__quote-source">
-            — <a href="https://github.com/lightpanda-io/browser" rel="noopener">lightpanda-io/browser</a>
-            <span class="gh-pill" aria-label="Upstream stars on GitHub">
-              <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="currentColor">
-                <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/>
-              </svg>
-              <span data-gh-stars="lightpanda-io/browser">—</span>
-            </span>
-          </span>
-          <span class="hero__quote-meta">Built from scratch · CDP-native · Headless</span>
-        </figcaption>
-      </figure>
+    <script>
+      /* wrap markdown h2-led chapters into <section class="chapter"> for snap + min-height */
+      (function () {
+        var inner = document.querySelector(".content__inner");
+        if (!inner) return;
+        var nodes = Array.from(inner.childNodes);
+        var firstH2 = inner.querySelector(":scope > h2[id]");
+        if (!firstH2) return;
+        var chapter = null;
+        nodes.forEach(function (node) {
+          if (node.nodeType === 1 && node.tagName === "H2" && node.id) {
+            chapter = document.createElement("section");
+            chapter.className = "chapter";
+            chapter.id = "chapter-" + node.id;
+            chapter.setAttribute("aria-labelledby", node.id);
+            inner.insertBefore(chapter, node);
+            chapter.appendChild(node);
+          } else if (chapter && (node.nodeType === 1 || node.nodeType === 3)) {
+            chapter.appendChild(node);
+          }
+        });
+      })();
 
-      <ul class="stats" aria-label="Lightpanda performance vs Chrome">
-        <li class="stat">
-          <span class="stat__num">9<span class="stat__x">×</span></span>
-          <span class="stat__label">Faster than Chrome headless</span>
-          <span class="stat__foot">933&nbsp;pages · AWS&nbsp;m5.large</span>
-        </li>
-        <li class="stat stat--green">
-          <span class="stat__num">16<span class="stat__x">×</span></span>
-          <span class="stat__label">Less memory used</span>
-          <span class="stat__foot">Same workload, same machine</span>
-        </li>
-        <li class="stat stat--gold">
-          <span class="stat__num">0<span class="stat__x">&nbsp;</span></span>
-          <span class="stat__label">Bytes of Chromium shipped</span>
-          <span class="stat__foot">A single static binary</span>
-        </li>
-      </ul>
-    </aside>
-  </section>
-
-  <div class="ticker" aria-hidden="true">
-    <div class="ticker__track">
-      <span>~17 MB RSS / test</span><span class="ticker__sep">◆</span>
-      <span>16× less memory than Chrome</span><span class="ticker__sep">◆</span>
-      <span>One static binary</span><span class="ticker__sep">◆</span>
-      <span>Ruby 3.3+ · Capybara 3.40+</span><span class="ticker__sep">◆</span>
-      <span>Rails 7 &amp; 8</span><span class="ticker__sep">◆</span>
-      <span>CDP-native</span><span class="ticker__sep">◆</span>
-      <span>Headless by design</span><span class="ticker__sep">◆</span>
-      <span>MIT · 0.1.0 beta</span><span class="ticker__sep">◆</span>
-      <span>~17 MB RSS / test</span><span class="ticker__sep">◆</span>
-      <span>16× less memory than Chrome</span><span class="ticker__sep">◆</span>
-      <span>One static binary</span><span class="ticker__sep">◆</span>
-      <span>Ruby 3.3+ · Capybara 3.40+</span><span class="ticker__sep">◆</span>
-      <span>Rails 7 &amp; 8</span><span class="ticker__sep">◆</span>
-      <span>CDP-native</span><span class="ticker__sep">◆</span>
-      <span>Headless by design</span><span class="ticker__sep">◆</span>
-      <span>MIT · 0.1.0 beta</span><span class="ticker__sep">◆</span>
-    </div>
-  </div>
-
-  <section class="swap wrap wrap--wide" id="stack" aria-labelledby="swap-title">
-    <header class="section__head">
-      <span class="section__no">01</span>
-      <h2 class="section__title" id="swap-title">The split</h2>
-      <p class="section__deck">
-        <strong>cuprite</strong> drives Chromium over CDP — battle-tested, the gold standard when you
-        need real rendering. <strong>capybara-lightpanda</strong> uses the same protocol on a leaner
-        runtime, sized for the headless tests that don't need a compositor. Run them side by side and
-        let each own the specs it's best at.
-      </p>
-    </header>
-
-    <div class="swap__grid">
-      <article class="stack stack--before" aria-label="Headless + visual stack">
-        <header class="stack__head">
-          <span class="stack__tag">Headless + visual</span>
-          <span class="stack__weight">~ 280 MB&nbsp;RSS / test</span>
-        </header>
-        <ol class="stack__layers">
-          <li class="layer layer--app">Capybara</li>
-          <li class="layer layer--mid">cuprite</li>
-          <li class="layer layer--mid">ferrum (CDP client)</li>
-          <li class="layer layer--heavy">
-            <span class="layer__name">Chromium</span>
-            <span class="layer__sub">multi-process · Blink · V8 · Skia · …</span>
-          </li>
-        </ol>
-        <p class="stack__note">Boots the entire Chromium rendering pipeline for every <em>headless</em> test.</p>
-      </article>
-
-      <div class="swap__arrow" aria-hidden="true">
-        <svg viewBox="0 0 80 24" width="80" height="24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M2 12h70"/>
-          <path d="M62 4l10 8-10 8"/>
-        </svg>
-        <span>split</span>
-      </div>
-
-      <article class="stack stack--after" aria-label="Headless-only stack">
-        <header class="stack__head">
-          <span class="stack__tag stack__tag--accent">Headless only</span>
-          <span class="stack__weight">~ 17 MB&nbsp;RSS / test</span>
-        </header>
-        <ol class="stack__layers">
-          <li class="layer layer--app">Capybara</li>
-          <li class="layer layer--mid">capybara-lightpanda <span class="layer__pill">CDP&nbsp;client</span></li>
-          <li class="layer layer--light">
-            <span class="layer__name">Lightpanda</span>
-            <span class="layer__sub">Zig · V8 · html5ever · libcurl</span>
-          </li>
-        </ol>
-        <p class="stack__note">A single binary. No rendering engine. JS where you need it, network where you need it.</p>
-      </article>
-    </div>
-
-    <p class="lineage">
-      <span class="lineage__label">Lineage</span>
-      <span>
-        Built in the spirit of
-        <a href="https://cuprite.rubycdp.com/" rel="noopener">cuprite</a>
-        and
-        <a href="https://github.com/rubycdp/ferrum" rel="noopener">ferrum</a> —
-        the projects that proved CDP is the right answer for Ruby system tests.
-      </span>
-    </p>
-  </section>
-
-  <main id="main" class="content wrap wrap--wide">
-    <div class="content__inner">
-      {{ .Content }}
-    </div>
-  </main>
-
-  <section class="matrix wrap wrap--wide" id="capabilities" aria-labelledby="matrix-title">
-    <header class="section__head">
-      <span class="section__no">06</span>
-      <h2 class="section__title" id="matrix-title">What works, what doesn't</h2>
-      <p class="section__deck">
-        Lightpanda is a headless browser by design — no layout, no paint, no compositor.
-        Here's the honest matrix for system-test authors.
-      </p>
-    </header>
-
-    <div class="matrix__grid">
-      <ul class="matrix__col matrix__col--ok" aria-label="Supported">
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Visit, click, fill, submit, navigate, history</li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>CSS &amp; XPath selectors (XPath polyfilled)</li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Cookies, headers, redirects, network</li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>Turbo Drive, Turbo Frames, Stimulus</li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span><code>execute_script</code>, <code>evaluate_script</code></li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>iframes, frame switching</li>
-        <li class="matrix__row"><span class="check" aria-hidden="true">✓</span>JS&nbsp;dialogs (<code>accept_modal&nbsp;:alert</code>, <code>dismiss_modal</code>)</li>
-      </ul>
-      <ul class="matrix__col matrix__col--no" aria-label="Not supported">
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Real screenshots <span class="muted">(no compositor)</span></li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Visual regression / pixel tests</li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Scroll, resize, full <code>getComputedStyle</code></li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>File uploads <span class="muted">(<code>input[type=file]</code>)</span></li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Service Workers, Web Workers</li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>WebAuthn / passkeys</li>
-        <li class="matrix__row"><span class="cross" aria-hidden="true">✕</span>Anything that needs layout to be correct</li>
-      </ul>
-    </div>
-
-    <p class="matrix__foot">
-      Need pixels? Keep <code>cuprite</code> for visual specs and let <code>lightpanda</code> own the rest.
-      You can run both side by side — only the driver changes.
-    </p>
-  </section>
-
-  <footer class="endrail wrap wrap--wide">
-    <div class="endrail__inner">
-      <div class="endrail__brand">
-        <span class="endrail__mark" aria-hidden="true"></span>
-        <span class="endrail__name">capybara<span class="endrail__sep">::</span><em>lightpanda</em></span>
-      </div>
-      <nav class="endrail__links" aria-label="Resources">
-        <a href="{{ .Site.Params.github_url }}" rel="noopener">github</a>
-        <span aria-hidden="true">·</span>
-        <a href="{{ .Site.Params.rubygems_url }}" rel="noopener">rubygems</a>
-        <span aria-hidden="true">·</span>
-        <a href="https://github.com/lightpanda-io/browser" rel="noopener">lightpanda</a>
-        <span aria-hidden="true">·</span>
-        <a href="https://github.com/teamcapybara/capybara" rel="noopener">capybara</a>
-      </nav>
-      <p class="endrail__sig">
-        <span>v0.1.0 · public beta</span>
-        <span aria-hidden="true">·</span>
-        <span>MIT licensed</span>
-        <span aria-hidden="true">·</span>
-        <span>2026</span>
-      </p>
-    </div>
-  </footer>
-
-  <script>
-    /* wrap markdown h2-led chapters into <section class="chapter"> for snap + min-height */
-    (function () {
-      var inner = document.querySelector('.content__inner');
-      if (!inner) return;
-      var nodes = Array.from(inner.childNodes);
-      var firstH2 = inner.querySelector(':scope > h2[id]');
-      if (!firstH2) return;
-      var chapter = null;
-      nodes.forEach(function (node) {
-        if (node.nodeType === 1 && node.tagName === 'H2' && node.id) {
-          chapter = document.createElement('section');
-          chapter.className = 'chapter';
-          chapter.id = 'chapter-' + node.id;
-          chapter.setAttribute('aria-labelledby', node.id);
-          inner.insertBefore(chapter, node);
-          chapter.appendChild(node);
-        } else if (chapter && (node.nodeType === 1 || node.nodeType === 3)) {
-          chapter.appendChild(node);
-        }
-      });
-    })();
-
-    /* smooth-scroll for in-page hash links */
-    (function () {
-      var links = document.querySelectorAll('a[href^="#"]');
-      if (!links.length) return;
-      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var navOffset = 76;
-      var animate = function (to, duration) {
-        var start = window.scrollY;
-        var distance = to - start;
-        var startTime = performance.now();
-        var step = function (now) {
-          var t = Math.min(1, (now - startTime) / duration);
-          var eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-          window.scrollTo(0, start + distance * eased);
-          if (t < 1) requestAnimationFrame(step);
+      /* smooth-scroll for in-page hash links */
+      (function () {
+        var links = document.querySelectorAll('a[href^="#"]');
+        if (!links.length) return;
+        var prefersReduced = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        var navOffset = 76;
+        var animate = function (to, duration) {
+          var start = window.scrollY;
+          var distance = to - start;
+          var startTime = performance.now();
+          var step = function (now) {
+            var t = Math.min(1, (now - startTime) / duration);
+            var eased = 1 - Math.pow(1 - t, 3);
+            window.scrollTo(0, start + distance * eased);
+            if (t < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
         };
-        requestAnimationFrame(step);
-      };
-      links.forEach(function (link) {
-        link.addEventListener('click', function (e) {
-          var hash = link.getAttribute('href');
-          if (!hash || hash === '#') return;
-          var target = document.getElementById(hash.slice(1));
-          if (!target) return;
-          e.preventDefault();
-          var top = target.getBoundingClientRect().top + window.scrollY - navOffset;
-          if (prefersReduced) {
-            window.scrollTo(0, top);
-          } else {
-            var distance = Math.abs(top - window.scrollY);
-            var duration = Math.min(900, Math.max(450, distance * 0.4));
-            animate(top, duration);
-          }
-          history.replaceState(null, '', hash);
-        });
-      });
-    })();
-
-    /* scroll-triggered reveals */
-    (function () {
-      if (!('IntersectionObserver' in window)) return;
-      var targets = document.querySelectorAll(
-        '.section__head, .swap__grid > *, .matrix__col, .endrail__inner'
-      );
-      targets.forEach(function (el) { el.classList.add('reveal'); });
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          if (e.isIntersecting) {
-            e.target.classList.add('is-visible');
-            io.unobserve(e.target);
-          }
-        });
-      }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
-      targets.forEach(function (el) { io.observe(el); });
-      setTimeout(function () {
-        document.querySelectorAll('.reveal:not(.is-visible)').forEach(function (el) {
-          el.classList.add('is-visible');
-        });
-      }, 2500);
-    })();
-
-    /* chapter index scroll-spy */
-    (function () {
-      var links = Array.from(document.querySelectorAll('.hero__index a[href^="#"]'));
-      if (!links.length) return;
-      var entries = links.map(function (a) {
-        var id = a.getAttribute('href').slice(1);
-        var target = document.getElementById(id);
-        return target ? { id: id, link: a, target: target } : null;
-      }).filter(Boolean);
-      if (!entries.length) return;
-      var raf = 0;
-      var update = function () {
-        var probe = window.scrollY + window.innerHeight * 0.5;
-        var active = null;
-        entries.forEach(function (e) {
-          var top = e.target.getBoundingClientRect().top + window.scrollY;
-          if (top <= probe) active = e;
-        });
-        links.forEach(function (l) { l.classList.remove('is-active'); });
-        if (active) active.link.classList.add('is-active');
-        raf = 0;
-      };
-      window.addEventListener('scroll', function () {
-        if (!raf) raf = requestAnimationFrame(update);
-      }, { passive: true });
-      update();
-    })();
-
-    /* scroll progress */
-    (function () {
-      var bar = document.querySelector('.scroll-progress');
-      if (!bar) return;
-      var raf = 0;
-      var update = function () {
-        var doc = document.documentElement;
-        var max = (doc.scrollHeight - window.innerHeight) || 1;
-        var pct = Math.min(100, Math.max(0, (window.scrollY / max) * 100));
-        bar.style.setProperty('--scroll-pct', pct.toFixed(2) + '%');
-        raf = 0;
-      };
-      window.addEventListener('scroll', function () {
-        if (!raf) raf = requestAnimationFrame(update);
-      }, { passive: true });
-      update();
-    })();
-
-    /* copy-to-clipboard for code blocks */
-    (function () {
-      var blocks = document.querySelectorAll('.content .highlight');
-      if (!blocks.length || !navigator.clipboard) return;
-      blocks.forEach(function (block) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'code-copy';
-        btn.setAttribute('aria-label', 'Copy code to clipboard');
-        btn.innerHTML = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg><span>copy</span>';
-        block.appendChild(btn);
-        btn.addEventListener('click', function () {
-          var code = block.querySelector('code') || block.querySelector('pre');
-          if (!code) return;
-          navigator.clipboard.writeText(code.innerText).then(function () {
-            btn.classList.add('is-copied');
-            btn.querySelector('span').textContent = 'copied';
-            setTimeout(function () {
-              btn.classList.remove('is-copied');
-              btn.querySelector('span').textContent = 'copy';
-            }, 1600);
+        links.forEach(function (link) {
+          link.addEventListener("click", function (e) {
+            var hash = link.getAttribute("href");
+            if (!hash || hash === "#") return;
+            var target = document.getElementById(hash.slice(1));
+            if (!target) return;
+            e.preventDefault();
+            var top =
+              target.getBoundingClientRect().top + window.scrollY - navOffset;
+            if (prefersReduced) {
+              window.scrollTo(0, top);
+            } else {
+              var distance = Math.abs(top - window.scrollY);
+              var duration = Math.min(600, Math.max(300, distance * 0.25));
+              animate(top, duration);
+            }
+            history.replaceState(null, "", hash);
           });
         });
-      });
-    })();
+      })();
 
-    /* GitHub stars */
-    (function () {
-      var nodes = document.querySelectorAll('[data-gh-stars]');
-      if (!nodes.length) return;
-      var TTL = 60 * 60 * 1000;
-      var format = function (n) {
-        if (n >= 10000) return (n / 1000).toFixed(0) + 'k';
-        if (n >= 1000)  return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-        return String(n);
-      };
-      var paint = function (el, n) { el.textContent = format(n); el.classList.add('is-loaded'); };
-      var groups = {};
-      nodes.forEach(function (el) {
-        var repo = el.getAttribute('data-gh-stars');
-        (groups[repo] = groups[repo] || []).push(el);
-      });
-      Object.keys(groups).forEach(function (repo) {
-        var els = groups[repo];
-        var KEY = 'gh-stars:' + repo;
-        try {
-          var cached = JSON.parse(localStorage.getItem(KEY) || 'null');
-          if (cached && Date.now() - cached.t < TTL) {
-            els.forEach(function (el) { paint(el, cached.n); });
+      /* scroll-triggered reveals */
+      (function () {
+        if (!("IntersectionObserver" in window)) return;
+        var targets = document.querySelectorAll(
+          ".section__head, .why__manifesto, .why__pillars > *, .why__stats > *, .why__source, .swap__shared, .swap__split, .swap__halves > *, .matrix__col, .beta__try, .beta__ask, .endrail__inner",
+        );
+        targets.forEach(function (el) {
+          el.classList.add("reveal");
+        });
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add("is-visible");
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { rootMargin: "0px 0px -10% 0px", threshold: 0.05 },
+        );
+        targets.forEach(function (el) {
+          io.observe(el);
+        });
+        setTimeout(function () {
+          document
+            .querySelectorAll(".reveal:not(.is-visible)")
+            .forEach(function (el) {
+              el.classList.add("is-visible");
+            });
+        }, 2500);
+
+        /* benchmark bars: fill on intersection (separate observer — .bar is a <td> and the .reveal translate misbehaves on table cells) */
+        var bars = document.querySelectorAll(".bar");
+        if (!bars.length) return;
+        var bio = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add("is-visible");
+                bio.unobserve(e.target);
+              }
+            });
+          },
+          { rootMargin: "0px 0px -10% 0px", threshold: 0.2 },
+        );
+        bars.forEach(function (el) {
+          bio.observe(el);
+        });
+      })();
+
+      /* stop the chapter-arrow nudge once the user has actually scrolled */
+      (function () {
+        var arrow = document.querySelector(".hero__index-arrow");
+        if (!arrow) return;
+        var rest = function () {
+          arrow.classList.add("is-rested");
+        };
+        window.addEventListener("scroll", rest, { once: true, passive: true });
+      })();
+
+      /* hero scroll cue — fade out once the user has actually started scrolling */
+      (function () {
+        var cue = document.querySelector(".hero__scroll");
+        if (!cue) return;
+        var THRESHOLD = 80;
+        var raf = 0;
+        var update = function () {
+          raf = 0;
+          if (window.scrollY > THRESHOLD) cue.classList.add("is-rested");
+          else cue.classList.remove("is-rested");
+        };
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (!raf) raf = requestAnimationFrame(update);
+          },
+          { passive: true },
+        );
+        update();
+      })();
+
+      /* pin the hero chapter index to the viewport bottom once the user starts scrolling;
+       hide it when the footer comes into view; reappear on scroll up */
+      (function () {
+        var idx = document.querySelector(".hero__index");
+        if (!idx) return;
+        var endrail = document.querySelector(".endrail");
+        var mq = window.matchMedia("(min-width: 1080px)");
+        var THRESHOLD = 80;
+        var nearFooter = false;
+
+        if (endrail && "IntersectionObserver" in window) {
+          var fio = new IntersectionObserver(
+            function (entries) {
+              nearFooter = entries[0].isIntersecting;
+              update();
+            },
+            { rootMargin: "0px 0px 0px 0px", threshold: 0 },
+          );
+          fio.observe(endrail);
+        }
+
+        var raf = 0;
+        var update = function () {
+          raf = 0;
+          if (!mq.matches) {
+            idx.classList.remove("is-pinned");
             return;
           }
-        } catch (e) {}
-        fetch('https://api.github.com/repos/' + repo, { headers: { 'Accept': 'application/vnd.github+json' } })
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (data) {
-            if (!data || typeof data.stargazers_count !== 'number') return;
-            var n = data.stargazers_count;
-            try { localStorage.setItem(KEY, JSON.stringify({ n: n, t: Date.now() })); } catch (e) {}
-            els.forEach(function (el) { paint(el, n); });
+          var pastHero = window.scrollY > THRESHOLD;
+          if (pastHero && !nearFooter) idx.classList.add("is-pinned");
+          else idx.classList.remove("is-pinned");
+        };
+        var schedule = function () {
+          if (!raf) raf = requestAnimationFrame(update);
+        };
+
+        window.addEventListener("scroll", schedule, { passive: true });
+        window.addEventListener("resize", schedule, { passive: true });
+        if (mq.addEventListener) mq.addEventListener("change", update);
+        else if (mq.addListener) mq.addListener(update);
+        update();
+      })();
+
+      /* chapter index scroll-spy + per-section progress fill */
+      (function () {
+        var links = Array.from(
+          document.querySelectorAll('.hero__index a[href^="#"]'),
+        );
+        if (!links.length) return;
+        var entries = links
+          .map(function (a) {
+            var id = a.getAttribute("href").slice(1);
+            var target = document.getElementById(id);
+            return target ? { id: id, link: a, target: target } : null;
           })
-          .catch(function () {});
-      });
-    })();
-  </script>
-</body>
+          .filter(Boolean);
+        if (!entries.length) return;
+        var raf = 0;
+        var update = function () {
+          var probe = window.scrollY + window.innerHeight * 0.5;
+          var active = null,
+            activeIdx = -1;
+          entries.forEach(function (e, i) {
+            var top = e.target.getBoundingClientRect().top + window.scrollY;
+            if (top <= probe) {
+              active = e;
+              activeIdx = i;
+            }
+          });
+          links.forEach(function (l, i) {
+            l.classList.remove("is-active");
+            l.classList.toggle("is-visited", i < activeIdx);
+            if (i !== activeIdx) l.style.removeProperty("--section-progress");
+          });
+          if (active) {
+            active.link.classList.add("is-active");
+            var topY =
+              active.target.getBoundingClientRect().top + window.scrollY;
+            var bottomY =
+              activeIdx < entries.length - 1
+                ? entries[activeIdx + 1].target.getBoundingClientRect().top +
+                  window.scrollY
+                : topY + active.target.offsetHeight;
+            var span = Math.max(1, bottomY - topY);
+            var progress = Math.max(0, Math.min(1, (probe - topY) / span));
+            active.link.style.setProperty(
+              "--section-progress",
+              progress.toFixed(4),
+            );
+          }
+          raf = 0;
+        };
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (!raf) raf = requestAnimationFrame(update);
+          },
+          { passive: true },
+        );
+        window.addEventListener(
+          "resize",
+          function () {
+            if (!raf) raf = requestAnimationFrame(update);
+          },
+          { passive: true },
+        );
+        update();
+      })();
+
+      /* scroll progress (transform: scaleX, GPU-accelerated) */
+      (function () {
+        var bar = document.querySelector(".scroll-progress");
+        if (!bar) return;
+        var fill = bar.querySelector("span") || bar;
+        var raf = 0;
+        var update = function () {
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - window.innerHeight || 1;
+          var frac = Math.min(1, Math.max(0, window.scrollY / max));
+          fill.style.transform = "scaleX(" + frac.toFixed(4) + ")";
+          raf = 0;
+        };
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (!raf) raf = requestAnimationFrame(update);
+          },
+          { passive: true },
+        );
+        update();
+      })();
+
+      /* copy-to-clipboard for code blocks */
+      (function () {
+        var blocks = document.querySelectorAll(".content .highlight");
+        if (!blocks.length || !navigator.clipboard) return;
+        blocks.forEach(function (block) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "code-copy";
+          btn.setAttribute("aria-label", "Copy code to clipboard");
+          btn.innerHTML =
+            '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg><span>copy</span>';
+          block.appendChild(btn);
+          btn.addEventListener("click", function () {
+            var code =
+              block.querySelector("code") || block.querySelector("pre");
+            if (!code) return;
+            navigator.clipboard.writeText(code.innerText).then(function () {
+              btn.classList.add("is-copied");
+              btn.querySelector("span").textContent = "copied";
+              setTimeout(function () {
+                btn.classList.remove("is-copied");
+                btn.querySelector("span").textContent = "copy";
+              }, 1600);
+            });
+          });
+        });
+      })();
+
+      /* GitHub stars */
+      (function () {
+        var nodes = document.querySelectorAll("[data-gh-stars]");
+        if (!nodes.length) return;
+        var TTL = 60 * 60 * 1000;
+        var format = function (n) {
+          if (n >= 10000) return (n / 1000).toFixed(0) + "k";
+          if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+          return String(n);
+        };
+        var paint = function (el, n) {
+          el.textContent = format(n);
+          el.classList.add("is-loaded");
+        };
+        var groups = {};
+        nodes.forEach(function (el) {
+          var repo = el.getAttribute("data-gh-stars");
+          (groups[repo] = groups[repo] || []).push(el);
+        });
+        Object.keys(groups).forEach(function (repo) {
+          var els = groups[repo];
+          var KEY = "gh-stars:" + repo;
+          try {
+            var cached = JSON.parse(localStorage.getItem(KEY) || "null");
+            if (cached && Date.now() - cached.t < TTL) {
+              els.forEach(function (el) {
+                paint(el, cached.n);
+              });
+              return;
+            }
+          } catch (e) {}
+          fetch("https://api.github.com/repos/" + repo, {
+            headers: { Accept: "application/vnd.github+json" },
+          })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (data) {
+              if (!data || typeof data.stargazers_count !== "number") return;
+              var n = data.stargazers_count;
+              try {
+                localStorage.setItem(
+                  KEY,
+                  JSON.stringify({ n: n, t: Date.now() }),
+                );
+              } catch (e) {}
+              els.forEach(function (el) {
+                paint(el, n);
+              });
+            })
+            .catch(function () {});
+        });
+      })();
+    </script>
+  </body>
 </html>

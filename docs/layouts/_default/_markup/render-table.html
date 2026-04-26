@@ -5,18 +5,21 @@
 {{- $headers    := slice -}}
 {{- if gt (len $headerRows) 0 }}{{ $headers = index $headerRows 0 }}{{ end -}}
 
-{{- /* Detect "Time" / "Speed" columns by header text */ -}}
+{{- /* Detect "Time" / "Speed" / "RSS" columns by header text */ -}}
 {{- $timeCol := -1 -}}
 {{- $speedCol := -1 -}}
+{{- $memCol := -1 -}}
 {{- range $i, $h := $headers -}}
   {{- $name := lower (trim (plainify $h.Text) " ") -}}
   {{- if eq $name "time"  }}{{ $timeCol  = $i }}{{ end -}}
   {{- if eq $name "speed" }}{{ $speedCol = $i }}{{ end -}}
+  {{- if or (hasPrefix $name "rss") (hasPrefix $name "memory") }}{{ $memCol = $i }}{{ end -}}
 {{- end -}}
 
 {{- /* Pre-pass: max numeric value per visualizable column */ -}}
 {{- $maxTime := 0.0 -}}
 {{- $maxSpeed := 0.0 -}}
+{{- $maxMem := 0.0 -}}
 {{- range $bodyRows -}}
   {{- if ge $timeCol 0 -}}
     {{- $cell := index . $timeCol -}}
@@ -34,9 +37,17 @@
       {{- if gt $v $maxSpeed }}{{ $maxSpeed = $v }}{{ end -}}
     {{- end -}}
   {{- end -}}
+  {{- if ge $memCol 0 -}}
+    {{- $cell := index . $memCol -}}
+    {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+    {{- if gt (len $m) 0 -}}
+      {{- $v := float (index $m 0) -}}
+      {{- if gt $v $maxMem }}{{ $maxMem = $v }}{{ end -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 
-{{- $hasBars := or (gt $maxTime 0.0) (gt $maxSpeed 0.0) -}}
+{{- $hasBars := or (or (gt $maxTime 0.0) (gt $maxSpeed 0.0)) (gt $maxMem 0.0) -}}
 
 <table{{ if $hasBars }} class="bench"{{ end }}>
   <thead>
@@ -67,6 +78,13 @@
               {{- $v := float (index $m 0) -}}
               {{- $pct = mul (div $v $maxTime) 100 -}}
               {{- $kind = "time" -}}
+            {{- end -}}
+          {{- else if and (eq $j $memCol) (gt $maxMem 0.0) -}}
+            {{- $m := findRE `[0-9]+\.?[0-9]*` (plainify $cell.Text) -}}
+            {{- if gt (len $m) 0 -}}
+              {{- $v := float (index $m 0) -}}
+              {{- $pct = mul (div $v $maxMem) 100 -}}
+              {{- $kind = "memory" -}}
             {{- end -}}
           {{- end -}}
           {{- if ge $pct 0.0 -}}

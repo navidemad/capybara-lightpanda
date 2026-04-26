@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussions — beta intake & questions
+    url: https://github.com/navidemad/capybara-lightpanda/discussions
+    about: Drop your suite size + Rails/Turbo versions, ask before filing, share workarounds.
+  - name: Lightpanda browser issues
+    url: https://github.com/lightpanda-io/browser/issues
+    about: If the bug is in the browser itself (CDP method missing, JS API not implemented), file upstream.
