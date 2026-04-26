@@ -30,8 +30,8 @@ bundle exec rubocop -a                # Lint with auto-fix
 - All CDP classes live under `Capybara::Lightpanda` namespace (Browser, Client, Cookies, etc.)
 - `Browser#go_to` includes a `readyState` polling fallback — do not remove it. Lightpanda's `Page.loadEventFired` is unreliable.
 - `Browser#back`/`#forward` use JS `history.back()`/`history.forward()` because `Page.getNavigationHistory` and `Page.navigateToHistoryEntry` don't exist in Lightpanda. `Browser#refresh` uses `Page.reload` (implemented upstream in PR #1992).
-- `Cookies#clear` catches `BrowserError` and falls back to deleting individually. `Network.clearBrowserCookies` is safe on >= v0.2.6, but the fallback remains for older versions.
-- `Cookies#all` uses `Network.getCookies` (NOT `getAllCookies` — that method doesn't exist in Lightpanda).
+- `Cookies#clear` always sweeps via per-origin `Network.getCookies(urls:)` + `Network.deleteCookies(url:)` because (a) `Network.clearBrowserCookies` raises `InvalidParams` on current Lightpanda nightly (regressed from the >= v0.2.6 fix) and (b) `Network.getCookies` (no `urls`) is scoped to the current page's origin only, so cookies set on previously-visited domains are otherwise invisible. `Browser#visited_origins` tracks `scheme://host:port` strings across `go_to` calls so the sweep can enumerate cross-domain cookies.
+- `Cookies#all` uses `Network.getCookies` (NOT `getAllCookies` — that method doesn't exist in Lightpanda). Result is scoped to the current page's origin only; pass `urls:` explicitly via `Browser#command("Network.getCookies", urls: [...])` for cross-origin enumeration.
 - `javascripts/index.js` contains the XPath polyfill (`xpathFind` + `document.evaluate` shim), Turbo activity tracking, the `requestSubmit` polyfill, and a `querySelector{,All}` polyfill that rewrites `#id` → `[id="..."]` to work around a Lightpanda CSS-engine bug where `#id` shorthand fails after the body is mutated via `innerHTML` and then replaced (Turbo Drive's snapshot+swap pattern). `Browser#create_page` registers it via `Page.addScriptToEvaluateOnNewDocument` so Lightpanda auto-injects it on every navigation. No manual re-injection needed.
 - Node identity uses CDP remote object IDs (`Runtime.callFunctionOn` with `this` binding). All node operations route through a single `call` method for centralized error handling. JS function declarations are self-contained constants (no `_lightpanda` dependency) so they work in any execution context including iframes.
 - `Node#[]` returns resolved URLs for `src`/`href`/`action` attributes via `PROPERTY_OR_ATTRIBUTE_JS` (matching Capybara's expected semantics).
@@ -57,7 +57,7 @@ To test against a real Rails app, add `gem "capybara-lightpanda", path: "../capy
 
 ## Reference: Ferrum Gem
 
-When implementing new CDP features or improving existing ones, refer to [Ferrum](https://github.com/rubinat/ferrum) (Ruby CDP client for Chrome) for design inspiration — especially for API patterns, error handling, and Capybara driver conventions. However, always adapt for Lightpanda's constraints: missing CDP methods, unreliable events, XPath polyfill needs, async navigation, and crash recovery. Never blindly copy Ferrum patterns that assume Chrome behavior (e.g., synchronous `Page.navigate`, `Page.reload`, `getAllCookies`, native XPathResult).
+When implementing new CDP features or improving existing ones, refer to [Ferrum](https://github.com/rubycdp/ferrum) (Ruby CDP client for Chrome) for design inspiration — especially for API patterns, error handling, and Capybara driver conventions. However, always adapt for Lightpanda's constraints: missing CDP methods, unreliable events, XPath polyfill needs, async navigation, and crash recovery. Never blindly copy Ferrum patterns that assume Chrome behavior (e.g., synchronous `Page.navigate`, `Page.reload`, `getAllCookies`, native XPathResult).
 
 ## Sync Upstream
 
