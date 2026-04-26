@@ -117,7 +117,44 @@ RSpec.configure do |config|
       # waiting on that navigation never sees it complete.
       /#assert_current_path should wait for current_path/,
       /#assert_current_path should wait for current_path to disappear/,
+      /#assert_no_current_path\? should wait for current_path to disappear/,
       /#has_current_path\? should wait for current_path/,
+      /#has_no_current_path\? should wait for current_path to disappear/,
+      # Lightpanda doesn't preserve URL fragments through redirects: visiting
+      # `/redirect#fragment` lands on `/landed`, dropping the `#fragment`.
+      /#current_url, #current_path, #current_host maintains fragment/,
+      # `<input type=range>` has no slider DOM in Lightpanda — `set` writes
+      # the value but the browser doesn't clamp/validate it the way Chrome's
+      # range widget does, and `min`/`max` constraint enforcement is missing.
+      /#fill_in with input\[type="range"\] should set the range slider to valid values/,
+      /#fill_in with input\[type="range"\] should respect the range slider limits/,
+      # CSS selector escape syntax (\31, \. etc.) — Lightpanda's selector
+      # parser doesn't handle the CSS escape grammar.
+      /#find with css selectors should support escaping characters/,
+      /#has_css\? should allow escapes in the CSS selector/,
+      # Frame-closed detection — Lightpanda doesn't expose enough state to
+      # distinguish a closed iframe from a live one within the frame_stack.
+      /#switch_to_frame works if the frame is closed/,
+      /#within_frame works if the frame is closed/,
+      # `validity` API not implemented — `el.validity` returns undefined,
+      # so `:valid` filter and `el.validationMessage` don't work.
+      /#has_field with valid should be true if field is valid/,
+      /#has_field with valid should be false if field is invalid/,
+      # CSS text-transform / case sensitivity for invisible text — depends
+      # on getComputedStyle returning cascade-resolved `text-transform`,
+      # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.
+      /#assert_text should raise error.*if requested text is present but invisible and with incorrect case/,
+      # `obscured: true/false` for nodes outside viewport — needs real
+      # geometry & viewport (Page.getLayoutMetrics is hardcoded 1920x1080).
+      /#all with obscured filter should not find nodes on top outside the viewport when false/,
+      /#all with obscured filter should find top nodes outside the viewport when true/,
+      # ShadowRoot textContent — Lightpanda preserves source-template
+      # whitespace differently than Chrome (see lightpanda-io.md known bug 8),
+      # which leaks into `node #shadow_root should get visible text`.
+      /node #shadow_root should get visible text/,
+      # `<input list=...>` datalist — Lightpanda renders the input but the
+      # browser-side datalist UI/option-fill logic isn't implemented.
+      /#select input with datalist should select an option/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }

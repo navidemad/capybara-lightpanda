@@ -11,10 +11,12 @@ module Capybara
       end
 
       def text
+        ensure_connected
         call("function() { return this.textContent }")
       end
 
       def all_text
+        ensure_connected
         filter_text(call("function() { return this.textContent }"))
       end
 
@@ -23,6 +25,7 @@ module Capybara
       # that fail VISIBLE_JS, and emit newlines around block-display elements
       # (the part of innerText behavior we still need).
       def visible_text
+        ensure_connected
         call(VISIBLE_TEXT_JS).to_s
                              .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
                              .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
@@ -99,7 +102,18 @@ module Capybara
           when "datetime-local"
             call(SET_VALUE_JS, format_datetime_value(value))
           else
-            call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
+            str = value.to_s
+            # HTML implicit-submission: a trailing \n in a text-like input is
+            # like the user pressing Enter — submits the form when there's a
+            # default submit button OR exactly one text control. Strip the \n,
+            # set the value, then route through Capybara's click flow on the
+            # synthesized/found default button so CLICK_JS's fetch+swap runs.
+            if str.end_with?("\n") && %w[text email password url tel search number].include?(type)
+              call(SET_VALUE_JS, truncate_to_maxlength(str.chomp))
+              implicit_submit
+            else
+              call(SET_VALUE_JS, truncate_to_maxlength(str))
+            end
           end
         elsif tag == "textarea"
           call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
@@ -136,7 +150,9 @@ module Capybara
       def tag_name
         # ShadowRoot/DocumentFragment have no tagName; report a stable label so
         # Capybara's failure messages can render `tag="ShadowRoot"`.
-        call("function() {
+        # Memoized: an objectId points to a single DOM node whose tagName is
+        # immutable for that node's lifetime.
+        @tag_name ||= call("function() {
           if (this.nodeType === 11) return 'ShadowRoot';
           return this.tagName ? this.tagName.toLowerCase() : '';
         }")
@@ -212,6 +228,25 @@ module Capybara
 
       private
 
+      # Capybara's `automatic_reload` re-runs the original query when an element
+      # access raises one of the driver's `invalid_element_errors`. After a DOM
+      # mutation like `replaceWith`, our cached objectId still resolves to the
+      # detached node, so reads succeed (with stale data) and the auto-reload
+      # never fires. Detect detachment via `isConnected` and raise so the
+      # synchronize-loop notices and triggers a re-find.
+      def ensure_connected
+        connected = call("function() { return this.isConnected }")
+        return if connected
+
+        raise ObsoleteNode.new(self, "Node is no longer attached to the document")
+      end
+
+      # Trigger implicit form submission via the IMPLICIT_SUBMIT_JS pipeline
+      # (same fetch+swap as CLICK_JS, but without a submitter).
+      def implicit_submit
+        call(IMPLICIT_SUBMIT_JS)
+      end
+
       # Format helpers for Date/Time/DateTime values passed to date/time/datetime-local
       # inputs. Mirror Capybara::Selenium's SettableValue so a Ruby Time fills the
       # field with the same string the user would type.
@@ -259,8 +294,9 @@ module Capybara
 
       # Centralized command dispatch via Runtime.callFunctionOn.
       # The function runs with `this` bound to the DOM element by CDP.
-      # All JS function declarations are self-contained (no _lightpanda dependency)
-      # so they work in any execution context including iframes.
+      # JS bodies may reference `_lightpanda.*` helpers — they're registered via
+      # Page.addScriptToEvaluateOnNewDocument in every document (top frame and
+      # iframes alike), so the namespace is available wherever `this` lives.
       def call(function_declaration, *args)
         driver.browser.with_default_context_wait do
           driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
@@ -381,16 +417,36 @@ module Capybara
           var enctype = (this.getAttribute('formenctype') ||
                          form.getAttribute('enctype') ||
                          'application/x-www-form-urlencoded').toLowerCase();
+          // Lightpanda's URLSearchParams.toString() drops the `=` when the value
+          // is an empty string (`{key: ""}` serializes as `key`, not `key=`),
+          // which makes the server parse the field as nil instead of "". Lightpanda
+          // also doesn't perform the HTML-spec LF→CRLF normalization for textarea
+          // values during form submission. Build the query string by hand so both
+          // round-trip correctly.
+          var formEncode = function(fd) {
+            var pairs = [];
+            for (var entry of fd.entries()) {
+              var value = entry[1];
+              if (typeof value === 'string') {
+                // Normalize line endings to CRLF per HTML form-data set spec.
+                value = value.replace(/\\r\\n|\\r|\\n/g, '\\r\\n');
+              }
+              pairs.push(encodeURIComponent(entry[0]).replace(/%20/g, '+') +
+                         '=' +
+                         encodeURIComponent(value).replace(/%20/g, '+'));
+            }
+            return pairs.join('&');
+          };
           var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
           if (method === 'GET') {
             var sep = action.indexOf('?') >= 0 ? '&' : '?';
-            action = action + sep + new URLSearchParams(formData).toString();
+            action = action + sep + formEncode(formData);
           } else if (enctype === 'multipart/form-data') {
             // Pass FormData directly — fetch sets Content-Type with the correct boundary.
             opts.body = formData;
           } else {
             opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-            opts.body = new URLSearchParams(formData);
+            opts.body = formEncode(formData);
           }
 
           return fetch(action, opts).then(function(r) {
@@ -404,124 +460,9 @@ module Capybara
         }
       JS
 
-      VISIBLE_JS = <<~JS
-        function() {
-          var TAG = (this.tagName || '').toUpperCase();
-          // Elements that are never rendered, regardless of CSS.
-          if (TAG === 'HEAD' || TAG === 'TEMPLATE' || TAG === 'NOSCRIPT' ||
-              TAG === 'SCRIPT' || TAG === 'STYLE' || TAG === 'TITLE') return false;
-          if (TAG === 'INPUT' && (this.type || '').toLowerCase() === 'hidden') return false;
+      VISIBLE_JS = "function() { return _lightpanda.isVisible(this); }"
 
-          // Walk ancestors for cascade-based hiding that getComputedStyle alone misses
-          // (Lightpanda-specific: class-rule resolution + special-element rules,
-          // plus the HTML `hidden` attribute which checkVisibility does not honor).
-          var node = this;
-          while (node && node.nodeType === 1) {
-            if (node.hasAttribute && node.hasAttribute('hidden')) return false;
-            var parent = node.parentNode;
-            if (parent && parent.nodeType === 1) {
-              var ptag = (parent.tagName || '').toUpperCase();
-              if (ptag === 'HEAD' || ptag === 'TEMPLATE' || ptag === 'NOSCRIPT') return false;
-              // <details> hides everything but the first <summary> when closed.
-              if (ptag === 'DETAILS' && !parent.open) {
-                var ntag = (node.tagName || '').toUpperCase();
-                if (ntag !== 'SUMMARY') return false;
-              }
-            }
-            node = parent;
-          }
-
-          // Lightpanda's checkVisibility() catches display:none from inline styles
-          // and class rules (CSSOM PR #1797), but does not honor visibility:hidden
-          // — so we always check that explicitly via getComputedStyle.
-          var win = this.ownerDocument.defaultView || window;
-          var style = win.getComputedStyle(this);
-          if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
-          if (typeof this.checkVisibility === 'function') {
-            return this.checkVisibility();
-          }
-          if (style.display === 'none') return false;
-          if (this.offsetParent === null && style.position !== 'fixed' &&
-              TAG !== 'BODY' && TAG !== 'HTML') return false;
-          return true;
-        }
-      JS
-
-      # Walk children and accumulate text from visible nodes only. Inserts
-      # newlines around block-display containers so paragraphs/lists render with
-      # natural breaks (Capybara expects this from Chrome's innerText).
-      VISIBLE_TEXT_JS = <<~JS
-        function() {
-          var BLOCK = { BLOCK:1, FLEX:1, GRID:1, 'LIST-ITEM':1, TABLE:1, 'TABLE-ROW':1,
-                        'TABLE-CAPTION':1, 'TABLE-CELL':1 };
-          var BLOCK_TAG = { ADDRESS:1, ARTICLE:1, ASIDE:1, BLOCKQUOTE:1, DETAILS:1, DIALOG:1,
-                            DIV:1, DL:1, DT:1, DD:1, FIELDSET:1, FIGCAPTION:1, FIGURE:1,
-                            FOOTER:1, FORM:1, H1:1, H2:1, H3:1, H4:1, H5:1, H6:1, HEADER:1,
-                            HGROUP:1, HR:1, LI:1, MAIN:1, NAV:1, OL:1, P:1, PRE:1, SECTION:1,
-                            TABLE:1, TR:1, UL:1 };
-
-          function visible(el) {
-            var tag = (el.tagName || '').toUpperCase();
-            if (tag === 'HEAD' || tag === 'TEMPLATE' || tag === 'NOSCRIPT' ||
-                tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TITLE') return false;
-            if (tag === 'INPUT' && (el.type || '').toLowerCase() === 'hidden') return false;
-            var n = el;
-            while (n && n.nodeType === 1) {
-              if (n.hasAttribute && n.hasAttribute('hidden')) return false;
-              var p = n.parentNode;
-              if (p && p.nodeType === 1) {
-                var pt = (p.tagName || '').toUpperCase();
-                if (pt === 'HEAD' || pt === 'TEMPLATE' || pt === 'NOSCRIPT') return false;
-                if (pt === 'DETAILS' && !p.open) {
-                  var nt = (n.tagName || '').toUpperCase();
-                  if (nt !== 'SUMMARY') return false;
-                }
-              }
-              n = p;
-            }
-            var win = el.ownerDocument.defaultView || window;
-            var style = win.getComputedStyle(el);
-            if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
-            if (typeof el.checkVisibility === 'function') return el.checkVisibility();
-            if (style.display === 'none') return false;
-            return true;
-          }
-
-          // Collapse runs of ASCII whitespace (preserving NBSP) to a single space —
-          // matches Chrome's innerText whitespace handling for text nodes.
-          function normText(s) {
-            return s.replace(/[\\t\\n\\r\\f\\v ]+/g, ' ');
-          }
-
-          function walk(node) {
-            if (node.nodeType === 3) return normText(node.nodeValue);
-            // DocumentFragment / ShadowRoot — no element of its own to test
-            // for visibility, just walk children.
-            if (node.nodeType === 11) {
-              var fout = '';
-              for (var k = 0; k < node.childNodes.length; k++) fout += walk(node.childNodes[k]);
-              return fout;
-            }
-            if (node.nodeType !== 1) return '';
-            if (!visible(node)) return '';
-            var tag = (node.tagName || '').toUpperCase();
-            if (tag === 'TEXTAREA') return node.value || '';
-            if (tag === 'BR') return '\\n';
-            var win = node.ownerDocument.defaultView || window;
-            var style = win.getComputedStyle(node);
-            var disp = (style.display || '').toUpperCase();
-            var isBlock = BLOCK[disp] || BLOCK_TAG[tag];
-            var out = '';
-            for (var i = 0; i < node.childNodes.length; i++) {
-              out += walk(node.childNodes[i]);
-            }
-            if (isBlock) out = '\\n' + out + '\\n';
-            return out;
-          }
-
-          return walk(this);
-        }
-      JS
+      VISIBLE_TEXT_JS = "function() { return _lightpanda.visibleText(this); }"
 
       PROPERTY_OR_ATTRIBUTE_JS = <<~JS
         function(name) {
@@ -564,6 +505,80 @@ module Capybara
           this.value = value;
           this.dispatchEvent(new Event('input', {bubbles: true}));
           this.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      JS
+
+      # HTML implicit-submission: when the user presses Enter in a text-like
+      # field, the form is submitted if either (a) there's a default submit
+      # button, or (b) the form has exactly one submittable text control.
+      # `this` is the input. Mirror CLICK_JS's submit pipeline so the gem's
+      # fetch+swap path runs (Lightpanda's form.submit() doesn't navigate).
+      IMPLICIT_SUBMIT_JS = <<~JS
+        function() {
+          var form = this.form;
+          if (!form) return;
+          var hasDefault = !!form.querySelector(
+            'button[type=submit], button:not([type]), input[type=submit], input[type=image]'
+          );
+          if (!hasDefault) {
+            var textInputs = form.querySelectorAll(
+              'input[type=text], input[type=email], input[type=password], ' +
+              'input[type=url], input[type=tel], input[type=search], ' +
+              'input[type=number], input:not([type])'
+            );
+            if (textInputs.length !== 1) return;
+          }
+
+          if (typeof Turbo === 'undefined') {
+            var ev;
+            if (typeof SubmitEvent === 'function') {
+              ev = new SubmitEvent('submit', { bubbles: true, cancelable: true });
+            } else {
+              ev = new Event('submit', { bubbles: true, cancelable: true });
+            }
+            var allowed = form.dispatchEvent(ev);
+            if (!allowed) return;
+          }
+
+          var formData = new FormData(form);
+          var action = form.getAttribute('action') || window.location.href;
+          try { action = new URL(action, window.location.href).href; } catch (e) {}
+          var method = (form.getAttribute('method') || 'GET').toUpperCase();
+          var enctype = (form.getAttribute('enctype') || 'application/x-www-form-urlencoded').toLowerCase();
+
+          var formEncode = function(fd) {
+            var pairs = [];
+            for (var entry of fd.entries()) {
+              var value = entry[1];
+              if (typeof value === 'string') {
+                value = value.replace(/\\r\\n|\\r|\\n/g, '\\r\\n');
+              }
+              pairs.push(encodeURIComponent(entry[0]).replace(/%20/g, '+') +
+                         '=' +
+                         encodeURIComponent(value).replace(/%20/g, '+'));
+            }
+            return pairs.join('&');
+          };
+
+          var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
+          if (method === 'GET') {
+            var sep = action.indexOf('?') >= 0 ? '&' : '?';
+            action = action + sep + formEncode(formData);
+          } else if (enctype === 'multipart/form-data') {
+            opts.body = formData;
+          } else {
+            opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            opts.body = formEncode(formData);
+          }
+
+          return fetch(action, opts).then(function(r) {
+            return r.text().then(function(html) { return { url: r.url, html: html }; });
+          }).then(function(o) {
+            var doc = new DOMParser().parseFromString(o.html, 'text/html');
+            document.title = (doc.title || '');
+            document.body.innerHTML = doc.body.innerHTML;
+            try { history.replaceState(null, '', o.url); } catch (e) {}
+          });
         }
       JS
 
@@ -618,56 +633,9 @@ module Capybara
         }
       JS
 
-      EDITABLE_HOST_JS = <<~JS
-        function() {
-          if (this.isContentEditable) return true;
-          var n = this;
-          while (n && n.nodeType === 1) {
-            if (n.hasAttribute && n.hasAttribute('contenteditable')) {
-              var v = (n.getAttribute('contenteditable') || '').toLowerCase();
-              return v !== 'false';
-            }
-            n = n.parentElement;
-          }
-          return false;
-        }
-      JS
+      EDITABLE_HOST_JS = "function() { return _lightpanda.isContentEditable(this); }"
 
-      # HTML defines a disabled form control as one whose own `disabled`
-      # attribute is set OR whose ancestor select/optgroup/fieldset is disabled
-      # (with a fieldset-disabled exception for descendants of its first legend).
-      # `this.disabled` only reflects the element's own attribute, so we walk
-      # up the tree to honor the inherited cases.
-      DISABLED_JS = <<~JS
-        function() {
-          if (this.disabled) return true;
-          var tag = (this.tagName || '').toUpperCase();
-          if (tag === 'OPTION') {
-            var p = this.parentElement;
-            while (p && (p.tagName || '').toUpperCase() === 'OPTGROUP') {
-              if (p.disabled) return true;
-              p = p.parentElement;
-            }
-            if (p && (p.tagName || '').toUpperCase() === 'SELECT' && p.disabled) return true;
-          }
-          var FORM = { INPUT:1, BUTTON:1, SELECT:1, TEXTAREA:1, OPTION:1 };
-          if (FORM[tag]) {
-            var node = this.parentElement;
-            while (node) {
-              if ((node.tagName || '').toUpperCase() === 'FIELDSET' && node.disabled) {
-                var firstLegend = null;
-                for (var c = node.firstElementChild; c; c = c.nextElementSibling) {
-                  if ((c.tagName || '').toUpperCase() === 'LEGEND') { firstLegend = c; break; }
-                }
-                if (firstLegend && firstLegend.contains(this)) return false;
-                return true;
-              }
-              node = node.parentElement;
-            }
-          }
-          return false;
-        }
-      JS
+      DISABLED_JS = "function() { return _lightpanda.isDisabled(this); }"
 
       GET_STYLE_JS = <<~JS
         function(prop) {
@@ -687,36 +655,7 @@ module Capybara
         }
       JS
 
-      OBSCURED_JS = <<~JS
-        function() {
-          var doc = this.ownerDocument;
-          var win = doc.defaultView || window;
-          // An element with display:none, visibility:hidden, or the `hidden`
-          // attribute can never be the topmost element at any point —
-          // semantically it's obscured. (Lightpanda returns a fake non-zero
-          // bounding rect for display:none, so this short-circuit is required.)
-          var style = win.getComputedStyle(this);
-          if (style.display === 'none') return true;
-          if (style.visibility === 'hidden' || style.visibility === 'collapse') return true;
-          // `hidden` attribute on self or any ancestor cascades to invisible.
-          var anc = this;
-          while (anc && anc.nodeType === 1) {
-            if (anc.hasAttribute && anc.hasAttribute('hidden')) return true;
-            anc = anc.parentNode;
-          }
-          var r = this.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) return true;
-          var cx = r.left + (r.width / 2);
-          var cy = r.top + (r.height / 2);
-          var w = win.innerWidth || doc.documentElement.clientWidth;
-          var h = win.innerHeight || doc.documentElement.clientHeight;
-          if (cx < 0 || cy < 0 || cx > w || cy > h) return true;
-          var hit = doc.elementFromPoint(cx, cy);
-          if (!hit) return true;
-          if (hit === this) return false;
-          return !this.contains(hit);
-        }
-      JS
+      OBSCURED_JS = "function() { return _lightpanda.isObscured(this); }"
 
       GET_PATH_JS = <<~JS
         function() {

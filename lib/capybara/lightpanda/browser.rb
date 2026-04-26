@@ -618,6 +618,8 @@ module Capybara
           { "__lightpanda_node__" => result["objectId"] }
         elsif %w[boolean number string].include?(result["type"])
           result["value"]
+        elsif result["subtype"] == "array" && result["objectId"]
+          serialize_remote_array(result["objectId"])
         elsif result["type"] == "object" && result["objectId"]
           serialize_remote_object(result["objectId"])
         else
@@ -636,6 +638,21 @@ module Capybara
           returnByValue: true
         )
         handle_evaluate_response(json)
+      ensure
+        release_object(object_id)
+      end
+
+      # Walk an array's own indexed properties via `Runtime.getProperties`,
+      # unwrapping each element through the regular result pipeline so that
+      # DOM-node entries surface as `{ "__lightpanda_node__" => ... }` instead
+      # of being flattened to `{}` by `returnByValue: true`. Releases the
+      # outer array's objectId once we've harvested its elements.
+      def serialize_remote_array(object_id)
+        properties = get_object_properties(object_id).fetch("result", [])
+        properties
+          .select { |p| p["enumerable"] && p["name"] =~ /\A\d+\z/ }
+          .sort_by { |p| p["name"].to_i }
+          .map { |p| unwrap_call_result(p["value"] || {}) }
       ensure
         release_object(object_id)
       end

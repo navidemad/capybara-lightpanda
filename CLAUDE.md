@@ -12,7 +12,15 @@ Capybara → capybara-lightpanda (driver + CDP client) → Lightpanda browser (Z
 
 ```bash
 bundle install                        # Install dependencies
-bundle exec rake test                 # Run tests
+bundle exec rake spec:incremental     # PREFERRED: run specs file-by-file, skipping ones already passing.
+                                      #   Records pass/fail in tmp/spec_progress.json. Failed files re-run with
+                                      #   --only-failures so iteration stays fast. Env: CLEAR=1 resets progress,
+                                      #   FAIL_FAST=1 stops on first failure, ONLY=<glob> restricts the file set.
+                                      #   Use this instead of `rake spec:all` (which runs everything from scratch
+                                      #   and can take 10+ minutes per run).
+bundle exec rake spec                 # Run only spec/features/driver_spec.rb (~2 min)
+bundle exec rake spec:shared          # Run only spec/features/session_spec.rb (~10 min, full Capybara shared specs)
+bundle exec rake spec:unit            # Run unit specs
 bundle exec rubocop                   # Lint
 bundle exec rubocop -a                # Lint with auto-fix
 ```
