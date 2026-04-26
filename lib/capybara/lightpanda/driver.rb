@@ -186,6 +186,18 @@ module Capybara
         ]
       end
 
+      # Pause execution for interactive debugging.
+      def pause
+        if $stdin.tty?
+          warn "\nPaused. Press Enter to continue."
+          $stdin.gets
+        else
+          warn "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
+          trap("CONT") {} # rubocop:disable Lint/EmptyBlock
+          ::Process.kill("STOP", ::Process.pid)
+        end
+      end
+
       private
 
       # Unwrap arguments before sending to the browser. Capybara::Node::Element wraps
@@ -196,32 +208,18 @@ module Capybara
       end
 
       # Walk through evaluate-script results turning DOM-node markers (the
-      # `{ "objectId" => "..." }` hashes produced by `Browser#unwrap_call_result`)
+      # `{ "__lightpanda_node__" => "..." }` hashes produced by `Browser#unwrap_call_result`)
       # into Lightpanda::Node instances so Capybara can wrap them as elements.
       def unwrap_script_result(value)
         case value
         when Array then value.map { |v| unwrap_script_result(v) }
         when Hash
-          if value.size == 1 && value.key?("objectId")
-            Node.new(self, value["objectId"])
+          if value.size == 1 && value.key?("__lightpanda_node__")
+            Node.new(self, value["__lightpanda_node__"])
           else
             value.transform_values { |v| unwrap_script_result(v) }
           end
         else value
-        end
-      end
-
-      public
-
-      # Pause execution for interactive debugging.
-      def pause
-        if $stdin.tty?
-          warn "\nPaused. Press Enter to continue."
-          $stdin.gets
-        else
-          warn "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
-          trap("CONT") {} # rubocop:disable Lint/EmptyBlock
-          ::Process.kill("STOP", ::Process.pid)
         end
       end
     end

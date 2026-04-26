@@ -160,18 +160,27 @@ module Capybara
       # Equality must compare the underlying DOM node, not the (transient) remote_object_id.
       # The same DOM element receives a new objectId on each Runtime call, so a fast path
       # on string equality is just a shortcut — falls back to backendNodeId resolution
-      # (stable per page) when the strings differ.
+      # (stable per page) when the strings differ. If either side fails to resolve a
+      # backendNodeId (e.g., both objectIds were released), treat them as not equal
+      # rather than collapsing two unrelated released nodes onto each other.
       def ==(other)
         return false unless other.is_a?(self.class)
         return true if remote_object_id == other.remote_object_id
 
-        backend_node_id == other.backend_node_id
+        left = backend_node_id
+        right = other.backend_node_id
+        !left.nil? && left == right
       end
 
       alias eql? ==
 
+      # Stable hash for Set/Hash membership. Prefer the backendNodeId (consistent
+      # across CDP calls for the same DOM node); fall back to the remote_object_id
+      # string when describeNode failed transiently. Two Nodes that compare equal
+      # via `==` always hash the same: equal-by-remote_object_id implies equal
+      # fallback string; equal-by-backend_node_id implies equal primary key.
       def hash
-        backend_node_id.hash
+        (backend_node_id || @remote_object_id).hash
       end
 
       def backend_node_id
@@ -284,10 +293,16 @@ module Capybara
           try { action = new URL(action, window.location.href).href; } catch (e) {}
           var method = (this.getAttribute('formmethod') || form.getAttribute('method') || 'GET').toUpperCase();
 
+          var enctype = (this.getAttribute('formenctype') ||
+                         form.getAttribute('enctype') ||
+                         'application/x-www-form-urlencoded').toLowerCase();
           var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
           if (method === 'GET') {
             var sep = action.indexOf('?') >= 0 ? '&' : '?';
             action = action + sep + new URLSearchParams(formData).toString();
+          } else if (enctype === 'multipart/form-data') {
+            // Pass FormData directly — fetch sets Content-Type with the correct boundary.
+            opts.body = formData;
           } else {
             opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
             opts.body = new URLSearchParams(formData);

@@ -162,7 +162,7 @@ module Capybara
       # No-args fast path uses Runtime.evaluate; with args we wrap as a function
       # and dispatch via Runtime.callFunctionOn so `arguments[i]` is bound.
       # Both paths use `returnByValue: false` and unwrap so DOM-node returns
-      # come back as `{ "objectId" => ... }` for the Driver to wrap.
+      # come back as `{ "__lightpanda_node__" => ... }` for the Driver to wrap.
       def evaluate(expression, *args)
         if args.empty?
           response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
@@ -537,7 +537,7 @@ module Capybara
       # Run a wrapped function via Runtime.callFunctionOn with `arguments` bound.
       # `args` is converted via `serialize_argument` (Nodes → objectId, scalars → value).
       # When `return_by_value: false` (the default) the return value is unwrapped via
-      # `unwrap_call_result` so that DOM nodes come back as `{ "objectId" => ... }`
+      # `unwrap_call_result` so that DOM nodes come back as `{ "__lightpanda_node__" => ... }`
       # hashes the Driver can wrap as Capybara nodes.
       def call_with_args(function_declaration, args, return_by_value: false)
         params = {
@@ -554,28 +554,37 @@ module Capybara
       end
 
       # Translate a non-by-value Runtime result into a plain Ruby value, surfacing
-      # DOM nodes as `{ "objectId" => "..." }` so the Driver can wrap them.
+      # DOM nodes as `{ "__lightpanda_node__" => "..." }` so the Driver can wrap
+      # them. The sentinel key (rather than a plain "objectId") prevents
+      # misclassifying user JS that legitimately returns `{ objectId: "x" }`.
       def unwrap_call_result(result)
         return nil if result["type"] == "undefined"
         return nil if result["subtype"] == "null"
 
         if result["subtype"] == "node" && result["objectId"]
-          { "objectId" => result["objectId"] }
+          { "__lightpanda_node__" => result["objectId"] }
         elsif %w[boolean number string].include?(result["type"])
           result["value"]
         elsif result["type"] == "object" && result["objectId"]
-          # Re-fetch as JSON-serializable value for plain objects/arrays.
-          # Cheaper than walking properties and good enough for shared specs.
-          json = page_command(
-            "Runtime.callFunctionOn",
-            objectId: result["objectId"],
-            functionDeclaration: "function() { return this }",
-            returnByValue: true
-          )
-          handle_evaluate_response(json)
+          serialize_remote_object(result["objectId"])
         else
           result["value"]
         end
+      end
+
+      # Re-fetch a remote object as JSON-serializable value for plain objects/arrays.
+      # Cheaper than walking properties and good enough for shared specs. Releases
+      # the original handle so long-lived sessions don't accumulate leaked objectIds.
+      def serialize_remote_object(object_id)
+        json = page_command(
+          "Runtime.callFunctionOn",
+          objectId: object_id,
+          functionDeclaration: "function() { return this }",
+          returnByValue: true
+        )
+        handle_evaluate_response(json)
+      ensure
+        release_object(object_id)
       end
 
       # objectId of `document`, used as the `this` context for callFunctionOn when

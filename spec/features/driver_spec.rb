@@ -887,6 +887,20 @@ RSpec.describe Capybara::Lightpanda::Driver do
       expect(el.tag_name).to eq("ul")
     end
 
+    # XPath spec: positional predicates on reverse axes evaluate in axis
+    # (proximity) order. ancestor::*[1] must pick the parent, NOT the root.
+    # Pins the polyfill regression where reverse axes were emitted in document
+    # order, flipping which node `[1]` selected.
+    it "ancestor::*[1] returns the nearest ancestor (proximity order predicate)" do
+      el = session.find(:xpath, "//td[normalize-space() = '1']/ancestor::*[1]")
+      expect(el.tag_name).to eq("tr")
+    end
+
+    it "preceding-sibling::*[1] returns the closest preceding sibling" do
+      el = session.find(:xpath, "//li[3]/preceding-sibling::*[1]")
+      expect(el.text).to eq("Item 2")
+    end
+
     it "handles concat()" do
       el = session.find(:xpath, "//*[contains(concat(' ', @class, ' '), ' item ')]", match: :first)
       expect(el.tag_name).to eq("li")
