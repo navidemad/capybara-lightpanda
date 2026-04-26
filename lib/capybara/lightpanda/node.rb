@@ -157,15 +157,16 @@ module Capybara
         object_ids.map { |oid| self.class.new(driver, oid) }
       end
 
-      # Equality must compare the underlying DOM node, not the (transient) remote_object_id.
-      # The same DOM element receives a new objectId on each Runtime call, so a fast path
-      # on string equality is just a shortcut — falls back to backendNodeId resolution
-      # (stable per page) when the strings differ. If either side fails to resolve a
-      # backendNodeId (e.g., both objectIds were released), treat them as not equal
-      # rather than collapsing two unrelated released nodes onto each other.
+      # Equality compares the underlying DOM node via backendNodeId, the only
+      # identity that's stable across CDP calls. NO fast path on remote_object_id:
+      # two wrappers with the same remote_object_id can resolve to different
+      # backendNodeIds (one cached at 42, the other still nil from a transient
+      # describeNode failure), and a remote-id fast path there would return `true`
+      # while `#hash` returned different values, violating the hash contract.
+      # When either side fails to resolve, the nodes are treated as not equal so
+      # stale wrappers don't collapse onto each other.
       def ==(other)
         return false unless other.is_a?(self.class)
-        return true if remote_object_id == other.remote_object_id
 
         left = backend_node_id
         right = other.backend_node_id
@@ -174,13 +175,12 @@ module Capybara
 
       alias eql? ==
 
-      # Stable hash for Set/Hash membership. Prefer the backendNodeId (consistent
-      # across CDP calls for the same DOM node); fall back to the remote_object_id
-      # string when describeNode failed transiently. Two Nodes that compare equal
-      # via `==` always hash the same: equal-by-remote_object_id implies equal
-      # fallback string; equal-by-backend_node_id implies equal primary key.
+      # Hash on backendNodeId so equal nodes always hash the same. When
+      # describeNode fails (returns nil) the bucket collapses to `nil.hash`;
+      # combined with `==` returning false for nil-resolved nodes, Set/Hash
+      # membership stays consistent (collisions are allowed for unequal objects).
       def hash
-        (backend_node_id || @remote_object_id).hash
+        backend_node_id.hash
       end
 
       def backend_node_id
