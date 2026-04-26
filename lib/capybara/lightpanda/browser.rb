@@ -52,6 +52,7 @@ module Capybara
         @session_id = attach_result["sessionId"]
 
         subscribe_to_console_logs
+        subscribe_to_execution_context
         register_auto_scripts
       end
 
@@ -130,6 +131,25 @@ module Capybara
 
         page_command("Page.enable")
         @page_events_enabled = true
+      end
+
+      # Block up to `timeout` seconds for a default V8 execution context to
+      # exist. Returns true if available (immediately or after waiting),
+      # false if the timeout elapses with no executionContextCreated event.
+      def wait_for_default_context(timeout = 1.0)
+        @default_context_event.wait(timeout)
+      end
+
+      # Run the block; if it raises NoExecutionContextError (the navigation
+      # race window — lightpanda-io/browser#2187), wait for the next default
+      # context to be signaled by Runtime.executionContextCreated, then
+      # retry once. Replaces blind 100 ms sleep retries.
+      def with_default_context_wait(timeout: 1.0)
+        yield
+      rescue NoExecutionContextError
+        raise unless wait_for_default_context(timeout)
+
+        yield
       end
 
       def back
@@ -461,7 +481,7 @@ module Capybara
       JS
 
       def find_in_document(method, selector)
-        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+        with_default_context_wait do
           js = if method == "xpath"
                  "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
                else
@@ -509,6 +529,26 @@ module Capybara
         on("Runtime.consoleAPICalled") do |params|
           params["args"]&.each { |r| logger.puts(r["value"]) }
         end
+      end
+
+      # Track default-execution-context availability via Runtime events.
+      # Lightpanda destroys the V8 default context at navigation start (long
+      # before frameNavigated fires), then re-creates it once the new page
+      # commits. During the gap, Runtime.evaluate / callFunctionOn rejects
+      # with "Cannot find default execution context"
+      # (lightpanda-io/browser#2187). We watch executionContextsCleared /
+      # executionContextCreated and use the resulting Concurrent::Event to
+      # gate retries deterministically instead of blind sleeping.
+      def subscribe_to_execution_context
+        @default_context_event = Concurrent::Event.new
+        @default_context_event.set
+
+        on("Runtime.executionContextsCleared") { @default_context_event.reset }
+        on("Runtime.executionContextCreated") do |params|
+          @default_context_event.set if params.dig("context", "auxData", "isDefault")
+        end
+
+        page_command("Runtime.enable")
       end
 
       def serialize_argument(arg)

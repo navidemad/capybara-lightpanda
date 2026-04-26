@@ -40,7 +40,7 @@ module Capybara
       end
 
       def shadow_root
-        result = Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+        result = driver.browser.with_default_context_wait do
           driver.browser.call_function_on(
             @remote_object_id,
             "function() { return this.shadowRoot }",
@@ -207,7 +207,7 @@ module Capybara
       # All JS function declarations are self-contained (no _lightpanda dependency)
       # so they work in any execution context including iframes.
       def call(function_declaration, *args)
-        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+        driver.browser.with_default_context_wait do
           driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
         end
       rescue BrowserError => e
