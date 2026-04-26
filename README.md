@@ -202,6 +202,10 @@ end
 - [Capybara](https://github.com/teamcapybara/capybara) — the test framework
 - Inspired by the [Cuprite](https://github.com/rubycdp/cuprite) / [Ferrum](https://github.com/rubycdp/ferrum) architecture and [`lightpanda-ruby`](https://github.com/marcoroth/lightpanda-ruby)
 
+Patterns adapted from these MIT-licensed projects (cookies API, frame switching,
+node call/error conventions, retry/event utilities) are acknowledged with the
+original copyright notices in [NOTICE.md](NOTICE.md).
+
 ## Contributing
 
 Bug reports and pull requests are welcome on [GitHub](https://github.com/navidemad/capybara-lightpanda).
