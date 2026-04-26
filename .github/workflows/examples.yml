@@ -13,6 +13,10 @@ on:
           - plain
           - turbo
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   examples:
     runs-on: ubuntu-latest

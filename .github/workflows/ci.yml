@@ -3,21 +3,36 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
+    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby: ["3.3", "4.0"]
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - run: bundle exec rubocop
 
   test:
+    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
