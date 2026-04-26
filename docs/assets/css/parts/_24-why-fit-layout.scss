@@ -223,4 +223,12 @@
   padding: 4px 0;
 }
 .why__grid .why__stats {
+  width: clamp(260px, 30vw, 360px);
+}
+
+/* why__source — tail caption */
+.why__source {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  margin: 0;
 }

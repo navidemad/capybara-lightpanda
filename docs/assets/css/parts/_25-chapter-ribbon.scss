@@ -1,0 +1,39 @@
+/* shared chapter ribbon — placed last so it overrides section-specific
+   ::after decorations and renders identically across all chapter heads.
+   slow breathing pulse: width swells from a hairline tick to a wider band
+   while the ruby glow brightens at peak. */
+:is(.why, .swap, .pair, .matrix, .beta, .chapter)::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ruby), transparent);
+  pointer-events: none;
+  z-index: 1;
+  animation: chapter-ribbon-pulse 2.4s ease-in-out infinite;
+  will-change: width, opacity, filter;
+}
+
+@keyframes chapter-ribbon-pulse {
+  0%,
+  100% {
+    width: 20%;
+    opacity: 0.55;
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    width: 60%;
+    opacity: 1;
+    filter: drop-shadow(0 0 8px var(--ruby));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.why, .swap, .pair, .matrix, .beta, .chapter)::after {
+    animation: none;
+    width: 80px;
+  }
+}
