@@ -1,152 +1,127 @@
 ---
 name: sync-upstream
-description: Check Lightpanda upstream repo for CDP changes, fixed bugs, new issues, and opportunities to improve capybara-lightpanda. Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, or investigating whether a specific CDP behavior (like Page.loadEventFired, Network.clearBrowserCookies, XPathResult) has changed or been fixed. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods -- those are code tasks, not upstream investigations.
+description: Audit upstream repos that affect the capybara-lightpanda gem — the Lightpanda browser (lightpanda-io/browser), and the peer Ruby CDP gems Ferrum (rubycdp/ferrum) and Cuprite (rubycdp/cuprite). Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, investigating a specific CDP behavior (Page.loadEventFired, Network.clearBrowserCookies, XPathResult, modal handling), or asks what's new in Ferrum or Cuprite, what patterns we should adopt from them, whether a Ferrum error class or retry helper is worth mirroring, or whether Cuprite's driver does X better. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation, or when they want a pre-release peer-gem comparison. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods — those are code tasks, not upstream investigations.
 user_invocable: true
 model: opus
 effort: max
 ---
 
-# Sync Upstream Lightpanda
+# Sync Upstream
 
-You are auditing the Lightpanda browser upstream repo (https://github.com/lightpanda-io/browser) for changes that affect the capybara-lightpanda gem.
+Audit upstream repos for changes that affect `capybara-lightpanda`. This skill is **reconnaissance and planning**, not implementation. Three sync targets, two different categories of finding:
 
-## Adapt to Context
+| Target | Repo | Role | Findings unlock |
+|---|---|---|---|
+| **Lightpanda** | lightpanda-io/browser | Backend (Zig browser) | Workaround removal, new CDP capabilities, new risks |
+| **Ferrum** | rubycdp/ferrum | Peer Ruby CDP client | Idiomatic adoption candidates (errors, retry, frame/runtime split) |
+| **Cuprite** | rubycdp/cuprite | Peer Capybara CDP driver | Driver-layer adoption candidates (error mapping, JS polyfills) |
 
-Before starting, read the user's prompt carefully. There are two modes:
+Lightpanda defines what's *possible*. Ferrum and Cuprite define what's *idiomatic* for a Ruby gem doing the same job. Different questions, different rules-file destinations, but a shared workflow worth running together — especially before a release.
 
-**Targeted investigation** — The user asks about a specific behavior (e.g., "has Page.loadEventFired been fixed?", "can we remove the readyState fallback?"). Focus your investigation on that topic. Skip unrelated checks. Still read lightpanda-io.md for context, but go deep on the specific question rather than broad.
+## Step 0: Pick targets
 
-**Full sync** — The user asks for a general check, periodic sync, or pre-release audit. Run the complete workflow below.
+Read the user's prompt and pick which targets to run:
 
-For pre-release audits specifically, end your report with an explicit **Release Readiness** section: "Safe to release" or "Block release because..." with clear reasoning.
+- **All three** — phrases like "sync upstream", "pre-release audit", "check what's new", "general upstream check"
+- **Lightpanda only** — Lightpanda-specific symptoms (CDP method behavior, browser bug, navigation issue, BrowserError, "is this a Lightpanda limitation?")
+- **Ferrum only** — "what's new in Ferrum?", "did Ferrum add X?", "should we adopt their retry/error/frame pattern?"
+- **Cuprite only** — "how does Cuprite handle Y?", "is our driver error mapping behind Cuprite?"
+- **Targeted investigation** — a single specific question (e.g., "has Page.loadEventFired been fixed?"). Run only the relevant target and skip unrelated checks. Still read the rules files for context, but go deep on the question.
 
-## Step 1: Gather Current State
+Tell the user which targets you've picked and why before starting recon. They can redirect.
 
-Read `.claude/rules/lightpanda-io.md` to understand:
-- Which CDP methods this gem uses (the "CDP Methods Used by This Gem" list)
-- Known bugs and workarounds
-- Tracked upstream issues
-- Known limitations
+## Step 1: Gather current state
 
-Read `lib/capybara/lightpanda/browser.rb`, `lib/capybara/lightpanda/driver.rb`, and `lib/capybara/lightpanda/node.rb` to understand current implementation.
+Read both rules files unconditionally — the answers to "what changed?" depend on knowing what we already know:
 
-## Step 2: Check Upstream Changes
+- `.claude/rules/lightpanda-io.md` — current understanding of the browser
+- `.claude/rules/ruby-cdp-peers.md` — adopted/outstanding patterns from Ferrum and Cuprite
 
-Use `gh` CLI and WebFetch to check the upstream repo. Run these checks in parallel where possible:
+Then read the gem source surfaces relevant to the targets you picked:
 
-### 2a. Recent Commits to CDP Domains
+- Lightpanda → `lib/capybara/lightpanda/browser.rb`, `node.rb`, `cookies.rb`, `frame.rb` (workarounds depend on browser quirks)
+- Ferrum → `lib/capybara/lightpanda/node.rb`, `frame.rb`, `cookies.rb`, `errors.rb`, `utils/event.rb`, `client.rb` (the surfaces where Ferrum's design directly competes with ours)
+- Cuprite → `lib/capybara/lightpanda/driver.rb`, `javascripts/index.js` (driver-layer error mapping + JS bundle)
 
-```bash
-gh api repos/lightpanda-io/browser/commits \
-  --jq '.[] | select(.commit.message | test("(?i)cdp|runtime|page|network|dom|target|cookie|xpath|navigate|dialog|frame|input")) | {sha: .sha[0:8], date: .commit.author.date[0:10], message: .commit.message | split("\n")[0]}'
-```
+## Step 2: Per target, follow its reference file
 
-### 2b. Recently Closed Issues We Track
+Each target has a per-target reference with concrete recon commands, source-tree pointers, and what to skip:
 
-Check each issue from the "Upstream Open Issues" table in lightpanda-io.md:
-```bash
-gh issue view <NUMBER> --repo lightpanda-io/browser --json state,title,closedAt
-```
+- `references/lightpanda.md` — CDP method existence checks, gh queries, lightpanda-io.md update rules
+- `references/ferrum.md` — Ferrum source tree, file-by-file comparisons against our gem, what's Chrome-specific to skip
+- `references/cuprite.md` — Cuprite driver/error/JS comparisons
 
-### 2c. New Issues That Affect Us
+Run target recons in parallel where possible (each `gh api` or WebFetch is independent).
 
-```bash
-gh api "repos/lightpanda-io/browser/issues?state=open&per_page=50&sort=created&direction=desc" \
-  --jq '.[] | select(.title | test("(?i)cdp|cookie|navigate|xpath|runtime|evaluate|dom|network|page|target|frame|dialog|websocket")) | {number: .number, title: .title, created: .created_at[0:10]}'
-```
+## Step 3: Categorize findings
 
-### 2d. Verify Our CDP Methods Exist Upstream
+Use this taxonomy across all targets — every finding lands in exactly one bucket:
 
-This is the most important check. Fetch each CDP domain source file and verify that **every method listed in "CDP Methods Used by This Gem"** actually exists in the upstream dispatch enum. Lightpanda doesn't implement all Chrome CDP methods — some we call may silently fail or return errors.
+- **Broken** — methods we call that no longer exist upstream (Lightpanda only). Bugs in our gem. Flag with our gem-side file:line.
+- **Workaround removal** — bugs we work around that are now fixed (Lightpanda). Always require validation (run `bundle exec rake spec` against current nightly) before recommending removal.
+- **New capabilities** — CDP methods or browser features now available that could replace JS workarounds (Lightpanda).
+- **Adoption candidates** — patterns/APIs Ferrum or Cuprite has that we don't, and that aren't Lightpanda-blocked. Each entry: peer file ↔ our file ↔ rationale ↔ rough effort (tiny/medium/large).
+- **Already adopted** — patterns we mirror from a previous sync. Note when the peer has since diverged (do we re-mirror?).
+- **Diverged on purpose** — places we deliberately differ because Lightpanda's constraints require it. Don't flag as adoption candidates again.
+- **New risks** — open issues / regressions that could break our gem, or bugs the peers fixed that may also affect us.
 
-Files to check:
-- `src/cdp/domains/page.zig` — verify `Page.navigate`, `Page.reload`, `Page.enable`, `Page.getNavigationHistory`, `Page.navigateToHistoryEntry`, `Page.handleJavaScriptDialog`, `Page.loadEventFired`
-- `src/cdp/domains/runtime.zig` — verify `Runtime.evaluate`, `Runtime.callFunctionOn`, `Runtime.getProperties`, `Runtime.releaseObject`
-- `src/cdp/domains/network.zig` — verify `Network.getAllCookies` vs `Network.getCookies`, `Network.setCookie`, `Network.deleteCookies`, `Network.clearBrowserCookies`
-- `src/cdp/domains/dom.zig` — verify `DOM.getDocument`, `DOM.querySelector`, `DOM.querySelectorAll`
-- `src/cdp/domains/target.zig` — verify `Target.createTarget`, `Target.attachToTarget`
+## Step 4: Update the right rules file
 
-Use WebFetch on GitHub raw URLs or `gh api` to read file contents. Look for the method name in the `processMessage` dispatch enum — if it's not there, the method doesn't exist and our gem is calling a non-existent endpoint.
+- Lightpanda findings → `.claude/rules/lightpanda-io.md` (per `references/lightpanda.md` hygiene rules)
+- Ferrum / Cuprite findings → `.claude/rules/ruby-cdp-peers.md` (per `references/{ferrum,cuprite}.md` hygiene rules)
 
-Also check for new methods that could improve the driver (e.g., `Page.addScriptToEvaluateOnNewDocument`, `Input.dispatchMouseEvent`, `DOM.resolveNode`).
+Both rules files are **current-state references, not changelogs**. Edit affected sections inline; don't append a "Recently Merged Fixes" section. Closed issues / adopted patterns get deleted or moved, not archived.
 
-### 2e. Release Notes
+**Verify before claiming.** Don't speculatively mark issues as fixed or methods as added without confirmation from the upstream issue/PR.
 
-```bash
-gh release list --repo lightpanda-io/browser --limit 5
-```
+## Step 5: Generate report
 
-## Step 3: Analyze Impact
-
-For each finding, categorize it:
-
-### Broken: Methods We Call That Don't Exist
-Methods listed in "CDP Methods Used by This Gem" that are NOT in upstream source. These are bugs in our gem — we're calling endpoints that don't exist. Flag with specific file and line number in our codebase.
-
-### Workaround Removal Opportunities
-Bugs we work around that may now be fixed:
-- `Page.loadEventFired` reliability → could simplify `Browser#go_to`
-- `Network.clearBrowserCookies` crash → could simplify `Cookies#clear`
-- `XPathResult` not implemented → could remove/reduce polyfill
-- `Page.handleJavaScriptDialog` not confirmed → could enable modal support
-
-### New CDP Methods Available
-Methods that weren't available before but could improve the driver.
-
-### New Bugs or Regressions
-Issues that could break our gem or require new workarounds.
-
-### Feature Opportunities
-New Lightpanda capabilities that could unlock features in our driver (e.g., frame support, file upload, Web APIs).
-
-## Step 4: Update Rules File
-
-If there are meaningful changes, update `.claude/rules/lightpanda-io.md`. The doc is a **current-state reference, not a git log** — keep it short and focused on what affects gem behavior today.
-
-- When an upstream issue closes, **delete its row** from the `Upstream Open Issues That Affect This Gem` table — do not move it to a "Closed Issues" section (that section no longer exists).
-- Add newly discovered open issues only if they touch gem-relevant behavior (CDP methods we use, navigation, cookies, JS context, crashes). Skip CLI-only, Puppeteer-only, Stagehand-only, MCP-only, build/CI, and pure-internal-refactor issues.
-- Update CDP method support notes (move methods between Used / NOT Available / Partially Implemented / Recently Implemented / Available-but-unused).
-- Update limitation notes for anything that's been fixed.
-- Flag methods in "CDP Methods Used by This Gem" that don't actually exist upstream.
-- Add newly available methods to "Available CDP Methods" section.
-
-**Do not add a chronological "Recently Merged Fixes" changelog.** When a merged PR changes gem-relevant behavior, edit the affected section inline (e.g., add the PR number to the relevant Known Bug, CDP Methods sub-table, or General Limitations bullet) and stop. PRs that don't change gem behavior — internal refactors, CI, MCP, build, CLI-only flags, test-only changes — must not be recorded in this file.
-
-**Do not add "Closed Issues We Filed" or "Recently Closed Tracked Issues" tables.** Closed issues that no longer affect gem behavior should be deleted, not archived.
-
-**Important**: Only update facts you've verified. Don't speculatively mark issues as fixed without confirmation.
-
-## Step 5: Generate Report
-
-Present a structured report to the user:
+Use this exact template. Omit sections with no findings rather than leaving them empty.
 
 ```
 ## Upstream Sync Report — [date]
 
-### Broken: CDP Methods We Call That Don't Exist
-- [ ] `Page.reload` — not in page.zig dispatch enum. Browser#refresh (browser.rb:122) will fail.
+Targets run: [Lightpanda / Ferrum / Cuprite / subset]
 
-### Workarounds to Re-evaluate
-- [ ] Issue #XXXX (description) — now CLOSED, test if workaround can be removed
+### Lightpanda
+**Broken**
+- [ ] ...
+**Workarounds to re-evaluate**
+- [ ] ...
+**New capabilities**
+- [ ] ...
+**New risks**
+- [ ] ...
 
-### New Capabilities
-- [ ] `Runtime.callFunctionOn` now supported — could replace JS node registry
+### Ferrum
+**Adoption candidates**
+- [ ] [tiny/medium/large] pattern → ferrum_file ↔ our_file ↔ why
+**Diverged (revisit?)**
+- [ ] ...
+**New risks**
+- [ ] ...
 
-### New Risks
-- [ ] Issue #XXXX — new bug that may affect us
+### Cuprite
+**Adoption candidates**
+- [ ] ...
+**New risks**
+- [ ] ...
 
-### Rules File Updated
-- Changed X, Y, Z in lightpanda-io.md
+### Rules files updated
+- lightpanda-io.md: ...
+- ruby-cdp-peers.md: ...
 
-### Recommended Next Steps
+### Recommended next steps
 1. [CRITICAL] ...
 2. [HIGH] ...
 3. [MEDIUM] ...
 
-### Release Readiness (if pre-release audit)
-**Safe to release** / **Block release** — with reasoning.
+### Release Readiness (only if pre-release audit)
+**Safe to release** / **Block release because** — with reasoning.
 ```
 
-## Step 6: Suggest Code Changes (if applicable)
+For pre-release audits specifically, the **Release Readiness** section is required. "Block release" should only fire on Lightpanda-side breakage (broken CDP methods, regressions affecting test passage). Ferrum/Cuprite adoption candidates never block a release — they're improvement opportunities, not bugs.
 
-If a workaround can be removed or a new feature can be adopted, describe the specific code change but **do not implement it** unless the user asks. The goal of this skill is reconnaissance and planning, not automatic code changes.
+## Step 6: Suggest code changes (do not implement)
+
+If a finding has a clear next code change (workaround removal, pattern adoption), describe the specific change in the report — file:line, what to change, why — but **do not implement it** unless the user explicitly asks. The skill is for reconnaissance and planning. Code edits belong in a follow-up turn where the user has agreed to the scope.

@@ -128,16 +128,17 @@ LP.getStructuredData         LP.waitForSelector
    - This gem works around it with `document.readyState` polling fallback in `Browser#go_to`
    - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable (#1801, #1832 still open)
 
-2. **`Network.clearBrowserCookies`** — Fixed in >= v0.2.6
-   - Was: Lightpanda responded with `InvalidParams` AND killed the WebSocket
-   - Now: calls `clearRetainingCapacity()` on in-memory cookie jar (safe)
-   - Gem retains fallback for older binaries but primary path works
+2. **`Network.clearBrowserCookies`** — REGRESSED on current nightly (verified 2026-04-26 on `1.0.0-nightly.5812+b3257754`)
+   - PR #1821 (>= v0.2.6) was supposed to fix this by calling `clearRetainingCapacity()` on the in-memory cookie jar (no more WebSocket crash)
+   - Today: command responds `InvalidParams` — does not crash the WebSocket but also does not clear anything
+   - Workaround in gem: `Cookies#clear` ignores `clearBrowserCookies` and sweeps cookies per-origin via `Network.getCookies(urls: visited_origins)` + `Network.deleteCookies(url: ...)`. `Browser#visited_origins` accumulates `scheme://host:port` strings as the gem navigates so the sweep can enumerate cross-domain cookies.
+   - `Network.getCookies` (without `urls`) is scoped to the current page's origin — cookies on previously-visited domains are invisible from a different page; `Network.getCookies` on `about:blank` raises `InvalidDomain`. The `urls:` parameter accepts a list and returns cross-domain cookies (verified working).
+   - `Network.deleteCookies(name:, url:)` works correctly per-origin.
 
 3. **`XPathResult` not implemented**
    - `document.evaluate` and the `XPathResult` interface do not exist in Lightpanda
    - This gem injects a JS polyfill that converts XPath to CSS selectors (~80% coverage)
-   - Polyfill MUST be re-injected after every `visit` (JS context lost between navigations)
-   - **`Page.addScriptToEvaluateOnNewDocument` now works** (PR #1993, merged 2026-03-30) — could register polyfill once at session creation instead of re-injecting after every navigation
+   - Polyfill is auto-injected on every navigation via `Page.addScriptToEvaluateOnNewDocument` (PR #1993, merged 2026-03-30) — registered once at session creation in `Browser#create_page`. No manual re-injection on each `visit` is needed.
 
 4. **No rendering engine (CSS much improved)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
@@ -153,7 +154,8 @@ LP.getStructuredData         LP.waitForSelector
    - Workaround: after redirect, do a second navigation to the same URL if cookie-dependent
 
 6. **JavaScript context lost between navigations**
-   - All injected JS (polyfills, custom functions) must be re-injected after each page load — OR use `Page.addScriptToEvaluateOnNewDocument` for auto-injection (PR #1993, merged 2026-03-30)
+   - JS execution context is reset on every page load: globals, polyfills, and any custom functions evaluated in a previous document are gone.
+   - Polyfills are auto-injected on every navigation via `Page.addScriptToEvaluateOnNewDocument` (PR #1993, merged 2026-03-30), registered once at session creation in `Browser#create_page`. Ad-hoc `Runtime.evaluate` calls still need to be re-run after each `visit`.
    - Node references (objectIds) become invalid after navigation
 
 7. **Turbo Drive — RESOLVED via gem-side `#id` selector polyfill (2026-04-25)**
@@ -183,7 +185,7 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (filed by us, still open / no reviews as of 2026-04-26) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
+- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (filed by us, still open / no reviews as of 2026-04-27) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
 - **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
 - **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
