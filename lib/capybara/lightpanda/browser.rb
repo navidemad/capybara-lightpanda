@@ -432,19 +432,28 @@ module Capybara
         @modal_responses << { accept: false, type: type.to_s }
       end
 
-      def find_modal(type, wait: options.timeout)
+      def find_modal(type, text: nil, wait: options.timeout)
+        regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
         deadline = monotonic_time + wait
+        last_message = nil
         loop do
           msg = @modal_messages.find { |m| m[:type] == type.to_s }
           if msg
-            @modal_messages.delete(msg)
-            return msg[:message]
+            last_message = msg[:message]
+            if regexp.nil? || last_message.match?(regexp)
+              @modal_messages.delete(msg)
+              return last_message
+            end
           end
           break if monotonic_time > deadline
 
           sleep 0.05
         end
-        raise Capybara::ModalNotFound, "Unable to find modal dialog"
+        if last_message
+          raise Capybara::ModalNotFound,
+                "Unable to find modal dialog with #{text} - found '#{last_message}' instead."
+        end
+        raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
       end
 
       def reset_modals
@@ -482,10 +491,14 @@ module Capybara
 
       def find_in_document(method, selector)
         with_default_context_wait do
+          # Coerce Symbol selectors (e.g. Capybara warning path lets `have_css(:p)`
+          # through) to a string before quoting. Symbol#inspect returns `:p`,
+          # which would inject a bare token into the JS source.
+          selector_literal = selector.to_s.inspect
           js = if method == "xpath"
-                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
+                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector_literal}, document) : []"
                else
-                 "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } " \
+                 "(function() { try { return Array.from(document.querySelectorAll(#{selector_literal})); } " \
                    "catch(e) { return []; } })()"
                end
           result = evaluate_with_ref(js)

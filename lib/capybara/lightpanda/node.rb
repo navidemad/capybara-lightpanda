@@ -92,12 +92,22 @@ module Capybara
             call(SET_CHECKBOX_JS, value ? true : false)
           when "file"
             raise NotImplementedError, "File uploads not yet supported by Lightpanda"
+          when "date"
+            call(SET_VALUE_JS, format_date_value(value))
+          when "time"
+            call(SET_VALUE_JS, format_time_value(value))
+          when "datetime-local"
+            call(SET_VALUE_JS, format_datetime_value(value))
           else
-            call(SET_VALUE_JS, value.to_s)
+            call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
           end
         elsif tag == "textarea"
-          call(SET_VALUE_JS, value.to_s)
-        elsif self["contenteditable"]
+          call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
+        elsif call(EDITABLE_HOST_JS)
+          # `contenteditable` cascades through descendants. Check
+          # `isContentEditable`, then fall back to walking ancestors for
+          # `contenteditable` since Lightpanda doesn't expose the
+          # property on every element.
           call("function(v) { this.innerHTML = v }", value.to_s)
         end
       end
@@ -107,6 +117,14 @@ module Capybara
       end
 
       def unselect_option
+        unless call("function() {
+          var s = this.parentElement;
+          while (s && (s.tagName || '').toUpperCase() !== 'SELECT') s = s.parentElement;
+          return !!(s && s.multiple);
+        }")
+          raise Capybara::UnselectNotAllowed, "Cannot unselect option from single select box."
+        end
+
         call(UNSELECT_OPTION_JS)
       end
 
@@ -116,7 +134,12 @@ module Capybara
       end
 
       def tag_name
-        call("function() { return this.tagName.toLowerCase() }")
+        # ShadowRoot/DocumentFragment have no tagName; report a stable label so
+        # Capybara's failure messages can render `tag="ShadowRoot"`.
+        call("function() {
+          if (this.nodeType === 11) return 'ShadowRoot';
+          return this.tagName ? this.tagName.toLowerCase() : '';
+        }")
       end
 
       def visible?
@@ -128,11 +151,11 @@ module Capybara
       end
 
       def selected?
-        call("function() { return this.selected }")
+        call("function() { return !!this.selected }")
       end
 
       def disabled?
-        call("function() { return this.disabled }")
+        call(DISABLED_JS)
       end
 
       def readonly?
@@ -188,6 +211,38 @@ module Capybara
       end
 
       private
+
+      # Format helpers for Date/Time/DateTime values passed to date/time/datetime-local
+      # inputs. Mirror Capybara::Selenium's SettableValue so a Ruby Time fills the
+      # field with the same string the user would type.
+      def format_date_value(value)
+        return value.to_s if value.is_a?(String) || !value.respond_to?(:to_date)
+
+        value.to_date.iso8601
+      end
+
+      def format_time_value(value)
+        return value.to_s if value.is_a?(String) || !value.respond_to?(:to_time)
+
+        value.to_time.strftime("%H:%M")
+      end
+
+      def format_datetime_value(value)
+        return value.to_s if value.is_a?(String) || !value.respond_to?(:to_time)
+
+        value.to_time.strftime("%Y-%m-%dT%H:%M")
+      end
+
+      # `maxlength` only constrains user typing, not direct value assignment, but
+      # Selenium-style drivers truncate to match what a user would have ended up
+      # with. Honor it explicitly so Capybara-shared specs behave the same.
+      def truncate_to_maxlength(str)
+        max = self["maxlength"]
+        return str unless max
+
+        n = max.to_i
+        n.positive? ? str[0, n] : str
+      end
 
       # Whitespace-normalized text (Cuprite pattern). Capybara's text matchers compare
       # against this, and Lightpanda's textContent preserves source-template whitespace
@@ -247,9 +302,26 @@ module Capybara
         function() {
           var tag = this.tagName.toLowerCase();
           var type = (this.type || '').toLowerCase();
-          var isSubmitBtn = ((tag === 'input' || tag === 'button') && type === 'submit') ||
-                            (tag === 'input' && type === 'image');
+          // <button> with no `type` attribute defaults to submit per HTML.
+          var isSubmitBtn = (tag === 'button' && (type === '' || type === 'submit')) ||
+                            (tag === 'input' && (type === 'submit' || type === 'image'));
           var form = isSubmitBtn ? this.form : null;
+          // Lightpanda doesn't propagate label clicks to their associated
+          // form control the way browsers do, so when Capybara clicks a
+          // <label> for a hidden checkbox/radio (automatic_label_click)
+          // we explicitly forward the click.
+          if (tag === 'label') {
+            this.click();
+            var ctrl = null;
+            var forId = this.getAttribute('for');
+            if (forId) ctrl = this.ownerDocument.getElementById(forId);
+            if (!ctrl) ctrl = this.querySelector('input, select, textarea');
+            if (ctrl) {
+              var ctype = (ctrl.type || '').toLowerCase();
+              if (ctype === 'checkbox' || ctype === 'radio') ctrl.click();
+            }
+            return;
+          }
           if (!form) {
             this.click();
             // Lightpanda doesn't toggle <details> when its <summary> is clicked.
@@ -285,9 +357,22 @@ module Capybara
 
           // No handler intercepted — fetch + swap ourselves because Lightpanda's
           // native form.submit() does not navigate.
-          var formData = new FormData(form);
+          // Pass the submitter so the button is serialized at its document
+          // position alongside the form's other named controls.
+          var formData;
+          try { formData = new FormData(form, this); }
+          catch (e) { formData = new FormData(form); }
           var submitterName = this.getAttribute('name');
-          if (submitterName) formData.append(submitterName, this.getAttribute('value') || '');
+          if (submitterName && !formData.has(submitterName)) {
+            // Lightpanda's FormData(form, submitter) may omit a <button> with no
+            // explicit value attribute; HTML says the value falls back to
+            // textContent, so feed that in ourselves when the entry is missing.
+            var submitterValue = this.getAttribute('value');
+            if (submitterValue === null) {
+              submitterValue = (tag === 'button') ? (this.textContent || '') : '';
+            }
+            formData.append(submitterName, submitterValue);
+          }
 
           var action = this.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
           try { action = new URL(action, window.location.href).href; } catch (e) {}
@@ -410,6 +495,13 @@ module Capybara
 
           function walk(node) {
             if (node.nodeType === 3) return normText(node.nodeValue);
+            // DocumentFragment / ShadowRoot — no element of its own to test
+            // for visibility, just walk children.
+            if (node.nodeType === 11) {
+              var fout = '';
+              for (var k = 0; k < node.childNodes.length; k++) fout += walk(node.childNodes[k]);
+              return fout;
+            }
             if (node.nodeType !== 1) return '';
             if (!visible(node)) return '';
             var tag = (node.tagName || '').toUpperCase();
@@ -442,6 +534,16 @@ module Capybara
             if (this.hasAttribute(name)) return this[name];
             return null;
           }
+          // Boolean attributes: the static `checked`/`selected`/etc.
+          // attribute reflects only the default (form-reset) state.
+          // The live property tracks the current state, which is what
+          // Capybara's `node['checked']` etc. semantics need.
+          var BOOL_PROP = { checked: 'checked', selected: 'selected',
+                            disabled: 'disabled', multiple: 'multiple',
+                            readonly: 'readOnly', hidden: 'hidden',
+                            autofocus: 'autofocus', required: 'required' };
+          var prop = BOOL_PROP[name.toLowerCase()];
+          if (prop && this[prop] !== undefined) return this[prop];
           return this.getAttribute(name);
         }
       JS
@@ -457,6 +559,7 @@ module Capybara
 
       SET_VALUE_JS = <<~JS
         function(value) {
+          if (this.readOnly || this.hasAttribute('readonly')) return;
           this.focus();
           this.value = value;
           this.dispatchEvent(new Event('input', {bubbles: true}));
@@ -466,26 +569,44 @@ module Capybara
 
       SELECT_OPTION_JS = <<~JS
         function() {
-          this.selected = true;
-          if (this.parentElement) {
-            this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
+          var sel = this.parentElement;
+          while (sel && (sel.tagName || '').toUpperCase() !== 'SELECT') sel = sel.parentElement;
+          if (!sel) {
+            // Datalist options don't live inside a <select>; toggling
+            // `selected` is meaningless. The matching <input list=...>
+            // is what should receive the value, but Capybara handles
+            // that path itself; just no-op here.
+            return;
           }
+          if (sel.multiple) {
+            this.selected = true;
+          } else {
+            // Lightpanda doesn't auto-deselect siblings when we set
+            // `option.selected`, so mirror what a real browser does and
+            // route the change through the parent's `value`.
+            sel.value = this.value;
+          }
+          sel.dispatchEvent(new Event('input', {bubbles: true}));
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
         }
       JS
 
       UNSELECT_OPTION_JS = <<~JS
         function() {
+          var sel = this.parentElement;
+          while (sel && (sel.tagName || '').toUpperCase() !== 'SELECT') sel = sel.parentElement;
+          if (!sel || !sel.multiple) return;
           this.selected = false;
-          if (this.parentElement) {
-            this.parentElement.dispatchEvent(new Event('change', {bubbles: true}));
-          }
+          sel.dispatchEvent(new Event('input', {bubbles: true}));
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
         }
       JS
 
       SET_CHECKBOX_JS = <<~JS
         function(value) {
-          this.checked = value;
-          this.dispatchEvent(new Event('change', {bubbles: true}));
+          // Use `click()` so user-installed click/change handlers fire and
+          // observe a real toggle. No-op if already in the requested state.
+          if (this.checked !== value) this.click();
         }
       JS
 
@@ -494,6 +615,57 @@ module Capybara
           this.focus();
           this.value += key;
           this.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+      JS
+
+      EDITABLE_HOST_JS = <<~JS
+        function() {
+          if (this.isContentEditable) return true;
+          var n = this;
+          while (n && n.nodeType === 1) {
+            if (n.hasAttribute && n.hasAttribute('contenteditable')) {
+              var v = (n.getAttribute('contenteditable') || '').toLowerCase();
+              return v !== 'false';
+            }
+            n = n.parentElement;
+          }
+          return false;
+        }
+      JS
+
+      # HTML defines a disabled form control as one whose own `disabled`
+      # attribute is set OR whose ancestor select/optgroup/fieldset is disabled
+      # (with a fieldset-disabled exception for descendants of its first legend).
+      # `this.disabled` only reflects the element's own attribute, so we walk
+      # up the tree to honor the inherited cases.
+      DISABLED_JS = <<~JS
+        function() {
+          if (this.disabled) return true;
+          var tag = (this.tagName || '').toUpperCase();
+          if (tag === 'OPTION') {
+            var p = this.parentElement;
+            while (p && (p.tagName || '').toUpperCase() === 'OPTGROUP') {
+              if (p.disabled) return true;
+              p = p.parentElement;
+            }
+            if (p && (p.tagName || '').toUpperCase() === 'SELECT' && p.disabled) return true;
+          }
+          var FORM = { INPUT:1, BUTTON:1, SELECT:1, TEXTAREA:1, OPTION:1 };
+          if (FORM[tag]) {
+            var node = this.parentElement;
+            while (node) {
+              if ((node.tagName || '').toUpperCase() === 'FIELDSET' && node.disabled) {
+                var firstLegend = null;
+                for (var c = node.firstElementChild; c; c = c.nextElementSibling) {
+                  if ((c.tagName || '').toUpperCase() === 'LEGEND') { firstLegend = c; break; }
+                }
+                if (firstLegend && firstLegend.contains(this)) return false;
+                return true;
+              }
+              node = node.parentElement;
+            }
+          }
+          return false;
         }
       JS
 

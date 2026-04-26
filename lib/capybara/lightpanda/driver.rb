@@ -126,18 +126,42 @@ module Capybara
         end
       end
 
+      # Capybara::Driver::Base falls back to running these via the top
+      # execution context, which always reports the parent document. Resolve
+      # them through the iframe element's contentWindow / contentDocument so
+      # they reflect the active frame.
+      def frame_url
+        frame = browser.frame_stack.last
+        return browser.current_url unless frame
+
+        browser.call_function_on(frame.remote_object_id,
+                                 "function() { return this.contentWindow.location.href }")
+      end
+
+      def frame_title
+        frame = browser.frame_stack.last
+        return browser.title unless frame
+
+        browser.call_function_on(frame.remote_object_id,
+                                 "function() { return this.contentDocument.title }")
+      end
+
       # -- Modal/Dialog Support --
 
       def accept_modal(type, **options, &block)
         browser.accept_modal(type, text: options[:with])
         block&.call
-        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type,
+                           text: options[:text],
+                           wait: options.fetch(:wait, browser.options.timeout))
       end
 
       def dismiss_modal(type, **options, &block)
         browser.dismiss_modal(type)
         block&.call
-        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type,
+                           text: options[:text],
+                           wait: options.fetch(:wait, browser.options.timeout))
       end
 
       # -- Screenshots --
@@ -157,6 +181,7 @@ module Capybara
       def reset!
         browser.clear_frames
         browser.reset_modals
+        browser.cookies.clear
         browser.go_to("about:blank")
       rescue StandardError
         @browser&.quit

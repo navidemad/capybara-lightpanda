@@ -2,5 +2,11 @@
   "effortLevel": "high",
   "env": {
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000"
+  },
+  "permissions": {
+    "allow": [
+      "Edit(.claude/rules/lightpanda-io.md)",
+      "Edit(.claude/skills/sync-upstream/SKILL.md)"
+    ]
   }
 }

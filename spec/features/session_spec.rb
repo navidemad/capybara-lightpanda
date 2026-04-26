@@ -14,10 +14,33 @@ Capybara::SpecHelper.run_specs(
   "Lightpanda",
   # Capybara feature flags Lightpanda doesn't support (yet). Each entry has a
   # corresponding entry in `.claude/rules/lightpanda-io.md`.
-  #   :windows    — `window.open` is in flight upstream (PR #2237). New target
-  #                 doesn't materialize when a target=_blank link is clicked, so
-  #                 the `become_closed`/`window_opened_by` shared specs can't
-  #                 produce a second window to operate on.
+  #   :windows           — `window.open` in flight upstream (PR #2237).
   #   :html5_drag, :drag — no real layout/pointer dispatch geometry.
-  capybara_skip: %i[windows html5_drag drag]
+  #   :scroll            — no rendering engine, no scroll.
+  #   :hover             — no real layout for hover positioning.
+  #   :spatial           — `find(above:|below:|near:)` needs real geometry.
+  #   :status_code       — CDP doesn't expose response status.
+  #   :response_headers  — CDP doesn't expose response headers.
+  #   :trigger           — driver doesn't implement Node#trigger.
+  #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
+  #   :html_validation   — element.validationMessage not exposed.
+  #   :download          — no file download support.
+  #   :active_element    — Tab-key focus traversal isn't implemented, and
+  #                        `el.click()` doesn't focus form controls the way
+  #                        a native mouse click does, so `:focused` filters
+  #                        can't track which element should be active.
+  capybara_skip: %i[
+    windows
+    html5_drag drag
+    scroll
+    hover
+    spatial
+    status_code
+    response_headers
+    trigger
+    shadow_dom
+    html_validation
+    download
+    active_element
+  ]
 )
