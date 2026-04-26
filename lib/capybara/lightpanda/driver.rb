@@ -50,6 +50,17 @@ module Capybara
       end
       alias body html
 
+      def active_element
+        oid = browser.active_element
+        oid && Node.new(self, oid)
+      end
+
+      # Capybara's Session#send_keys routes to Driver#send_keys; Cuprite's pattern
+      # is to fan that out to whatever element currently has focus.
+      def send_keys(*keys)
+        active_element&.send_keys(*keys)
+      end
+
       def find_xpath(selector)
         object_ids = browser.find("xpath", selector)
         object_ids.map { |oid| Node.new(self, oid) }
@@ -60,17 +71,17 @@ module Capybara
         object_ids.map { |oid| Node.new(self, oid) }
       end
 
-      def evaluate_script(script, *_args)
-        browser.evaluate(script)
+      def evaluate_script(script, *args)
+        unwrap_script_result(browser.evaluate(script.strip, *native_args(args)))
       end
 
-      def execute_script(script, *_args)
-        browser.execute(script)
+      def execute_script(script, *args)
+        browser.execute(script.strip, *native_args(args))
         nil
       end
 
-      def evaluate_async_script(script, *_args)
-        browser.evaluate_async(script)
+      def evaluate_async_script(script, *args)
+        unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args)))
       end
 
       # -- Cookie Management --
@@ -174,6 +185,33 @@ module Capybara
           MouseEventFailed,
         ]
       end
+
+      private
+
+      # Unwrap arguments before sending to the browser. Capybara::Node::Element wraps
+      # our Lightpanda::Node — pull `.base` out so `serialize_argument` can build
+      # `{objectId: …}` for the CDP payload. Cuprite's `native_args` pattern.
+      def native_args(args)
+        args.map { |a| a.is_a?(Capybara::Node::Element) ? a.base : a }
+      end
+
+      # Walk through evaluate-script results turning DOM-node markers (the
+      # `{ "objectId" => "..." }` hashes produced by `Browser#unwrap_call_result`)
+      # into Lightpanda::Node instances so Capybara can wrap them as elements.
+      def unwrap_script_result(value)
+        case value
+        when Array then value.map { |v| unwrap_script_result(v) }
+        when Hash
+          if value.size == 1 && value.key?("objectId")
+            Node.new(self, value["objectId"])
+          else
+            value.transform_values { |v| unwrap_script_result(v) }
+          end
+        else value
+        end
+      end
+
+      public
 
       # Pause execution for interactive debugging.
       def pause

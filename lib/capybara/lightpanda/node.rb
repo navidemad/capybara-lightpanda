@@ -14,8 +14,42 @@ module Capybara
         call("function() { return this.textContent }")
       end
 
+      def all_text
+        filter_text(call("function() { return this.textContent }"))
+      end
+
+      # Lightpanda's innerText returns textContent verbatim (no rendering, so no
+      # hidden-descendant filtering). Walk descendants ourselves, skipping nodes
+      # that fail VISIBLE_JS, and emit newlines around block-display elements
+      # (the part of innerText behavior we still need).
       def visible_text
-        call("function() { return this.innerText }")
+        call(VISIBLE_TEXT_JS).to_s
+                             .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
+                             .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
+                             .gsub(/[ \t\f\v]+/, " ")
+                             .gsub(/[ \t\f\v]*\n[ \t\f\v\n]*/, "\n")
+                             .tr("\u00A0", " ")
+      end
+
+      def rect
+        call(GET_RECT_JS)
+      end
+
+      def obscured?
+        call(OBSCURED_JS)
+      end
+
+      def shadow_root
+        result = Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+          driver.browser.call_function_on(
+            @remote_object_id,
+            "function() { return this.shadowRoot }",
+            return_by_value: false
+          )
+        end
+        return nil unless result.is_a?(Hash) && result["objectId"]
+
+        self.class.new(driver, result["objectId"])
       end
 
       # Smart property/attribute getter (Cuprite pattern).
@@ -123,11 +157,41 @@ module Capybara
         object_ids.map { |oid| self.class.new(driver, oid) }
       end
 
+      # Equality must compare the underlying DOM node, not the (transient) remote_object_id.
+      # The same DOM element receives a new objectId on each Runtime call, so a fast path
+      # on string equality is just a shortcut — falls back to backendNodeId resolution
+      # (stable per page) when the strings differ.
       def ==(other)
-        other.is_a?(self.class) && remote_object_id == other.remote_object_id
+        return false unless other.is_a?(self.class)
+        return true if remote_object_id == other.remote_object_id
+
+        backend_node_id == other.backend_node_id
+      end
+
+      alias eql? ==
+
+      def hash
+        backend_node_id.hash
+      end
+
+      def backend_node_id
+        @backend_node_id ||= driver.browser.backend_node_id(@remote_object_id)
       end
 
       private
+
+      # Whitespace-normalized text (Cuprite pattern). Capybara's text matchers compare
+      # against this, and Lightpanda's textContent preserves source-template whitespace
+      # differently than Chrome — without normalization, multi-line fixtures fail
+      # `text: "Line\nLine"` matchers.
+      def filter_text(text)
+        text.to_s
+            .gsub(/[\u200B\u200E\u200F]/, "")
+            .gsub(/[ \n\f\t\v\u2028\u2029]+/, " ")
+            .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
+            .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
+            .tr("\u00A0", " ")
+      end
 
       # Centralized command dispatch via Runtime.callFunctionOn.
       # The function runs with `this` bound to the DOM element by CDP.
@@ -153,66 +217,202 @@ module Capybara
         end
       end
 
-      # Turbo-compatible click. When Turbo is loaded and a submit button is clicked,
-      # bypasses Turbo's fetch-based form submission (which fails in Lightpanda) by
-      # using fetch() + document.write() to POST the form and render the response.
-      # When Turbo is not loaded, uses requestSubmit() to fire the submit event.
-      # For non-submit elements, falls back to standard HTMLElement.click().
+      # Form-submit click bypass for Lightpanda.
+      #
+      # Lightpanda's `form.submit()` does NOT navigate — it parses, validates, but
+      # never issues an HTTP request. And `document.write()` is a no-op (verified
+      # 2026-04-26: body length unchanged after open/write/close). So both the
+      # native submit path and the previous `fetch+document.write` workaround leave
+      # the page on the original URL with the form still rendered.
+      #
+      # For submit-button clicks we instead `fetch` the form action ourselves,
+      # parse the response with `DOMParser`, swap `document.body.innerHTML`, and
+      # `history.replaceState` the response URL. `_lightpanda` and the XPath
+      # polyfill survive the swap because we don't reload the document.
+      #
+      # For non-submit elements (links, regular buttons, anchors) we fall through
+      # to native `this.click()`. Turbo Drive's click handler — when Turbo is
+      # loaded — intercepts that natively, runs its own fetch+replaceWith, and
+      # works fine on Lightpanda after the `#id` rewriter polyfill in index.js.
       CLICK_JS = <<~JS
         function() {
           var tag = this.tagName.toLowerCase();
           var type = (this.type || '').toLowerCase();
           var isSubmitBtn = ((tag === 'input' || tag === 'button') && type === 'submit') ||
                             (tag === 'input' && type === 'image');
-
-          if (isSubmitBtn) {
-            var form = this.form;
-            if (!form) { this.click(); return; }
-
-            if (typeof Turbo !== 'undefined') {
-              var formData = new FormData(form);
-              var submitterName = this.getAttribute('name');
-              if (submitterName) formData.append(submitterName, this.getAttribute('value') || '');
-
-              var action = this.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
-              try { action = new URL(action, window.location.href).href; } catch(e) {}
-              var method = (this.getAttribute('formmethod') || form.getAttribute('method') || 'GET').toUpperCase();
-
-              var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
-              if (method === 'GET') {
-                var sep = action.indexOf('?') >= 0 ? '&' : '?';
-                action = action + sep + new URLSearchParams(formData).toString();
-              } else {
-                opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-                opts.body = new URLSearchParams(formData);
+          var form = isSubmitBtn ? this.form : null;
+          if (!form) {
+            this.click();
+            // Lightpanda doesn't toggle <details> when its <summary> is clicked.
+            // Walk up to the nearest <details> (only if click hit a summary
+            // and we haven't been preventDefault'd by user JS) and flip `open`.
+            if (tag === 'summary') {
+              var d = this.parentNode;
+              while (d && d.nodeType === 1 && d.tagName.toLowerCase() !== 'details') {
+                d = d.parentNode;
               }
-
-              return fetch(action, opts).then(function(r) { return r.text(); }).then(function(html) {
-                document.open(); document.write(html); document.close();
-              });
+              if (d && d.tagName && d.tagName.toLowerCase() === 'details') {
+                d.open = !d.open;
+              }
             }
-
-            if (typeof form.requestSubmit === 'function') {
-              form.requestSubmit(this);
-              return;
-            }
+            return;
           }
 
-          this.click();
+          // Fire the submit event first so user JS handlers can intercept and
+          // preventDefault — but skip this when Turbo is loaded, because Turbo's
+          // submit pipeline throws on Lightpanda (and the gem already handles the
+          // navigation below). Turbo's link-click pipeline still works fine.
+          if (typeof Turbo === 'undefined') {
+            var ev;
+            if (typeof SubmitEvent === 'function') {
+              ev = new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: this });
+            } else {
+              ev = new Event('submit', { bubbles: true, cancelable: true });
+              ev.submitter = this;
+            }
+            var allowed = form.dispatchEvent(ev);
+            if (!allowed) return;
+          }
+
+          // No handler intercepted — fetch + swap ourselves because Lightpanda's
+          // native form.submit() does not navigate.
+          var formData = new FormData(form);
+          var submitterName = this.getAttribute('name');
+          if (submitterName) formData.append(submitterName, this.getAttribute('value') || '');
+
+          var action = this.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
+          try { action = new URL(action, window.location.href).href; } catch (e) {}
+          var method = (this.getAttribute('formmethod') || form.getAttribute('method') || 'GET').toUpperCase();
+
+          var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
+          if (method === 'GET') {
+            var sep = action.indexOf('?') >= 0 ? '&' : '?';
+            action = action + sep + new URLSearchParams(formData).toString();
+          } else {
+            opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            opts.body = new URLSearchParams(formData);
+          }
+
+          return fetch(action, opts).then(function(r) {
+            return r.text().then(function(html) { return { url: r.url, html: html }; });
+          }).then(function(o) {
+            var doc = new DOMParser().parseFromString(o.html, 'text/html');
+            document.title = (doc.title || '');
+            document.body.innerHTML = doc.body.innerHTML;
+            try { history.replaceState(null, '', o.url); } catch (e) {}
+          });
         }
       JS
 
       VISIBLE_JS = <<~JS
         function() {
-          var tag = this.tagName;
-          if (tag === 'HEAD' || tag === 'head') return false;
+          var TAG = (this.tagName || '').toUpperCase();
+          // Elements that are never rendered, regardless of CSS.
+          if (TAG === 'HEAD' || TAG === 'TEMPLATE' || TAG === 'NOSCRIPT' ||
+              TAG === 'SCRIPT' || TAG === 'STYLE' || TAG === 'TITLE') return false;
+          if (TAG === 'INPUT' && (this.type || '').toLowerCase() === 'hidden') return false;
+
+          // Walk ancestors for cascade-based hiding that getComputedStyle alone misses
+          // (Lightpanda-specific: class-rule resolution + special-element rules,
+          // plus the HTML `hidden` attribute which checkVisibility does not honor).
+          var node = this;
+          while (node && node.nodeType === 1) {
+            if (node.hasAttribute && node.hasAttribute('hidden')) return false;
+            var parent = node.parentNode;
+            if (parent && parent.nodeType === 1) {
+              var ptag = (parent.tagName || '').toUpperCase();
+              if (ptag === 'HEAD' || ptag === 'TEMPLATE' || ptag === 'NOSCRIPT') return false;
+              // <details> hides everything but the first <summary> when closed.
+              if (ptag === 'DETAILS' && !parent.open) {
+                var ntag = (node.tagName || '').toUpperCase();
+                if (ntag !== 'SUMMARY') return false;
+              }
+            }
+            node = parent;
+          }
+
+          // Lightpanda's checkVisibility() catches display:none from inline styles
+          // and class rules (CSSOM PR #1797), but does not honor visibility:hidden
+          // — so we always check that explicitly via getComputedStyle.
           var win = this.ownerDocument.defaultView || window;
           var style = win.getComputedStyle(this);
-          if (style.display === 'none') return false;
           if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+          if (typeof this.checkVisibility === 'function') {
+            return this.checkVisibility();
+          }
+          if (style.display === 'none') return false;
           if (this.offsetParent === null && style.position !== 'fixed' &&
-              tag !== 'BODY' && tag !== 'HTML' && tag !== 'body' && tag !== 'html') return false;
+              TAG !== 'BODY' && TAG !== 'HTML') return false;
           return true;
+        }
+      JS
+
+      # Walk children and accumulate text from visible nodes only. Inserts
+      # newlines around block-display containers so paragraphs/lists render with
+      # natural breaks (Capybara expects this from Chrome's innerText).
+      VISIBLE_TEXT_JS = <<~JS
+        function() {
+          var BLOCK = { BLOCK:1, FLEX:1, GRID:1, 'LIST-ITEM':1, TABLE:1, 'TABLE-ROW':1,
+                        'TABLE-CAPTION':1, 'TABLE-CELL':1 };
+          var BLOCK_TAG = { ADDRESS:1, ARTICLE:1, ASIDE:1, BLOCKQUOTE:1, DETAILS:1, DIALOG:1,
+                            DIV:1, DL:1, DT:1, DD:1, FIELDSET:1, FIGCAPTION:1, FIGURE:1,
+                            FOOTER:1, FORM:1, H1:1, H2:1, H3:1, H4:1, H5:1, H6:1, HEADER:1,
+                            HGROUP:1, HR:1, LI:1, MAIN:1, NAV:1, OL:1, P:1, PRE:1, SECTION:1,
+                            TABLE:1, TR:1, UL:1 };
+
+          function visible(el) {
+            var tag = (el.tagName || '').toUpperCase();
+            if (tag === 'HEAD' || tag === 'TEMPLATE' || tag === 'NOSCRIPT' ||
+                tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TITLE') return false;
+            if (tag === 'INPUT' && (el.type || '').toLowerCase() === 'hidden') return false;
+            var n = el;
+            while (n && n.nodeType === 1) {
+              if (n.hasAttribute && n.hasAttribute('hidden')) return false;
+              var p = n.parentNode;
+              if (p && p.nodeType === 1) {
+                var pt = (p.tagName || '').toUpperCase();
+                if (pt === 'HEAD' || pt === 'TEMPLATE' || pt === 'NOSCRIPT') return false;
+                if (pt === 'DETAILS' && !p.open) {
+                  var nt = (n.tagName || '').toUpperCase();
+                  if (nt !== 'SUMMARY') return false;
+                }
+              }
+              n = p;
+            }
+            var win = el.ownerDocument.defaultView || window;
+            var style = win.getComputedStyle(el);
+            if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+            if (typeof el.checkVisibility === 'function') return el.checkVisibility();
+            if (style.display === 'none') return false;
+            return true;
+          }
+
+          // Collapse runs of ASCII whitespace (preserving NBSP) to a single space —
+          // matches Chrome's innerText whitespace handling for text nodes.
+          function normText(s) {
+            return s.replace(/[\\t\\n\\r\\f\\v ]+/g, ' ');
+          }
+
+          function walk(node) {
+            if (node.nodeType === 3) return normText(node.nodeValue);
+            if (node.nodeType !== 1) return '';
+            if (!visible(node)) return '';
+            var tag = (node.tagName || '').toUpperCase();
+            if (tag === 'TEXTAREA') return node.value || '';
+            if (tag === 'BR') return '\\n';
+            var win = node.ownerDocument.defaultView || window;
+            var style = win.getComputedStyle(node);
+            var disp = (style.display || '').toUpperCase();
+            var isBlock = BLOCK[disp] || BLOCK_TAG[tag];
+            var out = '';
+            for (var i = 0; i < node.childNodes.length; i++) {
+              out += walk(node.childNodes[i]);
+            }
+            if (isBlock) out = '\\n' + out + '\\n';
+            return out;
+          }
+
+          return walk(this);
         }
       JS
 
@@ -286,6 +486,48 @@ module Capybara
         function(prop) {
           var win = this.ownerDocument.defaultView || window;
           return win.getComputedStyle(this)[prop];
+        }
+      JS
+
+      GET_RECT_JS = <<~JS
+        function() {
+          var r = this.getBoundingClientRect();
+          return {
+            x: r.x, y: r.y,
+            top: r.top, bottom: r.bottom, left: r.left, right: r.right,
+            width: r.width, height: r.height
+          };
+        }
+      JS
+
+      OBSCURED_JS = <<~JS
+        function() {
+          var doc = this.ownerDocument;
+          var win = doc.defaultView || window;
+          // An element with display:none, visibility:hidden, or the `hidden`
+          // attribute can never be the topmost element at any point —
+          // semantically it's obscured. (Lightpanda returns a fake non-zero
+          // bounding rect for display:none, so this short-circuit is required.)
+          var style = win.getComputedStyle(this);
+          if (style.display === 'none') return true;
+          if (style.visibility === 'hidden' || style.visibility === 'collapse') return true;
+          // `hidden` attribute on self or any ancestor cascades to invisible.
+          var anc = this;
+          while (anc && anc.nodeType === 1) {
+            if (anc.hasAttribute && anc.hasAttribute('hidden')) return true;
+            anc = anc.parentNode;
+          }
+          var r = this.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return true;
+          var cx = r.left + (r.width / 2);
+          var cy = r.top + (r.height / 2);
+          var w = win.innerWidth || doc.documentElement.clientWidth;
+          var h = win.innerHeight || doc.documentElement.clientHeight;
+          if (cx < 0 || cy < 0 || cx > w || cy > h) return true;
+          var hit = doc.elementFromPoint(cx, cy);
+          if (!hit) return true;
+          if (hit === this) return false;
+          return !this.contains(hit);
         }
       JS
 

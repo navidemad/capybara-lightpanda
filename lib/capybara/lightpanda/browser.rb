@@ -159,32 +159,53 @@ module Capybara
       alias html body
 
       # Evaluate JS and return a serialized value.
-      def evaluate(expression)
-        response = page_command("Runtime.evaluate", expression: expression, returnByValue: true, awaitPromise: true)
+      # No-args fast path uses Runtime.evaluate; with args we wrap as a function
+      # and dispatch via Runtime.callFunctionOn so `arguments[i]` is bound.
+      # Both paths use `returnByValue: false` and unwrap so DOM-node returns
+      # come back as `{ "objectId" => ... }` for the Driver to wrap.
+      def evaluate(expression, *args)
+        if args.empty?
+          response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
+          raise JavaScriptError, response if response["exceptionDetails"]
 
-        handle_evaluate_response(response)
+          return unwrap_call_result(response["result"])
+        end
+
+        wrapped = "function() { return #{expression} }"
+        call_with_args(wrapped, args)
       end
 
       # Execute JS without returning a value.
-      def execute(expression)
-        page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
+      def execute(expression, *args)
+        if args.empty?
+          page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
+          return nil
+        end
+
+        wrapped = "function() { #{expression} }"
+        call_with_args(wrapped, args, return_by_value: false)
         nil
       end
 
       # Evaluate async JS with a callback. The user's script receives
-      # a `arguments[arguments.length - 1]` callback to signal completion
-      # (matching Capybara's evaluate_async_script contract).
-      def evaluate_async(expression, wait: @options.timeout)
+      # the callback as its last argument (`arguments[arguments.length - 1]`),
+      # matching Capybara's evaluate_async_script contract.
+      def evaluate_async(expression, *args, wait: @options.timeout)
+        timeout_ms = (wait * 1000).to_i
         wrapped = <<~JS
-          new Promise(function(__resolve, __reject) {
-            var __timer = setTimeout(function() {
-              __reject(new Error('Async script timeout after #{(wait * 1000).to_i}ms'));
-            }, #{(wait * 1000).to_i});
-            var __done = function(val) { clearTimeout(__timer); __resolve(val); };
-            (function() { #{expression} }).call(null, __done);
-          })
+          function() {
+            var __args = Array.prototype.slice.call(arguments);
+            return new Promise(function(__resolve, __reject) {
+              var __timer = setTimeout(function() {
+                __reject(new Error('Async script timeout after #{timeout_ms}ms'));
+              }, #{timeout_ms});
+              var __done = function(val) { clearTimeout(__timer); __resolve(val); };
+              __args.push(__done);
+              (function() { #{expression} }).apply(null, __args);
+            });
+          }
         JS
-        evaluate(wrapped)
+        call_with_args(wrapped, args)
       end
 
       # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
@@ -245,6 +266,19 @@ module Capybara
       def find_within(remote_object_id, method, selector)
         result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
         extract_node_object_ids(result)
+      end
+
+      # objectId of document.activeElement, or nil if none/document detached.
+      def active_element
+        result = evaluate_with_ref("document.activeElement")
+        result&.dig("objectId")
+      end
+
+      # Resolve an objectId to its stable per-page backendNodeId.
+      # objectIds are transient (re-issued per Runtime call) but backendNodeId is stable,
+      # so this is what we compare for cross-query node equality.
+      def backend_node_id(remote_object_id)
+        page_command("DOM.describeNode", objectId: remote_object_id).dig("node", "backendNodeId")
       end
 
       def css(selector)
@@ -498,6 +532,58 @@ module Capybara
         return nil if result["type"] == "undefined"
 
         result["value"]
+      end
+
+      # Run a wrapped function via Runtime.callFunctionOn with `arguments` bound.
+      # `args` is converted via `serialize_argument` (Nodes → objectId, scalars → value).
+      # When `return_by_value: false` (the default) the return value is unwrapped via
+      # `unwrap_call_result` so that DOM nodes come back as `{ "objectId" => ... }`
+      # hashes the Driver can wrap as Capybara nodes.
+      def call_with_args(function_declaration, args, return_by_value: false)
+        params = {
+          objectId: document_object_id,
+          functionDeclaration: function_declaration,
+          returnByValue: return_by_value,
+          awaitPromise: true,
+          arguments: args.map { |a| serialize_argument(a) },
+        }
+        response = page_command("Runtime.callFunctionOn", **params)
+        raise JavaScriptError, response if response["exceptionDetails"]
+
+        return_by_value ? handle_evaluate_response(response) : unwrap_call_result(response["result"])
+      end
+
+      # Translate a non-by-value Runtime result into a plain Ruby value, surfacing
+      # DOM nodes as `{ "objectId" => "..." }` so the Driver can wrap them.
+      def unwrap_call_result(result)
+        return nil if result["type"] == "undefined"
+        return nil if result["subtype"] == "null"
+
+        if result["subtype"] == "node" && result["objectId"]
+          { "objectId" => result["objectId"] }
+        elsif %w[boolean number string].include?(result["type"])
+          result["value"]
+        elsif result["type"] == "object" && result["objectId"]
+          # Re-fetch as JSON-serializable value for plain objects/arrays.
+          # Cheaper than walking properties and good enough for shared specs.
+          json = page_command(
+            "Runtime.callFunctionOn",
+            objectId: result["objectId"],
+            functionDeclaration: "function() { return this }",
+            returnByValue: true
+          )
+          handle_evaluate_response(json)
+        else
+          result["value"]
+        end
+      end
+
+      # objectId of `document`, used as the `this` context for callFunctionOn when
+      # we need `arguments` binding but don't care about `this`. Re-resolved per
+      # call because the document objectId is invalidated by navigation.
+      def document_object_id
+        result = page_command("Runtime.evaluate", expression: "document", returnByValue: false)
+        result.dig("result", "objectId")
       end
 
       def wait_for_page_load(url, retried:)

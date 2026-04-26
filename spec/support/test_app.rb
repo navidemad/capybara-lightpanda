@@ -151,16 +151,38 @@ class TestApp
         <head>
           <title>Visibility Test</title>
           <style>
-            #hidden-display { display: none; }
-            #hidden-visibility { visibility: hidden; }
+            #hidden-display-class { display: none; }
+            #hidden-visibility-class { visibility: hidden; }
+            #hidden-collapse-class { visibility: collapse; }
             #visible { display: block; }
           </style>
         </head>
         <body>
           <div id="visible">I am visible</div>
-          <div id="hidden-display">I am hidden via display:none</div>
-          <div id="hidden-visibility">I am hidden via visibility:hidden</div>
+          <div id="hidden-display-inline" style="display: none">inline display none</div>
+          <div id="hidden-visibility-inline" style="visibility: hidden">inline visibility hidden</div>
+          <div id="hidden-collapse-inline" style="visibility: collapse">inline visibility collapse</div>
+          <div id="hidden-display-class">class display none</div>
+          <div id="hidden-visibility-class">class visibility hidden</div>
+          <div id="hidden-collapse-class">class visibility collapse</div>
+          <div id="hidden-attr" hidden="hidden">hidden attribute</div>
+          <div id="hidden-ancestor" hidden="hidden">
+            <span id="hidden-via-ancestor">descendant of hidden ancestor</span>
+          </div>
           <input type="hidden" id="hidden-input" value="secret">
+          <details id="closed-details">
+            <summary id="closed-summary">Click to open</summary>
+            <p id="details-body">details body content</p>
+          </details>
+          <details id="open-details" open>
+            <summary id="open-summary">Already open</summary>
+            <p id="open-body">open body content</p>
+          </details>
+          <div id="text-with-hidden">
+            Visible part
+            <em style="display: none" id="hidden-em">SECRET</em>
+            and more
+          </div>
         </body>
       </html>
     HTML

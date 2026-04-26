@@ -12,33 +12,12 @@ require "spec_helper"
 Capybara::SpecHelper.run_specs(
   TestSessions::Lightpanda,
   "Lightpanda",
-  capybara_skip: %i[
-    windows
-    modals
-    screenshot
-    css
-    spatial
-    scroll
-    hover
-    download
-    active_element
-    shadow_dom
-    status_code
-    response_headers
-    html_validation
-  ]
-) do |example|
-  case example.metadata[:full_description]
-  when /node #reload/
-    # Remote object IDs don't survive page navigation in Lightpanda
-    skip "Node reload not supported"
-  when /node #drag/
-    skip "No drag and drop support"
-  when /node #attach_file/, /attach_file/
-    skip "File upload not supported by Lightpanda"
-  when /matches_style/, /assert_style/
-    skip "No CSS engine — getComputedStyle not available"
-  when /evaluate_async_script.*(passing elements|returning elements|context of the element)/
-    skip "Async scripts cannot pass/return DOM elements (returnByValue limitation)"
-  end
-end
+  # Capybara feature flags Lightpanda doesn't support (yet). Each entry has a
+  # corresponding entry in `.claude/rules/lightpanda-io.md`.
+  #   :windows    — `window.open` is in flight upstream (PR #2237). New target
+  #                 doesn't materialize when a target=_blank link is clicked, so
+  #                 the `become_closed`/`window_opened_by` shared specs can't
+  #                 produce a second window to operate on.
+  #   :html5_drag, :drag — no real layout/pointer dispatch geometry.
+  capybara_skip: %i[windows html5_drag drag]
+)

@@ -33,40 +33,41 @@ module TestSessions
 end
 
 RSpec.configure do |config|
+  config.example_status_persistence_file_path = File.join(PROJECT_ROOT, "tmp", "rspec_status.txt")
+
+  # Skip Capybara shared specs that depend on browser features Lightpanda doesn't
+  # implement. See `.claude/rules/lightpanda-io.md` for the per-feature rationale.
+  # Keep this list narrow — every entry is a known browser-side gap, not a gem bug.
   config.define_derived_metadata do |metadata|
-    # Lightpanda limitations — skip by full test description.
-    regexes = [
-      # No rendering engine — no computed styles, layout, visual state
-      /matches_style/,
-      /assert_style/,
+    description = metadata[:full_description]
+    next unless description
 
-      # No drag and drop support
-      /drag_to/,
-      /drag_by/,
-
-      # No file upload support
-      /attach_file/,
-
-      # No shadow DOM
-      /shadow_root/,
-      /shadow dom/i,
-
-      # No download support
-      /download/i,
-
-      # Element obscuring checks need rendering
-      /Element not found, or not visible, or element is obscured/,
-      /obscured/,
-
-      # No proper headers/status code access
-      /response_headers/,
-      /status_code/,
-
-      # save_page/screenshot filesystem tests can be flaky without rendering
-      /save_and_open_screenshot/,
+    # Lightpanda auto-dismisses JS dialogs (alert→OK, confirm→false, prompt→null)
+    # and `Page.handleJavaScriptDialog` always errors. So `accept_modal(:confirm|:prompt)`
+    # cannot override the return value the page sees, and text-mismatch
+    # `ModalNotFound` expectations (where the test expects accept_alert to NOT accept
+    # when the text doesn't match) cannot be honored.
+    # See `.claude/rules/lightpanda-io.md` known-bug item on `Page.handleJavaScriptDialog`.
+    modal_patterns = [
+      /#accept_confirm/,
+      /#accept_prompt/,
+      /#accept_alert.*if the text doesn'?t match/,
+      /#accept_alert.*work with nested modals/,
     ].freeze
 
-    metadata[:skip] = "Not supported by Lightpanda" if metadata[:full_description]&.match?(Regexp.union(regexes))
+    if modal_patterns.any? { |re| description =~ re }
+      metadata[:skip] = "Lightpanda auto-dismisses JS dialogs; can't override return values"
+      next
+    end
+
+    # Honor `capybara_skip:` from the run_specs caller. The Capybara shared specs
+    # tag describe-blocks with `requires: %i[windows js]` etc.; `capybara_skip`
+    # marks the feature names this driver explicitly opts out of supporting.
+    requires = metadata[:requires]
+    skip_list = metadata[:capybara_skip]
+    if requires && skip_list && (matched = requires & skip_list).any?
+      metadata[:skip] = "Lightpanda doesn't support: #{matched.join(', ')}"
+    end
   end
 
   config.around do |example|

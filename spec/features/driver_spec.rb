@@ -396,6 +396,85 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
+  # Visibility (regression for Lightpanda quirks: checkVisibility doesn't
+  # honor `visibility:hidden` or the `hidden` attribute; native click on
+  # <summary> doesn't toggle <details>; getBoundingClientRect returns a
+  # fake non-zero rect for display:none.)
+  # ───────────────────────────────────────────────
+
+  describe "visibility detection" do
+    before { session.visit("/lightpanda/visibility") }
+
+    it "treats inline style=display:none as not visible" do
+      expect(session.find(:css, "#hidden-display-inline", visible: false)).not_to be_visible
+    end
+
+    it "treats class-rule display:none as not visible" do
+      expect(session.find(:css, "#hidden-display-class", visible: false)).not_to be_visible
+    end
+
+    it "treats inline style=visibility:hidden as not visible" do
+      expect(session.find(:css, "#hidden-visibility-inline", visible: false)).not_to be_visible
+    end
+
+    it "treats class-rule visibility:hidden as not visible" do
+      expect(session.find(:css, "#hidden-visibility-class", visible: false)).not_to be_visible
+    end
+
+    it "treats inline style=visibility:collapse as not visible" do
+      expect(session.find(:css, "#hidden-collapse-inline", visible: false)).not_to be_visible
+    end
+
+    it "treats the HTML `hidden` attribute as not visible" do
+      expect(session.find(:css, "#hidden-attr", visible: false)).not_to be_visible
+    end
+
+    it "cascades hidden attribute through ancestor to descendants" do
+      expect(session.find(:css, "#hidden-via-ancestor", visible: false)).not_to be_visible
+    end
+
+    it "treats <input type=hidden> as not visible" do
+      expect(session.find(:css, "#hidden-input", visible: false)).not_to be_visible
+    end
+
+    it "treats descendants of closed <details> (other than <summary>) as not visible" do
+      expect(session.find(:css, "#details-body", visible: false)).not_to be_visible
+      expect(session.find(:css, "#closed-summary")).to be_visible
+    end
+
+    it "treats descendants of an open <details> as visible" do
+      expect(session.find(:css, "#open-body")).to be_visible
+    end
+
+    it "toggles <details> open when its <summary> is clicked" do
+      expect(session.evaluate_script("document.getElementById('closed-details').open")).to eq(false)
+      session.find(:css, "#closed-summary").click
+      expect(session.evaluate_script("document.getElementById('closed-details').open")).to eq(true)
+      expect(session.find(:css, "#details-body")).to be_visible
+    end
+
+    it "considers display:none elements obscured" do
+      expect(session.find(:css, "#hidden-display-inline", visible: false)).to be_obscured
+      expect(session.find(:css, "#hidden-display-class", visible: false)).to be_obscured
+    end
+
+    it "considers visibility:hidden elements obscured" do
+      expect(session.find(:css, "#hidden-visibility-inline", visible: false)).to be_obscured
+    end
+
+    it "considers descendants of hidden-attr ancestors obscured" do
+      expect(session.find(:css, "#hidden-via-ancestor", visible: false)).to be_obscured
+    end
+
+    it "filters hidden descendants out of visible_text" do
+      el = session.find(:css, "#text-with-hidden")
+      expect(el.text).to include("Visible part")
+      expect(el.text).to include("and more")
+      expect(el.text).not_to include("SECRET")
+    end
+  end
+
+  # ───────────────────────────────────────────────
   # Form interaction
   # ───────────────────────────────────────────────
 
@@ -594,6 +673,33 @@ RSpec.describe Capybara::Lightpanda::Driver do
     it "passes correct submitter for button with formaction" do
       session.find(:css, "#btn-publish").click
       expect(session.find(:css, "#submit-result").text).to eq("intercepted:btn-publish")
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Plain (non-Turbo) form submission via fetch + DOMParser swap
+  # ───────────────────────────────────────────────
+  #
+  # Lightpanda's native `form.submit()` is a no-op (no navigation), and
+  # `document.write()` doesn't replace the body. CLICK_JS works around both by
+  # firing the submit event for user handlers, then — if not preventDefault'd —
+  # fetching the form action and swapping document.body.innerHTML.
+
+  describe "plain form submission (Lightpanda fetch+swap)" do
+    before { session.visit("/lightpanda/form_test") }
+
+    it "POSTs the form and renders the result page after click" do
+      session.find(:css, "#name").set("Probe")
+      session.find(:css, "#test-form button[type=submit], #test-form input[type=submit]").click
+      expect(session).to have_css("pre#results", wait: 2)
+      expect(session.find(:css, "pre#results").text).to include("Probe")
+    end
+
+    it "preserves the _lightpanda polyfill across the body swap" do
+      session.find(:css, "#name").set("Probe")
+      session.find(:css, "#test-form button[type=submit], #test-form input[type=submit]").click
+      session.has_css?("pre#results", wait: 2)
+      expect(session.evaluate_script("typeof window._lightpanda")).to eq("object")
     end
   end
 
