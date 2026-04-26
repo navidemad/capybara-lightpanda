@@ -155,6 +155,14 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
+      # Lightpanda's FormData includes a `<select>` with no `<option>` as
+      # an empty-string entry; the spec / Chrome omit those entries.
+      # Pure browser-side bug in Lightpanda's FormData implementation.
+      /#click_button.*should not serialize a select tag without options/,
+      # Lightpanda's `Page.reload` does not replay a POST navigation as a
+      # POST — it issues a fresh GET to the same URL, so the form action
+      # handler never runs again and the test's `post_count` doesn't bump.
+      /#refresh it reposts/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }
