@@ -79,6 +79,15 @@ html {
     min-height: 0;
   }
 }
+
+/* ---------- shared chapter chrome ---------- */
+/* echoes the .endrail divider treatment so every chapter opens with a
+   hairline + centered ruby ribbon and shares the same vertical breathing. */
+:is(.why, .swap, .matrix, .beta, .chapter) {
+  position: relative;
+  padding-block: clamp(32px, 4vh, 64px);
+  border-top: 1px solid var(--ink-line);
+}
 body {
   margin: 0;
   background: var(--ink);
@@ -1544,9 +1553,7 @@ body > * {
 
 /* ---------- generic section head ---------- */
 .section__head {
-  margin: 0 0 64px;
-  padding-top: 28px;
-  border-top: 1px solid var(--ink-line);
+  margin: 0 0 clamp(28px, 3vw, 40px);
   display: grid;
   grid-template-columns: var(--marginalia) minmax(0, 1fr);
   column-gap: clamp(20px, 3vw, 56px);
@@ -1596,6 +1603,12 @@ body > * {
     "wght" 500;
   max-width: 18ch;
 }
+.section__title-text {
+  background-color: var(--ruby);
+  padding: 0 0.18em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
 .section__deck {
   grid-column: 2;
   grid-row: 2;
@@ -1622,7 +1635,7 @@ body > * {
 /* ---------- swap (stack diagram) ---------- */
 /* ---------- "Why this engine" chapter ---------- */
 .why {
-  padding: clamp(36px, 4vw, 56px) var(--gutter) clamp(28px, 3vw, 40px);
+  padding-inline: var(--gutter);
   --why-prose: 880px;
 }
 @media (min-width: 1080px) {
@@ -1941,7 +1954,7 @@ body > * {
 
 /* ---------- swap (stack diagram) ---------- */
 .swap {
-  padding: clamp(32px, 4vw, 56px) var(--gutter);
+  padding-inline: var(--gutter);
 }
 .swap .section__head {
   border-top: 0;
@@ -2298,7 +2311,7 @@ body > * {
 
 /* ---------- content (markdown body) ---------- */
 .content {
-  padding: clamp(48px, 6vw, 88px) var(--gutter);
+  padding-inline: var(--gutter);
 }
 .content__inner {
   counter-reset: section 2;
@@ -2321,7 +2334,6 @@ body > * {
   grid-template-columns: subgrid;
   column-gap: clamp(20px, 3vw, 56px);
   align-content: center;
-  padding-block: clamp(40px, 6vw, 96px);
 }
 .chapter > * {
   grid-column: prose-start / prose-end;
@@ -2351,21 +2363,28 @@ body > * {
   }
 }
 
+.content__inner {
+  counter-reset: section 2;
+}
 .content h2 {
   grid-column: marker-start / prose-end;
   display: grid;
   grid-template-columns: subgrid;
   counter-increment: section;
   font-family: var(--display);
-  font-size: clamp(30px, 4vw, 56px);
+  font-size: clamp(36px, 5.4vw, 76px);
   font-weight: 500;
   letter-spacing: -0.028em;
-  line-height: 1;
-  margin: 96px 0 28px;
+  line-height: 0.98;
+  margin: 0 0 clamp(28px, 3vw, 40px);
   color: var(--paper);
-  padding-top: 32px;
-  border-top: 1px solid var(--ink-line);
   align-items: start;
+}
+.content h2 .section__title-text {
+  background-color: var(--ruby);
+  padding: 0 0.18em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 .content h2:first-child {
   margin-top: 0;
@@ -2924,7 +2943,7 @@ body > * {
 
 /* ---------- matrix ---------- */
 .matrix {
-  padding: clamp(48px, 6vw, 88px) var(--gutter);
+  padding-inline: var(--gutter);
 }
 .matrix__grid {
   display: grid;
@@ -4017,7 +4036,6 @@ body > * {
    ============================================================ */
 .beta {
   scroll-margin-top: var(--nav-h);
-  padding-block: clamp(14px, 2.2vh, 44px);
   min-height: calc(100dvh - var(--nav-h));
   display: flex;
   flex-direction: column;
@@ -4769,17 +4787,6 @@ body > * {
     var(--ink) 100%
   );
 }
-.why::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 80px;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent);
-}
 
 /* §06 Beta · ruby-warm decision spread */
 .beta {
@@ -4811,22 +4818,6 @@ body > * {
     transparent 94%,
     var(--ink) 100%
   );
-}
-.beta::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, var(--gold) 55%, transparent),
-    transparent
-  );
-  opacity: 0.55;
-  pointer-events: none;
 }
 
 /* ============================================================
@@ -5102,4 +5093,19 @@ body > * {
   font-size: 11px;
   letter-spacing: 0.12em;
   margin: 0;
+}
+
+/* shared chapter ribbon — placed last so it overrides section-specific
+   ::after decorations and renders identically across all chapter heads. */
+:is(.why, .swap, .matrix, .beta, .chapter)::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ruby), transparent);
+  pointer-events: none;
+  z-index: 1;
 }

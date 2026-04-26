@@ -1,0 +1,5 @@
+{{- if eq .Level 2 -}}
+<h2 id="{{ .Anchor }}"><span class="section__title-text">{{ .Text | safeHTML }}</span></h2>
+{{- else -}}
+<h{{ .Level }} id="{{ .Anchor }}">{{ .Text | safeHTML }}</h{{ .Level }}>
+{{- end -}}
