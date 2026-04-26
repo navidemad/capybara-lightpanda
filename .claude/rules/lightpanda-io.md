@@ -183,12 +183,9 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (filed by us) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
-- **PR #2241**: **browser: bound per-tick memory growth on JS-heavy pages** — caps `HttpClient.processMessages` at 16 completions per tick and fires `memoryPressureNotification(.moderate)` once a second from `Runner._wait`. Our gem uses CDP not fetch, but if the cap also lands on the CDP path it should harden long-lived sessions on heavy SPAs.
+- **PR #2244**: **Fix `Frame.getElementByIdFromNode` to recover from removed_ids** (filed by us, still open / no reviews as of 2026-04-26) — **DIRECTLY UNBLOCKS removing the gem-side `#id` rewriter**. Mirrors the `Document.getElementById` / `ShadowRoot.getElementById` recovery into `Frame.getElementByIdFromNode` (the selector engine's `#id` fast path), so `querySelector('#id')` no longer returns `null` after the body's been mutated via `innerHTML` and replaced (Turbo Drive's `PageRenderer.replaceBody` pattern). PR includes a regression test in `src/browser/tests/element/duplicate_ids.html`. See Known Bug #7. When merged: remove the `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` patches from `lib/capybara/lightpanda/javascripts/index.js` and the polyfill regression test from `driver_spec.rb`.
 - **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
-- **PR #2172**: **Improve safety of Node.replaceChild and Element.replaceWith** — DOM manipulation stability; Turbo Drive exercises both paths.
 - **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
-- **PR #2078**: **WIP: Worker** — Web Workers implementation starting. Would fix #2017. Major new capability if/when shipped.
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
 
 ### Upstream Open Issues That Affect This Gem
@@ -201,7 +198,7 @@ LP.getStructuredData         LP.waitForSelector
 | #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds. |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
-| #2017 | JS | Implement Worker and SharedWorker (PR #2078 WIP). |
+| #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed (PR #2078 merged 2026-04-14, more APIs in PR #2208/#2218); SharedWorker still missing and many Worker APIs still unimplemented, so issue stays open. |
 
 ### General Limitations
 
@@ -213,9 +210,11 @@ LP.getStructuredData         LP.waitForSelector
 - `window.postMessage` across frames now works (PR #1817)
 - No CORS enforcement (acknowledged in upstream README as of 2026-03-27)
 - In-page `WebSocket` API now implemented (PR #2179 merged 2026-04-18, closes #1952)
-- No Web Workers, Service Workers, SharedArrayBuffer (PR #2078 WIP for Worker support)
+- Web Workers: partial support landed (PR #2078 merged 2026-04-14; PR #2208 merged 2026-04-23 added `URL`, `AbortController`, `AbortSignal` for workers; PR #2218 merged 2026-04-23 added `OffscreenCanvas` for workers). Many Worker APIs still missing — issue #2017 remains open. Workers run in the same thread as the page and have a separate context (`WorkerGlobalScope`, no `Window`/`Node`).
+- No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
 - File upload not supported (`input[type=file]` operations will fail)
+- Long-lived sessions on JS-heavy pages now better-bounded (PR #2241 merged 2026-04-25): `HttpClient.processMessages` capped at 16 completions per tick and `memoryPressureNotification(.moderate)` fires once per second from `Runner._wait`, reducing per-tick memory blow-ups on heavy SPAs (e.g. github.com/features/copilot). Main-page lifetime now uses an `ArenaPool` arena rather than `page.arena` (PR #2245 merged 2026-04-26) so memory is released sooner after navigation.
 
 ## CLI Reference
 
