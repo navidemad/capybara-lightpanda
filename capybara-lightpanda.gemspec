@@ -25,7 +25,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*", "LICENSE.txt", "NOTICE.md", "README.md", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "capybara", ">= 3.0"
+  spec.add_dependency "capybara", ">= 3.0", "< 5"
   spec.add_dependency "concurrent-ruby", "~> 1.3"
   spec.add_dependency "websocket-driver", "~> 0.8"
 end
