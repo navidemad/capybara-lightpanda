@@ -538,9 +538,7 @@
                   Add to your <code>Gemfile</code>, in the
                   <code>:test</code> group.
                 </p>
-                <pre
-                  class="beta__code"
-                ><code><span class="beta__tok-c">gem</span> <span class="beta__tok-s">"capybara-lightpanda"</span></code></pre>
+                {{ transform.Highlight `gem "capybara-lightpanda"` "ruby" "" }}
               </div>
             </li>
             <li class="beta__step-row">
@@ -550,22 +548,18 @@
                   Gate it on an env var so your existing driver stays the
                   default.
                 </p>
-                <pre
-                  class="beta__code"
-                ><code><span class="beta__tok-c"># spec/support/capybara.rb · or test/support/...</span>
-<span class="beta__tok-k">if</span> ENV[<span class="beta__tok-s">"BROWSER"</span>] == <span class="beta__tok-s">"lightpanda"</span>
-  <span class="beta__tok-c">require</span> <span class="beta__tok-s">"capybara-lightpanda"</span>
-  Capybara.javascript_driver = <span class="beta__tok-sym">:lightpanda</span>
-<span class="beta__tok-k">end</span></code></pre>
+                {{ transform.Highlight `# spec/support/capybara.rb · or test/support/...
+if ENV["BROWSER"] == "lightpanda"
+  require "capybara-lightpanda"
+  Capybara.javascript_driver = :lightpanda
+end` "ruby" "" }}
               </div>
             </li>
             <li class="beta__step-row">
               <span class="beta__step-no" aria-hidden="true">3</span>
               <div class="beta__step-body">
                 <p class="beta__step-line">Run one suite. Decide.</p>
-                <pre
-                  class="beta__code"
-                ><code><span class="beta__tok-p">$</span> BROWSER=lightpanda bundle exec rails test test/system/</code></pre>
+                {{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails test test/system/` "console" "" }}
               </div>
             </li>
           </ol>

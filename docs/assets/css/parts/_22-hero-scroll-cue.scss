@@ -1,0 +1,112 @@
+/* ============================================================
+   hero scroll cue — pulsing arrow at the bottom of the hero
+   ============================================================ */
+.hero__scroll {
+  position: absolute;
+  bottom: clamp(14px, 2vw, 24px);
+  left: 50%;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  z-index: 5;
+  opacity: 0.9;
+  transform: translateX(-50%);
+  transition:
+    opacity 0.35s var(--ease-out),
+    color 0.25s var(--ease);
+  animation: hero-scroll-bob 2.6s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+.hero__scroll:hover {
+  color: var(--paper);
+  opacity: 1;
+}
+.hero__scroll:hover .hero__scroll-arrow {
+  border-color: var(--ruby);
+  background: color-mix(in oklab, var(--ruby) 14%, var(--ink-2));
+  color: var(--paper);
+}
+.hero__scroll-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--ruby) 35%, var(--ink-line-2));
+  background: color-mix(in oklab, var(--ruby) 6%, var(--ink-2));
+  color: var(--ruby);
+  position: relative;
+  transition:
+    background 0.25s var(--ease),
+    border-color 0.25s var(--ease),
+    color 0.25s var(--ease);
+}
+.hero__scroll-arrow::before,
+.hero__scroll-arrow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--ruby) 45%, transparent);
+  pointer-events: none;
+  animation: hero-scroll-ring 2.6s ease-out infinite;
+}
+.hero__scroll-arrow::after {
+  animation-delay: 1.3s;
+}
+
+.hero__scroll.is-rested {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 12px);
+}
+
+@keyframes hero-scroll-bob {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, 6px);
+  }
+}
+@keyframes hero-scroll-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__scroll {
+    animation: none;
+  }
+  .hero__scroll-arrow::before,
+  .hero__scroll-arrow::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* hide the scroll cue on mobile/tablet — chapter index is hidden there too,
+   but the hero stacks naturally and the scroll affordance is implicit */
+@media (max-width: 720px) {
+  .hero__scroll {
+    display: none;
+  }
+}
+

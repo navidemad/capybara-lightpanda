@@ -1,0 +1,27 @@
+/* ---------- scroll progress ---------- */
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 60;
+  pointer-events: none;
+  background: transparent;
+}
+.scroll-progress span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(var(--scroll-frac, 0));
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    var(--ruby),
+    var(--gold) 60%,
+    var(--bamboo)
+  );
+  box-shadow: 0 0 8px color-mix(in oklab, var(--ruby) 60%, transparent);
+  will-change: transform;
+}
+

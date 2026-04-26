@@ -1,0 +1,70 @@
+/* ============================================================
+   hero beta pill
+   ============================================================ */
+.hero__beta {
+  display: inline-flex;
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  padding: 6px 14px 6px 10px;
+  border: 1px solid var(--ink-line);
+  background: color-mix(in oklab, var(--ruby) 6%, var(--ink-2));
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+  animation: rise 0.6s var(--ease-out) both;
+  animation-delay: 20ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__beta {
+    animation: none;
+  }
+}
+.hero__beta-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ruby);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--ruby) 22%, transparent);
+  animation: beta-pulse 2.4s ease-in-out infinite;
+}
+@keyframes beta-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ruby) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--ruby) 28%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__beta-dot {
+    animation: none;
+  }
+}
+.hero__beta-label {
+  color: var(--paper);
+  font-weight: 500;
+}
+.hero__beta-sep {
+  color: var(--paper-faint);
+}
+.hero__beta-link {
+  color: var(--ruby);
+  border-bottom: 1px dotted color-mix(in oklab, var(--ruby) 60%, transparent);
+  padding-bottom: 1px;
+  transition:
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+.hero__beta-link:hover {
+  color: var(--paper);
+  border-bottom-color: var(--paper);
+}
+

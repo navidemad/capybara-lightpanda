@@ -1,0 +1,40 @@
+/* ============================================================
+   trusted strip — nested as §01 appendix.
+   Defined LAST so it overrides the standalone-section .trusted rules.
+   ============================================================ */
+.why__trusted {
+  padding: 22px 0 0;
+  border-top: 1px dashed var(--ink-line);
+  border-bottom: 0;
+  background: none;
+  margin-top: clamp(28px, 3vw, 48px);
+}
+.why__trusted::before {
+  display: none; /* drop the standalone gold-seam ribbon */
+}
+.why__trusted .trusted__inner {
+  max-width: none;
+  margin: 0;
+}
+.why__trusted .trusted__eyebrow {
+  margin: 0 0 18px;
+}
+.why__trusted .trusted__plates {
+  gap: clamp(10px, 1.2vw, 16px);
+}
+.why__trusted .plate {
+  gap: 8px;
+}
+.why__trusted .plate__frame {
+  height: 64px;
+  padding: 10px 14px;
+}
+.why__trusted .plate__frame img {
+  height: 18px;
+}
+.why__trusted .trusted__foot {
+  margin-top: 16px;
+  padding-top: 14px;
+  font-size: 12px;
+}
+

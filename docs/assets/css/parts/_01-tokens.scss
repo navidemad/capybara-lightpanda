@@ -1,0 +1,45 @@
+/* ============================================================
+   capybara::lightpanda — performance brief
+   Dark warm theme · Bricolage Grotesque + Funnel Sans + JetBrains Mono
+   ============================================================ */
+
+:root {
+  --ink: #0c0c0a;
+  --ink-2: #131310;
+  --ink-3: #1b1a16;
+  --ink-line: #2a2823;
+  --ink-line-2: #3a372f;
+
+  --paper: #f1ece0;
+  --paper-mute: #c9c2b1;
+  --paper-dim: #8b8674;
+  --paper-faint: #5a5648;
+
+  --ruby: #d30001;
+  --ruby-deep: #9a0001;
+  --ruby-soft: #f7c7c7;
+
+  --bamboo: #9bbf6a;
+  --bamboo-deep: #6e9043;
+
+  --gold: #d6a86a;
+  --gold-soft: #efd6a9;
+
+  --display:
+    "Bricolage Grotesque", "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --body: "Funnel Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --max: 1280px;
+  --max-wide: 1560px;
+  --max-prose: 820px;
+  --marginalia: clamp(140px, 16vw, 240px);
+  --gutter: clamp(20px, 3.2vw, 56px);
+  --radius: 14px;
+  --radius-sm: 8px;
+
+  --nav-h: 76px;
+
+  --ease: cubic-bezier(0.2, 0.65, 0.25, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}

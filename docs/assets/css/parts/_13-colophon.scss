@@ -1,0 +1,71 @@
+/* ---------- colophon ---------- */
+.colophon {
+  margin-top: clamp(64px, 8vw, 112px);
+  padding: 80px 0 28px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in oklab, var(--ink) 60%, #000) 80%
+  );
+  border-top: 1px solid var(--ink-line);
+}
+.colophon__inner {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  padding-bottom: 56px;
+}
+.colophon__col p {
+  margin: 12px 0 0;
+  color: var(--paper-mute);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.colophon__col p a {
+  color: var(--paper);
+  border-bottom: 1px dotted var(--paper-faint);
+}
+.colophon__col p a:hover {
+  color: var(--ruby);
+  border-color: var(--ruby);
+}
+.colophon__heading {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ruby);
+}
+.colophon__rule {
+  height: 1px;
+  background: var(--ink-line);
+  margin: 0;
+}
+.colophon__base {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--paper-faint);
+  letter-spacing: 0.04em;
+}
+.colophon__base a {
+  color: var(--paper-mute);
+  border-bottom: 1px dotted var(--paper-faint);
+}
+.colophon__base a:hover {
+  color: var(--ruby);
+  border-color: var(--ruby);
+}
+
+@media (max-width: 720px) {
+  .colophon__inner {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+

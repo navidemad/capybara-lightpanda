@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+cd "$(dirname "$0")/../docs"
+
+exec mise exec -- hugo server --disableFastRender "$@"

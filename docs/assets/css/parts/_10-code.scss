@@ -1,0 +1,276 @@
+/* ---------- code blocks ---------- */
+.content pre,
+.content .highlight {
+  margin: 28px 0 36px;
+  border-radius: var(--radius);
+  background: var(--ink-2);
+  border: 1px solid var(--ink-line);
+  overflow: hidden;
+  position: relative;
+}
+@media (min-width: 1100px) {
+  .content__inner > pre,
+  .content__inner > .highlight,
+  .content__inner > table {
+    grid-column: prose-start / aside-end;
+    max-width: 1080px;
+  }
+}
+.content .highlight {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  padding-top: 36px;
+}
+.content .highlight pre {
+  margin: 0;
+  background: transparent;
+  border: 0;
+  padding: 22px 26px 22px;
+  overflow-x: auto;
+  color: var(--paper);
+}
+.content pre:not(.chroma) {
+  padding: 22px 26px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--paper);
+  overflow-x: auto;
+}
+.content pre code,
+.content .highlight code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* copy button */
+.code-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-line);
+  background: color-mix(in oklab, var(--ink) 70%, transparent);
+  color: var(--paper-mute);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.25s var(--ease),
+    transform 0.25s var(--ease),
+    color 0.25s var(--ease),
+    border-color 0.25s var(--ease);
+  z-index: 3;
+}
+.code-copy svg {
+  color: currentColor;
+}
+.content .highlight:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+.code-copy:hover {
+  color: var(--paper);
+  border-color: color-mix(in oklab, var(--paper) 30%, var(--ink-line));
+}
+.code-copy.is-copied {
+  color: var(--bamboo);
+  border-color: color-mix(in oklab, var(--bamboo) 50%, var(--ink-line));
+  opacity: 1;
+  transform: none;
+}
+
+/* language label via :has() */
+.content .highlight::before {
+  content: "code";
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  background: var(--ink-3);
+  border-bottom: 1px solid var(--ink-line);
+  border-right: 1px solid var(--ink-line);
+  border-bottom-right-radius: 8px;
+  padding: 6px 14px;
+}
+.content .highlight:has(code.language-ruby)::before {
+  content: "ruby";
+  color: var(--ruby);
+}
+.content .highlight:has(code.language-bash)::before,
+.content .highlight:has(code.language-shell)::before,
+.content .highlight:has(code.language-sh)::before {
+  content: "shell";
+  color: var(--bamboo);
+}
+.content .highlight:has(code.language-yaml)::before,
+.content .highlight:has(code.language-toml)::before {
+  content: "config";
+  color: var(--gold);
+}
+.content .highlight:has(code.language-html)::before {
+  content: "html";
+  color: var(--gold);
+}
+.content .highlight:has(code.language-js)::before,
+.content .highlight:has(code.language-javascript)::before {
+  content: "javascript";
+  color: var(--gold);
+}
+
+/* chroma syntax — dark warm theme */
+.chroma {
+  color: var(--paper);
+  background: transparent;
+}
+.chroma .err {
+  color: var(--ruby);
+}
+.chroma .c,
+.chroma .ch,
+.chroma .cm,
+.chroma .c1,
+.chroma .cs {
+  color: var(--paper-faint);
+  font-style: italic;
+}
+.chroma .cp,
+.chroma .cpf {
+  color: var(--paper-faint);
+  font-style: italic;
+}
+.chroma .k,
+.chroma .kc,
+.chroma .kd,
+.chroma .kn,
+.chroma .kp,
+.chroma .kr,
+.chroma .kt {
+  color: var(--ruby);
+  font-weight: 500;
+}
+.chroma .o {
+  color: var(--paper-mute);
+}
+.chroma .nb {
+  color: var(--gold);
+}
+.chroma .nf {
+  color: var(--gold-soft);
+}
+.chroma .nc {
+  color: var(--bamboo);
+  font-weight: 500;
+}
+.chroma .nn {
+  color: var(--bamboo);
+}
+.chroma .nt {
+  color: var(--ruby);
+}
+.chroma .na {
+  color: var(--gold);
+}
+.chroma .nv,
+.chroma .vc,
+.chroma .vg,
+.chroma .vi {
+  color: var(--paper);
+}
+.chroma .ne {
+  color: var(--ruby);
+}
+.chroma .ni {
+  color: var(--gold-soft);
+}
+.chroma .no {
+  color: var(--gold);
+}
+.chroma .py {
+  color: var(--paper);
+}
+.chroma .s,
+.chroma .sa,
+.chroma .sb,
+.chroma .sc,
+.chroma .dl,
+.chroma .sd,
+.chroma .s1,
+.chroma .s2,
+.chroma .se,
+.chroma .sh,
+.chroma .si,
+.chroma .sx,
+.chroma .sr {
+  color: var(--bamboo);
+}
+.chroma .ss {
+  color: var(--gold);
+}
+.chroma .m,
+.chroma .mb,
+.chroma .mf,
+.chroma .mh,
+.chroma .mi,
+.chroma .il,
+.chroma .mo {
+  color: var(--gold);
+}
+.chroma .ow,
+.chroma .l {
+  color: var(--paper-mute);
+}
+.chroma .gh {
+  color: var(--bamboo);
+  font-weight: 600;
+}
+.chroma .gu {
+  color: var(--bamboo);
+}
+.chroma .gd {
+  color: var(--ruby);
+  background: color-mix(in oklab, var(--ruby) 12%, transparent);
+}
+.chroma .gi {
+  color: var(--bamboo);
+  background: color-mix(in oklab, var(--bamboo) 12%, transparent);
+}
+.chroma .gp {
+  color: var(--paper-faint);
+}
+.chroma .gs {
+  font-weight: 600;
+}
+.chroma .ge {
+  font-style: italic;
+}
+.chroma .gr {
+  color: var(--ruby);
+}
+.chroma .gt {
+  color: var(--paper-faint);
+}
+
+.chroma .ln,
+.chroma .lnt {
+  color: var(--paper-faint);
+  padding-right: 14px;
+  user-select: none;
+}
+

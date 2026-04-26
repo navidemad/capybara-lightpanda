@@ -1,0 +1,357 @@
+/* ---------- swap (stack diagram) ---------- */
+.swap {
+  padding-inline: var(--gutter);
+}
+.swap .section__head {
+  border-top: 0;
+  padding-top: 0;
+  margin-bottom: clamp(28px, 3vw, 40px);
+}
+.swap__compare {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+/* shared Capybara header — spans both halves to make the visual argument that
+   the API surface is the same; only the runtime below diverges */
+.swap__shared {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+  margin-bottom: 0;
+}
+.swap__shared-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+.swap__shared-glyph {
+  font-family: var(--display);
+  font-style: italic;
+  color: var(--ruby);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.swap__shared-card {
+  --pad-x: clamp(20px, 2.4vw, 36px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: min(560px, 100%);
+  padding: 16px var(--pad-x) 18px;
+  border: 1px solid color-mix(in oklab, var(--paper) 25%, var(--ink-line-2));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--paper) 12%, var(--ink-3));
+  font-family: var(--mono);
+  position: relative;
+}
+.swap__shared-card::before,
+.swap__shared-card::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  width: 1px;
+  height: 14px;
+  background: color-mix(in oklab, var(--paper) 25%, var(--ink-line-2));
+}
+.swap__shared-card::before {
+  left: 25%;
+}
+.swap__shared-card::after {
+  right: 25%;
+}
+.swap__shared-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper);
+  letter-spacing: -0.005em;
+}
+.swap__shared-sub {
+  font-size: 11.5px;
+  color: var(--paper-mute);
+  letter-spacing: 0.04em;
+}
+
+/* split rule — visualizes where the runtime diverges */
+.swap__split {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 22px;
+  color: var(--paper-faint);
+}
+.swap__split-rule {
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink-line) 0 5px,
+    transparent 5px 9px
+  );
+}
+.swap__split-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ruby);
+  white-space: nowrap;
+}
+
+/* the diverging halves */
+.swap__halves {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 40px);
+  align-items: stretch;
+}
+
+@media (max-width: 720px) {
+  .swap__halves {
+    grid-template-columns: 1fr;
+  }
+  .swap__split {
+    margin: 14px 0 16px;
+  }
+}
+.stack {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--paper) 2%, transparent),
+      transparent 40%
+    ),
+    var(--ink-2);
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius);
+  padding: clamp(18px, 1.8vw, 28px);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.35s var(--ease),
+    border-color 0.35s var(--ease),
+    box-shadow 0.35s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .stack:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in oklab, var(--paper) 18%, var(--ink-line));
+    box-shadow: 0 16px 40px -20px
+      color-mix(in oklab, var(--ruby) 50%, transparent);
+  }
+  .stack--after:hover {
+    box-shadow: 0 16px 40px -20px
+      color-mix(in oklab, var(--bamboo) 50%, transparent);
+  }
+}
+.stack::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--ink-line-2);
+}
+.stack--after::before {
+  background: linear-gradient(180deg, var(--bamboo), var(--gold));
+}
+.stack--before {
+  opacity: 0.92;
+}
+
+.stack__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.stack__tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--paper-faint);
+  padding: 5px 10px;
+  border: 1px solid var(--ink-line-2);
+  border-radius: 999px;
+}
+.stack__tag--accent {
+  color: var(--bamboo);
+  border-color: color-mix(in oklab, var(--bamboo) 50%, var(--ink-line));
+  background: color-mix(in oklab, var(--bamboo) 10%, transparent);
+}
+.stack__weight {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--paper-mute);
+}
+
+.stack__layers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.layer {
+  position: relative;
+  padding: 10px 14px;
+  border: 1px solid var(--ink-line-2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  background: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  transition:
+    transform 0.35s var(--ease),
+    border-color 0.35s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .layer:hover {
+    transform: translateX(4px);
+    border-color: color-mix(in oklab, var(--paper) 25%, var(--ink-line-2));
+  }
+}
+.layer:last-child {
+  margin-bottom: 0;
+}
+.layer--app {
+  background: color-mix(in oklab, var(--paper) 12%, var(--ink-3));
+  border-color: color-mix(in oklab, var(--paper) 25%, var(--ink-line-2));
+}
+.layer--mid {
+  background: var(--ink-3);
+}
+.layer--heavy {
+  padding: 14px 16px;
+  background: color-mix(in oklab, var(--ruby) 16%, var(--ink-3));
+  border-color: color-mix(in oklab, var(--ruby) 40%, var(--ink-line-2));
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 8px,
+    color-mix(in oklab, var(--ruby) 12%, transparent) 8px 9px
+  );
+}
+.layer--light {
+  padding: 14px 16px;
+  background: color-mix(in oklab, var(--bamboo) 14%, var(--ink-3));
+  border-color: color-mix(in oklab, var(--bamboo) 50%, var(--ink-line-2));
+}
+.layer__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.layer__sub {
+  font-size: 11px;
+  color: var(--paper-mute);
+  letter-spacing: 0.04em;
+}
+.layer__pill {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--gold) 22%, var(--ink-3));
+  border: 1px solid color-mix(in oklab, var(--gold) 50%, transparent);
+  color: var(--gold-soft);
+  margin-left: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stack__note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--paper-mute);
+  font-style: italic;
+}
+.stack__note em {
+  color: var(--paper);
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* quote */
+.quote {
+  margin: 64px 0 0;
+  max-width: 1080px;
+  padding: clamp(40px, 5vw, 72px) clamp(32px, 5vw, 88px);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(
+      ellipse at top right,
+      color-mix(in oklab, var(--ruby) 15%, transparent),
+      transparent 60%
+    ),
+    var(--ink-2);
+  border: 1px solid var(--ink-line);
+  position: relative;
+}
+.quote::before {
+  content: "“";
+  position: absolute;
+  top: -24px;
+  left: 24px;
+  font-family: var(--display);
+  font-size: 140px;
+  line-height: 1;
+  color: var(--ruby);
+  font-style: italic;
+}
+.quote blockquote {
+  margin: 0;
+}
+.quote p {
+  font-family: var(--display);
+  font-size: clamp(22px, 2.6vw, 34px);
+  line-height: 1.25;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--paper);
+  margin: 0;
+}
+.quote em {
+  font-style: italic;
+  color: var(--bamboo);
+}
+.quote figcaption {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--paper-faint);
+  letter-spacing: 0.04em;
+}
+.quote figcaption a {
+  color: var(--paper-mute);
+  border-bottom: 1px dotted var(--paper-faint);
+}
+.quote figcaption a:hover {
+  color: var(--ruby);
+}
+@media (max-width: 600px) {
+  .quote {
+    padding: 32px 24px;
+  }
+  .quote::before {
+    font-size: 90px;
+    top: -8px;
+    left: 12px;
+  }
+}
+

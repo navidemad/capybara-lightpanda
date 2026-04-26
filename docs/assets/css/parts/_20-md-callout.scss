@@ -1,0 +1,56 @@
+/* ---------- markdown inline callout (rollback note in §03) ---------- */
+.md-callout {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 14px;
+  align-items: start;
+  margin: 18px 0 24px;
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--paper-mute);
+}
+.md-callout strong {
+  color: var(--paper);
+  font-weight: 600;
+}
+.md-callout code {
+  font-family: var(--mono);
+  font-size: 0.84em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ink-3);
+  border: 1px solid var(--ink-line);
+  color: var(--gold-soft);
+}
+.md-callout__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.md-callout--rollback {
+  border: 1px dashed color-mix(in oklab, var(--bamboo) 35%, var(--ink-line));
+  background: color-mix(in oklab, var(--bamboo) 5%, transparent);
+}
+.md-callout--rollback strong {
+  color: var(--bamboo);
+}
+.md-callout--rollback .md-callout__glyph {
+  background: color-mix(in oklab, var(--bamboo) 22%, transparent);
+  color: var(--bamboo);
+}
+@media (max-width: 600px) {
+  .md-callout {
+    grid-template-columns: 1fr;
+  }
+  .md-callout__glyph {
+    display: none;
+  }
+}
+

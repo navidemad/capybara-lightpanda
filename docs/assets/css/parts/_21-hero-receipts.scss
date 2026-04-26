@@ -1,0 +1,119 @@
+/* ============================================================
+   hero receipts — three honest numbers under the CTAs
+   ============================================================ */
+.hero__receipts {
+  margin: clamp(20px, 2.4vw, 32px) 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--ink-line);
+}
+.hero__receipts-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+.hero__receipts-eyebrow-glyph {
+  color: var(--gold);
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hero__receipts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-left: 1px solid var(--ink-line);
+}
+.receipt {
+  display: grid;
+  gap: 6px;
+  padding: 6px 18px 4px;
+  border-right: 1px solid var(--ink-line);
+}
+.receipt__num {
+  font-family: var(--display);
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings:
+    "opsz" 72,
+    "wght" 480;
+  display: inline-flex;
+  align-items: baseline;
+}
+.receipt__num em {
+  font-style: normal;
+  font-size: 0.46em;
+  font-weight: 400;
+  color: var(--paper-mute);
+  letter-spacing: 0.02em;
+}
+.receipt__num small {
+  font-size: 0.5em;
+  font-weight: 400;
+  color: var(--paper-faint);
+  letter-spacing: 0.02em;
+}
+.receipt__head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.receipt__foot {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-faint);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero__receipts-cite {
+  margin: 14px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--paper-faint);
+}
+.hero__receipts-cite a {
+  color: var(--paper-mute);
+  border-bottom: 1px dotted var(--paper-faint);
+  padding-bottom: 1px;
+  transition:
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+.hero__receipts-cite a:hover {
+  color: var(--ruby);
+  border-bottom-color: var(--ruby);
+}
+
+@media (max-width: 720px) {
+  .hero__receipts-list {
+    grid-template-columns: 1fr;
+    border-left: 0;
+    border-top: 1px solid var(--ink-line);
+  }
+  .receipt {
+    border-right: 0;
+    border-bottom: 1px solid var(--ink-line);
+    padding: 12px 0 10px;
+  }
+}
+

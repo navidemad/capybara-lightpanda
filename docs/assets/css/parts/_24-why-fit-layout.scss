@@ -1,0 +1,226 @@
+/* ============================================================
+   §01 fit-to-viewport layout (desktop ≥1080px):
+   - section_head as 2-col with title-stack | trusted-strip
+   - why__grid: pillars left, stats right, sharing the spine
+   - source as a tail caption
+   ============================================================ */
+
+/* §01 head — title-stack sits inside the centered prose column so its left
+   edge aligns with the body grid below. The chapter marker keeps its
+   canonical large-numeral treatment but hangs in the left margin via an
+   absolute offset, preserving the editorial "marginalia" feel without
+   stealing horizontal space from the prose. */
+.why__head {
+  position: relative;
+  display: block;
+  max-width: var(--why-prose);
+  margin-inline: auto;
+}
+.why__head .section__no {
+  position: absolute;
+  top: 0;
+  right: calc(100% + clamp(20px, 3vw, 56px));
+  text-align: right;
+  justify-self: auto;
+}
+.why__head-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.why__head-stack > .section__title {
+  margin: 0;
+  grid-column: auto;
+  grid-row: auto;
+}
+.why__head-stack > .why__epigraph {
+  margin: 0;
+  grid-column: auto;
+  grid-row: auto;
+}
+
+/* "Also powers" — a thin editorial credit strip framed by hairlines, sitting
+   between the chapter head and the body grid. Eyebrow on the left, logos
+   spaced across to the right. */
+.why__trusted-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(18px, 2vw, 32px);
+  max-width: var(--why-prose);
+  margin: 0 auto;
+  padding: clamp(10px, 1.1vw, 16px) 0;
+  border-top: 1px solid color-mix(in oklab, var(--ink-line) 70%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--ink-line) 70%, transparent);
+}
+.why__trusted-strip-eyebrow {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.why__trusted-strip-glyph {
+  font-family: var(--display);
+  font-size: 14px;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+}
+.why__trusted-strip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(18px, 2.4vw, 36px);
+  flex-wrap: wrap;
+}
+.why__trusted-strip-list li {
+  display: inline-flex;
+  align-items: center;
+}
+.why__trusted-strip-list img {
+  height: 20px;
+  width: auto;
+  opacity: 0.6;
+  filter: grayscale(0.7) brightness(1.05);
+  transition:
+    opacity 0.25s var(--ease),
+    filter 0.25s var(--ease);
+}
+.why__trusted-strip-list li:hover img {
+  opacity: 1;
+  filter: grayscale(0);
+}
+
+@media (max-width: 720px) {
+  .why__trusted-strip {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .why__trusted-strip-list {
+    justify-content: flex-start;
+  }
+}
+
+/* below ~1080px there isn't enough page margin to hang the chapter marker.
+   Drop it back into the flow above the title, left-aligned. */
+@media (max-width: 1079px) {
+  .why__head .section__no {
+    position: static;
+    text-align: left;
+    margin-bottom: 14px;
+  }
+}
+
+/* why__grid — pillars left, stats right. Columns shrink to their natural
+   content width so the pair sits as a centered unit inside the prose column,
+   instead of stretching edge-to-edge. */
+.why__grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  column-gap: clamp(36px, 4vw, 72px);
+  row-gap: 18px;
+  align-items: start;
+  margin-inline: auto;
+}
+@media (max-width: 880px) {
+  .why__grid {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    justify-items: center;
+  }
+  .why__grid .why__pillars,
+  .why__grid .why__stats {
+    width: 100%;
+    max-width: 480px;
+  }
+}
+.why__grid > .why__pillars,
+.why__grid > .why__stats {
+  margin: 0;
+  max-width: none;
+  border-top: 0;
+}
+
+/* stats become a vertical list of rows when inside .why__grid */
+.why__grid .why__stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 0;
+  border-bottom: 0;
+}
+.why__grid .why__stats .stat {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) 1fr;
+  column-gap: 16px;
+  row-gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px dashed var(--ink-line);
+  align-items: baseline;
+}
+.why__grid .why__stats .stat:last-child {
+  border-bottom: 0;
+}
+.why__grid .why__stats .stat__num {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: clamp(28px, 2.4vw, 38px);
+  margin: 0;
+}
+.why__grid .why__stats .stat__label {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.25;
+}
+.why__grid .why__stats .stat__bench {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.why__grid .why__stats .stat__foot {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+/* pillars — even tighter inside the grid */
+.why__grid .why__pillars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  width: clamp(280px, 36vw, 420px);
+}
+.why__grid .why__pillars .pillar {
+  padding: 4px 0;
+}
+.why__grid .why__stats {
+}

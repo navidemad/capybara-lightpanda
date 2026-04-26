@@ -1,0 +1,379 @@
+/* ---------- nav ---------- */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in oklab, var(--ink) 80%, transparent);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  border-bottom: 1px solid var(--ink-line);
+}
+.nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  height: 76px;
+}
+
+/* brand */
+.nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.nav__mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background:
+    radial-gradient(
+      120% 120% at 30% 0%,
+      color-mix(in oklab, var(--paper) 8%, transparent),
+      transparent 60%
+    ),
+    var(--ink-3);
+  border: 1px solid var(--ink-line-2);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--paper) 6%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  transition:
+    transform 0.35s var(--ease),
+    border-color 0.25s var(--ease);
+}
+.nav__mark::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklab, var(--ruby) 35%, transparent);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+  pointer-events: none;
+}
+.nav__mark img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav__brand:hover .nav__mark {
+    transform: rotate(-4deg) scale(1.04);
+  }
+  .nav__brand:hover .nav__mark::after {
+    opacity: 1;
+  }
+}
+
+.nav__ruby {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background:
+    radial-gradient(
+      120% 120% at 30% 0%,
+      rgba(255, 255, 255, 0.35),
+      transparent 60%
+    ),
+    var(--paper);
+  border: 1px solid color-mix(in oklab, var(--ruby) 25%, var(--paper-mute));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  transition:
+    transform 0.35s var(--ease),
+    border-color 0.25s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav__brand:hover .nav__ruby {
+    transform: rotate(4deg) scale(1.04);
+    border-color: var(--ruby);
+  }
+}
+.nav__ruby-mark {
+  display: block;
+  width: 36px;
+  height: 36px;
+  background-color: var(--ruby);
+  -webkit-mask: url("https://rubyonrails.org/assets/images/logo.svg") no-repeat
+    center / contain;
+  mask: url("https://rubyonrails.org/assets/images/logo.svg") no-repeat center /
+    contain;
+}
+
+.nav__wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.nav__name {
+  font-family: var(--display);
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--paper);
+  line-height: 1;
+  font-weight: 500;
+  font-variation-settings:
+    "opsz" 48,
+    "wght" 540;
+}
+.nav__name em {
+  font-style: italic;
+  color: var(--ruby);
+  font-weight: 500;
+  font-variation-settings:
+    "opsz" 48,
+    "wght" 480;
+  letter-spacing: -0.022em;
+}
+.nav__sep {
+  color: var(--paper-faint);
+  margin: 0 1px;
+  font-weight: 400;
+}
+.nav__tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  line-height: 1.4;
+}
+
+/* links */
+.nav__links {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  font-family: var(--body);
+  font-size: 14px;
+  color: var(--paper-mute);
+}
+.nav__links > a:not(.nav__gh):not(.nav__cta) {
+  position: relative;
+  padding: 8px 0;
+  letter-spacing: -0.005em;
+  transition: color 0.25s var(--ease);
+}
+.nav__links > a:not(.nav__gh):not(.nav__cta):hover {
+  color: var(--paper);
+}
+.nav__links > a:not(.nav__gh):not(.nav__cta)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 1px;
+  background: var(--ruby);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav__links > a:not(.nav__gh):not(.nav__cta):hover::after {
+    transform: scaleX(1);
+  }
+}
+
+/* Install CTA — paper-filled pill that flips to ruby on hover */
+.nav__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  font-weight: 500;
+  transition:
+    background-color 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    transform 0.16s var(--ease-out);
+}
+.nav__cta:active {
+  transform: scale(0.97);
+}
+.nav__cta-icon {
+  transition: transform 0.25s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav__cta:hover {
+    background: var(--ruby);
+    border-color: var(--ruby);
+    color: var(--paper);
+  }
+  .nav__cta:hover .nav__cta-icon {
+    transform: translateY(2px);
+  }
+}
+
+/* GitHub button — Octicon mark + label + divider + meta */
+.nav__gh {
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-line-2);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--paper) 4%, transparent),
+      transparent 60%
+    ),
+    var(--ink-3);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    transform 0.25s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav__gh:hover {
+    border-color: color-mix(in oklab, var(--paper) 50%, var(--ink-line-2));
+    transform: translateY(-1px);
+  }
+}
+.nav__gh:active {
+  transform: scale(0.97);
+}
+.nav__gh-mark {
+  align-self: center;
+  margin: 0 8px 0 14px;
+  color: var(--paper);
+  flex-shrink: 0;
+}
+.nav__gh-label {
+  align-self: center;
+  font-weight: 500;
+  padding-right: 12px;
+}
+.nav__gh-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--ink-line-2);
+}
+.nav__gh-meta {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  background: color-mix(in oklab, var(--ink) 50%, transparent);
+  color: var(--paper-mute);
+  font-size: 12px;
+  height: 100%;
+  transition:
+    color 0.25s var(--ease),
+    background 0.25s var(--ease);
+}
+.nav__gh:hover .nav__gh-meta {
+  color: var(--gold);
+  background: color-mix(in oklab, var(--gold) 8%, transparent);
+}
+.nav__gh-star {
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.nav__gh-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  min-width: 2ch;
+  text-align: right;
+  opacity: 0.55;
+  transition: opacity 0.35s var(--ease);
+}
+.nav__gh-count.is-loaded {
+  opacity: 1;
+}
+@keyframes pulse-faint {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.nav__gh-count:not(.is-loaded) {
+  animation: pulse-faint 1.4s ease-in-out infinite;
+}
+
+@media (max-width: 980px) {
+  .nav__links > a:not(.nav__gh):not(.nav__cta) {
+    display: none;
+  }
+  .nav__inner {
+    gap: 12px;
+  }
+}
+@media (max-width: 480px) {
+  .nav__cta span {
+    display: none;
+  }
+  .nav__cta {
+    padding: 8px 12px;
+  }
+}
+@media (max-width: 720px) {
+  .nav__inner {
+    height: 68px;
+  }
+  .nav__mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+  }
+  .nav__mark img {
+    width: 26px;
+    height: 26px;
+  }
+  .nav__name {
+    font-size: 14px;
+  }
+  .nav__tag {
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+  }
+  .nav__gh-meta {
+    display: none;
+  }
+  .nav__gh-divider {
+    display: none;
+  }
+  .nav__gh-label {
+    padding-right: 14px;
+  }
+}
+@media (max-width: 480px) {
+  .nav__tag {
+    display: none;
+  }
+  .nav__gh-label {
+    display: none;
+  }
+  .nav__gh-mark {
+    margin: 0 12px;
+  }
+}
+

@@ -1,0 +1,83 @@
+
+/* ---------- background dot grid (deepest parallax layer) ---------- */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(241, 236, 224, 0.045) 1px,
+    transparent 0
+  );
+  background-size: 28px 28px;
+  background-position: 0 var(--bg-parallax, 0);
+  z-index: 0;
+  pointer-events: none;
+  mask-image: radial-gradient(
+    ellipse 80% 60% at 50% 30%,
+    #000 0%,
+    transparent 80%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 80% 60% at 50% 30%,
+    #000 0%,
+    transparent 80%
+  );
+  will-change: background-position;
+}
+
+/* ---------- page-wide skewed grid (mid parallax layer) ----------
+   Mirrors the .hero__grid pattern but in subtler ruby. Fixed-positioned,
+   skewed statically; the parallax driver shifts the *background* via
+   background-position, which auto-wraps with the repeating pattern so
+   the drift is bounded regardless of document length. */
+.page-grid {
+  position: fixed;
+  inset: -22vh -8vw -22vh -8vw;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transform: skewY(-9deg);
+  transform-origin: top left;
+  will-change: background-position;
+  --p-cell: clamp(56px, 5vw, 80px);
+  --p-line: color-mix(in oklab, var(--ruby) 22%, transparent);
+  background-image:
+    linear-gradient(to right, var(--p-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--p-line) 1px, transparent 1px);
+  background-size: var(--p-cell) var(--p-cell);
+  background-position: 0 var(--page-parallax, 0);
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.7) 14%,
+    rgba(0, 0, 0, 0.95) 50%,
+    rgba(0, 0, 0, 0.7) 86%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.7) 14%,
+    rgba(0, 0, 0, 0.95) 50%,
+    rgba(0, 0, 0, 0.7) 86%,
+    transparent 100%
+  );
+  opacity: 0.75;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-grid {
+    background-position: 0 0;
+  }
+  .grid-bg {
+    background-position: 0 0;
+  }
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+.page-grid {
+  z-index: 0;
+}
+

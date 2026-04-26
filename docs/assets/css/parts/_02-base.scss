@@ -1,0 +1,113 @@
+
+/* ---------- reset ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: var(--nav-h);
+}
+
+.hero,
+.why,
+.swap,
+.pair,
+.matrix,
+.endrail,
+.chapter {
+  scroll-margin-top: var(--nav-h);
+}
+.hero {
+  /* slightly under-fill so the next chapter's hairline + ::after ribbon
+     peek above the fold and signal "scroll for more". */
+  min-height: calc(92dvh - var(--nav-h));
+}
+.why,
+.swap,
+.pair,
+.matrix,
+.chapter {
+  min-height: calc(100dvh - var(--nav-h));
+}
+@media (max-width: 700px) {
+  .hero,
+  .why,
+  .swap,
+  .pair,
+  .matrix,
+  .chapter {
+    min-height: 0;
+  }
+}
+
+/* ---------- shared chapter chrome ---------- */
+/* echoes the .endrail divider treatment so every chapter opens with a
+   hairline + centered ruby ribbon and shares the same vertical breathing. */
+:is(.why, .swap, .pair, .matrix, .beta, .chapter) {
+  position: relative;
+  padding-block: clamp(32px, 4vh, 64px);
+  border-top: 1px solid var(--ink-line);
+}
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.6;
+  font-weight: 400;
+  font-feature-settings: "ss01", "ss02", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* prose wrapping — pretty for paragraphs (no orphans), balance for headings */
+:where(p, li, dd, blockquote, figcaption) {
+  text-wrap: pretty;
+}
+:where(h1, h2, h3, h4, h5, h6) {
+  text-wrap: balance;
+}
+img,
+svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button {
+  font: inherit;
+}
+::selection {
+  background: var(--ruby);
+  color: var(--paper);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.5em 1em;
+  z-index: 100;
+}
+.skip:focus {
+  left: 1em;
+  top: 1em;
+}
+
+.wrap {
+  max-width: var(--max);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  position: relative;
+}
+.wrap--wide {
+  max-width: var(--max-wide);
+}

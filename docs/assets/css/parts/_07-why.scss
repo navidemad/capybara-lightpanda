@@ -1,0 +1,331 @@
+/* ---------- swap (stack diagram) ---------- */
+/* ---------- "Why this engine" chapter ---------- */
+.why {
+  padding-inline: var(--gutter);
+  --why-prose: 880px;
+}
+@media (min-width: 1080px) {
+  .why {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(20px, 2.4vw, 36px);
+    min-height: calc(100dvh - var(--nav-h));
+  }
+  .why > * {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+.why .section__head {
+  margin-bottom: clamp(20px, 2vw, 28px);
+}
+.why {
+  position: relative;
+}
+
+.why__manifesto {
+  max-width: 880px;
+  margin: 0 auto clamp(40px, 4vw, 64px);
+  position: relative;
+  padding: 18px 28px 22px;
+  border-left: 2px solid var(--ruby);
+  background: color-mix(in oklab, var(--ruby) 4%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.why__manifesto::before {
+  content: none;
+}
+
+.why__eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+.why__eyebrow a {
+  color: var(--paper);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--ruby) 60%, transparent);
+  padding-bottom: 1px;
+}
+.why__eyebrow-glyph {
+  font-family: var(--display);
+  font-style: italic;
+  color: var(--ruby);
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.why__quote {
+  margin: 0;
+}
+.why__quote p {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(22px, 2.4vw, 36px);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  color: var(--paper);
+  font-weight: 400;
+  font-variation-settings:
+    "opsz" 96,
+    "wght" 460;
+}
+.why__quote em {
+  font-style: italic;
+  color: var(--bamboo);
+  font-weight: 500;
+}
+
+.why__pillars {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 0 clamp(36px, 4vw, 56px);
+  padding: 0;
+}
+.why__pillars .pillar {
+  padding: 6px 0;
+}
+
+.why__stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--ink-line);
+}
+.why__stats .stat {
+  border-bottom: 1px dashed var(--ink-line);
+  border-right: 0;
+  padding: 18px 0;
+}
+.why__stats .stat:last-child {
+  border-bottom: 0;
+}
+
+@media (min-width: 880px) {
+  .why__stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 0;
+    border-bottom: 1px dashed var(--ink-line);
+  }
+  .why__stats .stat {
+    border-bottom: 0;
+    border-right: 1px dashed var(--ink-line);
+    padding: 22px clamp(20px, 2.2vw, 32px);
+    display: grid;
+    grid-template-columns: minmax(72px, auto) 1fr;
+    column-gap: 18px;
+    row-gap: 4px;
+    align-items: baseline;
+  }
+  .why__stats .stat:first-child {
+    padding-left: 0;
+  }
+  .why__stats .stat:last-child {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .why__stats .stat__num {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: center;
+    font-size: clamp(48px, 4.4vw, 72px);
+    margin: 0;
+  }
+  .why__stats .stat__label {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  .why__stats .stat__foot {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--paper-faint);
+  }
+  .why__stats .stat__bench {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    line-height: 1;
+  }
+  .why__stats .stat__bench .bench__a,
+  .why__stats .stat__bench .bench__b {
+    font-weight: 500;
+    font-feature-settings: "tnum" 1;
+  }
+  .why__stats .stat__bench .bench__a {
+    color: var(--paper);
+  }
+  .why__stats .stat__bench .bench__b {
+    color: var(--paper-faint);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(
+      in oklab,
+      var(--paper-faint) 70%,
+      transparent
+    );
+    text-decoration-thickness: 1px;
+  }
+  .why__stats .stat__bench .bench__bar {
+    position: relative;
+    height: 5px;
+    border-radius: 2px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--ink-line) 0 4px,
+      transparent 4px 7px
+    );
+  }
+  .why__stats .stat__bench .bench__bar i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--p, 12%);
+    border-radius: 2px;
+    background: var(--ruby);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 1.4s cubic-bezier(0.4, 0, 0.1, 1) 0.35s;
+  }
+  .why__stats .stat.is-visible .bench__bar i {
+    transform: scaleX(1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .why__stats .stat__bench .bench__bar i {
+      transform: scaleX(1);
+      transition: none;
+    }
+  }
+  .why__stats .stat--green .bench__bar i {
+    background: var(--bamboo);
+  }
+}
+
+.why__source {
+  max-width: 880px;
+  margin: 18px auto 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  color: var(--paper-faint);
+  text-align: right;
+}
+.why__source a {
+  color: var(--paper);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--ruby) 60%, transparent);
+  padding-bottom: 1px;
+  transition: border-color 200ms var(--ease-out);
+}
+.why__source a:hover {
+  border-bottom-color: var(--ruby);
+}
+
+/* desktop prose — §01 body content (grid + source caption) sits in a single
+   880px column centered horizontally within the section. The trusted-strip
+   above and the head above that share the same centered axis, so the eye
+   scans down a single column. Defined last so the longhand margins win over
+   earlier `margin: ...` shorthands. */
+@media (min-width: 1080px) {
+  .why__grid,
+  .why__source {
+    max-width: var(--why-prose);
+    margin-inline: auto;
+  }
+  .why__epigraph {
+    max-width: var(--why-prose);
+  }
+}
+
+/* §01 title epigraph — the manifesto, sized as a subtitle under "Why this engine" */
+.why__epigraph {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 4px 0 0;
+  font-family: var(--display);
+  font-size: clamp(17px, 1.4vw, 24px);
+  line-height: 1.3;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--paper);
+  font-variation-settings:
+    "opsz" 64,
+    "wght" 420;
+  letter-spacing: -0.012em;
+  border-left: 2px solid var(--ruby);
+  padding: 4px 0 4px 16px;
+}
+.why__epigraph em {
+  color: var(--bamboo);
+  font-style: italic;
+  font-weight: 500;
+}
+.why__epigraph-cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 14px;
+  padding: 3px 10px 2px;
+  border: 1px solid var(--ink-line);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--gold) 4%, var(--ink-3));
+  color: var(--paper-mute);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1;
+  vertical-align: 4px;
+  transition:
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+.why__epigraph-cite:hover {
+  border-color: color-mix(in oklab, var(--ruby) 35%, var(--ink-line));
+  color: var(--paper);
+}
+.why__epigraph-cite-gh {
+  color: var(--paper-mute);
+  flex-shrink: 0;
+  transition: color 0.2s var(--ease);
+}
+.why__epigraph-cite:hover .why__epigraph-cite-gh {
+  color: var(--paper);
+}
+.why__epigraph-cite .gh-pill {
+  margin: 0 0 0 4px;
+  padding: 0 0 0 8px;
+  border: 0;
+  border-left: 1px solid var(--ink-line);
+  background: transparent;
+  color: var(--gold);
+  letter-spacing: -0.01em;
+  font-size: 10.5px;
+  text-transform: none;
+  gap: 3px;
+}
+

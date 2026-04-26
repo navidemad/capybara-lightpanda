@@ -1,0 +1,27 @@
+// capybara::lightpanda — main entry
+// Cascade order is preserved by numeric prefix; do not reorder lightly.
+
+@use "parts/01-tokens" as *;
+@use "parts/02-base" as *;
+@use "parts/03-background" as *;
+@use "parts/04-nav" as *;
+@use "parts/05-hero" as *;
+@use "parts/06-section-head" as *;
+@use "parts/07-why" as *;
+@use "parts/08-swap" as *;
+@use "parts/09-content" as *;
+@use "parts/10-code" as *;
+@use "parts/11-tables" as *;
+@use "parts/12-matrix" as *;
+@use "parts/13-colophon" as *;
+@use "parts/14-reveal" as *;
+@use "parts/15-scroll-progress" as *;
+@use "parts/16-trusted-strip" as *;
+@use "parts/17-endrail" as *;
+@use "parts/18-hero-beta-pill" as *;
+@use "parts/19-beta" as *;
+@use "parts/20-md-callout" as *;
+@use "parts/21-hero-receipts" as *;
+@use "parts/22-hero-scroll-cue" as *;
+@use "parts/23-trusted-appendix" as *;
+@use "parts/24-why-fit-layout" as *;

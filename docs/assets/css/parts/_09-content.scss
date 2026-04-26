@@ -1,0 +1,229 @@
+/* ---------- content (markdown body) ---------- */
+/* nested inside .pair.wrap.wrap--wide which already provides gutters,
+   so .content adds no extra inline padding of its own. */
+.content {
+  padding-inline: 0;
+}
+.content__inner {
+  counter-reset: section 2;
+  display: grid;
+  grid-template-columns:
+    [marker-start] var(--marginalia)
+    [prose-start] minmax(0, var(--max-prose))
+    [prose-end] minmax(0, 1fr) [aside-end];
+  column-gap: clamp(20px, 3vw, 56px);
+  row-gap: 0;
+}
+.content__inner > * {
+  grid-column: prose-start / prose-end;
+  min-width: 0;
+}
+
+.content__inner > .chapter {
+  grid-column: marker-start / aside-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  column-gap: clamp(20px, 3vw, 56px);
+  align-content: center;
+}
+.chapter > * {
+  grid-column: prose-start / prose-end;
+  min-width: 0;
+}
+.chapter > h2 {
+  grid-column: marker-start / prose-end;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+.chapter > h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+@media (max-width: 1100px) {
+  .content__inner > .chapter {
+    grid-template-columns: 1fr;
+    grid-column: 1;
+  }
+  .chapter > * {
+    grid-column: 1;
+  }
+  .chapter > h2 {
+    grid-template-columns: 1fr;
+    grid-column: 1;
+  }
+}
+
+.content__inner {
+  counter-reset: section 2;
+}
+.content h2 {
+  grid-column: marker-start / prose-end;
+  display: grid;
+  grid-template-columns: subgrid;
+  counter-increment: section;
+  font-family: var(--display);
+  font-size: clamp(36px, 5.4vw, 76px);
+  font-weight: 500;
+  letter-spacing: -0.028em;
+  line-height: 0.98;
+  margin: 0 0 clamp(28px, 3vw, 40px);
+  color: var(--paper);
+  align-items: start;
+}
+.content h2 .section__title-text {
+  background-color: var(--ruby);
+  padding: 0 0.18em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.content h2:first-child {
+  margin-top: 0;
+}
+.content h2::before {
+  content: counter(section, decimal-leading-zero);
+  grid-column: marker-start / prose-start;
+  justify-self: end;
+  align-self: start;
+  font-family: var(--display);
+  font-size: clamp(40px, 4.6vw, 72px);
+  font-weight: 300;
+  font-variation-settings:
+    "opsz" 96,
+    "wght" 320;
+  letter-spacing: -0.04em;
+  color: var(--ruby);
+  line-height: 0.85;
+  padding-top: 6px;
+  padding-right: 8px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.content h2 > * {
+  grid-column: prose-start / prose-end;
+}
+.content h2 a {
+  display: inline;
+}
+
+@media (max-width: 1100px) {
+  .content__inner {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: var(--max-prose);
+    margin-inline: auto;
+  }
+  .content__inner > * {
+    grid-column: 1;
+  }
+  .content h2 {
+    grid-template-columns: 1fr;
+    grid-column: 1;
+  }
+  .content h2::before {
+    grid-column: 1;
+    padding-top: 0;
+    margin-bottom: 10px;
+    display: block;
+  }
+}
+
+.content h2 a,
+.content h3 a {
+  color: inherit;
+}
+.content h2[id],
+.content h3[id],
+#migrate,
+#benchmark,
+#install,
+#stack,
+#pair-with-cuprite,
+#capabilities {
+  scroll-margin-top: 80px;
+}
+
+.content h3 {
+  font-family: var(--display);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  margin: 48px 0 16px;
+  color: var(--paper);
+}
+
+.content p {
+  margin: 0 0 22px;
+  color: var(--paper-mute);
+  line-height: 1.7;
+  font-size: 17px;
+}
+.content p strong {
+  color: var(--paper);
+  font-weight: 600;
+}
+.content p em {
+  color: var(--paper);
+  font-style: italic;
+}
+.content code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--ink-3);
+  border: 1px solid var(--ink-line);
+  color: var(--gold-soft);
+}
+.content a {
+  color: var(--paper);
+  border-bottom: 1px solid var(--ruby);
+  padding-bottom: 1px;
+  transition:
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+.content a:hover {
+  color: var(--ruby);
+}
+
+.content ul,
+.content ol {
+  margin: 0 0 26px;
+  padding-left: 0;
+  list-style: none;
+}
+.content ul li,
+.content ol li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 10px;
+  color: var(--paper-mute);
+  line-height: 1.55;
+}
+.content ul li::before {
+  content: "";
+  position: absolute;
+  top: 0.65em;
+  left: 6px;
+  width: 8px;
+  height: 1px;
+  background: var(--ruby);
+}
+.content ol {
+  counter-reset: ol;
+}
+.content ol li {
+  counter-increment: ol;
+}
+.content ol li::before {
+  content: counter(ol, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ruby);
+  padding-top: 4px;
+}
+

@@ -1,0 +1,29 @@
+/* ---------- reveal-on-scroll ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.35s ease-out,
+    transform 0.35s var(--ease-out);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.swap__halves > .stack--after.reveal {
+  transition-delay: 120ms;
+}
+.swap__split.reveal {
+  transition-delay: 60ms;
+}
+.matrix__col--no.reveal {
+  transition-delay: 100ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
