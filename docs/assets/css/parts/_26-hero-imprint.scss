@@ -1,0 +1,82 @@
+/* ============================================================
+   hero open-source pill — sibling to .hero__beta
+   ============================================================
+   sits next to the v0.1.0 beta pill in a single eyebrow row.
+   matches .hero__beta's chip shape (mono small caps, rounded
+   border) but in bamboo to distinguish open-source signal from
+   beta signal. */
+
+.hero__eyebrows {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 22px;
+}
+@media (min-width: 1080px) {
+  .hero__eyebrows {
+    margin: 0;
+  }
+}
+
+/* zero out .hero__beta's own bottom margin when it lives inside
+   the eyebrows row — the row owns the spacing now. */
+.hero__eyebrows .hero__beta {
+  margin: 0;
+}
+
+.hero__oss {
+  display: inline-flex;
+  align-self: flex-start;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 14px 6px 10px;
+  border: 1px solid color-mix(in oklab, var(--bamboo) 32%, var(--ink-line));
+  background: color-mix(in oklab, var(--bamboo) 6%, var(--ink-2));
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+  line-height: 1.4;
+  animation: rise 0.6s var(--ease-out) both;
+  animation-delay: 80ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__oss {
+    animation: none;
+  }
+}
+
+/* status dot — same shape as .hero__beta-dot but bamboo */
+.hero__oss-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bamboo);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--bamboo) 22%, transparent);
+  animation: oss-pulse 3s ease-in-out infinite;
+}
+@keyframes oss-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--bamboo) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--bamboo) 26%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero__oss-dot {
+    animation: none;
+  }
+}
+
+.hero__oss-label {
+  color: var(--paper);
+  font-weight: 500;
+}

@@ -10,8 +10,8 @@
   gap: 10px;
   margin: 0 0 22px;
   padding: 6px 14px 6px 10px;
-  border: 1px solid var(--ink-line);
-  background: color-mix(in oklab, var(--ruby) 6%, var(--ink-2));
+  border: 1px solid color-mix(in oklab, var(--gold) 30%, var(--ink-line));
+  background: color-mix(in oklab, var(--gold) 7%, var(--ink-2));
   border-radius: 999px;
   font-family: var(--mono);
   font-size: 11px;
@@ -30,17 +30,17 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ruby);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--ruby) 22%, transparent);
+  background: var(--gold);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--gold) 22%, transparent);
   animation: beta-pulse 2.4s ease-in-out infinite;
 }
 @keyframes beta-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ruby) 18%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--gold) 18%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px color-mix(in oklab, var(--ruby) 28%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--gold) 28%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -55,16 +55,7 @@
 .hero__beta-sep {
   color: var(--paper-faint);
 }
-.hero__beta-link {
-  color: var(--ruby);
-  border-bottom: 1px dotted color-mix(in oklab, var(--ruby) 60%, transparent);
-  padding-bottom: 1px;
-  transition:
-    color 0.2s var(--ease),
-    border-color 0.2s var(--ease);
-}
-.hero__beta-link:hover {
-  color: var(--paper);
-  border-bottom-color: var(--paper);
+.hero__beta-note {
+  color: color-mix(in oklab, var(--gold) 70%, var(--paper-mute));
 }
 

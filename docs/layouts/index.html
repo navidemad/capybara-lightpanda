@@ -49,14 +49,18 @@
         </span>
       </a>
       <div class="hero__main">
-        <p class="hero__beta">
-          <span class="hero__beta-dot" aria-hidden="true"></span>
-          <span class="hero__beta-label">v0.1.0 · public beta</span>
-          <span class="hero__beta-sep" aria-hidden="true">·</span>
-          <a class="hero__beta-link" href="#join-beta"
-            >we want your feedback <span aria-hidden="true">↘</span></a
-          >
-        </p>
+        <div class="hero__eyebrows">
+          <p class="hero__beta">
+            <span class="hero__beta-dot" aria-hidden="true"></span>
+            <span class="hero__beta-label">v0.1.0 · public beta</span>
+            <span class="hero__beta-sep" aria-hidden="true">·</span>
+            <span class="hero__beta-note">we want your feedback</span>
+          </p>
+          <p class="hero__oss" aria-label="Open-source release">
+            <span class="hero__oss-dot" aria-hidden="true"></span>
+            <span class="hero__oss-label">Open source</span>
+          </p>
+        </div>
         <h1 class="hero__title" id="hero-title">
           <span class="hero__line"
             >Faster system tests for
@@ -508,7 +512,8 @@
 
             <tr class="matrix__group">
               <td colspan="4">
-                Browser-engine features — keep cuprite if you need these
+                Browser-engine features — keep cuprite on those specific tests
+                if you need these
               </td>
             </tr>
             <tr>

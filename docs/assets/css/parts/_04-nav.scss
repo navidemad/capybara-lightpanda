@@ -222,7 +222,7 @@
   }
 }
 
-/* GitHub button — Octicon mark + label + divider + meta */
+/* GitHub button — Octicon mark + repo path + meta star pill */
 .nav__gh {
   display: inline-flex;
   align-items: stretch;
@@ -238,7 +238,7 @@
     var(--ink-3);
   color: var(--paper);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12.5px;
   letter-spacing: -0.005em;
   overflow: hidden;
   position: relative;
@@ -258,30 +258,41 @@
 }
 .nav__gh-mark {
   align-self: center;
-  margin: 0 8px 0 14px;
-  color: var(--paper);
+  margin: 0 8px 0 12px;
+  color: var(--paper-mute);
   flex-shrink: 0;
+  transition: color 0.25s var(--ease);
 }
-.nav__gh-label {
+.nav__gh:hover .nav__gh-mark {
+  color: var(--paper);
+}
+.nav__gh-repo {
   align-self: center;
+  font-feature-settings: "ss01";
   font-weight: 500;
+  color: var(--paper-mute);
+  white-space: nowrap;
   padding-right: 12px;
+  transition: color 0.25s var(--ease);
 }
-.nav__gh-divider {
-  align-self: stretch;
-  width: 1px;
-  background: var(--ink-line-2);
+.nav__gh-slash {
+  margin: 0 1px;
+  color: color-mix(in oklab, var(--gold) 55%, var(--paper-faint));
+}
+.nav__gh:hover .nav__gh-repo {
+  color: var(--paper);
 }
 .nav__gh-meta {
   align-self: center;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  background: color-mix(in oklab, var(--ink) 50%, transparent);
+  gap: 5px;
+  padding: 0 12px;
+  background: color-mix(in oklab, var(--ink) 55%, transparent);
   color: var(--paper-mute);
-  font-size: 12px;
+  font-size: 11.5px;
   height: 100%;
+  border-left: 1px solid var(--ink-line-2);
   transition:
     color 0.25s var(--ease),
     background 0.25s var(--ease);
@@ -298,7 +309,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   letter-spacing: -0.01em;
-  min-width: 2ch;
+  min-width: 1.5ch;
   text-align: right;
   opacity: 0.55;
   transition: opacity 0.35s var(--ease);
@@ -355,25 +366,23 @@
     font-size: 9.5px;
     letter-spacing: 0.18em;
   }
+  .nav__gh-repo {
+    display: none;
+  }
   .nav__gh-meta {
-    display: none;
-  }
-  .nav__gh-divider {
-    display: none;
-  }
-  .nav__gh-label {
-    padding-right: 14px;
+    border-left: 0;
+    background: transparent;
   }
 }
 @media (max-width: 480px) {
   .nav__tag {
     display: none;
   }
-  .nav__gh-label {
-    display: none;
-  }
   .nav__gh-mark {
-    margin: 0 12px;
+    margin: 0 8px 0 12px;
+  }
+  .nav__gh-meta {
+    padding: 0 12px 0 0;
   }
 }
 
