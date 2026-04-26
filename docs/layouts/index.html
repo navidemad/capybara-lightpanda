@@ -1058,6 +1058,107 @@
             .catch(function () {});
         });
       })();
+
+      /* hero scroll parallax — grid backdrop drifts at 0.35× scroll rate */
+      (function () {
+        var grid = document.querySelector(".hero__grid");
+        if (!grid) return;
+        if (
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        )
+          return;
+        var raf = 0;
+        var update = function () {
+          var y = window.scrollY * 0.35;
+          grid.style.setProperty("--parallax-y", y.toFixed(1) + "px");
+          raf = 0;
+        };
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (!raf) raf = requestAnimationFrame(update);
+          },
+          { passive: true },
+        );
+        update();
+      })();
+
+      /* stat count-up — animate .stat__num from 0 to its rendered value on first
+         viewport entry. Skip stats already on screen at script load to avoid the
+         "9→0→9" flash for visitors who land low on the page. */
+      (function () {
+        if (!("IntersectionObserver" in window)) return;
+        var prefersReduced = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        var nums = document.querySelectorAll(".stat__num");
+        if (!nums.length || prefersReduced) return;
+        var ease = function (t) {
+          return 1 - Math.pow(1 - t, 3);
+        };
+        var animate = function (textNode, target, duration) {
+          var start = performance.now();
+          var step = function (now) {
+            var t = Math.min(1, (now - start) / duration);
+            textNode.nodeValue = String(Math.round(target * ease(t)));
+            if (t < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        };
+        nums.forEach(function (el) {
+          var txt = el.firstChild;
+          if (!txt || txt.nodeType !== 3) return;
+          var target = parseInt(txt.nodeValue, 10);
+          if (!target) return;
+          var rect = el.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) return;
+          el.dataset.countTarget = String(target);
+          txt.nodeValue = "0";
+        });
+        var obs = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (!e.isIntersecting) return;
+              var el = e.target;
+              var t = parseInt(el.dataset.countTarget, 10);
+              if (t) animate(el.firstChild, t, 950 + t * 28);
+              obs.unobserve(el);
+            });
+          },
+          { threshold: 0.4 },
+        );
+        nums.forEach(function (el) {
+          if (el.dataset.countTarget) obs.observe(el);
+        });
+      })();
+
+      /* magnetic primary CTA — uses individual `translate` so it composes
+         cleanly with .btn:active { transform: scale(0.97) } */
+      (function () {
+        var btn = document.querySelector(".hero__cta .btn--primary");
+        if (!btn) return;
+        if (window.matchMedia("(hover: none)").matches) return;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+          return;
+        var raf = 0;
+        var tx = 0;
+        var ty = 0;
+        var apply = function () {
+          btn.style.translate = tx.toFixed(2) + "px " + ty.toFixed(2) + "px";
+          raf = 0;
+        };
+        btn.addEventListener("mousemove", function (e) {
+          var r = btn.getBoundingClientRect();
+          tx = (e.clientX - r.left - r.width / 2) * 0.18;
+          ty = (e.clientY - r.top - r.height / 2) * 0.22;
+          if (!raf) raf = requestAnimationFrame(apply);
+        });
+        btn.addEventListener("mouseleave", function () {
+          tx = 0;
+          ty = 0;
+          btn.style.translate = "";
+        });
+      })();
     </script>
   </body>
 </html>
