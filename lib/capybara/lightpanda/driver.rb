@@ -50,6 +50,17 @@ module Capybara
       end
       alias body html
 
+      def active_element
+        oid = browser.active_element
+        oid && Node.new(self, oid)
+      end
+
+      # Capybara's Session#send_keys routes to Driver#send_keys; Cuprite's pattern
+      # is to fan that out to whatever element currently has focus.
+      def send_keys(*keys)
+        active_element&.send_keys(*keys)
+      end
+
       def find_xpath(selector)
         object_ids = browser.find("xpath", selector)
         object_ids.map { |oid| Node.new(self, oid) }
@@ -60,17 +71,17 @@ module Capybara
         object_ids.map { |oid| Node.new(self, oid) }
       end
 
-      def evaluate_script(script, *_args)
-        browser.evaluate(script)
+      def evaluate_script(script, *args)
+        unwrap_script_result(browser.evaluate(script.strip, *native_args(args)))
       end
 
-      def execute_script(script, *_args)
-        browser.execute(script)
+      def execute_script(script, *args)
+        browser.execute(script.strip, *native_args(args))
         nil
       end
 
-      def evaluate_async_script(script, *_args)
-        browser.evaluate_async(script)
+      def evaluate_async_script(script, *args)
+        unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args)))
       end
 
       # -- Cookie Management --
@@ -115,18 +126,42 @@ module Capybara
         end
       end
 
+      # Capybara::Driver::Base falls back to running these via the top
+      # execution context, which always reports the parent document. Resolve
+      # them through the iframe element's contentWindow / contentDocument so
+      # they reflect the active frame.
+      def frame_url
+        frame = browser.frame_stack.last
+        return browser.current_url unless frame
+
+        browser.call_function_on(frame.remote_object_id,
+                                 "function() { return this.contentWindow.location.href }")
+      end
+
+      def frame_title
+        frame = browser.frame_stack.last
+        return browser.title unless frame
+
+        browser.call_function_on(frame.remote_object_id,
+                                 "function() { return this.contentDocument.title }")
+      end
+
       # -- Modal/Dialog Support --
 
       def accept_modal(type, **options, &block)
         browser.accept_modal(type, text: options[:with])
         block&.call
-        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type,
+                           text: options[:text],
+                           wait: options.fetch(:wait, browser.options.timeout))
       end
 
       def dismiss_modal(type, **options, &block)
         browser.dismiss_modal(type)
         block&.call
-        browser.find_modal(type, wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type,
+                           text: options[:text],
+                           wait: options.fetch(:wait, browser.options.timeout))
       end
 
       # -- Screenshots --
@@ -146,6 +181,7 @@ module Capybara
       def reset!
         browser.clear_frames
         browser.reset_modals
+        browser.cookies.clear
         browser.go_to("about:blank")
       rescue StandardError
         @browser&.quit
@@ -184,6 +220,31 @@ module Capybara
           warn "\nPaused. Send SIGCONT (kill -CONT #{::Process.pid}) to continue."
           trap("CONT") {} # rubocop:disable Lint/EmptyBlock
           ::Process.kill("STOP", ::Process.pid)
+        end
+      end
+
+      private
+
+      # Unwrap arguments before sending to the browser. Capybara::Node::Element wraps
+      # our Lightpanda::Node — pull `.base` out so `serialize_argument` can build
+      # `{objectId: …}` for the CDP payload. Cuprite's `native_args` pattern.
+      def native_args(args)
+        args.map { |a| a.is_a?(Capybara::Node::Element) ? a.base : a }
+      end
+
+      # Walk through evaluate-script results turning DOM-node markers (the
+      # `{ "__lightpanda_node__" => "..." }` hashes produced by `Browser#unwrap_call_result`)
+      # into Lightpanda::Node instances so Capybara can wrap them as elements.
+      def unwrap_script_result(value)
+        case value
+        when Array then value.map { |v| unwrap_script_result(v) }
+        when Hash
+          if value.size == 1 && value.key?("__lightpanda_node__")
+            Node.new(self, value["__lightpanda_node__"])
+          else
+            value.transform_values { |v| unwrap_script_result(v) }
+          end
+        else value
         end
       end
     end

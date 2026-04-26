@@ -4,7 +4,6 @@ require "capybara"
 
 require_relative "capybara/lightpanda/version"
 require_relative "capybara/lightpanda/errors"
-require_relative "capybara/lightpanda/utils"
 require_relative "capybara/lightpanda/logger"
 require_relative "capybara/lightpanda/options"
 require_relative "capybara/lightpanda/binary"

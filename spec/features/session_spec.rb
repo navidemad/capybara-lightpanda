@@ -12,33 +12,35 @@ require "spec_helper"
 Capybara::SpecHelper.run_specs(
   TestSessions::Lightpanda,
   "Lightpanda",
+  # Capybara feature flags Lightpanda doesn't support (yet). Each entry has a
+  # corresponding entry in `.claude/rules/lightpanda-io.md`.
+  #   :windows           — `window.open` in flight upstream (PR #2237).
+  #   :html5_drag, :drag — no real layout/pointer dispatch geometry.
+  #   :scroll            — no rendering engine, no scroll.
+  #   :hover             — no real layout for hover positioning.
+  #   :spatial           — `find(above:|below:|near:)` needs real geometry.
+  #   :status_code       — CDP doesn't expose response status.
+  #   :response_headers  — CDP doesn't expose response headers.
+  #   :trigger           — driver doesn't implement Node#trigger.
+  #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
+  #   :html_validation   — element.validationMessage not exposed.
+  #   :download          — no file download support.
+  #   :active_element    — Tab-key focus traversal isn't implemented, and
+  #                        `el.click()` doesn't focus form controls the way
+  #                        a native mouse click does, so `:focused` filters
+  #                        can't track which element should be active.
   capybara_skip: %i[
     windows
-    modals
-    screenshot
-    css
-    spatial
+    html5_drag drag
     scroll
     hover
-    download
-    active_element
-    shadow_dom
+    spatial
     status_code
     response_headers
+    trigger
+    shadow_dom
     html_validation
+    download
+    active_element
   ]
-) do |example|
-  case example.metadata[:full_description]
-  when /node #reload/
-    # Remote object IDs don't survive page navigation in Lightpanda
-    skip "Node reload not supported"
-  when /node #drag/
-    skip "No drag and drop support"
-  when /node #attach_file/, /attach_file/
-    skip "File upload not supported by Lightpanda"
-  when /matches_style/, /assert_style/
-    skip "No CSS engine — getComputedStyle not available"
-  when /evaluate_async_script.*(passing elements|returning elements|context of the element)/
-    skip "Async scripts cannot pass/return DOM elements (returnByValue limitation)"
-  end
-end
+)

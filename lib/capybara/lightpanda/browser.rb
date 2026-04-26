@@ -52,6 +52,7 @@ module Capybara
         @session_id = attach_result["sessionId"]
 
         subscribe_to_console_logs
+        subscribe_to_execution_context
         register_auto_scripts
       end
 
@@ -132,6 +133,25 @@ module Capybara
         @page_events_enabled = true
       end
 
+      # Block up to `timeout` seconds for a default V8 execution context to
+      # exist. Returns true if available (immediately or after waiting),
+      # false if the timeout elapses with no executionContextCreated event.
+      def wait_for_default_context(timeout = 1.0)
+        @default_context_event.wait(timeout)
+      end
+
+      # Run the block; if it raises NoExecutionContextError (the navigation
+      # race window — lightpanda-io/browser#2187), wait for the next default
+      # context to be signaled by Runtime.executionContextCreated, then
+      # retry once. Replaces blind 100 ms sleep retries.
+      def with_default_context_wait(timeout: 1.0)
+        yield
+      rescue NoExecutionContextError
+        raise unless wait_for_default_context(timeout)
+
+        yield
+      end
+
       def back
         wait_for_navigation { execute("history.back()") }
       end
@@ -159,32 +179,53 @@ module Capybara
       alias html body
 
       # Evaluate JS and return a serialized value.
-      def evaluate(expression)
-        response = page_command("Runtime.evaluate", expression: expression, returnByValue: true, awaitPromise: true)
+      # No-args fast path uses Runtime.evaluate; with args we wrap as a function
+      # and dispatch via Runtime.callFunctionOn so `arguments[i]` is bound.
+      # Both paths use `returnByValue: false` and unwrap so DOM-node returns
+      # come back as `{ "__lightpanda_node__" => ... }` for the Driver to wrap.
+      def evaluate(expression, *args)
+        if args.empty?
+          response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
+          raise JavaScriptError, response if response["exceptionDetails"]
 
-        handle_evaluate_response(response)
+          return unwrap_call_result(response["result"])
+        end
+
+        wrapped = "function() { return #{expression} }"
+        call_with_args(wrapped, args)
       end
 
       # Execute JS without returning a value.
-      def execute(expression)
-        page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
+      def execute(expression, *args)
+        if args.empty?
+          page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
+          return nil
+        end
+
+        wrapped = "function() { #{expression} }"
+        call_with_args(wrapped, args, return_by_value: false)
         nil
       end
 
       # Evaluate async JS with a callback. The user's script receives
-      # a `arguments[arguments.length - 1]` callback to signal completion
-      # (matching Capybara's evaluate_async_script contract).
-      def evaluate_async(expression, wait: @options.timeout)
+      # the callback as its last argument (`arguments[arguments.length - 1]`),
+      # matching Capybara's evaluate_async_script contract.
+      def evaluate_async(expression, *args, wait: @options.timeout)
+        timeout_ms = (wait * 1000).to_i
         wrapped = <<~JS
-          new Promise(function(__resolve, __reject) {
-            var __timer = setTimeout(function() {
-              __reject(new Error('Async script timeout after #{(wait * 1000).to_i}ms'));
-            }, #{(wait * 1000).to_i});
-            var __done = function(val) { clearTimeout(__timer); __resolve(val); };
-            (function() { #{expression} }).call(null, __done);
-          })
+          function() {
+            var __args = Array.prototype.slice.call(arguments);
+            return new Promise(function(__resolve, __reject) {
+              var __timer = setTimeout(function() {
+                __reject(new Error('Async script timeout after #{timeout_ms}ms'));
+              }, #{timeout_ms});
+              var __done = function(val) { clearTimeout(__timer); __resolve(val); };
+              __args.push(__done);
+              (function() { #{expression} }).apply(null, __args);
+            });
+          }
         JS
-        evaluate(wrapped)
+        call_with_args(wrapped, args)
       end
 
       # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
@@ -245,6 +286,19 @@ module Capybara
       def find_within(remote_object_id, method, selector)
         result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
         extract_node_object_ids(result)
+      end
+
+      # objectId of document.activeElement, or nil if none/document detached.
+      def active_element
+        result = evaluate_with_ref("document.activeElement")
+        result&.dig("objectId")
+      end
+
+      # Resolve an objectId to its stable per-page backendNodeId.
+      # objectIds are transient (re-issued per Runtime call) but backendNodeId is stable,
+      # so this is what we compare for cross-query node equality.
+      def backend_node_id(remote_object_id)
+        page_command("DOM.describeNode", objectId: remote_object_id).dig("node", "backendNodeId")
       end
 
       def css(selector)
@@ -378,19 +432,24 @@ module Capybara
         @modal_responses << { accept: false, type: type.to_s }
       end
 
-      def find_modal(type, wait: options.timeout)
+      def find_modal(type, text: nil, wait: options.timeout)
+        regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
         deadline = monotonic_time + wait
+        last_message = nil
         loop do
           msg = @modal_messages.find { |m| m[:type] == type.to_s }
           if msg
-            @modal_messages.delete(msg)
-            return msg[:message]
+            last_message = msg[:message]
+            if regexp.nil? || last_message.match?(regexp)
+              @modal_messages.delete(msg)
+              return last_message
+            end
           end
           break if monotonic_time > deadline
 
           sleep 0.05
         end
-        raise Capybara::ModalNotFound, "Unable to find modal dialog"
+        raise_modal_not_found(text, last_message)
       end
 
       def reset_modals
@@ -399,6 +458,14 @@ module Capybara
       end
 
       private
+
+      def raise_modal_not_found(text, last_message)
+        if last_message
+          raise Capybara::ModalNotFound,
+                "Unable to find modal dialog with #{text} - found '#{last_message}' instead."
+        end
+        raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
+      end
 
       # JS function for finding elements within a node.
       # Works in any execution context (top frame or iframe).
@@ -427,11 +494,15 @@ module Capybara
       JS
 
       def find_in_document(method, selector)
-        Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1) do
+        with_default_context_wait do
+          # Coerce Symbol selectors (e.g. Capybara warning path lets `have_css(:p)`
+          # through) to a string before quoting. Symbol#inspect returns `:p`,
+          # which would inject a bare token into the JS source.
+          selector_literal = selector.to_s.inspect
           js = if method == "xpath"
-                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector.inspect}, document) : []"
+                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector_literal}, document) : []"
                else
-                 "(function() { try { return Array.from(document.querySelectorAll(#{selector.inspect})); } " \
+                 "(function() { try { return Array.from(document.querySelectorAll(#{selector_literal})); } " \
                    "catch(e) { return []; } })()"
                end
           result = evaluate_with_ref(js)
@@ -477,6 +548,26 @@ module Capybara
         end
       end
 
+      # Track default-execution-context availability via Runtime events.
+      # Lightpanda destroys the V8 default context at navigation start (long
+      # before frameNavigated fires), then re-creates it once the new page
+      # commits. During the gap, Runtime.evaluate / callFunctionOn rejects
+      # with "Cannot find default execution context"
+      # (lightpanda-io/browser#2187). We watch executionContextsCleared /
+      # executionContextCreated and use the resulting Concurrent::Event to
+      # gate retries deterministically instead of blind sleeping.
+      def subscribe_to_execution_context
+        @default_context_event = Concurrent::Event.new
+        @default_context_event.set
+
+        on("Runtime.executionContextsCleared") { @default_context_event.reset }
+        on("Runtime.executionContextCreated") do |params|
+          @default_context_event.set if params.dig("context", "auxData", "isDefault")
+        end
+
+        page_command("Runtime.enable")
+      end
+
       def serialize_argument(arg)
         if arg.respond_to?(:remote_object_id)
           { objectId: arg.remote_object_id }
@@ -498,6 +589,81 @@ module Capybara
         return nil if result["type"] == "undefined"
 
         result["value"]
+      end
+
+      # Run a wrapped function via Runtime.callFunctionOn with `arguments` bound.
+      # `args` is converted via `serialize_argument` (Nodes → objectId, scalars → value).
+      # When `return_by_value: false` (the default) the return value is unwrapped via
+      # `unwrap_call_result` so that DOM nodes come back as `{ "__lightpanda_node__" => ... }`
+      # hashes the Driver can wrap as Capybara nodes.
+      def call_with_args(function_declaration, args, return_by_value: false)
+        params = {
+          objectId: document_object_id,
+          functionDeclaration: function_declaration,
+          returnByValue: return_by_value,
+          awaitPromise: true,
+          arguments: args.map { |a| serialize_argument(a) },
+        }
+        response = page_command("Runtime.callFunctionOn", **params)
+        raise JavaScriptError, response if response["exceptionDetails"]
+
+        return_by_value ? handle_evaluate_response(response) : unwrap_call_result(response["result"])
+      end
+
+      # Translate a non-by-value Runtime result into a plain Ruby value, surfacing
+      # DOM nodes as `{ "__lightpanda_node__" => "..." }` so the Driver can wrap
+      # them. The sentinel key (rather than a plain "objectId") prevents
+      # misclassifying user JS that legitimately returns `{ objectId: "x" }`.
+      def unwrap_call_result(result)
+        return nil if result["type"] == "undefined"
+        return nil if result["subtype"] == "null"
+
+        object_id = result["objectId"]
+        if object_id
+          return { "__lightpanda_node__" => object_id } if result["subtype"] == "node"
+          return serialize_remote_array(object_id) if result["subtype"] == "array"
+          return serialize_remote_object(object_id) if result["type"] == "object"
+        end
+
+        result["value"]
+      end
+
+      # Re-fetch a remote object as JSON-serializable value for plain objects/arrays.
+      # Cheaper than walking properties and good enough for shared specs. Releases
+      # the original handle so long-lived sessions don't accumulate leaked objectIds.
+      def serialize_remote_object(object_id)
+        json = page_command(
+          "Runtime.callFunctionOn",
+          objectId: object_id,
+          functionDeclaration: "function() { return this }",
+          returnByValue: true
+        )
+        handle_evaluate_response(json)
+      ensure
+        release_object(object_id)
+      end
+
+      # Walk an array's own indexed properties via `Runtime.getProperties`,
+      # unwrapping each element through the regular result pipeline so that
+      # DOM-node entries surface as `{ "__lightpanda_node__" => ... }` instead
+      # of being flattened to `{}` by `returnByValue: true`. Releases the
+      # outer array's objectId once we've harvested its elements.
+      def serialize_remote_array(object_id)
+        properties = get_object_properties(object_id).fetch("result", [])
+        properties
+          .select { |p| p["enumerable"] && p["name"] =~ /\A\d+\z/ }
+          .sort_by { |p| p["name"].to_i }
+          .map { |p| unwrap_call_result(p["value"] || {}) }
+      ensure
+        release_object(object_id)
+      end
+
+      # objectId of `document`, used as the `this` context for callFunctionOn when
+      # we need `arguments` binding but don't care about `this`. Re-resolved per
+      # call because the document objectId is invalidated by navigation.
+      def document_object_id
+        result = page_command("Runtime.evaluate", expression: "document", returnByValue: false)
+        result.dig("result", "objectId")
       end
 
       def wait_for_page_load(url, retried:)
