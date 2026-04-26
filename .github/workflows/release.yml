@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: rubygems
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: ruby
+
+      - name: Verify tag matches gem version
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          gem_version="$(ruby -Ilib -rcapybara/lightpanda/version -e 'print Capybara::Lightpanda::VERSION')"
+          if [ "$tag" != "$gem_version" ]; then
+            echo "::error::Tag v$tag does not match VERSION $gem_version in lib/capybara/lightpanda/version.rb"
+            exit 1
+          fi
+
+      - name: Verify CHANGELOG has an entry for this version
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          if ! grep -qE "^## \[?${tag}\]?" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${tag}]' or '## ${tag}' heading"
+            exit 1
+          fi
+
+      - run: bundle exec rubocop
+      - run: bundle exec rake spec:unit
+
+      - uses: rubygems/release-gem@v1
