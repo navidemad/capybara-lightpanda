@@ -71,7 +71,7 @@ module Capybara
 
       def click(_keys = [], **_options)
         call(CLICK_JS)
-        driver.browser.wait_for_turbo
+        driver.browser.wait_for_idle
       end
 
       def right_click(_keys = [], **_options)
@@ -220,6 +220,7 @@ module Capybara
       # (same fetch+swap as CLICK_JS, but without a submitter).
       def implicit_submit
         call(IMPLICIT_SUBMIT_JS)
+        driver.browser.wait_for_idle
       end
 
       TEXT_LIKE_INPUT_TYPES = %w[text email password url tel search number].freeze

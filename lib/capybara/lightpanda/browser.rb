@@ -26,6 +26,8 @@ module Capybara
         @modal_handler_installed = false
         @frame_stack = []
         @frames = Concurrent::Hash.new
+        @turbo_event = Utils::Event.new
+        @turbo_event.set
         @visited_origins = Concurrent::Set.new
 
         start
@@ -62,9 +64,11 @@ module Capybara
         @session_id = attach_result["sessionId"]
 
         @frames.clear
+        @turbo_event.set
         subscribe_to_console_logs
         subscribe_to_execution_context
         subscribe_to_frame_events
+        subscribe_to_turbo_signals
         register_auto_scripts
       end
 
@@ -360,29 +364,44 @@ module Capybara
         end
       end
 
-      # Wait for any pending Turbo operations to complete.
-      # Returns immediately if Turbo is not loaded or has no pending work.
-      # Uses the tracking counters injected by index.js.
+      # Wait for any pending Turbo operations to complete. Event-driven: the
+      # injected JS in index.js calls `console.debug('__lightpanda_turbo_busy')`
+      # when the pending-ops counter rises above 0 and `_idle` when it returns
+      # to 0. We toggle @turbo_event accordingly (see subscribe_to_turbo_signals).
+      #
+      # Pages without Turbo never trigger _turboStart, so no sentinels fire and
+      # @turbo_event stays set (initial state) — wait returns immediately. Same
+      # for Turbo-loaded pages that have no pending work.
       def wait_for_turbo
-        idle = evaluate(
-          "typeof window._lightpanda === 'undefined' || " \
-          "!window._lightpanda.turbo || window._lightpanda.turbo.idle()"
-        )
-        return if idle
+        @turbo_event.wait(@options.timeout)
+      end
 
-        deadline = monotonic_time + @options.timeout
+      # Wait for the page to settle after an action that may have kicked off
+      # a Turbo fetch OR a full-page navigation. Used by Node#click and
+      # Node#implicit_submit so callers can immediately read updated state
+      # (title, current_url, …) without racing the navigation lifecycle.
+      #
+      # Sniff window: the action returns synchronously, but the CDP events
+      # signalling its async fallout (Runtime.executionContextsCleared for
+      # full nav; the turbo sentinel for Turbo) arrive later on the dispatch
+      # thread. We poll briefly for either signal — if neither fires within
+      # the window, assume the action was inert and exit fast.
+      SNIFF_WINDOW = 0.05
+      private_constant :SNIFF_WINDOW
+
+      def wait_for_idle
+        prior_context_iteration = @default_context_event.iteration
+        sniff_deadline = monotonic_time + SNIFF_WINDOW
         loop do
-          sleep 0.05
-          idle = begin
-            evaluate("window._lightpanda.turbo.idle()")
-          rescue StandardError
-            true
-          end
-          break if idle
-          break if monotonic_time > deadline
+          break if @default_context_event.iteration > prior_context_iteration
+          break unless @turbo_event.set?
+          break if monotonic_time > sniff_deadline
+
+          sleep 0.001
         end
-      rescue StandardError
-        # Page may have navigated (full page load), JS context lost — safe to continue
+
+        @default_context_event.wait(@options.timeout)
+        @turbo_event.wait(@options.timeout)
       end
 
       def keyboard
@@ -586,8 +605,41 @@ module Capybara
         return unless logger
 
         on("Runtime.consoleAPICalled") do |params|
-          params["args"]&.each { |r| logger.puts(r["value"]) }
+          params["args"]&.each do |r|
+            value = r["value"]
+            next if value.is_a?(String) && value.start_with?(TURBO_SENTINEL_PREFIX)
+
+            logger.puts(value)
+          end
         end
+      end
+
+      TURBO_SENTINEL_PREFIX = "__lightpanda_turbo_"
+      private_constant :TURBO_SENTINEL_PREFIX
+
+      # Wire @turbo_event to the JS-side _signalTurbo emissions. The JS calls
+      # console.debug('__lightpanda_turbo_busy') / '_idle' on transitions across
+      # zero pending ops; Lightpanda forwards those to Runtime.consoleAPICalled.
+      # Idle → set the event (wakes any waiter); busy → reset.
+      #
+      # On Runtime.executionContextsCleared (navigation), unconditionally set
+      # the event: if we navigated away mid-busy state, no further idle signal
+      # would ever come from the old context, and we'd block for the full
+      # timeout. The new context will signal busy again if Turbo is active.
+      def subscribe_to_turbo_signals
+        on("Runtime.consoleAPICalled") do |params|
+          next unless params["args"].is_a?(Array)
+
+          marker = params["args"].first&.dig("value")
+          next unless marker.is_a?(String) && marker.start_with?(TURBO_SENTINEL_PREFIX)
+
+          case marker
+          when "#{TURBO_SENTINEL_PREFIX}busy" then @turbo_event.reset
+          when "#{TURBO_SENTINEL_PREFIX}idle" then @turbo_event.set
+          end
+        end
+
+        on("Runtime.executionContextsCleared") { @turbo_event.set }
       end
 
       # Maintain @frames from Page.frame* events. Subscribed once per page
