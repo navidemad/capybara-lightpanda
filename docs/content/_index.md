@@ -2,8 +2,6 @@
 title: "Capybara::Lightpanda"
 ---
 
-## Pair with Cuprite
-
 If you already drive Capybara with `cuprite`, the architecture you've chosen is right — same `page.driver` surface, same Capybara semantics, same DSL. `capybara-lightpanda` is the headless companion that runs alongside it, not a rewrite of how you write tests.
 
 ```ruby
@@ -124,7 +122,7 @@ execute_script "window.example = 'hi'"
 evaluate_script "document.title"
 ```
 
-## In your test suite
+### In your test suite
 
 Honest numbers from a Rails 8.1 app — Turbo + Stimulus, 24 DOM-only system tests on an M-series laptop:
 

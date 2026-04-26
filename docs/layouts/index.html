@@ -24,6 +24,29 @@
         <i style="--x: 5; --y: 11; --d: 3.8s"></i>
         <i style="--x: 23; --y: 11; --d: 7.4s"></i>
       </div>
+      <a
+        class="hero__stamp"
+        href="#join-beta"
+        aria-label="Join the v0.1 open beta"
+      >
+        <span class="hero__stamp-ring" aria-hidden="true"></span>
+        <span class="hero__stamp-tick hero__stamp-tick--n" aria-hidden="true"
+          >·</span
+        >
+        <span class="hero__stamp-tick hero__stamp-tick--e" aria-hidden="true"
+          >·</span
+        >
+        <span class="hero__stamp-tick hero__stamp-tick--s" aria-hidden="true"
+          >·</span
+        >
+        <span class="hero__stamp-tick hero__stamp-tick--w" aria-hidden="true"
+          >·</span
+        >
+        <span class="hero__stamp-core">
+          <span class="hero__stamp-mark">v0.1</span>
+          <span class="hero__stamp-sub">open beta</span>
+        </span>
+      </a>
       <div class="hero__main">
         <p class="hero__beta">
           <span class="hero__beta-dot" aria-hidden="true"></span>
@@ -66,17 +89,24 @@
         </div>
 
         <div class="hero__cta">
-          <a class="btn btn--primary" href="{{ .Site.Params.github_url }}">
+          <a
+            class="btn btn--primary"
+            target="_blank"
+            href="{{ .Site.Params.github_url }}"
+          >
             <span>Source on GitHub</span>
             <span class="btn__arrow" aria-hidden="true">↗</span>
           </a>
-          <a class="btn btn--ghost" href="{{ .Site.Params.rubygems_url }}">
+          <a
+            target="_blank"
+            class="btn btn--ghost"
+            href="{{ .Site.Params.rubygems_url }}"
+          >
             <span>gem on RubyGems</span>
             <span class="btn__arrow" aria-hidden="true">↗</span>
           </a>
           <a class="btn btn--text" href="#join-beta">Join the beta ↘</a>
         </div>
-
       </div>
 
       <a class="hero__scroll" href="#why" aria-label="Scroll to next section">
@@ -103,7 +133,9 @@
       <header class="section__head why__head">
         <span class="section__no">01</span>
         <div class="why__head-stack">
-          <h2 class="section__title" id="why-title"><span class="section__title-text">Why this engine</span></h2>
+          <h2 class="section__title" id="why-title">
+            <span class="section__title-text">Why this engine</span>
+          </h2>
           <p class="why__epigraph">
             Not a Chromium fork. Not a WebKit patch. <em>A new browser.</em>
             <a
@@ -273,7 +305,9 @@
     >
       <header class="section__head">
         <span class="section__no">02</span>
-        <h2 class="section__title" id="swap-title"><span class="section__title-text">The split</span></h2>
+        <h2 class="section__title" id="swap-title">
+          <span class="section__title-text">The split</span>
+        </h2>
         <p class="section__deck">
           <strong>cuprite</strong> drives Chromium for real rendering.
           <strong>capybara-lightpanda</strong>
@@ -351,9 +385,29 @@
       </div>
     </section>
 
-    <main id="main" class="content wrap wrap--wide">
-      <div class="content__inner">{{ .Content }}</div>
-    </main>
+    <section
+      class="pair wrap wrap--wide"
+      id="pair-with-cuprite"
+      aria-labelledby="pair-title"
+    >
+      <header class="section__head">
+        <span class="section__no">03</span>
+        <h2 class="section__title" id="pair-title">
+          <span class="section__title-text">Pair with Cuprite</span>
+        </h2>
+        <p class="section__deck">
+          Drop in alongside cuprite, gate the lanes with one env var. Keep
+          cuprite where you need pixels, run
+          <strong>capybara-lightpanda</strong>
+          where you don't — and roll back by unsetting
+          <code>BROWSER=lightpanda</code>. Honest numbers from a real Rails 8
+          suite below.
+        </p>
+      </header>
+      <main id="main" class="content">
+        <div class="content__inner">{{ .Content }}</div>
+      </main>
+    </section>
 
     <section
       class="matrix wrap wrap--wide"
@@ -361,7 +415,7 @@
       aria-labelledby="matrix-title"
     >
       <header class="section__head">
-        <span class="section__no">05</span>
+        <span class="section__no">04</span>
         <h2 class="section__title" id="matrix-title">
           <span class="section__title-text">What works, what doesn't</span>
         </h2>
@@ -454,20 +508,11 @@
       id="join-beta"
       aria-labelledby="beta-title"
     >
-      <span class="beta__stamp" aria-hidden="true">
-        <span class="beta__stamp-ring"></span>
-        <span class="beta__stamp-tick beta__stamp-tick--n">·</span>
-        <span class="beta__stamp-tick beta__stamp-tick--e">·</span>
-        <span class="beta__stamp-tick beta__stamp-tick--s">·</span>
-        <span class="beta__stamp-tick beta__stamp-tick--w">·</span>
-        <span class="beta__stamp-core">
-          <span class="beta__stamp-mark">v0.1</span>
-          <span class="beta__stamp-sub">open beta</span>
-        </span>
-      </span>
       <header class="section__head">
-        <span class="section__no">06</span>
-        <h2 class="section__title" id="beta-title"><span class="section__title-text">Help us ship 1.0</span></h2>
+        <span class="section__no">05</span>
+        <h2 class="section__title" id="beta-title">
+          <span class="section__title-text">Help us ship 1.0</span>
+        </h2>
         <p class="section__deck">
           <strong>capybara-lightpanda</strong> is in public beta. Real Rails
           suites are how we find the edges. The cost to try it is one Gemfile
@@ -646,13 +691,10 @@
           <a href="#pair-with-cuprite"><span>03</span><em>Pair</em></a>
         </li>
         <li>
-          <a href="#in-your-test-suite"><span>04</span><em>Suite</em></a>
+          <a href="#capabilities"><span>04</span><em>Matrix</em></a>
         </li>
         <li>
-          <a href="#capabilities"><span>05</span><em>Matrix</em></a>
-        </li>
-        <li>
-          <a href="#join-beta"><span>06</span><em>Beta</em></a>
+          <a href="#join-beta"><span>05</span><em>Beta</em></a>
         </li>
       </ol>
       <span class="hero__index-arrow" aria-hidden="true">↓</span>
