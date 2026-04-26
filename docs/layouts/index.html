@@ -7,6 +7,7 @@
     <a href="#main" class="skip">Skip to content</a>
 
     <div class="grid-bg" aria-hidden="true"></div>
+    <div class="page-grid" aria-hidden="true"></div>
     <div class="scroll-progress" aria-hidden="true"><span></span></div>
 
     {{ partial "nav.html" . }}
@@ -1059,18 +1060,35 @@
         });
       })();
 
-      /* hero scroll parallax — grid backdrop drifts at 0.35× scroll rate */
+      /* multi-layer scroll parallax —
+         · .grid-bg dot pattern drifts background-position at 0.10× rate (deep)
+         · .page-grid skewed lines translate up at 0.40× rate (mid)
+         · .hero__grid stays at 0.35× translate within hero (foreground) */
       (function () {
-        var grid = document.querySelector(".hero__grid");
-        if (!grid) return;
-        if (
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        )
+        var heroGrid = document.querySelector(".hero__grid");
+        var pageGrid = document.querySelector(".page-grid");
+        var dotGrid = document.querySelector(".grid-bg");
+        if (!heroGrid && !pageGrid && !dotGrid) return;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches)
           return;
         var raf = 0;
         var update = function () {
-          var y = window.scrollY * 0.35;
-          grid.style.setProperty("--parallax-y", y.toFixed(1) + "px");
+          var sy = window.scrollY;
+          if (heroGrid)
+            heroGrid.style.setProperty(
+              "--parallax-y",
+              (sy * 0.35).toFixed(1) + "px",
+            );
+          if (pageGrid)
+            pageGrid.style.setProperty(
+              "--page-parallax",
+              (sy * -0.4).toFixed(1) + "px",
+            );
+          if (dotGrid)
+            dotGrid.style.setProperty(
+              "--bg-parallax",
+              (sy * -0.1).toFixed(1) + "px",
+            );
           raf = 0;
         };
         window.addEventListener(
