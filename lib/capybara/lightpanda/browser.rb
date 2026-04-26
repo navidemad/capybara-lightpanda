@@ -557,7 +557,7 @@ module Capybara
       # executionContextCreated and use the resulting Concurrent::Event to
       # gate retries deterministically instead of blind sleeping.
       def subscribe_to_execution_context
-        @default_context_event = Concurrent::Event.new
+        @default_context_event = Utils::Event.new
         @default_context_event.set
 
         on("Runtime.executionContextsCleared") { @default_context_event.reset }
@@ -669,7 +669,7 @@ module Capybara
       def wait_for_page_load(url, retried:)
         starting_url = safe_current_url
         deadline = monotonic_time + @options.timeout
-        loaded = Concurrent::Event.new
+        loaded = Utils::Event.new
 
         handler = proc { loaded.set }
         @client.on("Page.loadEventFired", &handler)
@@ -744,7 +744,7 @@ module Capybara
 
         starting_url = safe_current_url
         deadline = monotonic_time + @options.timeout
-        loaded = Concurrent::Event.new
+        loaded = Utils::Event.new
         handler = proc { loaded.set }
         @client.on("Page.loadEventFired", &handler)
 
