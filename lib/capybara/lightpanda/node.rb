@@ -3,6 +3,9 @@
 module Capybara
   module Lightpanda
     class Node < ::Capybara::Driver::Node
+      MOVING_WAIT_DELAY = ENV.fetch("LIGHTPANDA_NODE_MOVING_WAIT", 0.01).to_f
+      MOVING_WAIT_ATTEMPTS = ENV.fetch("LIGHTPANDA_NODE_MOVING_ATTEMPTS", 50).to_i
+
       attr_reader :remote_object_id
 
       def initialize(driver, remote_object_id)
@@ -40,6 +43,33 @@ module Capybara
 
       def obscured?
         call(OBSCURED_JS)
+      end
+
+      # Returns true when the element's bounding rect has changed between two
+      # samples taken `delay` seconds apart. Lightpanda has no real animation
+      # frame loop so most "movement" is JS-driven (style mutations); this
+      # works because getBoundingClientRect reflects those mutations.
+      def moving?(delay: MOVING_WAIT_DELAY)
+        previous = rect
+        sleep(delay)
+        previous != rect
+      end
+
+      # Block until the element's rect stabilises across two consecutive
+      # samples or `attempts` polls have elapsed (whichever first). Returns
+      # the last rect read; never raises. Mirrors ferrum's wait_for_stop_moving
+      # but no NodeMovingError because Lightpanda has no rendering loop, so a
+      # caller silently proceeding with the last rect is the right default.
+      def wait_for_stop_moving(delay: MOVING_WAIT_DELAY, attempts: MOVING_WAIT_ATTEMPTS)
+        previous = rect
+        attempts.times do
+          sleep(delay)
+          current = rect
+          return current if current == previous
+
+          previous = current
+        end
+        previous
       end
 
       def shadow_root
