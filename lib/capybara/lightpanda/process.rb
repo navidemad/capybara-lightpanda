@@ -10,12 +10,14 @@ module Capybara
       # The gem relies on this for XPath polyfill auto-injection.
       MINIMUM_NIGHTLY_BUILD = 5267
 
-      attr_reader :pid, :ws_url
+      attr_reader :pid, :ws_url, :version, :nightly_build
 
       def initialize(options)
         @options = options
         @pid = nil
         @ws_url = nil
+        @version = nil
+        @nightly_build = nil
         @stdout_r = nil
         @stdout_w = nil
         @stderr_r = nil
@@ -73,13 +75,13 @@ module Capybara
 
       def check_minimum_version(binary_path)
         stdout, = Open3.capture3(binary_path, "version")
-        version = stdout.strip
-        build = version[/nightly\.(\d+)/, 1]&.to_i
+        @version = stdout.strip
+        @nightly_build = @version[/nightly\.(\d+)/, 1]&.to_i
 
-        return if build && build >= MINIMUM_NIGHTLY_BUILD
+        return if @nightly_build && @nightly_build >= MINIMUM_NIGHTLY_BUILD
 
         raise BinaryError,
-              "Lightpanda #{version} is too old. " \
+              "Lightpanda #{@version} is too old. " \
               "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
               "(Page.addScriptToEvaluateOnNewDocument support). " \
               "Update: curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/" \

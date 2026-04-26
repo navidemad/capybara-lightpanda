@@ -47,6 +47,13 @@ RSpec.describe Capybara::Lightpanda::Driver do
       fresh_driver = Capybara::Lightpanda::Driver.new(TestApp, driver.options)
       expect(fresh_driver.instance_variable_get(:@browser)).to be_nil
     end
+
+    it "captures the Lightpanda version and nightly build after start" do
+      expect(browser.version).to be_a(String)
+      expect(browser.version).to match(/\d+\.\d+\.\d+/)
+      expect(browser.nightly_build).to be_a(Integer)
+      expect(browser.nightly_build).to be >= Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD
+    end
   end
 
   # ───────────────────────────────────────────────

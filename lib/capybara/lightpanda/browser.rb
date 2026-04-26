@@ -13,6 +13,17 @@ module Capybara
 
       delegate %i[on off] => :client
 
+      # Lightpanda binary version (e.g. "lightpanda 0.2.9 nightly.5267") and
+      # parsed nightly build number, captured at Process startup. nil when
+      # the gem is connecting to an externally-managed Lightpanda via ws_url.
+      def version
+        @process&.version
+      end
+
+      def nightly_build
+        @process&.nightly_build
+      end
+
       def initialize(options = {})
         @options = Options.new(options)
         @process = nil
