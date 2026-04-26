@@ -3,11 +3,151 @@
   padding-inline: var(--gutter);
 }
 .matrix__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
   margin: 0 auto 28px;
   max-width: 1080px;
+}
+
+/* ---------- 4-col capability matrix (table mode) ---------- */
+.matrix__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--ink-2);
+  font-family: var(--body);
+}
+.matrix__table thead th {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+  text-align: left;
+  font-weight: 500;
+  padding: 14px 18px;
+  background: var(--ink-3);
+  border-bottom: 1px solid var(--ink-line);
+}
+.matrix__table thead th code {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--paper-mute);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.matrix__table thead .matrix__th--us code {
+  color: var(--ruby);
+}
+.matrix__table tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--paper);
+  padding: 12px 18px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--ink-line);
+  width: 42%;
+}
+.matrix__table tbody td {
+  padding: 12px 18px;
+  font-size: 14px;
+  color: var(--paper-mute);
+  border-bottom: 1px solid var(--ink-line);
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.matrix__table tbody td:nth-child(2),
+.matrix__table tbody td:nth-child(3) {
+  width: 96px;
+  text-align: center;
+  color: var(--paper);
+}
+.matrix__table tbody tr:last-child th,
+.matrix__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.matrix__table tbody tr:hover {
+  background: color-mix(in oklab, var(--ruby) 4%, transparent);
+}
+.matrix__table tbody tr.matrix__row--accent {
+  background: color-mix(in oklab, var(--gold) 3%, transparent);
+}
+.matrix__table tbody tr.matrix__row--accent:hover {
+  background: color-mix(in oklab, var(--gold) 6%, transparent);
+}
+.matrix__table tbody tr.matrix__row--accent strong {
+  color: var(--gold);
+  font-weight: 600;
+}
+.matrix__table tbody th code,
+.matrix__table tbody td code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ink-3);
+  border: 1px solid var(--ink-line);
+  color: var(--gold-soft);
+}
+.partial {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  background: color-mix(in oklab, var(--gold) 18%, transparent);
+  color: var(--gold);
+  line-height: 1;
+}
+@media (max-width: 720px) {
+  .matrix__table thead {
+    display: none;
+  }
+  .matrix__table,
+  .matrix__table tbody,
+  .matrix__table tr,
+  .matrix__table th,
+  .matrix__table td {
+    display: block;
+    width: auto;
+  }
+  .matrix__table tr {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .matrix__table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .matrix__table tbody th {
+    padding: 0 0 8px;
+    border: 0;
+  }
+  .matrix__table tbody td {
+    padding: 4px 0;
+    border: 0;
+    text-align: left;
+  }
+  .matrix__table tbody td:nth-child(2)::before {
+    content: "cuprite: ";
+    color: var(--paper-faint);
+  }
+  .matrix__table tbody td:nth-child(3)::before {
+    content: "lightpanda: ";
+    color: var(--paper-faint);
+  }
+  .matrix__table tbody td:nth-child(2),
+  .matrix__table tbody td:nth-child(3) {
+    text-align: left;
+    width: auto;
+  }
 }
 .matrix__col {
   list-style: none;

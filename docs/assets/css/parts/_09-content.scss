@@ -24,7 +24,7 @@
   display: grid;
   grid-template-columns: subgrid;
   column-gap: clamp(20px, 3vw, 56px);
-  align-content: center;
+  align-content: start;
 }
 .chapter > * {
   grid-column: prose-start / prose-end;

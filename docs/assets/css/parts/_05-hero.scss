@@ -381,28 +381,33 @@
   }
   .hero__index {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 50%;
+    bottom: 18px;
     z-index: 45;
     margin: 0;
-    padding: 4px clamp(20px, 3.2vw, 56px);
-    border-top: 1px solid var(--ink-line);
-    background: color-mix(in oklab, var(--ink) 94%, transparent);
-    backdrop-filter: saturate(160%) blur(20px);
-    -webkit-backdrop-filter: saturate(160%) blur(20px);
-    box-shadow: 0 -8px 24px -16px rgba(0, 0, 0, 0.8);
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    padding: 6px 10px;
+    border: 1px solid color-mix(in oklab, var(--ink-line) 80%, transparent);
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--ink) 78%, transparent);
+    backdrop-filter: saturate(160%) blur(18px);
+    -webkit-backdrop-filter: saturate(160%) blur(18px);
+    box-shadow:
+      0 12px 32px -16px rgba(0, 0, 0, 0.75),
+      0 1px 0 0 color-mix(in oklab, var(--paper) 4%, transparent) inset;
     opacity: 0;
-    transform: translateY(100%);
+    transform: translateX(-50%) translateY(120%);
     pointer-events: none;
     transition:
       opacity 0.35s var(--ease-out),
       transform 0.45s var(--ease-out);
     will-change: transform, opacity;
+    overflow: hidden;
   }
   .hero__index.is-pinned {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
     pointer-events: auto;
   }
   /* arrow is a "scroll down" hint that's redundant once the bar is pinned at the bottom */
@@ -413,77 +418,69 @@
 @media (prefers-reduced-motion: reduce) {
   .hero__index {
     transition: opacity 0.2s linear;
-    transform: none;
+    transform: translateX(-50%);
   }
   .hero__index:not(.is-pinned) {
     opacity: 0;
   }
 }
 
-/* chapter index — fixed bottom bar on desktop (≥1080px), hidden below */
+/* chapter index — floating pill on desktop (≥1080px), hidden below */
 .hero__index {
   display: flex;
   align-items: center;
-  gap: clamp(12px, 1.5vw, 24px);
+  gap: 6px;
   font-family: var(--mono);
 }
 .hero__index ol {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  flex: 1;
-  gap: 0;
-  border-left: 1px solid var(--ink-line);
+  display: flex;
+  gap: 2px;
 }
 .hero__index li {
-  border-right: 1px solid var(--ink-line);
+  display: block;
 }
 .hero__index a {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
   color: var(--paper-mute);
   position: relative;
   transition:
     color 0.25s var(--ease),
     background 0.25s var(--ease);
 }
-.hero__index a::before {
+.hero__index::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--ruby), var(--gold));
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.35s var(--ease);
+  inset: 0;
+  transform: scaleX(var(--chapter-frac, 0));
+  transform-origin: left center;
+  transition: transform 0.18s linear;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--ruby) 22%, transparent),
+    color-mix(in oklab, var(--gold) 22%, transparent) 60%,
+    color-mix(in oklab, var(--bamboo) 22%, transparent)
+  );
+  border-radius: inherit;
+  pointer-events: none;
+  will-change: transform;
+}
+.hero__index > * {
+  position: relative;
+  z-index: 1;
 }
 .hero__index a:hover {
   color: var(--paper);
   background: color-mix(in oklab, var(--ruby) 6%, transparent);
 }
-@media (hover: hover) and (pointer: fine) {
-  .hero__index a:hover::before {
-    transform: scaleX(1);
-  }
-}
 .hero__index a.is-active {
   background: color-mix(in oklab, var(--ruby) 8%, transparent);
-}
-.hero__index a.is-active::before {
-  transform: scaleX(var(--section-progress, 1));
-  transition: transform 0.35s var(--ease-out);
-}
-.hero__index a.is-visited::before {
-  transform: scaleX(1);
-  transition: transform 0.35s var(--ease-out);
-  opacity: 0.7;
 }
 .hero__index a.is-visited span {
   color: color-mix(in oklab, var(--ruby) 80%, var(--paper-mute));

@@ -427,81 +427,108 @@
       </header>
 
       <div class="matrix__grid">
-        <ul class="matrix__col matrix__col--ok" aria-label="Supported">
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>Visit, click, fill, submit, navigate, history</div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>CSS &amp; XPath selectors (XPath polyfilled)</div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>Cookies, headers, redirects, network</div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>Turbo Drive, Turbo Frames, Stimulus</div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div><code>execute_script</code>, <code>evaluate_script</code></div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>iframes, frame switching</div>
-          </li>
-          <li class="matrix__row">
-            <span class="check" aria-hidden="true">✓</span>
-            <div>
-              JS&nbsp;dialogs (<code>accept_modal&nbsp;:alert</code>,
-              <code>dismiss_modal</code>)
-            </div>
-          </li>
-        </ul>
-        <ul class="matrix__col matrix__col--no" aria-label="Not supported">
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>
-              Real screenshots <span class="muted">(no compositor)</span>
-            </div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>Visual regression / pixel tests</div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>Scroll, resize, full <code>getComputedStyle</code></div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>
-              File uploads
-              <span class="muted">(<code>input[type=file]</code>)</span>
-            </div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>Service Workers, SharedWorker</div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>
-              Web Workers
-              <span class="muted">(partial — limited APIs)</span>
-            </div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>WebAuthn / passkeys</div>
-          </li>
-          <li class="matrix__row">
-            <span class="cross" aria-hidden="true">✕</span>
-            <div>Anything that needs layout to be correct</div>
-          </li>
-        </ul>
+        <table class="matrix__table">
+          <thead>
+            <tr>
+              <th scope="col">Capability</th>
+              <th scope="col"><code>cuprite</code></th>
+              <th scope="col" class="matrix__th--us"><code>lightpanda</code></th>
+              <th scope="col">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Visit, click, fill, submit, navigate, history</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>core Capybara surface</td>
+            </tr>
+            <tr>
+              <th scope="row">CSS + XPath selectors</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>XPath polyfilled (~80% coverage)</td>
+            </tr>
+            <tr>
+              <th scope="row">Cookies, headers, redirects</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <th scope="row">Turbo Drive, Frames, Stimulus</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <th scope="row"><code>execute_script</code> / <code>evaluate_script</code></th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <th scope="row">iframes, frame switching</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <th scope="row">JS dialogs</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="partial" aria-label="partial">~</span></td>
+              <td><code>accept_modal :alert</code>, <code>dismiss_modal</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Real screenshots</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="cross" aria-label="no">✕</span></td>
+              <td>no compositor</td>
+            </tr>
+            <tr>
+              <th scope="row">Visual regression / pixel tests</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="cross" aria-label="no">✕</span></td>
+              <td>keep cuprite for these</td>
+            </tr>
+            <tr>
+              <th scope="row">Scroll, resize, full <code>getComputedStyle</code></th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="partial" aria-label="partial">~</span></td>
+              <td>CSSOM landed; no layout</td>
+            </tr>
+            <tr>
+              <th scope="row">File uploads <span class="muted">(<code>input[type=file]</code>)</span></th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="cross" aria-label="no">✕</span></td>
+              <td>raises <code>NotImplementedError</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Web Workers</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="partial" aria-label="partial">~</span></td>
+              <td>limited APIs</td>
+            </tr>
+            <tr>
+              <th scope="row">Service Workers, WebAuthn</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="cross" aria-label="no">✕</span></td>
+              <td>—</td>
+            </tr>
+            <tr class="matrix__row--accent">
+              <th scope="row">Memory per session</th>
+              <td>~250&nbsp;MB</td>
+              <td><strong>~10&nbsp;MB</strong></td>
+              <td>the whole point</td>
+            </tr>
+            <tr class="matrix__row--accent">
+              <th scope="row">Cold-start time</th>
+              <td>~1.5&nbsp;s</td>
+              <td><strong>&lt;200&nbsp;ms</strong></td>
+              <td>per worker process</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <p class="matrix__foot">
@@ -919,8 +946,8 @@ end` "ruby" "" }}
           links.forEach(function (l, i) {
             l.classList.remove("is-active");
             l.classList.toggle("is-visited", i < activeIdx);
-            if (i !== activeIdx) l.style.removeProperty("--section-progress");
           });
+          var chapterFrac = 0;
           if (active) {
             active.link.classList.add("is-active");
             var topY =
@@ -931,12 +958,13 @@ end` "ruby" "" }}
                   window.scrollY
                 : topY + active.target.offsetHeight;
             var span = Math.max(1, bottomY - topY);
-            var progress = Math.max(0, Math.min(1, (probe - topY) / span));
-            active.link.style.setProperty(
-              "--section-progress",
-              progress.toFixed(4),
-            );
+            var localFrac = Math.max(0, Math.min(1, (probe - topY) / span));
+            chapterFrac = (activeIdx + localFrac) / entries.length;
           }
+          document.documentElement.style.setProperty(
+            "--chapter-frac",
+            chapterFrac.toFixed(4),
+          );
           raf = 0;
         };
         window.addEventListener(
@@ -956,17 +984,16 @@ end` "ruby" "" }}
         update();
       })();
 
-      /* scroll progress (transform: scaleX, GPU-accelerated) */
+      /* scroll progress (transform: scaleX, GPU-accelerated)
+         Sets --scroll-frac on :root so any element can mirror the same fill
+         (top bar + hero__index bottom bar both consume it via CSS). */
       (function () {
-        var bar = document.querySelector(".scroll-progress");
-        if (!bar) return;
-        var fill = bar.querySelector("span") || bar;
         var raf = 0;
+        var root = document.documentElement;
         var update = function () {
-          var doc = document.documentElement;
-          var max = doc.scrollHeight - window.innerHeight || 1;
+          var max = root.scrollHeight - window.innerHeight || 1;
           var frac = Math.min(1, Math.max(0, window.scrollY / max));
-          fill.style.transform = "scaleX(" + frac.toFixed(4) + ")";
+          root.style.setProperty("--scroll-frac", frac.toFixed(4));
           raf = 0;
         };
         window.addEventListener(

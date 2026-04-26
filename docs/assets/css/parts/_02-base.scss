@@ -24,20 +24,13 @@ html {
      peek above the fold and signal "scroll for more". */
   min-height: calc(92dvh - var(--nav-h));
 }
-.why,
-.swap,
-.pair,
-.matrix,
-.chapter {
+.why {
+  /* first chapter sets the cadence — keep the floor here */
   min-height: calc(100dvh - var(--nav-h));
 }
 @media (max-width: 700px) {
   .hero,
-  .why,
-  .swap,
-  .pair,
-  .matrix,
-  .chapter {
+  .why {
     min-height: 0;
   }
 }
@@ -47,7 +40,7 @@ html {
    hairline + centered ruby ribbon and shares the same vertical breathing. */
 :is(.why, .swap, .pair, .matrix, .beta, .chapter) {
   position: relative;
-  padding-block: clamp(32px, 4vh, 64px);
+  padding-block: clamp(80px, 10vh, 160px);
   border-top: 1px solid var(--ink-line);
 }
 body {
