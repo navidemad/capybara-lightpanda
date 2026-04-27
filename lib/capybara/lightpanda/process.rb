@@ -6,11 +6,14 @@ module Capybara
       READY_PATTERN = /server running.*address=(\d+\.\d+\.\d+\.\d+:\d+)/
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # First nightly with Frame.getElementByIdFromNode recovery (PR #2244, merged 2026-04-27).
-      # Without it, `#id` selectors return null after a body-innerHTML+replaceWith pattern
-      # (Turbo Drive's snapshot-then-swap), and the gem would need a JS-side rewriter to
-      # detour to `[id="..."]`. Rejecting older nightlies lets us keep that polyfill out.
-      MINIMUM_NIGHTLY_BUILD = 5816
+      # First nightly with the cookie/navigation/redirect fixes that let the gem
+      # drop several workarounds: PR #2255 (Network.clearBrowserCookies empty
+      # params + Network.getAllCookies), PR #2257 (window.location.pathname /
+      # .search assignment triggers navigation), PR #2265 (URL fragment inherited
+      # across fragment-less redirect). Rejecting older builds lets Cookies#clear
+      # rely on the bulk-clear call, Cookies#all use Network.getAllCookies, and
+      # current-path / fragment specs run unskipped.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5817")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 
@@ -78,14 +81,17 @@ module Capybara
       def check_minimum_version(binary_path)
         stdout, = Open3.capture3(binary_path, "version")
         @version = stdout.strip
-        @nightly_build = @version[/nightly\.(\d+)/, 1]&.to_i
+        # Accept either `nightly.NNNN` (publicly distributed builds) or
+        # `dev.NNNN` (locally compiled trees) — the build number is the same
+        # `git rev-list --count HEAD` counter, just labelled differently.
+        build = @version[/(?:nightly|dev)\.(\d+)/, 1]
+        @nightly_build = Gem::Version.new(build) if build
 
         return if @nightly_build && @nightly_build >= MINIMUM_NIGHTLY_BUILD
 
         raise BinaryError,
               "Lightpanda #{@version} is too old. " \
-              "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
-              "(Page.addScriptToEvaluateOnNewDocument support). " \
+              "This gem requires build >= #{MINIMUM_NIGHTLY_BUILD}. " \
               "Update: curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/" \
               "#{Binary.platform_binary} -o #{binary_path} && chmod +x #{binary_path}"
       rescue Errno::ENOENT

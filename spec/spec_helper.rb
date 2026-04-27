@@ -111,18 +111,6 @@ RSpec.configure do |config|
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
-      # `window.location.pathname` setter doesn't trigger navigation
-      # in Lightpanda (only `.href` does). The 'Change page' fixture
-      # uses `window.location.pathname = '/with_html'`, so any test
-      # waiting on that navigation never sees it complete.
-      /#assert_current_path should wait for current_path/,
-      /#assert_current_path should wait for current_path to disappear/,
-      /#assert_no_current_path\? should wait for current_path to disappear/,
-      /#has_current_path\? should wait for current_path/,
-      /#has_no_current_path\? should wait for current_path to disappear/,
-      # Lightpanda doesn't preserve URL fragments through redirects: visiting
-      # `/redirect#fragment` lands on `/landed`, dropping the `#fragment`.
-      /#current_url, #current_path, #current_host maintains fragment/,
       # `<input type=range>` has no slider DOM in Lightpanda — `set` writes
       # the value but the browser doesn't clamp/validate it the way Chrome's
       # range widget does, and `min`/`max` constraint enforcement is missing.

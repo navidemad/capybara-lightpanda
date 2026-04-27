@@ -58,7 +58,7 @@ Run target recons in parallel where possible (each `gh api` or WebFetch is indep
 Use this taxonomy across all targets — every finding lands in exactly one bucket:
 
 - **Broken** — methods we call that no longer exist upstream (Lightpanda only). Bugs in our gem. Flag with our gem-side file:line.
-- **Workaround removal** — bugs we work around that are now fixed (Lightpanda). Always require validation (run `bundle exec rake spec` against current nightly) before recommending removal.
+- **Workaround removal** — bugs we work around that are now fixed (Lightpanda). Always require validation before recommending removal: build the local browser from `main` (see `references/lightpanda.md` "Build local browser from main"), then prompt the user to run specs with `LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda`. Don't run specs unprompted.
 - **New capabilities** — CDP methods or browser features now available that could replace JS workarounds (Lightpanda).
 - **Adoption candidates** — patterns/APIs Ferrum or Cuprite has that we don't, and that aren't Lightpanda-blocked. Each entry: peer file ↔ our file ↔ rationale ↔ rough effort (tiny/medium/large).
 - **Already adopted** — patterns we mirror from a previous sync. Note when the peer has since diverged (do we re-mirror?).
@@ -72,7 +72,7 @@ Use this taxonomy across all targets — every finding lands in exactly one buck
 
 Both rules files are **current-state references, not changelogs**. Edit affected sections inline; don't append a "Recently Merged Fixes" section. Closed issues / adopted patterns get deleted or moved, not archived.
 
-**Verify before claiming.** Don't speculatively mark issues as fixed or methods as added without confirmation from the upstream issue/PR.
+**Verify before claiming.** Don't speculatively mark issues as fixed or methods as added without confirmation from the upstream issue/PR. For workaround-removal claims specifically, validation = specs green against `LIGHTPANDA_BIN` pointing at the locally-built `main` browser (see `references/lightpanda.md`).
 
 ## Step 5: Generate report
 
@@ -125,3 +125,11 @@ For pre-release audits specifically, the **Release Readiness** section is requir
 ## Step 6: Suggest code changes (do not implement)
 
 If a finding has a clear next code change (workaround removal, pattern adoption), describe the specific change in the report — file:line, what to change, why — but **do not implement it** unless the user explicitly asks. The skill is for reconnaissance and planning. Code edits belong in a follow-up turn where the user has agreed to the scope.
+
+For each recommended workaround removal, also output the exact validation command for the user to run before any cleanup, and pause:
+
+```
+LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+```
+
+Don't run it yourself — `spec:incremental` is long-running and the user decides when to validate.

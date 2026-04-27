@@ -51,7 +51,7 @@ RSpec.describe Capybara::Lightpanda::Driver do
     it "captures the Lightpanda version and nightly build after start" do
       expect(browser.version).to be_a(String)
       expect(browser.version).to match(/\d+\.\d+\.\d+/)
-      expect(browser.nightly_build).to be_a(Integer)
+      expect(browser.nightly_build).to be_a(Gem::Version)
       expect(browser.nightly_build).to be >= Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD
     end
   end

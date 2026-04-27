@@ -107,7 +107,7 @@ RSpec.describe Capybara::Lightpanda::Cookies do
     after { FileUtils.rm_f(tmp_path) }
 
     it "round-trips cookies through a YAML file" do
-      allow(browser).to receive(:command).with("Network.getCookies").and_return("cookies" => [cookie_attrs])
+      allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => [cookie_attrs])
 
       cookies.store(tmp_path)
 
@@ -132,7 +132,7 @@ RSpec.describe Capybara::Lightpanda::Cookies do
     it "defaults to cookies.yml when no path is given" do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir) do
-          allow(browser).to receive(:command).with("Network.getCookies").and_return("cookies" => [])
+          allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => [])
           cookies.store
           expect(File.exist?("cookies.yml")).to be true
         end

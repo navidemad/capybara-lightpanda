@@ -189,10 +189,20 @@ LP.getStructuredData         LP.waitForSelector
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
 - **PR #2259** (by us): **Page.reload replays POST**. Fixes #2258 — currently `Browser#refresh` (which calls `Page.reload`) silently downgrades a POST navigation to a GET. When merged: removes the `#refresh it reposts` skip pattern in `spec/spec_helper.rb`.
 - **PR #2261** (by us): **handleJavaScriptDialog drives confirm/prompt return values**. Fixes #2260 — currently `accept_modal(:confirm|:prompt)` cannot influence the JS return value (Lightpanda auto-dismisses). When merged: rewires `Browser#prepare_modals` to call `Page.handleJavaScriptDialog` (off the dispatch thread); removes 4 modal skip patterns in `spec/spec_helper.rb`.
-- **PR #2257** (by us): trigger navigation when `window.location.pathname` / `.search` is assigned. Currently only `.href =` navigates. When merged: removes 5 `assert_current_path` / `has_current_path` skip patterns.
 - **PR #2264** (by us): skip FormData entry for `<select>` with no selectedness candidate. When merged: removes the `#click_button on HTML4 form should not serialize a select tag without options` skip pattern.
-- **PR #2265** (by us): inherit URL fragment across fragment-less redirect. When merged: removes the `#current_url maintains fragment` skip pattern.
 - **PR #2267** (by us): clamp `<input type=range>` value to min/max. When merged: removes `#fill_in with input[type="range"]` range-related skip patterns.
+- **PR #2269** (by us): decode CSS escape sequences inside quoted attribute values in selectors. When merged: removes any `[attr="value\\\:foo"]` selector skip patterns (verify which specs were skipped for this reason before removal).
+- **PR #2279** (by us): honor `formaction` / `formmethod` / `formenctype` on submit button. When merged: lets the gem's `CLICK_JS` workaround drop its own override-attribute reads — they'd be honored natively by `form.submit()` once we drop the fetch+swap workaround (see "Recently Merged Fixes Awaiting Nightly" below).
+
+### Recently Merged Upstream PRs Awaiting a Public Nightly
+
+The public nightly tag last refreshed **2026-04-27 03:34 UTC**, snapshotting build `5816`. The following PRs merged AFTER that build started, so they are present in `lightpanda-io/browser@main` (and in any locally-built binary at sha `ef3305a7` or later) but NOT yet in the publicly-distributed nightly. When a fresh nightly ships (build 5817+), bump `Process::MINIMUM_NIGHTLY_BUILD` and apply the gem-side cleanups below.
+
+- **PR #2255** (by us, merged 2026-04-27 04:15 UTC): `Network.clearBrowserCookies` accepts empty params; `Network.getAllCookies` added to dispatch. Gem cleanup: drop the per-origin sweep in `Cookies#clear`, switch `Cookies#all` to `Network.getAllCookies`, remove `Browser#visited_origins` / `record_visited_origin` / `sweep_visited_origins` (~50 LOC).
+- **PR #2257** (by us, merged 2026-04-27 10:31 UTC): assigning `window.location.pathname` or `.search` now navigates. Gem cleanup: remove 5 `assert_current_path` / `has_current_path` skip patterns in `spec/spec_helper.rb`.
+- **PR #2253** (by us, merged 2026-04-27 04:20 UTC): `form.requestSubmit()` (no argument) now fires a `SubmitEvent` with `.submitter === null` (was previously `.submitter === form`, breaking Turbo's submitter sniff). Gem-side: the `requestSubmit` polyfill in `lib/capybara/lightpanda/javascripts/index.js:1019-1045` has been dead code since PR #1984 (Mar 25) added native `requestSubmit`; the polyfill's `if (!HTMLFormElement.prototype.requestSubmit)` guard means it's a no-op on any nightly newer than v0.2.7. Worth deleting on the next cleanup pass — purely a JS payload reduction, no behavior change.
+- **PR #2265** (by us, merged 2026-04-27 10:15 UTC): URL fragment inherited across fragment-less redirect. Gem cleanup: remove the `#current_url maintains fragment` skip pattern.
+- **PR #2251** (karlseguin, merged 2026-04-27): same-url navigate now actually reloads (was previously short-circuited as a fragment change even when the fragment didn't change). No direct gem-side action — surfaces as a stability fix for tests that assign `iframe.src = sameUrl` or `location.href = location.href`.
 
 ### Upstream Open Issues That Affect This Gem
 
