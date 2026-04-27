@@ -186,6 +186,17 @@ Reference implementation (already verified to exit 1 against bug / format-correc
 
 ---
 
+## Mermaid gotchas (Step 7 + Step 8)
+
+GitHub's mermaid renderer is stricter than the playground; bugs that look fine in raw markdown silently fail to render. Two patterns to avoid:
+
+- **Quoted node labels with backslash escapes or HTML entities.** `A["selector with \"quotes\""]` and `A["uses &#92; backslash"]` both trip GitHub's parser with `Unable to render rich display — Parse error on line 2`. Use plain unquoted labels (`A[selector with backslash escape]`) and put the literal selector / characters in the prose or a code block above the diagram. Diagrams illustrate flow, not literal syntax — let the prose carry the exact bytes.
+- **Long labels with internal punctuation.** Even unquoted, parens/brackets/colons inside a label can confuse the parser. Keep labels to short noun phrases (`parser walks string`, `escape decoded`, `attribute matched`) and let the arrows + nearby prose explain the semantics.
+
+If the visual-verification snapshot at Step 7c / 8e shows the diagram source rendering as a `mermaid` code block instead of a graph, this is almost always the cause. Strip quotes/escapes from labels and re-publish.
+
+---
+
 ## Issue body (Step 7)
 
 ````markdown
