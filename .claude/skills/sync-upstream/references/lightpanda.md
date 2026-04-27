@@ -118,6 +118,33 @@ To validate the workaround-removal recommendations, run:
 
 Record the HEAD sha in the report's **Workarounds to re-evaluate** entries so the validation context is reproducible.
 
+## Audit obsolete spec skip patterns
+
+After workaround removal, also audit `spec/spec_helper.rb`'s skip patterns — Lightpanda fixes browser-side gaps independently of the workarounds we file PRs for, so patterns can quietly become obsolete or over-broad without anyone noticing.
+
+The gem has a built-in audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* the previously-skipped specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
+
+```bash
+AUDIT_SKIPS=1 LIGHTPANDA_PATH=/Users/navid/code/browser/zig-out/bin/lightpanda \
+  bundle exec rspec spec/features/session_spec.rb \
+  --format json --out /tmp/audit.json
+```
+
+Then extract the passes:
+
+```bash
+ruby -rjson -e '
+data = JSON.parse(File.read("/tmp/audit.json"))
+passed = data["examples"].select { |e| e["status"] == "passed" }
+puts "Total: #{data["examples"].size}, passed: #{passed.size}, failed: #{data["examples"].count { |e| e["status"] == "failed" }}"
+passed.each { |e| puts "  #{e["full_description"]}" }
+'
+```
+
+Each passing example points at a skip pattern that's either fully obsolete (drop it) or too broad (narrow it). When narrowing, prefer patterns that match the actual failing description rather than the whole describe-block — e.g. `/#accept_confirm should accept the confirm/` instead of the blanket `/#accept_confirm/`.
+
+After narrowing, re-run the full session spec without `AUDIT_SKIPS` to confirm the un-skipped specs pass deterministically (no flakes), and that the pending count dropped by the expected amount. Add the audit findings to the **Workarounds to re-evaluate** bucket in the report.
+
 ## Categorize findings
 
 - **Broken**: methods we call that no longer exist upstream → bugs in our gem.
