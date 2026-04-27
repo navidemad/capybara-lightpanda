@@ -55,6 +55,8 @@ The wishlist's "Quick wins" section reflects the priority. If unsure, pick the s
 
 **First, filter through the wishlist's own annotations.** Each item in `references/upstream-wishlist.md` may carry a `**Upstream issue**:` / `**Upstream PR**:` line — items already filed by us are ineligible for this skill (don't open duplicates). Skim the candidates' wishlist entries before consulting the priority list below; Step 1b's `gh pr list` is the second-pass safety net, not the first.
 
+**Treat `(open as of YYYY-MM-DD)` annotations as hints, not facts.** The wishlist is hand-maintained and stale fast — items can flip from `open` to merged-and-shipped on the same day you start work. Always cross-check `git fetch && git log --oneline origin/main -20` and `gh pr list --state all --limit 20` before committing to an item. Step 1a/1b run these checks anyway, but a stale annotation can mislead the *recommended-order* picking before you ever get there.
+
 1. **A14** — `requestSubmit()` polyfill on `HTMLFormElement`. Smallest, isolated, easy to test. Good first PR.
 2. **A6** — `Page.reload` replays POST. Targeted CDP fix, single domain file.
 3. **A1 + A2 + B3** — cookie clearing trio. Bundle these because they share a root cause. (Exception to the "one PR per item" rule — only because the upstream fix is a single change.)
@@ -138,6 +140,7 @@ If a PR exists:
 - **Open** — link it, ask user whether to add to it (comment) or skip. Don't open a duplicate.
 - **Merged but not in nightly** — wait for next nightly, don't re-do.
 - **Closed unmerged** — read the close reason. Either upstream rejected the approach (don't re-file the same way) or it was superseded (find the successor).
+- **Closed issue with merged-but-partial fix PR** — closures are sometimes partial. Read the closing PR's description for explicit deferrals (`"future work"`, `"follow-up"`, `"could follow separately"`, `"larger change"`). The deferred portion is usually un-filed and is the actual scope for a fresh issue+PR. Frame your new issue as the follow-up — link the closing PR (`PR #X (closing #Y) wired up Z but explicitly deferred W: <quote>. This issue tracks that follow-up.`) so the maintainer immediately recognizes the lineage.
 
 ### 1c. Locate the gem-side workaround for context
 

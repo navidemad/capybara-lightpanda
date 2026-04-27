@@ -67,6 +67,19 @@ The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domai
 - **`Frame.navigate` asserts `_load_state == .waiting`.** A second direct `frame.navigate(...)` on a frame that already loaded panics with `frame.renavigate`. The CDP-side helpers (`doNavigate`, `doReload` in `src/cdp/domains/page.zig`) work around this by calling `session.replacePage()` first when the state isn't `.waiting`, returning a fresh frame in `.waiting`. Mirror that pattern in tests that want to drive multiple navigations on the same browser context — or do the second navigation *as the first* on a context you set up by hand (`cdp_inst.createBrowserContext()` + `bc.session.createPage()`).
 - **`loadBrowserContext({ .url = "..." })` does a GET only.** There's no parameter for `method` / `body` / `header`. If your test needs the first navigation to be POST, hand-roll the setup (`createBrowserContext` → set `bc.id`/`session_id`/`target_id` → `bc.session.createPage()` → `frame.navigate(url, .{ .method = .POST, .body = ..., .header = ... })`) instead of trying to bend `loadBrowserContext`.
 - **Adding HTTP routes goes in `src/testing.zig`'s `testHTTPHandler`.** It's a flat `if (std.mem.eql(u8, path, ...))` chain that responds via `req.respond(...)`. The handler runs synchronously per request; `req.head.method` gives the HTTP method, and you don't have to read or discard the request body before responding. Reuse existing routes (`/xhr`, `/xhr/json`) where possible to keep the test surface small.
+- **`loadBrowserContext({ .url = "anything.html" })` creates a real V8 JS context even when the URL 404s.** The test HTTP handler responds with a 404 for any unmapped path under `/src/browser/tests/`, but `frame.navigate` still initializes the JS runtime. Existing tests like `cdp.frame: addScriptToEvaluateOnNewDocument` lean on this — `hi.html` doesn't exist on disk. Useful when your test only needs JS execution, not fixture content. If you want a *real* fixture, drop one in `src/browser/tests/cdp/` (CDP-test-specific area; the directory test runners ignore it) and reference it as `.url = "cdp/<name>.html"`.
+- **Driving JS in a test and reading values back: use `frame.js.localScope` + `ls.local.exec`, not Runtime.evaluate.** Pattern (verbatim from `cdp.frame: addScriptToEvaluateOnNewDocument`):
+  ```zig
+  const frame = bc.session.currentFrame() orelse unreachable;
+  var ls: js.Local.Scope = undefined;
+  frame.js.localScope(&ls);
+  defer ls.deinit();
+  const v = try ls.local.exec("confirm('proceed?')", null);
+  try testing.expectEqual(true, v.toBool());
+  ```
+  `Value` conversions: `.toBool()` (bool), `.toI32() !i32`, `.toStringSlice() ![]u8`, `.isNull() bool`, `.isUndefined()`, `.isTrue()`. Cheaper than going through `Runtime.evaluate` + `expectSentResult` — the test reads the JS value directly without a CDP round-trip.
+- **`cmd.params(struct{...})` returns `?T`, not `T`.** Required params: unwrap with `orelse return error.InvalidParams`. Optional params: declare them with `?T = null` defaults inside the struct. The pre-existing pattern across `src/cdp/domains/*.zig` is `(try cmd.params(struct{...})) orelse return error.InvalidParams`.
+- **`expectSentResult(null, .{ .id = N })` asserts a successful empty response** — i.e. the dispatch handler called `cmd.sendResult(null, .{})`. Matching shape on the wire: `{"id": N, "result": {}}`. Use this for any handler whose contract is "no payload, just success" (`Page.handleJavaScriptDialog`, `Network.clearBrowserCookies`, `Page.enable`, etc.).
 
 ---
 

@@ -47,6 +47,7 @@ Use this file when:
 
 - **Today**: returns `-32000 No dialog is showing`. Dialogs auto-dismiss in headless mode (alert→OK, confirm→false, prompt→null) before a handler can intervene. The CDP method exists since commit 7208934b (2026-04-06) but has no effect.
 - **Want**: support deferred dialog handling — `accept`/`promptText` should override the auto-dismiss return value.
+- **Upstream issue**: #2260, **Upstream PR**: #2261 (open as of 2026-04-27, by us — pre-arm model).
 - **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `prepare_modals` / `accept_modal` / `dismiss_modal` / `find_modal` capture messages via `Page.javascriptDialogOpening` for matching, but never call `handleJavaScriptDialog`. Result: `accept_modal(:confirm|:prompt)` cannot influence the JS return value.
 - **Drop-on-fix**: rewire modal handlers to actually call `Page.handleJavaScriptDialog` (must be off the dispatch thread to avoid the synchronous-CDP-from-event-handler deadlock). Removes 4 skip-list patterns in `spec/spec_helper.rb` (`#accept_confirm`, `#accept_prompt`, `#accept_alert if text doesn't match`, `#accept_alert nested modals`). ~30 LOC + skip patterns.
 
