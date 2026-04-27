@@ -32,12 +32,15 @@ gem's upstream wishlist: `<one-line description>`.
    (pattern: see existing tests in `src/cdp/domains/network.zig`). For JS API
    fixes use HTML fixtures under `src/browser/tests/<area>/` (pattern: see
    `src/browser/tests/element/duplicate_ids.html` from PR #2244).
-2. Confirm the test fails by running `zig build test` (scoped to the right
-   module if possible — the full suite is slow).
+2. Mentally trace the failing test against current `main` and confirm it
+   would fail. Do NOT run `zig build test` (or any `zig build` variant) —
+   local Zig builds are forbidden (slow on the user's machine); upstream CI
+   verifies on push.
 3. Implement the fix in `<primary file>`. Keep the diff minimal — no
    surrounding cleanup, no formatting churn unrelated to the fix.
-4. Confirm the test now passes and no other tests regress (`zig build test`
-   over the touched module).
+4. Mentally trace the test against the fixed code path and confirm it would
+   now pass. Push the branch and let upstream CI run `zig build test` for
+   the real verification — never run it locally.
 5. Document any spec/CDP-protocol assumption in a code comment **only if** the
    assumption is non-obvious from the code itself.
 ````
