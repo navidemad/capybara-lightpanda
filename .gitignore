@@ -10,4 +10,5 @@
 *.gem
 .ruby-lsp/
 *.png
+!docs/static/img/*.png
 .playwright-mcp/
