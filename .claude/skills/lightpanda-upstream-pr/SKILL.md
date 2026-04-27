@@ -82,6 +82,25 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Running bare `zig build` instead of `mise exec -- zig build`.** The repo pins Zig 0.15.2 via `build.zig.zon`'s `minimum_zig_version`; the system Zig on this machine is newer (0.16.0). Bare `zig` in Claude's non-interactive subshells resolves to the system install — `cd` alone does NOT activate mise's pinned version (the directory hook only fires in interactive shells, not in the per-command subshells the Bash tool spawns). Building with the wrong Zig produces stdlib mismatch errors that look like real bugs. Always prefix `zig build` / `zig` invocations with `mise exec --`. See "Local build & test commands" below.
 - **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `mise exec -- zig build check $V8` / `mise exec -- zig build test $V8` directly.
 
+### Step 0c: Pivot policy when verification surfaces an adjacent bug
+
+The Step 1a probe sometimes retracts the original wishlist item AND incidentally exposes a real bug in a sibling code path. Today's session is the canonical example: A4 (`form.submit() doesn't navigate`) was retracted, but the same probe matrix revealed A20 (`formaction`/`formmethod`/`formenctype` on submit button ignored) — distinct bug, same `Frame.submitForm` function.
+
+When this happens, decide between **pivot in-session** or **stop and let the user pick the next item**:
+
+- **Pivot in-session** when ALL of the following hold:
+  - The adjacent bug lives in the same Zig file (or a sibling file in the same area) as the retracted item — fix scope is similar.
+  - The verification probe you just wrote covers ≥80% of the new item's reproducer (no fresh fixture/server design needed).
+  - The new bug has a clear spec-citable "want" behavior (HTML Living Standard, CDP protocol, Chrome source). Avoid pivoting to bugs whose correct behavior is ambiguous.
+  - The new bug doesn't require a different fix shape (e.g. don't pivot from "missing CDP method" to "wrong event timing" — those are different review surfaces).
+- **Stop** otherwise. Surface the new finding to the user (one paragraph: what you saw, where, why it's distinct from the retracted item) and ask whether to pivot to it, file a tracking issue without a PR, or move to the next wishlist item.
+
+When you pivot:
+1. Add a new entry for the discovered bug to `references/upstream-wishlist.md` (mirror the format of existing items: Today / Want / Gem workaround / Drop-on-fix). Pick the next free `A##` or `B##` ID.
+2. Retract the original entry per the `A4`/`A5`/`A9` precedent (NOT A BUG with empirical evidence + git-blame citation).
+3. Restart the skill flow at Step 1c for the new item — Steps 0/0a/0b are already satisfied (you just selected it).
+4. Reuse the verification probe from Step 1a — usually it's already 80% of Step 6's reproducer.
+
 ## Step V: Verifying existing work on a branch (skip the full Step 0–9 flow)
 
 Use this branch when the user says "branch X is done, verify it" / "we made changes in the worktree, check it's correctly done" / "review PR #N" rather than asking to start a new fix. The skill's main 0–9 path assumes greenfield implementation; verification has a different shape — the issue/PR may already exist and the toggle-off + reproducer were ideally done at implementation time but you're confirming retroactively.
@@ -135,20 +154,30 @@ Local verification reduces the cost of a broken CI run: catch trivial errors on 
 
 ## Step 1: Pre-flight
 
-Before touching any code, confirm three things:
+Before touching any code, confirm three things. **Do this before Step 2** — the entire branch + tasks + issue draft is wasted work if the bug is already fixed or already filed.
 
-### 1a. The bug still reproduces on current `main`
+### 1a. Verify the bug with a pure-CDP probe (the wishlist's `Today` line is not authoritative)
+
+The wishlist entries are written from gem-level Capybara observation by humans on a specific date. The gem routes through workarounds (CLICK_JS, fetch+swap, polyfills) that can mask or *misdiagnose* what's actually broken upstream — you'll see this most often when the wishlist's `Today` claim is broader than the actual bug. **Always confirm with a pure-CDP probe before bootstrapping the branch.**
 
 ```bash
 cd /Users/navid/code/browser
 git fetch origin && git log --oneline origin/main -10
 ```
 
-Then either:
-- Reproduce against the latest nightly binary already on disk (via the gem's setup) using the existing failing spec or a CDP repro. The nightly is the cheapest pre-flight surface — no local rebuild needed just to confirm a known bug. If `main` has commits since the nightly that may have already fixed the bug, read the diff (`git diff <nightly-sha>..origin/main -- <relevant-files>`) and reason about whether the fix landed; if ambiguous, build a local debug binary with `mise exec -- zig build $V8` and re-run the repro against `./zig-out/bin/lightpanda`.
-- For pure CDP/JS API gaps (A14, B1, etc.), grep the relevant `.zig` file for the missing symbol — absence is the repro.
+Three confirmation paths, in order of cheapness:
 
-If the bug appears already fixed, **stop and tell the user**. Recommend running `bundle exec rake spec` against current nightly on the gem to confirm, and update `.claude/rules/lightpanda-io.md` instead of opening a PR.
+1. **Pure-CDP probe against the installed nightly** — the strongest signal and the right default for any DOM / event / navigation / form / cookie bug. Copy `references/probe-lib/cdp.js` into `/tmp/probe-<id>/`, write a 30-line `probe.js` that exercises the bug via `Page.navigate` + `Runtime.evaluate` + `Target.attachToTarget`, and run it against a `lightpanda serve` from the binary already on disk. Asserts the wishlist's claim with no gem code in the loop. **Do this even if you "know" the bug is real** — the 5 minutes saves the 30+ minutes of branch + tests + issue-draft work that gets thrown away when you discover the bug is already fixed.
+2. **Grep the relevant `.zig` file for the missing symbol** — only valid for *pure absence* (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
+3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `mise exec -- zig build $V8` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
+
+**Cross-check intuition with `git blame`**: if the wishlist comment says "method X doesn't navigate" but `git blame src/<path>.zig` on the relevant function shows the navigation call has been in place for weeks/months, trust blame. The wishlist note is one author's empirical claim from a single timestamp; blame is what's actually in `main` right now. Today's session burned an hour on A4 because the gem's `CLICK_JS` comment authoritatively claimed `form.submit()` doesn't navigate, but `git blame Frame.zig:3756-3768` showed the navigation logic had been there for a month — the gem author had misdiagnosed a symptom.
+
+If the bug appears already fixed, **stop and tell the user**. Either:
+- The wishlist is stale → retract the entry per the `A4`/`A5` precedent (NOT A BUG with empirical evidence + git-blame citation in the wishlist + `lightpanda-io.md`) and recommend a follow-up gem cleanup PR if a workaround can now be deleted.
+- The fix is in `main` but not in the installed nightly → record it as `merged + waiting for nightly` in the wishlist; pick a different item.
+
+If verification surfaces an *adjacent* real bug (the original is fixed but a sibling code path is broken), see Step 0c.
 
 ### 1b. No existing upstream issue or PR addresses it
 
@@ -172,6 +201,8 @@ If a PR exists:
 
 The wishlist says where the workaround lives, and `references/file-mapping.md` has the full table (item → gem file). Read the workaround. The fix has to make it unnecessary, so understanding what the workaround does pins down the spec — exact return shape, error code, event name the upstream fix must match.
 
+**Read gem-side comments as one author's hypothesis, not as authoritative spec.** Comments like "Lightpanda's `form.submit()` does NOT navigate — it parses, validates, but never issues an HTTP request" describe what the gem author observed at a single point in time, often via a Capybara-level test that routes through several gem layers. The actual upstream behavior may differ — symptom misattribution is common when the bug surfaces through framework code. **Cross-check every load-bearing claim in a gem comment against `git blame` on the upstream production code.** If blame shows the relevant call has been in place for months, the comment is wrong (or stale, or referring to a different code path). Step 1a's pure-CDP probe is the tiebreaker.
+
 **Verify only the item you're fixing — don't take *adjacent* wishlist items at face value.** The wishlist is updated by hand and entries drift between reviews; a neighbor item described as broken may have been silently fixed upstream. If the design of your reproducer or fix depends on a neighbor item's behavior (e.g., A6's reproducer happens to call `form.submit()`, and A4 claims `form.submit()` doesn't navigate), spend two minutes confirming the neighbor is still broken — empirically, via a tiny CDP probe — before designing around the wishlist's claim. Cheaper than over-engineering a workaround you didn't need.
 
 ## Step 2: Bootstrap branch in `/Users/navid/code/browser`
@@ -186,6 +217,10 @@ git pull origin main                           # ALWAYS — never branch off a s
 git log --oneline -5                           # sanity-check the new HEAD
 git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix-a1-clearbrowsercookies
 ```
+
+If the main clone is on a different open-PR branch (because a previous session left it there), prefer creating a worktree for the new fix — keeps the main clone's branch intact and matches the existing per-fix-worktree pattern. Use `git worktree add -b fix-<id>-<slug> ../browser-<slug> origin/main`; the worktree starts from a fresh `origin/main` automatically.
+
+**`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
 
 If `git status` is dirty (uncommitted work from a previous session, stray repro artifacts, etc.), stop and surface it to the user — do not stash, reset, or clean without permission. The user decides whether to keep, discard, or move that work.
 

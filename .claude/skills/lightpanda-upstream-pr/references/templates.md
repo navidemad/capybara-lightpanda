@@ -85,50 +85,46 @@ The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domai
 
 ## Reproducer skeleton (Step 6)
 
-Lightpanda's CDP endpoint behaves *differently enough* from Chrome that the default `chrome-remote-interface` config breaks. Two non-obvious gotchas, both folded into the skeleton below:
+Use raw `ws` (not `chrome-remote-interface`) and the vendored helpers in `references/probe-lib/cdp.js`. Two reasons:
 
-- **Target discovery is empty.** `/json/list` returns `[]`, so the default `await CDP({port: 9222})` fails with `Error: No inspectable targets`. Pass `target: 'ws://127.0.0.1:9222/'` to skip discovery.
-- **Protocol descriptor isn't served.** `/json/protocol` returns 404, so `chrome-remote-interface` fails again with `Error: Not found`. Pass `local: true` to use its bundled descriptor.
+- **Lightpanda fights `chrome-remote-interface` at every layer.** `/json/list` returns `[]` (errors `No inspectable targets` — workaround: `target: 'ws://...'`). `/json/protocol` returns 404 (errors `Not found` — workaround: `local: true`). After both workarounds, the default flow still assumes a single implicit session, but Lightpanda needs `Target.createTarget` + `Target.attachToTarget` returning a `sessionId` that has to be passed on every subsequent call. Once you've stacked all three patches, c-r-i is no shorter than raw `ws`.
+- **The probe-lib already wraps the right pattern**, so each new probe is ~30 LOC of orchestration instead of re-inventing `makeClient` + the attach flow. See `references/probe-lib/README.md` for the full rationale and copy-into-repro instructions.
 
 Plus a third gotcha that's not specific to Lightpanda but bites silently: a stale `lightpanda serve` left over from a previous run will keep answering CDP without ever loading the new test fixture, so the reproducer's readiness loop must do more than check that the port is open. The skeleton kills any prior listener on the CDP/HTTP ports, then probes `/json/version` and asserts the `Browser` field starts with `Lightpanda` before driving the harness.
 
-Copy the two files below into `repro/<id>-<slug>/` (which is gitignored — see Step 6a). Adjust the fixture URLs and the assertion at the bottom of `repro.js`. Cap the harness at ~80 lines of shell + ~50 of JS; if the bug needs more, isolate further.
+### Files in the repro directory
 
-`repro.js` (CDP driver):
+Copy these into `repro/<id>-<slug>/` (gitignored — see Step 6a). The repro must stay self-contained: copy `cdp.js` from probe-lib alongside, don't `require` paths outside the directory.
+
+```bash
+cp .claude/skills/lightpanda-upstream-pr/references/probe-lib/cdp.js \
+   /Users/navid/code/browser/repro/<id>-<slug>/cdp.js
+```
+
+Cap the harness at ~80 lines of shell + ~50 lines of orchestration in `probe.js` (the helpers in `cdp.js` don't count). If the bug needs more, isolate further.
+
+`probe.js` (CDP driver, using probe-lib):
 
 ````
-const CDP = require('chrome-remote-interface');
-
-const HTTP_PORT = process.env.HTTP_PORT || '9580';
-const CDP_PORT = parseInt(process.env.CDP_PORT || '9222', 10);
+// <one-line description: what assertion distinguishes broken vs. fixed>
+const { connect } = require('./cdp.js');
 
 (async () => {
-  let client;
-  try {
-    // target + local are *both* required against Lightpanda — see header above.
-    client = await CDP({ target: `ws://127.0.0.1:${CDP_PORT}/`, local: true });
+  const c = await connect();
+  await c.navigate('http://127.0.0.1:8765/');
 
-    const { targetId } = await client.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await client.send('Target.attachToTarget', { targetId, flatten: true });
+  // <fire the action that exposes the bug, e.g.:>
+  // await c.eval('document.querySelector("#submit").click()');
 
-    await client.send('Page.enable', {}, sessionId);
-    await client.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/<fixture>.html` }, sessionId);
-    await new Promise((r) => setTimeout(r, 500));
+  // <wait for the observable side-effect, e.g.:>
+  // const ok = await c.waitFor('window.location.href.includes("/expected")');
 
-    // <run the assertion that distinguishes broken vs. fixed; print observation;
-    //  exit 1 on bug observed, exit 0 on fix.>
-
-    await client.close();
-    process.exit(0);
-  } catch (e) {
-    console.error('ERROR:', e && e.stack ? e.stack : e);
-    if (client) try { await client.close(); } catch (_) {}
-    process.exit(2);
-  }
-})();
+  c.close();
+  // process.exit(ok ? 0 : 1);  -- exit 0 = fix in place, exit 1 = bug reproduces
+})().catch(e => { console.error(e); process.exit(2); });
 ````
 
-`repro.sh` (harness):
+`repro.sh` (harness — same as before, just runs `node probe.js`):
 
 ````
 #!/usr/bin/env bash
@@ -175,14 +171,23 @@ for _ in $(seq 1 50); do
   sleep 0.1
 done
 
-if [ ! -d node_modules/chrome-remote-interface ]; then
-  npm install --no-save --silent chrome-remote-interface
+if [ ! -d node_modules/ws ]; then
+  npm install --no-save --silent ws
 fi
 
-exec node repro.js
+exec node probe.js
 ````
 
-Reference implementation (already verified to exit 1 against bug / format-correct against fix): `/Users/navid/code/browser/repro/a15-location-pathname/`.
+### Run order: pre-fix → post-fix → draft issue body
+
+Step 6c says to verify the repro pre-fix (against installed nightly, exit 1) and post-fix (against local debug build, exit 0). **Do both before drafting Step 7's issue body**, because the issue body's `Today` and `Expected after the fix` blocks should paste the actual exit lines verbatim — not paraphrased. Order:
+
+1. Build the local debug binary (`mise exec -- zig build $V8`) — only needed once per branch.
+2. `bash repro.sh` against installed nightly → capture exit code + last 5 lines of output.
+3. `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro.sh` → capture exit code + output.
+4. *Then* draft `/tmp/<id>-issue-body.md` (Step 7a), pasting both captured outputs into the `Run` section.
+
+Reference implementation (already verified to exit 1 against bug / format-correct against fix): `/Users/navid/code/browser/repro/a20-form-attrs-on-submitter/`.
 
 ---
 
