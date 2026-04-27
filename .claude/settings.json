@@ -5,8 +5,12 @@
   },
   "permissions": {
     "allow": [
-      "Edit(.claude/rules/lightpanda-io.md)",
-      "Edit(.claude/skills/sync-upstream/SKILL.md)"
+      "Edit(.claude/rules/**)",
+      "Edit(.claude/skills/**)",
+      "Write(.claude/rules/**)",
+      "Write(.claude/skills/**)",
+      "MultiEdit(.claude/rules/**)",
+      "MultiEdit(.claude/skills/**)"
     ]
   }
 }
