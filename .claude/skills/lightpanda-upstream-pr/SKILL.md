@@ -1,6 +1,6 @@
 ---
 name: lightpanda-upstream-pr
-description: Drive a single upstream Lightpanda PR end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/browser, implement the fix with a Zig test, validate that the gem's workaround can be deleted, and submit the PR via gh. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "let's knock out one of the upstream items", "PR the requestSubmit polyfill", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
+description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "file an issue and PR for the requestSubmit gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
 user_invocable: true
 model: opus
 effort: max
@@ -19,16 +19,35 @@ Two repos are in play. Keep them straight:
 
 The gem stays untouched in this skill. Removing the gem-side workaround happens in a **separate** turn after the upstream PR merges — never speculatively delete a workaround in the same session as the fix.
 
+## Reference files (load when needed)
+
+- `references/upstream-wishlist.md` — source of truth for items A1–A19, B1–B11. Read at Step 0.
+- `references/file-mapping.md` — wishlist item → gem-side workaround file + upstream Zig source file. Read at Steps 1c and 3.
+- `references/templates.md` — issue body, PR body, commit message, final report, implementation prompt. Read at Steps 4, 7, 8, 9.
+- `references/visual-verification.md` — GitHub markdown rendering checklist used by Steps 7c and 8e.
+
+## Audience: write for a Zig browser engineer, not a Rubyist
+
+The Lightpanda maintainer works in Zig + V8 on a browser engine. They are **not** familiar with Ruby, Rails, ActiveRecord, Capybara, RSpec, Turbo, Stimulus, or any Ruby-side framework. Every issue body, PR description, commit message, and reproducer must land for that audience or it gets ignored.
+
+Hard rules:
+
+- **Never reproduce a bug with a Ruby/Capybara/RSpec test.** Reproducers must run with only Lightpanda + a CDP client the maintainer can run in 30 seconds: `curl` over websocket, a tiny Node script using `chrome-remote-interface`, or `lightpanda fetch` against a static HTML file. A Rails or Capybara repro is opaque — they can't run it without a Ruby toolchain they don't have.
+- **Never describe behavior in framework terms.** Don't say "Capybara's `click_link` calls `Page.navigate` and then…" — say "a CDP client sending `Page.navigate` then awaiting the `Page.loadEventFired` event observes…". CDP semantics and HTML/DOM spec citations are universal; framework names aren't. Same for Turbo Drive — describe the actual DOM mutation pattern (`document.body.innerHTML = …; document.body.replaceWith(newBody)`) rather than naming the library.
+- **Mermaid diagrams are required, not optional.** Every issue gets a sequence diagram of the broken vs. expected CDP/event flow. Every PR gets a flowchart of the old (broken) vs. new (fixed) code path. They cut review time dramatically when the reviewer is doing surgery on engine code they didn't write — a 10-line diagram replaces a paragraph of prose.
+- **Cite the spec, not the consumer.** When stating expected behavior, link to: HTML Living Standard section, CDP protocol reference (`https://chromedevtools.github.io/devtools-protocol/`), or Chrome's source if the spec is silent. Never "because Capybara expects…".
+- **Reproducer must be self-contained**: one `repro.html` + one `repro.sh` (or `repro.js`). No `bundle install`, no `gem install`, no `Gemfile`. If you need Node, declare the exact one-liner: `npm install --no-save chrome-remote-interface` and inline the script.
+
 ## Step 0: Pick the item
 
-Source of truth: `references/upstream-wishlist.md` (this skill's references directory; absolute path `/Users/navid/code/capybara-lightpanda/.claude/skills/lightpanda-upstream-pr/references/upstream-wishlist.md`). Each entry has an ID (`A1`–`A19`, `B1`–`B11`).
+Source of truth: `references/upstream-wishlist.md`. Each entry has an ID (`A1`–`A19`, `B1`–`B11`).
 
 User typically names the item directly ("fix A14"). If they don't:
 
 - Ask which one, OR
 - Suggest the next from the recommended order (Step 0a) and confirm.
 
-**Refuse and explain** if the user names a Section C item — those are inherent (no rendering engine). Recommend running cuprite for that lane instead. Same for already-fixed items (e.g. A19) and items with an open PR by us (e.g. A8 → PR #2244 already filed).
+**Refuse and explain** if the user names a Section C item — those are inherent (no rendering engine). Recommend running cuprite for that lane instead. For items that may already be addressed (already fixed, open PR by us), the duplicate check in Step 1b will catch them — don't hardcode their state here.
 
 ### Step 0a: Recommended order if the user is undecided
 
@@ -38,17 +57,22 @@ The wishlist's "Quick wins" section reflects the priority. If unsure, pick the s
 2. **A6** — `Page.reload` replays POST. Targeted CDP fix, single domain file.
 3. **A1 + A2 + B3** — cookie clearing trio. Bundle these because they share a root cause. (Exception to the "one PR per item" rule — only because the upstream fix is a single change.)
 4. **A3** — `Page.handleJavaScriptDialog` actually dismisses/accepts. Touches `page.zig` + dialog plumbing.
-5. **A8** — already filed as PR #2244, just check status / nudge reviewers, don't re-file.
+5. **A8** — `#id` selector regression after body replacement. Check `gh pr list` first; we may already have a PR open.
 6. **B1** — `XPathResult` + `document.evaluate`. Largest scope (~700 LOC drop on the gem side). Last because it's the most invasive Zig change.
 
 Section A bugs > Section B missing methods, generally — bugs have clearer "want" semantics (Chrome behavior). Missing methods may need design discussion upstream first.
 
 ### Step 0b: Anti-patterns (refuse to do these)
 
-- **Bundling unrelated fixes into one PR.** Each item gets its own branch + PR. Reviewers reject mixed changes. The A1+A2+B3 bundle above is the only exception, and only because they share a one-function fix.
+- **Bundling unrelated fixes into one PR.** Each item gets its own branch + issue + PR. Reviewers reject mixed changes. The A1+A2+B3 bundle above is the only exception, and only because they share a one-function fix.
 - **Writing Ruby tests for the Zig fix.** Verification on the gem side is a separate phase (Step 5) and uses the *existing* gem-side test as a regression check, not a new spec.
 - **Skipping the Zig test.** Every fix gets at least one `test "..."` block in the same .zig file or under `src/browser/tests/`. CI requires it and reviewers will block.
-- **Re-filing A8.** PR #2244 is already open. If user asks to "do A8", check the PR status with `gh pr view 2244 --repo lightpanda-io/browser` and report instead of opening a duplicate.
+- **Opening a PR without an issue first.** Always file the issue (Step 7) before the PR (Step 8). An orphan PR has no place to record the reproducer cleanly and gives the maintainer no chance to weigh in on approach before code review.
+- **Opening a PR without a `Closes #<n>` line.** The PR body MUST include the literal text `Closes #<issue-num>` referencing the Step 7 issue. This wires up GitHub's auto-close on merge. Without it, the issue stays open after the PR merges and someone has to remember to close it manually — which never happens. Step 8d verifies GitHub actually parsed the link via `gh pr view ... --json closingIssuesReferences`. If that returns empty, the PR body is wrong and must be edited before continuing.
+- **Pasting a Ruby/Capybara/RSpec reproducer into the issue.** The maintainer can't run it. Reproducers are CDP + HTML only — see Step 6. If you can't reduce the bug to a CDP-only repro, the bug isn't isolated enough to fix yet.
+- **Skipping mermaid diagrams.** Issue and PR both require diagrams (sequence diagram for the issue, flowchart for the PR). They're not decoration — they're the fastest way for a Zig engineer to understand a bug they didn't write.
+- **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
+- **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
 
 ## Step 1: Pre-flight
 
@@ -86,24 +110,7 @@ If a PR exists:
 
 ### 1c. Locate the gem-side workaround for context
 
-The wishlist says where the workaround lives. Read it. The fix has to make the workaround unnecessary, so understanding what the workaround does pins down the spec.
-
-Map of items → gem workaround files:
-
-| Item | File on gem side |
-|---|---|
-| A1, A2, B3 | `lib/capybara/lightpanda/cookies.rb` (sweep_visited_origins) |
-| A3 | `lib/capybara/lightpanda/browser.rb` (prepare_modals, accept_modal, etc.) |
-| A4, A5 | `lib/capybara/lightpanda/node.rb` (CLICK_JS, IMPLICIT_SUBMIT_JS) |
-| A8 | `lib/capybara/lightpanda/javascripts/index.js` (querySelector rewriter) |
-| A10 | `lib/capybara/lightpanda/browser.rb` (wait_for_page_load) |
-| A11 | `lib/capybara/lightpanda/browser.rb` (with_default_context_wait) |
-| A12 | `lib/capybara/lightpanda/browser.rb` (handle_navigation_crash) |
-| A14 | `lib/capybara/lightpanda/javascripts/index.js` (requestSubmit polyfill) |
-| B1 | `lib/capybara/lightpanda/javascripts/index.js` (XPathEval IIFE) |
-| B2 | `lib/capybara/lightpanda/browser.rb` (back, forward) |
-
-Read the gem file's relevant section. Note the exact behavior the workaround relies on (return shape, error code, event name) — this is what the upstream fix must match.
+The wishlist says where the workaround lives, and `references/file-mapping.md` has the full table (item → gem file). Read the workaround. The fix has to make it unnecessary, so understanding what the workaround does pins down the spec — exact return shape, error code, event name the upstream fix must match.
 
 ## Step 2: Bootstrap branch in `/Users/navid/code/browser`
 
@@ -126,70 +133,23 @@ If missing, add it before doing any work.
 
 ## Step 3: Locate the Zig code
 
-CDP domain files live at `src/cdp/domains/<domain>.zig`. Browser-internal logic lives at `src/browser/`. JS API surface (DOM, HTML elements) lives at `src/browser/<area>/` (e.g. `src/browser/forms/`, `src/browser/dom/`).
-
-Mapping per item (use as a starting point, then `grep`/`rg` to confirm):
-
-| Item | Likely file(s) |
-|---|---|
-| A1 (`Network.clearBrowserCookies`) | `src/cdp/domains/network.zig` (dispatch enum + handler) |
-| A2 (`Network.getCookies` scope) | `src/cdp/domains/network.zig` (handler reads current page origin — change to enumerate jar) |
-| A3 (`handleJavaScriptDialog`) | `src/cdp/domains/page.zig` (dispatch handler — currently always errors) + dialog plumbing in `src/browser/Page.zig` |
-| A4 (`form.submit()`) | `src/browser/forms/HTMLFormElement.zig` (or wherever `submit` is bound) |
-| A5 (`document.write`) | `src/browser/document/Document.zig` |
-| A6 (`Page.reload` replays POST) | `src/cdp/domains/page.zig` (reload handler) + `src/browser/Page.zig` (navigation history entry shape) |
-| A7 (`<select>` empty FormData) | `src/browser/forms/` (FormData construction) |
-| A8 (`#id` selector) | `src/browser/css/` (selector engine, `Frame.getElementByIdFromNode`) — **PR #2244 already open** |
-| A10 (`Page.loadEventFired`) | `src/browser/Page.zig` (navigation lifecycle) + `src/cdp/domains/page.zig` (event emission) |
-| A11 (NoExecutionContextError) | `src/cdp/domains/runtime.zig` (evaluate — add wait/queue for new context) |
-| A14 (`requestSubmit`) | `src/browser/forms/HTMLFormElement.zig` |
-| A15 (`location.pathname` navigation) | `src/browser/dom/Location.zig` (or similar) |
-| B1 (`XPathResult`/`document.evaluate`) | New: `src/browser/dom/XPathEvaluator.zig` (large) |
-| B2 (history CDP methods) | `src/cdp/domains/page.zig` (add new dispatch entries) |
-| B3 (`Network.getAllCookies`) | `src/cdp/domains/network.zig` (add dispatch entry) |
-| B4 (`setFileInputFiles`) | `src/cdp/domains/page.zig` + file input plumbing in `src/browser/forms/` |
-
-Find the dispatch enum for CDP additions:
-
-```bash
-rg -n "fn processMessage" /Users/navid/code/browser/src/cdp/domains/network.zig
-rg -n "method_name" /Users/navid/code/browser/src/cdp/domains/network.zig | head
-```
-
-For JS APIs, check `src/browser/<area>/` for `.zig` files — APIs are bound through Zig→V8 reflection (look for `pub const` declarations of method names).
+`references/file-mapping.md` has the item → Zig file map and `rg` recipes for finding CDP dispatch enums and JS API bindings. Use it as a starting point, then confirm with grep — file layout drifts.
 
 ## Step 4: Implement fix + Zig test
 
-Use the implementation prompt template below to drive the Zig changes. Apply it as a self-contained brief — do not assume context from this conversation carries over if you spawn an agent.
+Use the implementation prompt template in `references/templates.md` to drive the Zig changes. The template can be applied two ways — work through it inline (default for small single-file changes) or paste it into a `general-purpose` subagent (better for multi-file changes or to keep main context lean). The template is self-contained either way; fill in the `<...>` placeholders before applying.
 
-### 4a. Implementation prompt template
+Work TDD: failing test → confirm it fails → implement → confirm it passes → no regressions.
 
-When making the fix, structure work as TDD:
-
-> **Context**: Working in `/Users/navid/code/browser`, the Lightpanda browser (Zig 0.15.2 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from `references/upstream-wishlist.md` in the gem repo: `<one-line description>`.
->
-> **Today's behavior**: `<copy from wishlist>`
->
-> **Want**: `<copy from wishlist>`
->
-> **Where to look**:
-> - Primary: `<file from Step 3 mapping>`
-> - Related: `<any test fixtures or sibling files>`
->
-> **TDD steps**:
-> 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file (pattern: see existing tests in `src/cdp/domains/network.zig`). For JS API fixes use HTML fixtures under `src/browser/tests/<area>/` (pattern: see `src/browser/tests/element/duplicate_ids.html` from PR #2244).
-> 2. Confirm the test fails by running `zig build test` (scoped to the right module if possible — the full suite is slow).
-> 3. Implement the fix in `<primary file>`. Keep the diff minimal — no surrounding cleanup, no formatting churn unrelated to the fix.
-> 4. Confirm the test now passes and no other tests regress (`zig build test` over the touched module).
-> 5. Document any spec/CDP-protocol assumption in a code comment **only if** the assumption is non-obvious from the code itself.
-
-### 4b. Verification gates before moving on
+### 4a. Verification gates before moving on
 
 - `zig build test` (or scoped equivalent) passes — including the new test.
 - `git diff` shows only files relevant to the fix. No `mise.toml`, no editor config.
 - The new test would have failed without the fix (toggle the fix line and confirm).
 
-If `zig build` fails for unrelated reasons (toolchain version, dependency churn), stop and check `mise.toml` / `.zig-version` — don't paper over the build error.
+### 4b. If the upstream Zig build is broken for unrelated reasons
+
+If `zig build` fails on a clean `main` without your changes (toolchain mismatch, dependency churn, transient CI breakage), **stop and report the exact build error to the user**. Do not paper over it by editing `.zig-version`, bumping deps, or rebasing onto an older commit — those are separate decisions the user has to make. Possible next steps to surface: pin to the last green commit, file a separate upstream issue about the build break, or wait it out.
 
 ## Step 5: Validate against the gem (sanity check, no edits)
 
@@ -208,88 +168,126 @@ For items where the gem implements a polyfill (A14, B1, A8), confirm the upstrea
 
 If the validation reveals a gap (fix works but doesn't fully obsolete the workaround): document the residual gap in the PR description rather than expanding scope. A partial fix is fine; a misleading PR is not.
 
-## Step 6: Submission
+## Step 6: Build the reproducer
+
+Before filing anything, build a self-contained reproducer the maintainer can run with no Ruby toolchain. This artifact is referenced by both the issue (Step 7) and the PR (Step 8), so do it once, well.
+
+### 6a. Where to put it
+
+Local workspace only — do **not** commit the reproducer to the upstream branch. Suggested layout:
+
+```
+/Users/navid/code/browser/repro/<id>-<slug>/
+  repro.html            # minimal fixture, no frameworks
+  repro.sh              # orchestrates lightpanda + driver + assertions
+  repro.js              # (if needed) Node CDP client using chrome-remote-interface
+  README.md             # what the script asserts; expected vs. actual output
+```
+
+Add the `repro/` directory to `.git/info/exclude` so it can't accidentally be committed.
+
+### 6b. Reproducer requirements
+
+The script must:
+
+1. Start `lightpanda serve --host 127.0.0.1 --port 9222` in the background, with a clean PID trap so it dies when the script exits.
+2. Serve `repro.html` over HTTP (`python3 -m http.server` on a free port is fine).
+3. Drive the browser through CDP — pure curl/websocket if simple enough, otherwise a small Node script using `chrome-remote-interface` (one `npm install --no-save chrome-remote-interface` line at the top).
+4. Print **exactly** the observation that demonstrates the bug, then `exit 1` if the bug is observed and `exit 0` if not. The maintainer should see the bug in one terminal command.
+5. Include a header comment listing: prerequisites, what to run, expected output today, expected output after the fix.
+
+Cap the whole thing at ~80 lines of shell + ~50 lines of JS. If the bug requires more than that to reproduce, the bug isn't isolated enough — split it.
+
+### 6c. Verify the reproducer locally
+
+Run it. Confirm exit code 1 (bug observed) on the current `main` build. Then apply your fix from Step 4 and confirm exit code 0 (bug gone). This is what proves the fix actually addresses the reported bug — not a Zig unit test alone.
+
+## Step 7: File the issue first
+
+The issue is filed **before** the PR, even when both go up the same day. The PR will close it via `Closes #<n>`. Filing the issue first gives the maintainer a place to comment on approach if they disagree, and gives the bug a permanent searchable record independent of any single PR's life.
+
+### 7a. Compose the body
+
+Use the issue body template in `references/templates.md`. The template includes both required mermaid sequence diagrams (broken vs. expected CDP flow) and slots for the reproducer.
+
+### 7b. File the issue
+
+```bash
+gh issue create --repo lightpanda-io/browser \
+  --title "<title — area: short description>" \
+  --body "$(cat <<'EOF'
+<paste full body>
+EOF
+)"
+```
+
+Capture the issue number from the response (e.g., `https://github.com/lightpanda-io/browser/issues/2400` → `2400`). The PR description and commit message both reference this number — wrong number means broken auto-close.
+
+### 7c. Visually verify the issue rendering
+
+Mermaid diagrams, nested code fences, and HEREDOC escape edge cases break in subtle ways that look fine in source but render wrong on GitHub. Apply the checklist from `references/visual-verification.md` (common section + issue-only section). If anything renders wrong or could read better, edit and re-publish before moving on.
+
+## Step 8: Open the PR linked to the issue
+
+Push the branch and open the PR. The PR body **must** contain a literal `Closes #<issue-num>` line referencing the issue from Step 7. This wires up GitHub's auto-close: when the PR merges, the issue closes automatically, the wishlist tracker stays accurate, and reviewers can see the linked issue in the right-sidebar of the PR. **Without this line, the issue stays open after merge** and someone has to remember to close it manually — which never happens.
+
+GitHub recognizes any of: `Closes`, `closes`, `Close`, `Fixes`, `fixes`, `Resolves`, `resolves`, plus the past-tense variants. Pick **`Closes`** for consistency across all our PRs.
+
+### 8a. Push and create
 
 ```bash
 cd /Users/navid/code/browser
-git status                                     # confirm only intended files
+git status                                     # confirm only intended files (no repro/, no mise.toml)
 git diff --stat                                # confirm reasonable surface
-git add <specific files>                       # NEVER `git add -A` here — the wishlist is gitignored but local-build artifacts may not be
-git commit                                     # use the template below
+git add <specific files>                       # NEVER `git add -A` — the repro dir and mise.toml are local-only
+git commit                                     # use commit message template in references/templates.md — body MUST include "Closes #<issue-num>"
 git push -u origin fix-<id>-<slug>
+
+# Sanity-check the prepared PR body BEFORE invoking gh pr create:
+# - contains "Closes #<actual issue number from Step 7>" (not "<issue-num>" placeholder)
+# - both mermaid diagrams are present
+# - issue number is the real one captured in 7b, not a guess
+echo "<paste prepared body>" | grep -E "Closes #[0-9]+" || { echo "MISSING Closes line — abort"; exit 1; }
+
 gh pr create --repo lightpanda-io/browser \
   --base main \
   --title "<title>" \
-  --body "<body from template>"
+  --body "$(cat <<'EOF'
+<paste body>
+EOF
+)"
 ```
 
-### 6a. Commit message template
+### 8b. Templates
 
-```
-<area>: <one-line summary, imperative mood>
+Commit message and PR description templates are in `references/templates.md`. Match the project's commit style — check `git log --oneline -20` for examples. Lightpanda uses lowercase area prefixes (`cdp:`, `dom:`, `forms:`, `page:`, `runtime:`, `network:`).
 
-<2-4 sentence body explaining root cause and fix>
+Do **not** mention `capybara-lightpanda` or the wishlist by name in the PR or commit. The fix should stand on its own merits — Lightpanda is a browser used by many clients, and naming one downstream consumer biases reviewers. Refer to "downstream CDP clients" generically if context demands.
 
-Closes #<issue> (if any)
-```
+### 8c. Verify the auto-close link is wired up
 
-Match the project's commit style — check `git log --oneline -20` for examples. Lightpanda uses lowercase area prefixes (`cdp:`, `dom:`, `forms:`, `page:`).
+Right after `gh pr create` returns the URL, verify GitHub actually parsed the `Closes #<n>` and linked the issue. A typo (`Close #1234.`, `closes#1234`, wrong number) silently fails and leaves the issue orphaned.
 
-### 6b. PR description template
-
-```markdown
-## What
-
-<one-paragraph description of the bug and fix>
-
-## Today
-
-<paste from references/upstream-wishlist.md "Today" line — the actual broken behavior>
-
-## Want
-
-<paste from references/upstream-wishlist.md "Want" line — Chrome / spec behavior>
-
-## How
-
-<bullet list of the change — files touched, key functions modified, any new abstractions>
-
-## Test
-
-- New test: `<file:test name>` — fails before, passes after.
-- Manual repro: <if applicable, e.g. "via capybara-lightpanda's `Cookies#clear` smoke spec, which fails before the fix and passes after">.
-
-## Notes
-
-<any caveats, follow-ups, or known limitations of this fix>
+```bash
+gh pr view <pr-num> --repo lightpanda-io/browser \
+  --json closingIssuesReferences \
+  --jq '.closingIssuesReferences[].number'
 ```
 
-Do **not** mention `capybara-lightpanda` or the wishlist by name in the PR body. The fix should stand on its own merits — Lightpanda is a browser used by many clients, and naming one downstream consumer biases reviewers. Refer to "downstream Capybara/CDP clients" generically if context demands.
+This must print the issue number from Step 7. If it's empty: edit the PR body via `gh pr edit <pr-num> --body-file <file>` to fix the `Closes` line, then re-run the check. Don't move on to Step 8d until the auto-close is confirmed.
 
-### 6c. Post-submit hygiene
+### 8d. Visually verify the PR rendering
 
-After the PR opens:
+Same drill as 7c, against the PR URL this time. Apply the checklist from `references/visual-verification.md` (common section + PR-only section: flowchart rendering, hyperlinked `Closes #<n>`, Linked Issues sidebar, Files-changed tab matches Fix bullets). Fix-and-republish if anything reads sloppy — don't ship a sloppy artifact when polish is two minutes away.
 
-1. Capture the PR URL in the report back to the user.
-2. **Do not** mark the wishlist item as fixed in `references/upstream-wishlist.md` yet — only when the PR merges and ships in a nightly. Add a note next to the item: `**Upstream PR**: #<n> (open as of YYYY-MM-DD)`.
+### 8e. Post-submit hygiene
+
+After the PR opens and the auto-close link is verified:
+
+1. Capture both URLs (issue + PR) in the report back to the user.
+2. **Do not** mark the wishlist item as fixed in `references/upstream-wishlist.md` yet — only when the PR merges and ships in a nightly. Add a note next to the item: `**Upstream issue**: #<i>, **Upstream PR**: #<n> (open as of YYYY-MM-DD)`.
 3. **Do not** delete the gem-side workaround — that's a follow-up gem PR after the nightly ships, in a separate turn.
 
-## Step 7: Report back
+## Step 9: Report back
 
-Single concise summary to the user:
-
-```
-Item: <ID> — <title>
-Branch: fix-<id>-<slug>
-PR: <URL>
-
-Diff: <files changed>, <lines>
-Tests: <new test names>
-Validation: <one-line — did the gem's workaround become deletable in principle? yes/no/partial>
-
-Next:
-- Wait for nightly to ship the fix.
-- Follow-up gem PR: delete <workaround> in /Users/navid/code/capybara-lightpanda when nightly drops.
-```
-
-If you stopped before submitting (because the bug was already fixed, a duplicate PR exists, or the fix needed design discussion), the report explains why and what's needed to unblock — no PR URL.
+Use the final-report template in `references/templates.md`. If you stopped before submitting (because the bug was already fixed, a duplicate exists, or the fix needed design discussion), the report explains why and what's needed to unblock — no issue/PR URL, but if you filed an issue without a PR, surface that URL.
