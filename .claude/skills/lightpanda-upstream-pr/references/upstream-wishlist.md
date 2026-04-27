@@ -51,19 +51,19 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `prepare_modals` / `accept_modal` / `dismiss_modal` / `find_modal` capture messages via `Page.javascriptDialogOpening` for matching, but never call `handleJavaScriptDialog`. Result: `accept_modal(:confirm|:prompt)` cannot influence the JS return value.
 - **Drop-on-fix**: rewire modal handlers to actually call `Page.handleJavaScriptDialog` (must be off the dispatch thread to avoid the synchronous-CDP-from-event-handler deadlock). Removes 4 skip-list patterns in `spec/spec_helper.rb` (`#accept_confirm`, `#accept_prompt`, `#accept_alert if text doesn't match`, `#accept_alert nested modals`). ~30 LOC + skip patterns.
 
-### A4. `form.submit()` does not navigate
+### A4. ~~`form.submit()` does not navigate~~ — NOT A BUG (gem misdiagnosis, retracted 2026-04-27)
 
-- **Today**: parses and validates but never issues an HTTP request. Page stays on original URL with form still rendered. Verified 2026-04-26.
-- **Want**: spec-compliant form submission — issue the request, navigate, fire submit event.
-- **Gem workaround**: `lib/capybara/lightpanda/node.rb` — `CLICK_JS` (submit-button click path) and `IMPLICIT_SUBMIT_JS` (Enter-in-text-input) do `fetch(action) → DOMParser → swap document.body.innerHTML → history.replaceState`. Bypasses Lightpanda's form pipeline entirely.
-- **Drop-on-fix**: simplify `CLICK_JS` to just `this.click()` for submit buttons; remove `IMPLICIT_SUBMIT_JS`. ~150 LOC.
+- **Resolution**: Lightpanda's native `form.submit()`, `submit_button.click()`, `form.requestSubmit()`, and Enter-in-text-input implicit submission **all navigate correctly** on current nightly. Verified empirically against `1.0.0-nightly.5816+a578f4d6` with a pure-CDP probe at `/tmp/a4-probe/probe-button-click.js` (POST + GET + redirect chain all PASS).
+- **What was actually wrong**: the gem's `CLICK_JS` fetch+swap workaround was added 2026-04-26 in commit `35ee402` based on the assumption that `Frame.submitForm` doesn't call into navigation. But `git blame` of `src/browser/Frame.zig` shows `submitForm` has been calling `scheduleNavigationWithArena` since 2026-03-24 (commit `^afb0c292`). The workaround was either a misdiagnosis of a different symptom or stale empirical evidence.
+- **Gem-side action (TODO)**: simplify `CLICK_JS` to just call `this.click()` for submit buttons; remove `IMPLICIT_SUBMIT_JS` and the `\n`-routing branch in `Node#fill_text_input`. ~150 LOC. Verify with `bundle exec rake spec:incremental`. Keep label-click forwarding and `<summary>`/`<details>` toggle (those are real upstream gaps).
+- **Drop-on-fix**: N/A upstream — gem cleanup only.
 
-### A5. `document.write()` is a no-op
+### A5. ~~`document.write()` is a no-op~~ — NOT A BUG (retracted 2026-04-27 alongside A4)
 
-- **Today**: `document.open(); document.write(html); document.close()` leaves `body.innerHTML.length` unchanged. Verified 2026-04-26.
-- **Want**: spec-compliant document.write — replace document content.
-- **Gem workaround**: implicit. The original CLICK_JS used `document.write` to swap content; replaced with `body.innerHTML = ...` as part of A4's workaround.
-- **Drop-on-fix**: alongside A4 if we ever want to use `document.write` again.
+- **Resolution**: Lightpanda's `document.open(); document.write(html); document.close()` correctly replaces the document body on current nightly. Verified empirically: probe writes `<h1>WRITTEN_PAGE</h1>` and `document.body.innerHTML` reflects it, `document.body.innerText.includes("WRITTEN_PAGE") === true`. Probe at `/tmp/a4-probe/probe-doc-write.js`.
+- **What was wrong**: the same 2026-04-26 commit (`35ee402`) that added the `form.submit()` workaround also asserted `document.write()` was a no-op. Both claims are contradicted by today's nightly.
+- **Gem-side action**: not directly used in the gem (CLICK_JS uses `body.innerHTML = ...`, not `document.write`), so removing the A5 entry is informational only. Drops alongside the A4 cleanup.
+- **Drop-on-fix**: N/A.
 
 ### A6. `Page.reload` does not replay POST
 
@@ -167,6 +167,14 @@ Use this file when:
 - **Want**: confirmed working as of >= v0.2.6.
 - **Gem workaround**: none. (Already fixed upstream.)
 - **Drop-on-fix**: N/A.
+
+### A20. `formaction` / `formmethod` / `formenctype` on submit button not honored
+
+- **Today (nightly 5816)**: native click on a `<button type=submit formaction="/X">` (or `formmethod=`, `formenctype=`) navigates to the form's `action` with the form's `method`/`enctype`, ignoring the submitter's overrides. Only `formtarget` is honored. Empirically verified with a CDP probe at `/tmp/a4-probe/probe-formaction.js` (3 of 4 cases FAIL on default nightly — `formaction`, `formmethod`, and combined override). `Frame.submitForm` reads `action`/`method`/`enctype` only from the form element (`Frame.zig:3735, 3752, 3753`); the symmetrical submitter-first lookup that already exists for `formtarget` (lines 3684-3691) is missing for the other three attributes.
+- **Want**: per [HTML Living Standard form submission algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-form-submit), when a submit button is the submitter, `formaction` / `formmethod` / `formenctype` on the submitter override the form's corresponding attributes (mirroring how `formtarget` already works upstream).
+- **Surfaced**: 2026-04-27 while verifying A4 was a misdiagnosis. The gem's `CLICK_JS` workaround (originally added for the wrong reason) coincidentally hides this real bug — see `node.rb` `CLICK_JS` reads `this.getAttribute('formaction') || form.getAttribute('action') || ...`, so the gem-side fetch+swap path uses the right URL while native CDP-driven Capybara wouldn't.
+- **Gem workaround**: implicit. The fetch+swap in `CLICK_JS` reads `formaction`/`formmethod`/`formenctype` directly off the submitter button before issuing the fetch.
+- **Drop-on-fix**: trim the formaction/formmethod/formenctype handling out of `CLICK_JS` once the fix ships in nightly. Combined with the now-stale A4 cleanup, the entire `CLICK_JS` fetch+swap path becomes deletable (~150 LOC). The text-content fallback for `<button name>` without explicit `value` may need a separate small probe before deletion.
 
 ---
 
@@ -298,7 +306,7 @@ If all of section A + B land upstream, the gem can shed roughly:
 | Item | LOC saved | Reason |
 |---|---|---|
 | **B1 — XPath evaluator** | ~700 | Whole `XPathEval` IIFE in index.js |
-| **A4 + A5 — form.submit / document.write** | ~150 | `CLICK_JS` fetch+swap + `IMPLICIT_SUBMIT_JS` |
+| ~~**A4 + A5 — form.submit / document.write**~~ | ~~~150~~ | RETRACTED 2026-04-27 — never actually broken upstream; gem cleanup tracked under A4 |
 | ~~**A8 — `#id` rewriter**~~ | ~~~60~~ | DONE 2026-04-27 — PR #2244 merged + shipped + gem polyfill removed |
 | **A1 + A2 + B3 — cookie clearing** | ~50 | `sweep_visited_origins`, `visited_origins` tracking |
 | **A3 — handleJavaScriptDialog** | ~30 + 4 skips | Modal handlers + 4 spec_helper skip patterns |
@@ -319,9 +327,10 @@ If filing one PR, these are the highest-impact:
 
 1. **A8 (`#id` rewriter)** — already filed (#2244). Small, targeted patch in `Frame.getElementByIdFromNode`. Fixes Turbo Drive interaction.
 2. **A1/A2 (cookie clearing)** — make `Network.clearBrowserCookies` actually clear the in-memory jar, OR implement `Network.getAllCookies`. Fixes `reset_session!` semantics across multi-domain tests.
-3. **A4 (`form.submit()` navigates)** — fixes a huge swath of plain-form tests; lets us delete the gem's most invasive workaround (~150 LOC).
-4. **B1 (`XPathResult` / `document.evaluate`)** — biggest LOC savings (~700 LOC). Native implementation would also fix XPath-in-iframes, edge cases in our evaluator.
-5. **A3 (`handleJavaScriptDialog`)** — fixes confirm/prompt return-value override; small upstream change.
+3. **B1 (`XPathResult` / `document.evaluate`)** — biggest LOC savings (~700 LOC). Native implementation would also fix XPath-in-iframes, edge cases in our evaluator.
+4. **A3 (`handleJavaScriptDialog`)** — fixes confirm/prompt return-value override; small upstream change.
+
+(A4 was previously listed here but has since been retracted as not-a-bug — see Section A.)
 
 ## What this gem won't ever fix (run cuprite)
 
