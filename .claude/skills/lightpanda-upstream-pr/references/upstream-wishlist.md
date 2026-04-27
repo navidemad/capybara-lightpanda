@@ -29,15 +29,17 @@ Use this file when:
 
 ### A1. `Network.clearBrowserCookies` returns `InvalidParams`
 
-- **Today**: command responds `-32602 InvalidParams`. PR #1821 (>= v0.2.6) was supposed to fix this; regressed on `nightly.5812`.
-- **Want**: clear ALL cookies in the in-memory jar regardless of current page origin (Chrome behavior).
+- **Today**: command responds `-31998 InvalidParams` whenever the caller includes `params: {}`. Root cause: inverted-logic guard in `clearBrowserCookies` returns `InvalidParams` if `cmd.params(struct{})` is non-null, which it always is when the caller sends an empty params object. PR #1821 (>= v0.2.6) added the missing `clearRetainingCapacity()` call but didn't fix this guard.
+- **Want**: clear ALL cookies in the in-memory jar regardless of current page origin (Chrome behavior); silently accept an empty params object per JSON-RPC convention.
+- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us).
 - **Gem workaround**: `lib/capybara/lightpanda/cookies.rb` — `Cookies#clear` ignores the response and falls through to a per-origin sweep using `Browser#visited_origins`.
 - **Drop-on-fix**: remove `sweep_visited_origins`, the `@visited_origins` tracking in `Browser#initialize`, the `record_visited_origin` helper. ~50 LOC.
 
 ### A2. `Network.getCookies` (no `urls`) scoped to current origin
 
-- **Today**: returns only cookies for the current page's origin. Cookies set on previously-visited domains are invisible. On `about:blank`, raises `InvalidDomain`.
-- **Want**: per CDP spec, returns all cookies (Chrome's behavior), or implement `Network.getAllCookies`.
+- **Today**: returns only cookies for the current page's origin. Cookies set on previously-visited domains are invisible. On `about:blank`, raises `InvalidDomain`. (This actually matches Chrome's CDP spec for `Network.getCookies`, but Chrome also implements `Network.getAllCookies` for cross-origin enumeration — see B3.)
+- **Want**: cross-origin enumeration via `Network.getAllCookies` (B3); the origin-scoped `Network.getCookies` itself can keep its current semantics.
+- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us — bundled with A1 + B3 since the gem workaround is shared).
 - **Gem workaround**: pass explicit `urls: [...]` parameter for cross-origin enumeration. Track visited origins in Browser. (Same workaround as A1.)
 - **Drop-on-fix**: alongside A1.
 
@@ -121,10 +123,10 @@ Use this file when:
 
 ### A14. `requestSubmit()` not implemented on `HTMLFormElement`
 
-- **Today**: `form.requestSubmit()` is undefined.
-- **Want**: HTML spec: dispatch a 'submit' event; if not preventDefaulted, submit the form.
-- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` polyfill at end of file (~20 LOC). Required because Turbo listens for the 'submit' event but `form.submit()` doesn't fire it (universal HTML behavior); `requestSubmit` does.
-- **Drop-on-fix**: remove the polyfill IIFE.
+- **Today (2026-04-27)**: native `HTMLFormElement.prototype.requestSubmit` exists (PR #1891 merged 2026-03-17, follow-up PR #1984 merged 2026-03-24 — both shipped in nightly.5812+). Functional behavior is correct: dispatches a `SubmitEvent`, validates submitter button, throws TypeError / NotFoundError per spec. The gem polyfill's `if (!HTMLFormElement.prototype.requestSubmit)` guard means it is a no-op on current nightly.
+- **Residual spec bug**: `requestSubmit()` with no submitter argument sets `event.submitter` to the form element; per HTML spec it should be `null`. **Upstream issue**: #2252, **Upstream PR**: #2253 (open as of 2026-04-27, by us).
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` polyfill at end of file (~20 LOC). Now superseded by native impl (already a no-op via the existence guard).
+- **Drop-on-fix**: remove the polyfill IIFE. Safe to do today even before #2253 lands — the gem isn't asserting `event.submitter === null` anywhere, and the polyfill is already inactive on current nightly. Defer until next gem release for safety.
 
 ### A15. `window.location.pathname =` doesn't trigger navigation
 
@@ -180,7 +182,9 @@ Use this file when:
 
 ### B3. `Network.getAllCookies` not implemented
 
+- **Today**: `Network.getAllCookies` is missing from the dispatch enum — calling it returns `-31998 UnknownMethod`.
 - **Want**: a way to enumerate all cookies in the jar regardless of origin.
+- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us — bundled with A1 + A2).
 - **Gem workaround**: pass explicit `urls:` to `Network.getCookies` (see A2).
 - **Drop-on-fix**: simplify `sweep_visited_origins` to one `Network.getAllCookies` call.
 

@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-04-27 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `aa0b7adb` (2026-03-23).
+**Last reviewed**: 2026-04-27 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `aa0b7adb` (2026-03-23). No new gem-relevant changes since prior review.
 
 ### Adopted
 
@@ -47,7 +47,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-04-27 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `cc3a3da6` (2026-04-11). Active dev resumed Mar–Apr 2026 toward an unreleased version.
+**Last reviewed**: 2026-04-27 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `cc3a3da6` (2026-04-11). Active dev resumed Mar–Apr 2026 toward an unreleased version. No new gem-relevant changes since prior review — recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?) are all already adopted.
 
 ### Adopted
 
