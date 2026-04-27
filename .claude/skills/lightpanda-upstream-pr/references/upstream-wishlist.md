@@ -4,7 +4,7 @@ What `capybara-lightpanda` patches around because of upstream gaps in
 [lightpanda-io/browser](https://github.com/lightpanda-io/browser).
 
 Each entry has:
-- **Today** — actual behavior on `1.0.0-nightly.5812+b3257754` (verified 2026-04-26)
+- **Today** — actual behavior on `1.0.0-nightly.5816+a578f4d6` (verified 2026-04-27)
 - **Want** — Chrome / spec behavior the gem assumes
 - **Gem workaround** — where the workaround lives + one-liner
 - **Drop-on-fix** — what gem code becomes superfluous when upstream lands the fix
@@ -29,17 +29,17 @@ Use this file when:
 
 ### A1. `Network.clearBrowserCookies` returns `InvalidParams`
 
-- **Today**: command responds `-31998 InvalidParams` whenever the caller includes `params: {}`. Root cause: inverted-logic guard in `clearBrowserCookies` returns `InvalidParams` if `cmd.params(struct{})` is non-null, which it always is when the caller sends an empty params object. PR #1821 (>= v0.2.6) added the missing `clearRetainingCapacity()` call but didn't fix this guard.
+- **Today (nightly 5816)**: command still responds `-31998 InvalidParams` because the fix is not yet in the nightly. PR #1821 (>= v0.2.6) added the missing `clearRetainingCapacity()` call but didn't fix the inverted-logic guard.
 - **Want**: clear ALL cookies in the in-memory jar regardless of current page origin (Chrome behavior); silently accept an empty params object per JSON-RPC convention.
-- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us).
+- **Upstream issue**: #2254, **Upstream PR**: **#2255 MERGED 2026-04-27 04:15 UTC, by us — NOT in nightly 5816** (built 03:18 UTC, ~57 min before merge). Will ship in next nightly.
 - **Gem workaround**: `lib/capybara/lightpanda/cookies.rb` — `Cookies#clear` ignores the response and falls through to a per-origin sweep using `Browser#visited_origins`.
-- **Drop-on-fix**: remove `sweep_visited_origins`, the `@visited_origins` tracking in `Browser#initialize`, the `record_visited_origin` helper. ~50 LOC.
+- **Drop-on-fix**: bump `MINIMUM_NIGHTLY_BUILD` past the post-merge build, then remove `sweep_visited_origins`, the `@visited_origins` tracking in `Browser#initialize`, the `record_visited_origin` helper. ~50 LOC.
 
 ### A2. `Network.getCookies` (no `urls`) scoped to current origin
 
-- **Today**: returns only cookies for the current page's origin. Cookies set on previously-visited domains are invisible. On `about:blank`, raises `InvalidDomain`. (This actually matches Chrome's CDP spec for `Network.getCookies`, but Chrome also implements `Network.getAllCookies` for cross-origin enumeration — see B3.)
+- **Today (nightly 5816)**: returns only cookies for the current page's origin. Cookies set on previously-visited domains are invisible. On `about:blank`, raises `InvalidDomain`. (This actually matches Chrome's CDP spec for `Network.getCookies`, but Chrome also implements `Network.getAllCookies` for cross-origin enumeration — see B3.)
 - **Want**: cross-origin enumeration via `Network.getAllCookies` (B3); the origin-scoped `Network.getCookies` itself can keep its current semantics.
-- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us — bundled with A1 + B3 since the gem workaround is shared).
+- **Upstream issue**: #2254, **Upstream PR**: **#2255 MERGED 2026-04-27, NOT in nightly 5816** — bundled with A1 + B3.
 - **Gem workaround**: pass explicit `urls: [...]` parameter for cross-origin enumeration. Track visited origins in Browser. (Same workaround as A1.)
 - **Drop-on-fix**: alongside A1.
 
@@ -81,13 +81,12 @@ Use this file when:
 - **Gem workaround**: none. Skip-listed (`#click_button on HTML4 form should not serialize a select tag without options`).
 - **Drop-on-fix**: remove the skip pattern.
 
-### A8. `#id` selector returns null after body innerHTML+replaceWith
+### A8. `#id` selector returns null after body innerHTML+replaceWith — FIXED + SHIPPED + GEM CLEANED UP
 
-- **Today**: `Frame.getElementByIdFromNode` (CSS selector engine fast path for `#id`) only checks the `lookup` map. After a body removal the original element lives in `_removed_ids` and the new element isn't re-registered, so `lookup.get(id)` misses. `getElementById` works (has recovery), `[id="..."]` works, but `#id` shorthand doesn't. Triggers in Turbo Drive's snapshot-then-swap pattern.
-- **Want**: `#id` fast path should mirror `Document.getElementById` recovery (walk `removed_ids` + scope root).
-- **Upstream PR**: **#2244 (filed by us, OPEN as of 2026-04-26)**.
-- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` patches `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` to rewrite `#id` → `[id="id"]` before delegating to native engine. Walks selector char-by-char, tracks bracket depth and quoted strings, supports compound selectors, pseudo-class arguments, commas, escapes.
-- **Drop-on-fix**: remove the `querySelector` rewriter IIFE in `index.js` (~60 LOC) and the polyfill regression test in `spec/features/driver_spec.rb`.
+- **Today (nightly 5816)**: FIXED. `document.querySelector('#id')` after the modify-then-replace pattern returns truthy on `1.0.0-nightly.5816+a578f4d6`. Empirically verified.
+- **Upstream PR**: **#2244 MERGED 2026-04-27 00:46 UTC, by us, commit `e1e9a0d7`**, included in nightly 5816.
+- **Gem workaround**: removed 2026-04-27. `MINIMUM_NIGHTLY_BUILD` bumped to 5816, the `querySelector{,All}` rewriter IIFE deleted from `index.js`, the polyfill regression test deleted from `driver_spec.rb`, and the polyfill mention dropped from `CLAUDE.md`. `bundle exec rake spec:incremental` confirmed 1396 examples passing (1 pre-existing #2187 flake).
+- **Drop-on-fix**: N/A — done.
 
 ### A9. Cookies set on 302 redirect not sent on follow-up request
 
@@ -126,10 +125,10 @@ Use this file when:
 
 ### A14. `requestSubmit()` not implemented on `HTMLFormElement`
 
-- **Today (2026-04-27)**: native `HTMLFormElement.prototype.requestSubmit` exists (PR #1891 merged 2026-03-17, follow-up PR #1984 merged 2026-03-24 — both shipped in nightly.5812+). Functional behavior is correct: dispatches a `SubmitEvent`, validates submitter button, throws TypeError / NotFoundError per spec. The gem polyfill's `if (!HTMLFormElement.prototype.requestSubmit)` guard means it is a no-op on current nightly.
-- **Residual spec bug**: `requestSubmit()` with no submitter argument sets `event.submitter` to the form element; per HTML spec it should be `null`. **Upstream issue**: #2252, **Upstream PR**: #2253 (open as of 2026-04-27, by us).
+- **Today (nightly 5816)**: native `HTMLFormElement.prototype.requestSubmit` exists (PR #1891 merged 2026-03-17, follow-up PR #1984 merged 2026-03-24 — both shipped in nightly.5812+). Functional behavior is correct: dispatches a `SubmitEvent`, validates submitter button, throws TypeError / NotFoundError per spec. The gem polyfill's `if (!HTMLFormElement.prototype.requestSubmit)` guard means it is a no-op on current nightly.
+- **Residual spec bug (still in 5816)**: `requestSubmit()` with no submitter argument sets `event.submitter` to the form element; per HTML spec it should be `null`. **Upstream issue**: #2252, **Upstream PR**: **#2253 MERGED 2026-04-27 04:20 UTC, by us, NOT in nightly 5816** (built 03:18 UTC, ~1h before merge). Will ship in next nightly.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` polyfill at end of file (~20 LOC). Now superseded by native impl (already a no-op via the existence guard).
-- **Drop-on-fix**: remove the polyfill IIFE. Safe to do today even before #2253 lands — the gem isn't asserting `event.submitter === null` anywhere, and the polyfill is already inactive on current nightly. Defer until next gem release for safety.
+- **Drop-on-fix**: remove the polyfill IIFE. Safe to do today even before #2253 ships — the gem isn't asserting `event.submitter === null` anywhere, and the polyfill is already inactive on current nightly. Defer until next gem release for safety.
 
 ### A15. `window.location.pathname =` doesn't trigger navigation
 
@@ -188,11 +187,11 @@ Use this file when:
 
 ### B3. `Network.getAllCookies` not implemented
 
-- **Today**: `Network.getAllCookies` is missing from the dispatch enum — calling it returns `-31998 UnknownMethod`.
+- **Today (nightly 5816)**: `Network.getAllCookies` is still missing from the dispatch enum — calling it returns `-31998 UnknownMethod`. Empirically verified.
 - **Want**: a way to enumerate all cookies in the jar regardless of origin.
-- **Upstream issue**: #2254, **Upstream PR**: #2255 (open as of 2026-04-27, by us — bundled with A1 + A2).
+- **Upstream issue**: #2254, **Upstream PR**: **#2255 MERGED 2026-04-27, NOT in nightly 5816** — bundled with A1 + A2.
 - **Gem workaround**: pass explicit `urls:` to `Network.getCookies` (see A2).
-- **Drop-on-fix**: simplify `sweep_visited_origins` to one `Network.getAllCookies` call.
+- **Drop-on-fix**: simplify `Cookies#all` to one `Network.getAllCookies` call (currently uses origin-scoped `Network.getCookies`).
 
 ### B4. `<input type=file>` / `Page.setFileInputFiles` not implemented (#2175)
 
@@ -216,8 +215,9 @@ Use this file when:
 
 - **Today (verified 2026-04-27 against nightly.5812+b3257754)**: numeric Unicode escapes in `#id` and `.class` (e.g. `#\31 escape\.me`, `.\32 escape`) **work** — PR #1350 (merged 2026-01-09) wired `parseEscape` into identifier parsing. The remaining broken case is escape sequences inside **quoted attribute values**: `p[data-random="abc\\def"]` does not match an element with `data-random="abc\def"` because `Parser.attributeValue` (`src/browser/webapi/selector/Parser.zig:1005`) reads the quoted string via `std.mem.indexOfScalarPos` without decoding CSS escapes, so `\\` survives as two literal bytes instead of one.
 - **Want**: per CSS Syntax Level 3 §4.3.7, decode escape sequences inside quoted strings — `\\` → `\`, `\"` → `"`, `\'` → `'`, hex escapes, line continuations.
+- **Upstream issue**: #2268, **Upstream PR**: #2269 (open as of 2026-04-27, by us).
 - **Gem workaround**: none. Of the two skip-listed Capybara specs, `#find with css selectors should support escaping characters` (cases `#\31 escape\.me`, `.\32 escape`) **passes against current nightly** — likely flipping to passing once the `find_spec.rb:91` skip pattern is removed. Only `#has_css? should allow escapes in the CSS selector` (the `p[data-random="abc\\def"]` case from `has_css_spec.rb:256-259`) genuinely needs the upstream fix.
-- **Drop-on-fix**: remove the `#has_css?` skip pattern. The `#find` pattern can probably be removed today after re-running the spec against nightly.
+- **Drop-on-fix**: remove the `#has_css?` skip pattern (needs PR #2269 in nightly). The `#find` pattern can probably be removed today after re-running the spec against nightly.
 - **Probe**: `/tmp/b7-probe/` has a 3-case CDP probe that demonstrates which forms work / fail. Reuse for the upstream reproducer.
 
 ### B8. Datalist option-fill UI not implemented
@@ -299,7 +299,7 @@ If all of section A + B land upstream, the gem can shed roughly:
 |---|---|---|
 | **B1 — XPath evaluator** | ~700 | Whole `XPathEval` IIFE in index.js |
 | **A4 + A5 — form.submit / document.write** | ~150 | `CLICK_JS` fetch+swap + `IMPLICIT_SUBMIT_JS` |
-| **A8 — `#id` rewriter** | ~60 | querySelector polyfill + regression test (PR #2244 OPEN) |
+| ~~**A8 — `#id` rewriter**~~ | ~~~60~~ | DONE 2026-04-27 — PR #2244 merged + shipped + gem polyfill removed |
 | **A1 + A2 + B3 — cookie clearing** | ~50 | `sweep_visited_origins`, `visited_origins` tracking |
 | **A3 — handleJavaScriptDialog** | ~30 + 4 skips | Modal handlers + 4 spec_helper skip patterns |
 | **A12 — WebSocket nav crash** | ~30 | `handle_navigation_crash` reconnect |
