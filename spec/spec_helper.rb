@@ -35,6 +35,13 @@ end
 RSpec.configure do |config|
   config.example_status_persistence_file_path = File.join(PROJECT_ROOT, "tmp", "rspec_status.txt")
 
+  # AUDIT_SKIPS=1 bypasses the skip blocks below and tags those specs with
+  # `:skip_audit` instead, then filter_run_when_matching narrows the run to
+  # *just* those specs. Used by sync-upstream to validate which patterns can
+  # be dropped after a Lightpanda upgrade.
+  audit_skips = ENV["AUDIT_SKIPS"] == "1"
+  config.filter_run_when_matching(:skip_audit) if audit_skips
+
   # Skip Capybara shared specs that depend on browser features Lightpanda doesn't
   # implement. See `.claude/rules/lightpanda-io.md` for the per-feature rationale.
   # Keep this list narrow — every entry is a known browser-side gap, not a gem bug.
@@ -43,20 +50,25 @@ RSpec.configure do |config|
     next unless description
 
     # Lightpanda auto-dismisses JS dialogs (alert→OK, confirm→false, prompt→null)
-    # and `Page.handleJavaScriptDialog` always errors. So `accept_modal(:confirm|:prompt)`
-    # cannot override the return value the page sees, and text-mismatch
-    # `ModalNotFound` expectations (where the test expects accept_alert to NOT accept
-    # when the text doesn't match) cannot be honored.
+    # and `Page.handleJavaScriptDialog` always errors. So tests that need the page's
+    # JS to observe a non-default return value can't pass; specs that only inspect
+    # the captured message ("should return the message presented") or the
+    # ModalNotFound path ("if the message doesn't match") work fine and run.
     # See `.claude/rules/lightpanda-io.md` known-bug item on `Page.handleJavaScriptDialog`.
     modal_patterns = [
-      /#accept_confirm/,
-      /#accept_prompt/,
-      /#accept_alert.*if the text doesn'?t match/,
+      /#accept_confirm should accept the confirm/,
+      /#accept_confirm should work with nested modals/,
+      /#accept_prompt should accept the prompt/,
+      /#accept_prompt should allow special characters/,
       /#accept_alert.*work with nested modals/,
     ].freeze
 
     if modal_patterns.any? { |re| description =~ re }
-      metadata[:skip] = "Lightpanda auto-dismisses JS dialogs; can't override return values"
+      if audit_skips
+        metadata[:skip_audit] = true
+      else
+        metadata[:skip] = "Lightpanda auto-dismisses JS dialogs; can't override return values"
+      end
       next
     end
 
@@ -113,13 +125,10 @@ RSpec.configure do |config|
       /node #path returns xpath which points to itself/,
       # `<input type=range>` has no slider DOM in Lightpanda — `set` writes
       # the value but the browser doesn't clamp/validate it the way Chrome's
-      # range widget does, and `min`/`max` constraint enforcement is missing.
+      # range widget does. Only the "valid values" test fails — the "respect
+      # the range slider limits" test passes because Capybara doesn't drive
+      # below-min / above-max writes through the same code path.
       /#fill_in with input\[type="range"\] should set the range slider to valid values/,
-      /#fill_in with input\[type="range"\] should respect the range slider limits/,
-      # CSS selector escape syntax (\31, \. etc.) — Lightpanda's selector
-      # parser doesn't handle the CSS escape grammar.
-      /#find with css selectors should support escaping characters/,
-      /#has_css\? should allow escapes in the CSS selector/,
       # Frame-closed detection — Lightpanda doesn't expose enough state to
       # distinguish a closed iframe from a live one within the frame_stack.
       /#switch_to_frame works if the frame is closed/,
@@ -143,10 +152,6 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
-      # Lightpanda's FormData includes a `<select>` with no `<option>` as
-      # an empty-string entry; the spec / Chrome omit those entries.
-      # Pure browser-side bug in Lightpanda's FormData implementation.
-      /#click_button.*should not serialize a select tag without options/,
       # Lightpanda's `Page.reload` does not replay a POST navigation as a
       # POST — it issues a fresh GET to the same URL, so the form action
       # handler never runs again and the test's `post_count` doesn't bump.
@@ -154,7 +159,11 @@ RSpec.configure do |config|
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }
-      metadata[:skip] = "Lightpanda browser limitation"
+      if audit_skips
+        metadata[:skip_audit] = true
+      else
+        metadata[:skip] = "Lightpanda browser limitation"
+      end
       next
     end
 
