@@ -43,3 +43,19 @@ jobs:
       - run: bundle exec rake spec:unit
 
       - uses: rubygems/release-gem@v1
+
+      - name: Extract CHANGELOG section for this version
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          awk -v v="$tag" '
+            $0 ~ "^## \\[?" v "\\]?" { found=1; next }
+            found && /^## \[?[0-9]/ { exit }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          echo "----- release_notes.md -----"
+          cat release_notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          generate_release_notes: true
