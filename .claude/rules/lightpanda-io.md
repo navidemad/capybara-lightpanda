@@ -121,17 +121,19 @@ LP.getStructuredData         LP.waitForSelector
 
 ### Critical for This Gem
 
-1. **`Page.loadEventFired` unreliable** (#1801, #1832)
+1. **`Page.loadEventFired` unreliable** (#1801)
    - May never fire on complex JS pages, Wikipedia, certain French real estate sites
    - **#1849 fixed** (PR #1850, merged 2026-03-16): WebSocket no longer dies during complex navigation, so readyState polling now works reliably as a fallback
-   - **PR #2032** (merged 2026-03-30) reordered navigation events: `Loaded` (= `Page.loadEventFired`) now fires after DOMContentLoaded, at the very end of the navigation sequence. This is closer to Chrome's behavior and may improve reliability, but #1801/#1832 remain open.
+   - **PR #2032** (merged 2026-03-30) reordered navigation events: `Loaded` (= `Page.loadEventFired`) now fires after DOMContentLoaded, at the very end of the navigation sequence. This is closer to Chrome's behavior and may improve reliability, but #1801 remains open.
+   - **#1832 closed** (2026-04-09): the guy-hoquet.com URL no longer hangs `Page.navigate`, but the broader category (#1801) is still open and the readyState fallback is still load-bearing.
    - This gem works around it with `document.readyState` polling fallback in `Browser#go_to`
-   - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable (#1801, #1832 still open)
+   - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable (#1801 still open)
 
-2. **`Network.clearBrowserCookies`** — REGRESSED on current nightly (verified 2026-04-26 on `1.0.0-nightly.5812+b3257754`)
-   - PR #1821 (>= v0.2.6) was supposed to fix this by calling `clearRetainingCapacity()` on the in-memory cookie jar (no more WebSocket crash)
-   - Today: command responds `InvalidParams` — does not crash the WebSocket but also does not clear anything
-   - Workaround in gem: `Cookies#clear` ignores `clearBrowserCookies` and sweeps cookies per-origin via `Network.getCookies(urls: visited_origins)` + `Network.deleteCookies(url: ...)`. `Browser#visited_origins` accumulates `scheme://host:port` strings as the gem navigates so the sweep can enumerate cross-domain cookies.
+2. **`Network.clearBrowserCookies` + `Network.getAllCookies`** — fix MERGED upstream, NOT yet in nightly (verified 2026-04-27 on `1.0.0-nightly.5816+a578f4d6`)
+   - **History**: PR #1821 (>= v0.2.6) added the missing `clearRetainingCapacity()` call on the in-memory cookie jar (stopped the WebSocket crash). But an inverted-logic guard in `clearBrowserCookies` then rejected any caller sending `params: {}` (which is most CDP clients) with `InvalidParams`. `Network.getAllCookies` was missing from the dispatch enum entirely.
+   - **PR #2255 MERGED 2026-04-27 04:15 UTC, by us** — drops the inverted guard and adds `getAllCookies` to the dispatch. NOT in today's nightly (`5816`, built 03:18 UTC, ~57 min before the merge). Empirically verified on 5816: `Network.getAllCookies` → `UnknownMethod`, `Network.clearBrowserCookies` (empty params) → `InvalidParams`.
+   - **Action when next nightly ships**: bump `MINIMUM_NIGHTLY_BUILD` past the post-merge build, then in `Cookies#clear` drop the per-origin `sweep_visited_origins` workaround and trust the bulk `clearBrowserCookies` call. Also switch `Cookies#all` to `Network.getAllCookies` (currently `Network.getCookies`, origin-scoped). Removes `Browser#visited_origins`, `record_visited_origin`, and the `sweep_visited_origins` private method (~50 LOC total).
+   - Until then, the existing workaround stands: `Cookies#clear` calls `clearBrowserCookies` (currently no-op), then sweeps per-origin via `Network.getCookies(urls: visited_origins)` + `Network.deleteCookies(url: ...)`. `Browser#visited_origins` accumulates `scheme://host:port` strings as the gem navigates.
    - `Network.getCookies` (without `urls`) is scoped to the current page's origin — cookies on previously-visited domains are invisible from a different page; `Network.getCookies` on `about:blank` raises `InvalidDomain`. The `urls:` parameter accepts a list and returns cross-domain cookies (verified working).
    - `Network.deleteCookies(name:, url:)` works correctly per-origin.
 
@@ -158,15 +160,13 @@ LP.getStructuredData         LP.waitForSelector
    - Polyfills are auto-injected on every navigation via `Page.addScriptToEvaluateOnNewDocument` (PR #1993, merged 2026-03-30), registered once at session creation in `Browser#create_page`. Ad-hoc `Runtime.evaluate` calls still need to be re-run after each `visit`.
    - Node references (objectIds) become invalid after navigation
 
-7. **Turbo Drive — RESOLVED via gem-side `#id` selector polyfill (2026-04-25)**
-   - **History**: `document.body = newBody` setter was missing → fixed by PR #2215 (merged 2026-04-23, shipped in nightly 2026-04-24). After that landed, removing the gem's `Turbo.session.drive = false` disabler still broke 2/9 real-Rails link-navigation specs. Turbo Drive's pipeline (`fetch → DOMParser → body.replaceWith`) was running cleanly — body was replaced, URL updated, events fired — but `expect(page).to have_css("#page-title", ...)` returned no match.
-   - **Real root cause**: Lightpanda's CSS selector engine has a bug where `querySelector('#id')` / `querySelectorAll('#id')` returns `null` / `[]` after the body is mutated via `innerHTML` and then replaced via `replaceWith` (or twice via `replaceWith`). `getElementById('id')` and `[id="id"]` always work; only the `#id` shorthand is broken. Bug triggers in Turbo Drive's snapshot-then-swap path because `PageRenderer.replaceBody` populates a new body via `innerHTML` before `document.body.replaceWith(newBody)`. Pure single `replaceWith` on an unmodified body does not trigger the bug.
-   - **Repro** (`/tmp/bug_when.rb`): a 12-row matrix shows only the modify-then-replace pattern breaks `#id`; tag-with-id (`h1#id`), descendant from class (`.cls h1`), and attribute equals (`[id="id"]`) keep working.
-   - **Gem fix (2026-04-25)**: `lib/capybara/lightpanda/javascripts/index.js` patches `Document.prototype.querySelector{,All}` and `Element.prototype.querySelector{,All}` to rewrite `#id` → `[id="id"]` in user-supplied selectors before delegating to the native engine. The rewriter walks the selector char-by-char, tracks bracket depth and quoted strings so it leaves attribute values like `[href="#frag"]` untouched, and supports compound selectors (`h1.foo#bar.baz`), pseudo-class arguments (`:not(#x)`), commas, and Unicode/escape identifier chars. 19/19 unit cases pass.
-   - **Verification (2026-04-25)**: `bundle exec rake spec` → 134/134 (1 unrelated pending cookies-on-redirect). `ruby examples/rails_turbo_rspec_example.rb` → 9/9 with Turbo Drive **enabled** against real Rails+Turbo 8.0.12.
-   - **Disabler removed**: the `Turbo.session.drive = false` auto-disabler IIFE that was at `javascripts/index.js:48-63` is gone. Turbo Drive runs natively. The previous disabler-asserting spec at `driver_spec.rb:605` was replaced with a polyfill regression test.
-   - **Remaining gem workaround**: `fetch()` + `document.write()` submit bypass in `CLICK_JS` (`lib/capybara/lightpanda/node.rb:161-203`). Form-submit tests route through this; left in place pending a separate investigation.
-   - **Upstream fix MERGED (PR #2244, merged 2026-04-27, commit `e1e9a0d7`, filed by us)**: root-cause patch in `Frame.getElementByIdFromNode`. The fast path used by the selector engine for `#id` only checked the `lookup` map; after a body removal the original `<h1>` lived in `_removed_ids` and the new `<h1>` was never re-registered, so `lookup.get(id)` missed and `getElementByIdFromNode` returned null. The fix mirrors the existing `Document.getElementById` / `ShadowRoot.getElementById` recovery: on a `lookup` miss, walk `removed_ids` + the scope root and re-register. Includes an HTML test asserting `querySelector('#id')`, `querySelectorAll('#id')`, and `getElementById('id')` all agree after duplicate removal. **Not yet in a tagged release** (latest 0.2.9 is from 2026-04-24, before the merge); only available on nightly built post-2026-04-27. **Action**: bump the gem's pinned nightly to one whose SHA includes `e1e9a0d7`, run `bundle exec rake spec` to confirm green, then remove the `Document.prototype.querySelector{,All}` / `Element.prototype.querySelector{,All}` rewriter at `lib/capybara/lightpanda/javascripts/index.js:1019-1079` (the IIFE comment block above it too) and the polyfill regression test in `spec/features/driver_spec.rb`.
+7. **Turbo Drive `#id` selector engine bug — FULLY RESOLVED (upstream + gem, 2026-04-27)**
+   - **History**: `document.body = newBody` setter was missing → fixed by PR #2215 (merged 2026-04-23, shipped in nightly 2026-04-24). After that landed, the CSS selector engine still had a bug: `querySelector('#id')` / `querySelectorAll('#id')` returned null / `[]` after the body was mutated via `innerHTML` and then replaced via `replaceWith` (Turbo Drive's snapshot-then-swap pattern). `getElementById('id')` and `[id="id"]` always worked; only the `#id` shorthand was broken because `Frame.getElementByIdFromNode` (the fast path) only consulted the `lookup` map and missed elements that had moved to `_removed_ids` after a body removal.
+   - **Upstream fix (PR #2244, merged 2026-04-27 00:46 UTC, commit `e1e9a0d7`, filed by us)**: on `lookup` miss, walk `_removed_ids` + scope root and re-register, mirroring the existing `Document.getElementById` / `ShadowRoot.getElementById` recovery.
+   - **Confirmed in nightly 5816+** (`1.0.0-nightly.5816+a578f4d6`, built 2026-04-27 03:18 UTC). Empirically verified.
+   - **Gem-side cleanup completed (2026-04-27)**: `Process::MINIMUM_NIGHTLY_BUILD` bumped to 5816 in `lib/capybara/lightpanda/process.rb`, the `Document.prototype.querySelector{,All}` / `Element.prototype.querySelector{,All}` rewriter IIFE was removed from `lib/capybara/lightpanda/javascripts/index.js`, the polyfill regression test was removed from `spec/features/driver_spec.rb`, and the gem-side polyfill mention was dropped from `CLAUDE.md`. `bundle exec rake spec:incremental` → 1396 examples, all pass (1 pre-existing #2187 frame-context flake).
+   - **Disabler note (kept for context)**: the `Turbo.session.drive = false` auto-disabler that was previously at `javascripts/index.js:48-63` was removed earlier (2026-04-25). Turbo Drive runs natively.
+   - **Remaining gem workaround for plain forms**: `fetch()` + body-innerHTML swap in `CLICK_JS` / `IMPLICIT_SUBMIT_JS` (`lib/capybara/lightpanda/node.rb`). Tracks Known Bug #9 and wishlist item A4 (`form.submit()` does not navigate). Independent of this `#id` issue.
    - **Turbo Frames (GET navigation)**: Already work — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element.
 
 8. **`textContent` whitespace differs from Chrome** (surfaced 2026-04-26)
@@ -188,6 +188,12 @@ LP.getStructuredData         LP.waitForSelector
 - **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
 - **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
+- **PR #2259** (by us): **Page.reload replays POST**. Fixes #2258 — currently `Browser#refresh` (which calls `Page.reload`) silently downgrades a POST navigation to a GET. When merged: removes the `#refresh it reposts` skip pattern in `spec/spec_helper.rb`.
+- **PR #2261** (by us): **handleJavaScriptDialog drives confirm/prompt return values**. Fixes #2260 — currently `accept_modal(:confirm|:prompt)` cannot influence the JS return value (Lightpanda auto-dismisses). When merged: rewires `Browser#prepare_modals` to call `Page.handleJavaScriptDialog` (off the dispatch thread); removes 4 modal skip patterns in `spec/spec_helper.rb`.
+- **PR #2257** (by us): trigger navigation when `window.location.pathname` / `.search` is assigned. Currently only `.href =` navigates. When merged: removes 5 `assert_current_path` / `has_current_path` skip patterns.
+- **PR #2264** (by us): skip FormData entry for `<select>` with no selectedness candidate. When merged: removes the `#click_button on HTML4 form should not serialize a select tag without options` skip pattern.
+- **PR #2265** (by us): inherit URL fragment across fragment-less redirect. When merged: removes the `#current_url maintains fragment` skip pattern.
+- **PR #2267** (by us): clamp `<input type=range>` value to min/max. When merged: removes `#fill_in with input[type="range"]` range-related skip patterns.
 
 ### Upstream Open Issues That Affect This Gem
 
@@ -200,6 +206,8 @@ LP.getStructuredData         LP.waitForSelector
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed (PR #2078 merged 2026-04-14, more APIs in PR #2208/#2218); SharedWorker still missing and many Worker APIs still unimplemented, so issue stays open. |
+| #2258 | Navigation | `Page.reload` regresses POST navigations to GET. Affects `Browser#refresh` after a POST. Our PR #2259 OPEN. |
+| #2260 | Modal | `Page.handleJavaScriptDialog` cannot influence `confirm()`/`prompt()` return values (Lightpanda auto-dismisses before handler runs). Our PR #2261 OPEN proposes a pre-arm model. |
 
 ### General Limitations
 
