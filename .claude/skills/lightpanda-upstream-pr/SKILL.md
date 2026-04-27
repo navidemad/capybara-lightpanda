@@ -143,6 +143,8 @@ If a PR exists:
 
 The wishlist says where the workaround lives, and `references/file-mapping.md` has the full table (item → gem file). Read the workaround. The fix has to make it unnecessary, so understanding what the workaround does pins down the spec — exact return shape, error code, event name the upstream fix must match.
 
+**Verify only the item you're fixing — don't take *adjacent* wishlist items at face value.** The wishlist is updated by hand and entries drift between reviews; a neighbor item described as broken may have been silently fixed upstream. If the design of your reproducer or fix depends on a neighbor item's behavior (e.g., A6's reproducer happens to call `form.submit()`, and A4 claims `form.submit()` doesn't navigate), spend two minutes confirming the neighbor is still broken — empirically, via a tiny CDP probe — before designing around the wishlist's claim. Cheaper than over-engineering a workaround you didn't need.
+
 ## Step 2: Bootstrap branch in `/Users/navid/code/browser`
 
 **Non-negotiable**: every session that touches `/Users/navid/code/browser` starts by checking out `main` and pulling the latest from `origin`. The upstream repo moves fast — branching off a stale `main` means rebasing later, missed fixes, and PRs that conflict on day one. Do this even if you "just" left the repo on `main` in a previous session; another machine, another teammate, or a Dependabot bump may have advanced it.
@@ -197,7 +199,7 @@ Use the local commands from "Local build & test commands" — fast enough that a
 - `mise exec -- zig version` prints `0.15.2`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
 - `mise exec -- zig build check $V8` is clean. No compile errors anywhere in the project (not just the file you edited).
 - A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> mise exec -- zig build test $V8` and confirm it passes.
-- Mentally toggle the fix off (or `git stash` the Zig change) and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix.
+- Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. **Prefer `Edit` to surgically revert the production lines, NOT `git stash`**: when the test sits in the same file as the fix (the common case for CDP changes — both live in `src/cdp/domains/<domain>.zig`), a `git stash` will sweep the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
 - `mise exec -- zig build test $V8` (full suite, no filter) passes — catches regressions in adjacent code.
 - The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
 - The diff matches the surrounding file's existing style (naming, comment density, helper layout) and contains no "while-we're-here" reformatting. Outsider PRs get reviewed line-by-line — reviewers reject mixed scope. Every changed line traces directly to the bug; if you wrote 200 lines and 50 would do, rewrite.
@@ -258,6 +260,8 @@ The script must:
 
 Cap the whole thing at ~80 lines of shell + ~50 lines of JS. If the bug requires more than that to reproduce, the bug isn't isolated enough — split it.
 
+**Keep the wishlist ID out of the file *contents*.** The directory name (`a6-page-reload-replay-post/`) is private — the maintainer never sees it. But anything inside the files (HTML `<title>`, JS comments, shell header comment, FAIL messages, Python module docstring) gets pasted verbatim into the issue body at Step 7, where strings like "A6 reproducer" or "see wishlist A4" are meaningless project-internal IDs that read as a downstream-consumer leak. Use generic, behavior-describing wording in the file contents — `"reload-replay-POST repro"`, `"FAIL: Page.reload regressed to GET."`, etc. The same rule applies to references to `capybara-lightpanda`, `Capybara`, `RSpec`, `Turbo`, etc. — none of those have any business appearing inside an upstream-facing reproducer.
+
 ### 6c. Verify the reproducer pre-fix and (recommended) post-fix
 
 Run the reproducer against the current nightly binary already on disk and confirm exit code 1 (bug observed). This proves the bug exists in nightly and the reproducer correctly catches it.
@@ -274,13 +278,12 @@ Use the issue body template in `references/templates.md`. The template includes 
 
 ### 7b. File the issue
 
+**Use the `Write` tool to stage the body file at `/tmp/<id>-issue-body.md`, then pass it via `--body-file`.** Don't shell out a `cat <<'EOF' ... EOF` heredoc — body content frequently contains substrings (`process.env.X`, dotfile paths, `.env`-style references) that trip local pre-tool hooks and reject the bash invocation. `--body-file` also makes the re-publish loop cleaner: edit the file, then `gh issue edit <n> --body-file <same-file>`.
+
 ```bash
 gh issue create --repo lightpanda-io/browser \
   --title "<title — area: short description>" \
-  --body "$(cat <<'EOF'
-<paste full body>
-EOF
-)"
+  --body-file /tmp/<id>-issue-body.md
 ```
 
 Capture the issue number from the response (e.g., `https://github.com/lightpanda-io/browser/issues/2400` → `2400`). The PR description and commit message both reference this number — wrong number means broken auto-close.
@@ -297,6 +300,8 @@ GitHub recognizes any of: `Closes`, `closes`, `Close`, `Fixes`, `fixes`, `Resolv
 
 ### 8a. Push and create
 
+Stage the PR body the same way as the issue body — use the `Write` tool to put it at `/tmp/<id>-pr-body.md`, then pass `--body-file`. Heredoc invocations get tripped by local hooks; `--body-file` survives them and makes re-publish a single command.
+
 ```bash
 cd /Users/navid/code/browser
 git status                                     # confirm only intended files (no repro/, no mise.toml)
@@ -309,15 +314,12 @@ git push -u origin fix-<id>-<slug>             # if origin is your fork; on a tw
 # - contains "Closes #<actual issue number from Step 7>" (not "<issue-num>" placeholder)
 # - both mermaid diagrams are present
 # - issue number is the real one captured in 7b, not a guess
-echo "<paste prepared body>" | grep -E "Closes #[0-9]+" || { echo "MISSING Closes line — abort"; exit 1; }
+grep -E "Closes #[0-9]+" /tmp/<id>-pr-body.md || { echo "MISSING Closes line — abort"; exit 1; }
 
 gh pr create --repo lightpanda-io/browser \
   --base main \
   --title "<title>" \
-  --body "$(cat <<'EOF'
-<paste body>
-EOF
-)"
+  --body-file /tmp/<id>-pr-body.md
 ```
 
 ### 8b. Templates

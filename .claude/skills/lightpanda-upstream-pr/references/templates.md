@@ -5,6 +5,7 @@ Load this file when reaching Step 4 (implementation), Step 6 (reproducer), Step 
 Sections:
 
 - [Implementation prompt (Step 4)](#implementation-prompt-step-4) — TDD brief for the Zig change
+- [CDP test gotchas (Step 4)](#cdp-test-gotchas-step-4) — non-obvious behaviors of `src/cdp/testing.zig` that bite first-time test authors
 - [Reproducer skeleton (Step 6)](#reproducer-skeleton-step-6) — `repro.js` + `repro.sh` with the non-default `chrome-remote-interface` config Lightpanda needs
 - [Issue body (Step 7)](#issue-body-step-7) — bug report with broken-vs-expected sequence diagrams
 - [Commit message (Step 8)](#commit-message-step-8) — area-prefixed, includes `Closes #<n>`
@@ -53,6 +54,19 @@ gem's upstream wishlist: `<one-line description>`.
 5. Document any spec/CDP-protocol assumption in a code comment **only if** the
    assumption is non-obvious from the code itself.
 ````
+
+---
+
+## CDP test gotchas (Step 4)
+
+The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domain> <method>"` blocks, but a few non-obvious behaviors will burn an iteration if you don't know them up front.
+
+- **`expectSentEvent("Method", .{}, .{})` is a *strict* empty-object match, not a wildcard.** The `params: .{}` parameter serializes to JSON `"params": {}` and is deep-compared against the received message. Real CDP events almost always carry a populated `params` object (e.g. `Page.frameNavigated` has `params.frame.{id, loaderId, url, ...}`), so an empty-struct expectation never matches and the assertion times out with `ErrorNotFound` on a perfectly-correct fixture. Two workable alternatives:
+  - Match a discriminating field: `try ctx.expectSentEvent("Page.frameNavigated", .{ .frame = .{ .loaderId = "LID-0000000002" } }, .{})`. Mind that the loader/frame ID counters are **shared across tests in the same `zig build test` run** — don't hard-pin a value if your test order isn't deterministic.
+  - Skip event matching entirely and drain the runner: `var runner = try bc.session.runner(.{}); try runner.wait(.{ .ms = 2000 });`. Cleaner when you only need "navigation finished, now I'll inspect the frame state" without caring which event fired.
+- **`Frame.navigate` asserts `_load_state == .waiting`.** A second direct `frame.navigate(...)` on a frame that already loaded panics with `frame.renavigate`. The CDP-side helpers (`doNavigate`, `doReload` in `src/cdp/domains/page.zig`) work around this by calling `session.replacePage()` first when the state isn't `.waiting`, returning a fresh frame in `.waiting`. Mirror that pattern in tests that want to drive multiple navigations on the same browser context — or do the second navigation *as the first* on a context you set up by hand (`cdp_inst.createBrowserContext()` + `bc.session.createPage()`).
+- **`loadBrowserContext({ .url = "..." })` does a GET only.** There's no parameter for `method` / `body` / `header`. If your test needs the first navigation to be POST, hand-roll the setup (`createBrowserContext` → set `bc.id`/`session_id`/`target_id` → `bc.session.createPage()` → `frame.navigate(url, .{ .method = .POST, .body = ..., .header = ... })`) instead of trying to bend `loadBrowserContext`.
+- **Adding HTTP routes goes in `src/testing.zig`'s `testHTTPHandler`.** It's a flat `if (std.mem.eql(u8, path, ...))` chain that responds via `req.respond(...)`. The handler runs synchronously per request; `req.head.method` gives the HTTP method, and you don't have to read or discard the request body before responding. Reuse existing routes (`/xhr`, `/xhr/json`) where possible to keep the test surface small.
 
 ---
 
@@ -233,13 +247,12 @@ Self-contained: one HTML fixture + one shell script. Runs against a fresh `light
 
 ### Filing it
 
+Stage the body via the `Write` tool to `/tmp/<id>-issue-body.md`, then pass `--body-file`. Don't shell out a heredoc — body content frequently contains substrings (`process.env.X`, dotfile paths) that trip local pre-tool hooks; `--body-file` sidesteps them and makes re-publish a single command.
+
 ```bash
 gh issue create --repo lightpanda-io/browser \
   --title "<title — area: short description>" \
-  --body "$(cat <<'EOF'
-<paste full body>
-EOF
-)"
+  --body-file /tmp/<id>-issue-body.md
 ```
 
 Capture the issue number from the response (e.g., `https://github.com/lightpanda-io/browser/issues/2400` → `2400`). The PR description and commit message both reference this number — wrong number means broken auto-close.
