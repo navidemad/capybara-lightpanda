@@ -73,6 +73,8 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Skipping mermaid diagrams.** Issue and PR both require diagrams (sequence diagram for the issue, flowchart for the PR). They're not decoration — they're the fastest way for a Zig engineer to understand a bug they didn't write.
 - **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
 - **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
+- **Branching off a stale `main`.** Every session that enters `/Users/navid/code/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
+- **Running `zig build test`.** NEVER run `zig build test` (or any variant that invokes the upstream Zig test runner) under any circumstances. The upstream repository's GitHub Actions workflow runs the full test suite on every PR — that is the authoritative verification surface, not local execution. Local Zig tests are slow, environment-sensitive, and duplicate what CI does for free. Write the `test "..."` block (Step 4 still requires it), commit it, push, and let upstream CI run it. If you feel you must verify locally before pushing, surface that to the user and let them run it on their own machine.
 
 ## Step 1: Pre-flight
 
@@ -114,14 +116,18 @@ The wishlist says where the workaround lives, and `references/file-mapping.md` h
 
 ## Step 2: Bootstrap branch in `/Users/navid/code/browser`
 
-Always start from a clean `main`:
+**Non-negotiable**: every session that touches `/Users/navid/code/browser` starts by checking out `main` and pulling the latest from `origin`. The upstream repo moves fast — branching off a stale `main` means rebasing later, missed fixes, and PRs that conflict on day one. Do this even if you "just" left the repo on `main` in a previous session; another machine, another teammate, or a Dependabot bump may have advanced it.
 
 ```bash
 cd /Users/navid/code/browser
 git status                                     # must be clean (mise.toml ignored)
-git checkout main && git pull origin main
+git checkout main                              # ALWAYS — never branch off whatever was checked out last
+git pull origin main                           # ALWAYS — never branch off a stale main
+git log --oneline -5                           # sanity-check the new HEAD
 git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix-a1-clearbrowsercookies
 ```
+
+If `git status` is dirty (uncommitted work from a previous session, stray repro artifacts, etc.), stop and surface it to the user — do not stash, reset, or clean without permission. The user decides whether to keep, discard, or move that work.
 
 Verify `mise.toml` is gitignored locally so it doesn't leak into a commit:
 
@@ -143,9 +149,10 @@ Work TDD: failing test → confirm it fails → implement → confirm it passes 
 
 ### 4a. Verification gates before moving on
 
-- `zig build test` (or scoped equivalent) passes — including the new test.
+- A new `test "..."` block exists in the appropriate `.zig` file covering the fix. **Do NOT run `zig build test` locally** — upstream's GitHub Actions workflow runs the full Zig test suite on every PR, and that is the authoritative verification surface. Write the test, commit it, push, and trust CI.
+- The reproducer from Step 6 exits 0 against a locally-built `lightpanda` binary with the fix applied (and exited 1 without it). This is the local proof that the fix works; the Zig test is what guards against regressions and is verified by upstream CI.
 - `git diff` shows only files relevant to the fix. No `mise.toml`, no editor config.
-- The new test would have failed without the fix (toggle the fix line and confirm).
+- Mentally toggle the fix off and confirm the new Zig test would fail — but do not run it locally to verify.
 
 ### 4b. If the upstream Zig build is broken for unrelated reasons
 
