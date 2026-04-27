@@ -358,6 +358,11 @@ Item: <ID> — <title>
 Branch: fix-<id>-<slug>
 Issue: <URL>
 PR:    <URL>
+Follow-ups filed during review: <list issue URLs, or "none">
+  └─ Each follow-up is separate scope. They will NOT auto-close when this PR
+     merges, even when cross-referenced in the body — only the literal
+     `Closes #<n>` line in this PR's body triggers auto-close, and that
+     line points at <issue from Step 7> only. Each follow-up needs its own PR.
 
 Diff: <files changed>, <lines>
 Tests: <new Zig test names>
@@ -368,6 +373,7 @@ Next:
 - Wait for nightly to ship the fix.
 - Follow-up gem PR: delete <workaround> in /Users/navid/code/capybara-lightpanda when nightly drops.
 - When the PR merges (and again when the fix ships in a tagged nightly), refresh the wishlist annotation in `references/upstream-wishlist.md` for `<ID>` — flip status from `(open as of YYYY-MM-DD)` to `merged ...` / `shipped in <nightly>`. The `/sync-upstream` skill audits this if you'd rather batch it.
+- For each follow-up issue listed above: open its own branch + PR later, applying this skill end-to-end.
 ```
 
 If you stopped before submitting (because the bug was already fixed, a duplicate exists, or the fix needed design discussion), the report explains why and what's needed to unblock — no issue/PR URL, but if you filed an issue without a PR, surface that URL.

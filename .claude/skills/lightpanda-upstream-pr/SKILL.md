@@ -88,7 +88,7 @@ Use this branch when the user says "branch X is done, verify it" / "we made chan
 
 Run these checks in order. Each one cross-references an existing Step in this file — go read that Step's detail if a check fails:
 
-1. **Worktree state.** `cd <worktree>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `mise.toml`, no `repro/`).
+1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `mise.toml`, no `repro/`).
 2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
 3. **Toolchain pin.** `mise exec -- zig version` prints `0.15.2` — see Step 2's pin block.
 4. **Compile clean.** `mise exec -- zig build check $V8` is clean — see Step 4a.
@@ -389,7 +389,9 @@ Use the final-report template in `references/templates.md`. If you stopped befor
 
 ## Step 10: Responding to maintainer review
 
-Triggered when the user says "reply to the maintainer review on PR #N" / "address the comments on the PR" — typically after Step 9 has already happened in a prior session and the maintainer left feedback in the meantime. This is a separate flow, not part of the linear 0–9 implementation.
+Triggered when the user says "reply to the maintainer review on PR #N" / "address the comments on the PR" / "analyze the maintainer feedback" / "what did the reviewer ask for" — typically after Step 9 has already happened in a prior session and the maintainer left feedback in the meantime. This is a separate flow, not part of the linear 0–9 implementation.
+
+The flow has two phases that can run in one turn or two: **analyze** (fetch comments, summarize each one, propose a path) and **act** (edit code, commit, reply with SHA). When the user's verb is "analyze" / "what did they ask for" / "review the feedback", do phase 1 only — stop after summarizing and wait for the user to greenlight before editing. When the verb is "reply" / "address" / "fix the comments", run both phases. If unsure, do phase 1 and ask. This protects against acting on a comment the user wants to push back on.
 
 ### 10a. Fetch the actual review comments
 
@@ -406,6 +408,23 @@ GitHub also has a "code suggestion" feature: a comment whose body starts with `\
 
 ### 10b. Address the feedback in code BEFORE replying
 
+**Locate the worktree first.** Run `cd /Users/navid/code/browser && git worktree list | grep <branch>` — the explicit `cd` is required because a fresh session typically starts in `/Users/navid/code/capybara-lightpanda` (the gem) and `git worktree list` only enumerates worktrees of the repo containing cwd. The branch is often checked out at `/Users/navid/code/browser-<slug>/` from a previous session — `cd` into the worktree directory before editing. If you skip this and `git checkout <branch>` from the main clone, you'll either be blocked (`'<branch>' is already used by worktree at <path>`) or fall back to checking out `fork/<branch>` and end up in detached HEAD, where edits commit fine but the eventual `git push` either fails or pushes the wrong ref.
+
+If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone (a previous session may have done all its work there, or this is the first follow-up since the branch was created). Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts from the original), don't assume the branch is missing.
+
+**Before applying review fixes, check `mergeable`.** Run `gh pr view <n> --repo lightpanda-io/browser --json mergeable --jq .mergeable`. If it's `CONFLICTING`, the branch is stale relative to `origin/main` and must be reconciled before you can push fixes — see Step 10b-merge below.
+
+#### 10b-merge. Reconcile a stale branch before applying review fixes
+
+Skip this sub-step if `mergeable` is `MERGEABLE`. If it's `CONFLICTING`:
+
+1. **Use `git merge origin/main`, not rebase.** The branch is published on the fork and the PR is open — rebase rewrites SHAs that the PR's review threads anchor on, breaks `gh pr view --json closingIssuesReferences`, and forces reviewers to re-fetch. Merge keeps SHAs stable and the merge commit is its own diff for the reviewer to skim.
+2. **Common conflict pattern**: both branches added a new `test "..." { ... }` block at the same file location, producing a diff3 conflict where the merge-base section (`||||||| <sha>` to `=======`) is empty. Resolution: keep both blocks complete in the new file. The trailing `}` `}` *outside* the conflict region close whichever test sits last — read the original file structure before the merge to see how many closing braces existed there. Don't blindly delete content from either side; both maintainers added intentional code.
+3. **Auto-merged files need verification, not trust.** `git merge` reports "Auto-merging X" for files where it applied a successful three-way merge — but that doesn't prove your branch's changes survived. After `git commit` of the merge, grep for the key identifiers your branch added (struct fields, function names, test names, route paths, `_navigated_options.body`, etc.) in the merged tree. If something's missing, the merge took the wrong side; redo the resolution.
+4. **Compile + run targeted tests** (`mise exec -- zig build check $V8` then `TEST_FILTER='<your test>' mise exec -- zig build test $V8`) to catch the merge dropping a struct field or rename. Then move on to apply the review fixes; commit them as a separate follow-up commit on top of the merge so the reviewer sees a clean "merge + fixes" pair, not a tangled single commit.
+
+**Skip the Step 4a toggle-off for behavior-preserving refactors.** The toggle-off gate ("revert production, confirm test fails, restore") exists to prove a *new* test exercises a *new* fix. When the maintainer asks for a refactor that should preserve behavior — extract a helper, rename, dedupe, factor a single iteration — branch HEAD already contains a verified fix and the relevant tests. The verification is "tests pass before AND after the refactor", not toggle-off. Don't reach for `git stash` + `git checkout main -- <file>` here either: HEAD's previous-fix version, the stash's refactor, and main's pre-fix version are three different versions of the same hunk and `git stash pop` will conflict on every overlapping line. If the refactor changes observable behavior (rare in review-driven follow-ups), fall back to Step 4a's full toggle-off.
+
 If the comment requires a code change, make and push the change first, then reply citing the new commit SHA. Replying with "will do" or "thanks, addressing now" is noise — the reviewer's GitHub feed surfaces every reply and "addressing" comments without a SHA make them re-check later. One reply, one commit, one SHA.
 
 When the change spans multiple comments, prefer one commit that addresses all of them rather than one commit per reply. Reviewers re-review by diffing the new commit against the previous one; one commit is one diff.
@@ -414,16 +433,23 @@ When the change spans multiple comments, prefer one commit that addresses all of
 
 Use `Write` to stage each reply body at `/tmp/<id>-reply-<n>.json` (JSON wrapper, not raw markdown — the API takes a JSON body). This avoids heredoc escape issues with backslashes and dollar-signs the same way `--body-file` does for issues/PRs.
 
-```bash
-# /tmp/<id>-reply-1.json contents:
-# {"body":"Done in <SHA>. <one-sentence explanation of how this addresses the comment>."}
+**Pick the endpoint based on what you're replying to.** The two surfaces look similar in the GitHub UI but use different APIs:
 
-gh api -X POST repos/lightpanda-io/browser/pulls/<n>/comments/<comment-id>/replies \
-  --input /tmp/<id>-reply-1.json \
-  --jq '{id, html_url, body}'
-```
+- **Inline comment** (anchored to a file/line, fetched at Step 10a): reply via `pulls/<n>/comments/<comment-id>/replies`. The new comment threads under the original in the PR's "Files changed" tab, exactly where the maintainer wrote their note.
+  ```bash
+  gh api -X POST repos/lightpanda-io/browser/pulls/<n>/comments/<comment-id>/replies \
+    --input /tmp/<id>-reply-1.json \
+    --jq '{id, html_url, body}'
+  ```
+- **Top-level review** (a review the maintainer left via "Review changes" with state `COMMENTED` / `APPROVED` / `CHANGES_REQUESTED`, surfaced by `gh pr view --json reviews`): there is **no** replies endpoint. Post a regular issue-level comment via `issues/<n>/comments`. PRs are issues for general-comment purposes, so the comment appears in the main "Conversation" tab and the maintainer gets a notification.
+  ```bash
+  gh api -X POST repos/lightpanda-io/browser/issues/<n>/comments \
+    --input /tmp/<id>-reply-toplevel.json \
+    --jq '{id, html_url}'
+  ```
+  In the body, briefly summarize which points you're addressing (since there's no thread anchor) and lead with the SHA — same template as 10d.
 
-The replies endpoint threads the new comment under the original — it appears inline in the PR's "Files changed" tab next to the line the maintainer commented on, exactly where they expect the response.
+A single review session often produces *both* shapes — Karl's typical pattern is one inline code-suggestion plus one top-level "here's the bigger concern" review. Address both in one follow-up commit and post both replies pointing at the same SHA.
 
 ### 10d. Reply template
 
@@ -440,4 +466,9 @@ Never reply with just "done" — it forces the reviewer to dig for the SHA. Neve
 
 `gh api repos/lightpanda-io/browser/pulls/<n>/comments --jq '.[] | select(.in_reply_to_id == <comment-id>) | {body, html_url}'` confirms each reply landed under the right thread. Capture the `html_url` values in the report back to the user so they can audit if needed.
 
-If the maintainer requested re-review (left a top-level review with `state: CHANGES_REQUESTED`), and you've addressed everything, prompt re-review explicitly: `gh api repos/lightpanda-io/browser/pulls/<n>/requested_reviewers -X POST -f reviewers='["<username>"]'` — but only if the user asks for it.
+**Read the review state before deciding whether to re-request review.** `gh pr view --json reviews --jq '.reviews[] | {author: .author.login, state}'` shows it. Two states matter for follow-up:
+
+- **`COMMENTED`**: feedback without a hard block. The maintainer is not gating merge on a re-review; replying with the SHA is enough. Don't `requested_reviewers -X POST` unless the user explicitly asks — it pings the maintainer for a no-op and burns goodwill.
+- **`CHANGES_REQUESTED`**: a hard block — merge is gated on the maintainer dismissing the review or approving a follow-up. Once you've addressed everything, prompt re-review explicitly: `gh api repos/lightpanda-io/browser/pulls/<n>/requested_reviewers -X POST -f reviewers='["<username>"]'`. Even here, only do it if the user asks; otherwise just push and reply, and let the maintainer come back on their own schedule.
+
+`APPROVED` reviews don't need a reply at all — surface the approval to the user as a status update and stop.
