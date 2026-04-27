@@ -68,6 +68,7 @@ Use this file when:
 
 - **Today**: a refresh after a POST navigation does a GET to the same URL, not a re-POST. Form action handlers don't re-run.
 - **Want**: replay the POST as Chrome does (with confirmation prompt that headless can auto-accept).
+- **Upstream issue**: #2258, **Upstream PR**: #2259 (open as of 2026-04-27, by us).
 - **Gem workaround**: none. Skip-listed in `spec/spec_helper.rb` (`#refresh it reposts`).
 - **Drop-on-fix**: remove the skip pattern.
 
