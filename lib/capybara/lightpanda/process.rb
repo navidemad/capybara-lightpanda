@@ -6,9 +6,11 @@ module Capybara
       READY_PATTERN = /server running.*address=(\d+\.\d+\.\d+\.\d+:\d+)/
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # First nightly with Page.addScriptToEvaluateOnNewDocument (PR #1993, merged 2026-03-30).
-      # The gem relies on this for XPath polyfill auto-injection.
-      MINIMUM_NIGHTLY_BUILD = 5267
+      # First nightly with Frame.getElementByIdFromNode recovery (PR #2244, merged 2026-04-27).
+      # Without it, `#id` selectors return null after a body-innerHTML+replaceWith pattern
+      # (Turbo Drive's snapshot-then-swap), and the gem would need a JS-side rewriter to
+      # detour to `[id="..."]`. Rejecting older nightlies lets us keep that polyfill out.
+      MINIMUM_NIGHTLY_BUILD = 5816
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

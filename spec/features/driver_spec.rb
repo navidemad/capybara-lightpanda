@@ -711,22 +711,10 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
-  # Turbo compatibility (CSS #id polyfill + fetch submit)
+  # Turbo compatibility (fetch submit)
   # ───────────────────────────────────────────────
 
   describe "Turbo compatibility" do
-    it "rewrites #id selectors to [id=\"...\"] so they survive body modify+replace" do
-      session.visit("/lightpanda/turbo_drive")
-      session.execute_script(<<~JS)
-        document.body.innerHTML = '<h1 id="page-title">Modified</h1>';
-        var nb = document.createElement('body');
-        nb.innerHTML = '<h1 id="page-title">Replaced</h1><p id="extra">x</p>';
-        document.body.replaceWith(nb);
-      JS
-      expect(session.evaluate_script("document.querySelector('#page-title') !== null")).to eq(true)
-      expect(session.evaluate_script("document.querySelectorAll('body #extra').length")).to eq(1)
-    end
-
     it "submits forms via fetch when Turbo is present" do
       session.visit("/lightpanda/turbo_form_submit")
       session.find(:css, "#turbo-name").set("Test User")
