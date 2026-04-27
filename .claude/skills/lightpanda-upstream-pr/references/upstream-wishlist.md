@@ -77,6 +77,7 @@ Use this file when:
 
 - **Today**: `new FormData(form)` includes a `<select>` with zero options as an empty-string entry.
 - **Want**: per HTML spec, omit the entry.
+- **Upstream issue**: #2262, **Upstream PR**: #2264 (open as of 2026-04-27, by us).
 - **Gem workaround**: none. Skip-listed (`#click_button on HTML4 form should not serialize a select tag without options`).
 - **Drop-on-fix**: remove the skip pattern.
 
@@ -134,20 +135,23 @@ Use this file when:
 
 - **Today**: only `.href =` triggers navigation. Setting `.pathname`, `.search`, `.hash` updates the URL string but doesn't navigate.
 - **Want**: any `location` part assignment triggers navigation, like Chrome.
+- **Upstream PR**: #2257 (open as of 2026-04-27, by us — covers `.pathname` and `.search`; `.hash` is in-page anchor and doesn't navigate cross-page).
 - **Gem workaround**: none. Skip-listed: `#assert_current_path should wait for current_path` (the underlying fixture uses `window.location.pathname =`).
 - **Drop-on-fix**: remove 5 skip patterns related to `assert_current_path` / `has_current_path`.
 
 ### A16. URL fragments dropped through redirects
 
 - **Today**: visiting `/redirect#fragment` lands on `/landed`, dropping `#fragment`.
-- **Want**: preserve fragment through redirect (Chrome behavior — fragment carries forward unless target sets its own).
+- **Want**: preserve fragment through redirect (RFC 7231 §7.1.2 — fragment carries forward unless Location header has its own).
+- **Upstream issue**: #2263, **Upstream PR**: #2265 (open as of 2026-04-27, by us).
 - **Gem workaround**: none. Skip-listed: `#current_url maintains fragment`.
 - **Drop-on-fix**: remove skip pattern.
 
 ### A17. `<input type=range>` constraints not enforced
 
 - **Today**: `set` writes the value but Lightpanda doesn't clamp/validate against `min`/`max`.
-- **Want**: enforce min/max on value assignment.
+- **Want**: enforce min/max on value assignment per WHATWG `type=range` value sanitization (step matching is a separate follow-up).
+- **Upstream issue**: #2266, **Upstream PR**: #2267 (open as of 2026-04-27, by us — covers min/max clamp; step matching deferred).
 - **Gem workaround**: none. Skip-listed: `#fill_in with input[type="range"] should set the range slider to valid values`, `should respect the range slider limits`.
 - **Drop-on-fix**: remove skip patterns.
 
@@ -208,11 +212,13 @@ Use this file when:
 - **Gem workaround**: none. Skip-listed: `#has_field with valid should be true if field is valid`, `should be false if field is invalid`.
 - **Drop-on-fix**: remove skip patterns.
 
-### B7. CSS escape syntax (`\31`, `\.` etc.) not supported in selectors
+### B7. CSS escape sequences inside quoted attribute values not decoded
 
-- **Want**: handle CSS escape grammar in the selector parser.
-- **Gem workaround**: none. Skip-listed: `#find with css selectors should support escaping characters`, `#has_css? should allow escapes in the CSS selector`.
-- **Drop-on-fix**: remove skip patterns.
+- **Today (verified 2026-04-27 against nightly.5812+b3257754)**: numeric Unicode escapes in `#id` and `.class` (e.g. `#\31 escape\.me`, `.\32 escape`) **work** — PR #1350 (merged 2026-01-09) wired `parseEscape` into identifier parsing. The remaining broken case is escape sequences inside **quoted attribute values**: `p[data-random="abc\\def"]` does not match an element with `data-random="abc\def"` because `Parser.attributeValue` (`src/browser/webapi/selector/Parser.zig:1005`) reads the quoted string via `std.mem.indexOfScalarPos` without decoding CSS escapes, so `\\` survives as two literal bytes instead of one.
+- **Want**: per CSS Syntax Level 3 §4.3.7, decode escape sequences inside quoted strings — `\\` → `\`, `\"` → `"`, `\'` → `'`, hex escapes, line continuations.
+- **Gem workaround**: none. Of the two skip-listed Capybara specs, `#find with css selectors should support escaping characters` (cases `#\31 escape\.me`, `.\32 escape`) **passes against current nightly** — likely flipping to passing once the `find_spec.rb:91` skip pattern is removed. Only `#has_css? should allow escapes in the CSS selector` (the `p[data-random="abc\\def"]` case from `has_css_spec.rb:256-259`) genuinely needs the upstream fix.
+- **Drop-on-fix**: remove the `#has_css?` skip pattern. The `#find` pattern can probably be removed today after re-running the spec against nightly.
+- **Probe**: `/tmp/b7-probe/` has a 3-case CDP probe that demonstrates which forms work / fail. Reuse for the upstream reproducer.
 
 ### B8. Datalist option-fill UI not implemented
 
@@ -236,10 +242,9 @@ Use this file when:
 
 ### B11. `Node#path` canonical XPath generation differs
 
-- **Today**: Lightpanda's DOM serialization differs from Chrome's expected XPath path output.
-- **Want**: XPath path matching Chrome's format (e.g. `/html/body/div[2]/p[1]`).
-- **Gem workaround**: gem uses CSS-like path generation in `GET_PATH_JS`. Skip-listed: `node #path returns xpath which points to itself`.
-- **Drop-on-fix**: remove skip pattern.
+- **Status (re-classified 2026-04-27)**: this is a **gem-side fix, not upstream**. Chrome doesn't expose any native `Element.path()` method either — Cuprite implements `path()` entirely in JS at `lib/capybara/cuprite/javascripts/index.js`'s `Cuprite.path(node)` using `document.evaluate('./preceding-sibling::TAG', ...)` and emits `//HTML/BODY/DIV[2]/P[1]`. The gem's current `GET_PATH_JS` (at `lib/capybara/lightpanda/node.rb:700-723`) emits a CSS-like path (`html > body > div:nth-of-type(2) > p`) which is what fails Capybara's `node #path returns xpath which points to itself` spec.
+- **Fix**: rewrite `GET_PATH_JS` in the gem to mirror Cuprite's algorithm. The gem already injects an XPath polyfill (`document.evaluate` + `XPathResult`) via `addScriptToEvaluateOnNewDocument`, so the same JS works.
+- **Action**: file as a gem-side TODO instead of an upstream PR. Not actionable through this skill.
 
 ---
 
