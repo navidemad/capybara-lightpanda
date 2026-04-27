@@ -82,6 +82,25 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Running bare `zig build` instead of `mise exec -- zig build`.** The repo pins Zig 0.15.2 via `build.zig.zon`'s `minimum_zig_version`; the system Zig on this machine is newer (0.16.0). Bare `zig` in Claude's non-interactive subshells resolves to the system install — `cd` alone does NOT activate mise's pinned version (the directory hook only fires in interactive shells, not in the per-command subshells the Bash tool spawns). Building with the wrong Zig produces stdlib mismatch errors that look like real bugs. Always prefix `zig build` / `zig` invocations with `mise exec --`. See "Local build & test commands" below.
 - **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `mise exec -- zig build check $V8` / `mise exec -- zig build test $V8` directly.
 
+## Step V: Verifying existing work on a branch (skip the full Step 0–9 flow)
+
+Use this branch when the user says "branch X is done, verify it" / "we made changes in the worktree, check it's correctly done" / "review PR #N" rather than asking to start a new fix. The skill's main 0–9 path assumes greenfield implementation; verification has a different shape — the issue/PR may already exist and the toggle-off + reproducer were ideally done at implementation time but you're confirming retroactively.
+
+Run these checks in order. Each one cross-references an existing Step in this file — go read that Step's detail if a check fails:
+
+1. **Worktree state.** `cd <worktree>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `mise.toml`, no `repro/`).
+2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
+3. **Toolchain pin.** `mise exec -- zig version` prints `0.15.2` — see Step 2's pin block.
+4. **Compile clean.** `mise exec -- zig build check $V8` is clean — see Step 4a.
+5. **Targeted test passes.** Run the new test with the right `TEST_FILTER` form (see "Local build & test commands" — `<test-name>#<html-basename>` for fixtures). Confirm it passes.
+6. **Toggle-off proves the test exercises the fix.** `git checkout main -- <production-file>`, re-run the targeted test, confirm it fails. Restore with `git checkout HEAD -- <production-file>`. See Step 4a's two-pattern bullet.
+7. **Full suite has no NEW failures.** `mise exec -- zig build test $V8`. Cross-reference any failures against the "Known-flaky-on-macOS tests" list; only investigate failures NOT on that list.
+8. **End-to-end reproducer.** Build the local debug binary if missing (`mise exec -- zig build $V8`), then `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro/<dir>/repro.sh` exits 0. See Step 6c.
+9. **Issue + PR body content.** `gh issue view <n> --json body --jq .body > /tmp/issue.txt` and same for PR. Audit per `references/visual-verification.md`: 2 mermaid diagrams (sequence in issue, flowchart in PR), CSS/HTML/CDP spec citation, no Ruby/Capybara/gem leak, no wishlist-ID leak, `Closes #<n>` literal text in PR body. See Steps 7a/7c and 8b/8d.
+10. **PR CI.** `gh pr checks <n> --repo lightpanda-io/browser` — for first-time external contributors only `CLAAssistant` runs until a maintainer approves; that's normal, surface as a status note, don't try to "fix" it.
+
+If any of 1–8 fail, surface the specific failure to the user with a fix proposal and STOP — don't silently re-do work the user might have already validated. If 9–10 reveal cosmetic issues (rendering, hyperlinks), fix-and-republish via `gh issue edit --body-file` / `gh pr edit --body-file`.
+
 ## Local build & test commands
 
 Two non-negotiables on every `zig build` invocation:
@@ -92,7 +111,7 @@ Two non-negotiables on every `zig build` invocation:
 | Command | When to use |
 |---|---|
 | `mise exec -- zig build check $V8` | After every Zig edit. Fastest signal — type-check only, no codegen, no link. Catches compile errors across the whole project. |
-| `TEST_FILTER=<pattern> mise exec -- zig build test $V8` | After writing/changing the test for the fix. Runs only matching `test "..."` blocks. Use during TDD iteration. |
+| `TEST_FILTER='<test-name>#<html-basename>' mise exec -- zig build test $V8` | After writing/changing the test for the fix. **Both halves are substring matches** via `std.mem.indexOf`, so `'Element'` will pick up `WebApi: Element` AND `MCP - findElement` — be specific. The `#<html-basename>` half is only consulted by `htmlRunner(...)` to filter which `tests/<dir>/*.html` fixtures run; omit it for plain `test "..."` blocks. Concrete examples: `TEST_FILTER='Selector: Parser.attributeValue'` (Zig unit test), `TEST_FILTER='WebApi: Element#attribute_value_escapes.html'` (one HTML fixture under `tests/element/`). |
 | `mise exec -- zig build test $V8` | Before pushing. Full unit-test suite — verifies nothing else regressed. |
 | `mise exec -- zig build $V8` | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix). |
 | `mise exec -- zig build run $V8 -- <args>` | Build & run the binary in one step. |
@@ -104,6 +123,13 @@ Performance notes:
 - `mise exec -- zig build check $V8` typically finishes in <10s after warm-up.
 - `mise exec -- zig build test $V8` runs in 30s–2min depending on what changed.
 - The `extras` step (legacy_test, snapshot_creator) is not in the default — don't trigger it.
+
+Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by your branch):
+- `MCP - findElement` (`src/mcp/tools.zig:1141`)
+- `cdp.lp: action tools` (`src/cdp/domains/lp.zig:357`)
+- `cdp.lp: waitForSelector` (`src/cdp/domains/lp.zig:423`)
+
+If `mise exec -- zig build test $V8` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/browser && TEST_FILTER='<test name>' mise exec -- zig build test $V8` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
 
 Local verification reduces the cost of a broken CI run: catch trivial errors on your machine first, let upstream CI be the authoritative second opinion (it builds on Linux against the upstream toolchain, which catches macOS-vs-Linux drift you can't see locally).
 
@@ -202,7 +228,9 @@ Use the local commands from "Local build & test commands" — fast enough that a
 - `mise exec -- zig version` prints `0.15.2`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
 - `mise exec -- zig build check $V8` is clean. No compile errors anywhere in the project (not just the file you edited).
 - A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> mise exec -- zig build test $V8` and confirm it passes.
-- Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. **Prefer `Edit` to surgically revert the production lines, NOT `git stash`**: when the test sits in the same file as the fix (the common case for CDP changes — both live in `src/cdp/domains/<domain>.zig`), a `git stash` will sweep the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
+- Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. Two patterns by where the test lives:
+  - **Test in the same `.zig` file as the fix** (common for CDP changes — both live in `src/cdp/domains/<domain>.zig`): **Use `Edit` to surgically revert just the production lines, NOT `git stash`**. A `git stash` sweeps the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
+  - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common for `htmlRunner` directories like `tests/element/`, `tests/document/`): the production code and the fixture live in different paths, so use `git checkout main -- <production-file>` to surgically revert just the production code. The fixture stays untouched and the same `TEST_FILTER='<runner>#<fixture>.html'` re-run reports a real fail (e.g. for the B7 fix: `git checkout main -- src/browser/webapi/selector/Parser.zig`, then `TEST_FILTER='WebApi: Element#attribute_value_escapes.html' mise exec -- zig build test $V8`). Restore with `git checkout HEAD -- <production-file>`.
 - `mise exec -- zig build test $V8` (full suite, no filter) passes — catches regressions in adjacent code.
 - The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
 - The diff matches the surrounding file's existing style (naming, comment density, helper layout) and contains no "while-we're-here" reformatting. Outsider PRs get reviewed line-by-line — reviewers reject mixed scope. Every changed line traces directly to the bug; if you wrote 200 lines and 50 would do, rewrite.
@@ -358,3 +386,58 @@ After the PR opens and the auto-close link is verified:
 ## Step 9: Report back
 
 Use the final-report template in `references/templates.md`. If you stopped before submitting (because the bug was already fixed, a duplicate exists, or the fix needed design discussion), the report explains why and what's needed to unblock — no issue/PR URL, but if you filed an issue without a PR, surface that URL.
+
+## Step 10: Responding to maintainer review
+
+Triggered when the user says "reply to the maintainer review on PR #N" / "address the comments on the PR" — typically after Step 9 has already happened in a prior session and the maintainer left feedback in the meantime. This is a separate flow, not part of the linear 0–9 implementation.
+
+### 10a. Fetch the actual review comments
+
+`gh pr view --json reviews` only returns *top-level* reviews (often empty `body` when the maintainer left only inline comments). **The inline comments live at a different endpoint**:
+
+```bash
+gh api repos/lightpanda-io/browser/pulls/<n>/comments \
+  --jq '.[] | {id, user: .user.login, path, original_line, body, in_reply_to_id, commit_id}'
+```
+
+Each comment carries an `id` (numeric, used in the reply endpoint), `path` + `original_line` (where in the diff the comment lives), and `commit_id` (which commit they reviewed against). If `in_reply_to_id` is non-null, that comment is itself a reply to an earlier one — walk the chain to understand the thread.
+
+GitHub also has a "code suggestion" feature: a comment whose body starts with `\`\`\`suggestion` proposes a literal replacement. Treat suggestions like any other comment for the purpose of replying — but if you adopt one verbatim in a follow-up commit, say so explicitly ("Adopted in <SHA>") so the reviewer knows the suggested code shipped.
+
+### 10b. Address the feedback in code BEFORE replying
+
+If the comment requires a code change, make and push the change first, then reply citing the new commit SHA. Replying with "will do" or "thanks, addressing now" is noise — the reviewer's GitHub feed surfaces every reply and "addressing" comments without a SHA make them re-check later. One reply, one commit, one SHA.
+
+When the change spans multiple comments, prefer one commit that addresses all of them rather than one commit per reply. Reviewers re-review by diffing the new commit against the previous one; one commit is one diff.
+
+### 10c. Compose and post the replies
+
+Use `Write` to stage each reply body at `/tmp/<id>-reply-<n>.json` (JSON wrapper, not raw markdown — the API takes a JSON body). This avoids heredoc escape issues with backslashes and dollar-signs the same way `--body-file` does for issues/PRs.
+
+```bash
+# /tmp/<id>-reply-1.json contents:
+# {"body":"Done in <SHA>. <one-sentence explanation of how this addresses the comment>."}
+
+gh api -X POST repos/lightpanda-io/browser/pulls/<n>/comments/<comment-id>/replies \
+  --input /tmp/<id>-reply-1.json \
+  --jq '{id, html_url, body}'
+```
+
+The replies endpoint threads the new comment under the original — it appears inline in the PR's "Files changed" tab next to the line the maintainer commented on, exactly where they expect the response.
+
+### 10d. Reply template
+
+Lead with the SHA, then *why* (or the tradeoff). One or two sentences max. The maintainer is busy.
+
+- **Adopted verbatim**: `Adopted in <SHA>. <one-sentence rationale or property the change relies on>.` (Example: "Adopted in `a5e5639a`. Pre-sizing to `input.len` is a clean upper bound since CSS escapes only ever shrink.")
+- **Adopted with adjustment**: `Done in <SHA> — adjusted to <X> instead of <Y> because <reason>.` Surface the deviation up-front so the reviewer doesn't have to read the diff to find it.
+- **Pushed back / disagree**: explain the constraint, propose an alternative, ask for direction. Don't silently ignore. Example: "Considered <approach> but it breaks <invariant> — would <alternative> work for you?"
+- **Out of scope**: "That's true, but tracking separately as it's outside this PR's scope (file an issue, link the issue # here). Happy to land it as a follow-up."
+
+Never reply with just "done" — it forces the reviewer to dig for the SHA. Never reply with "thanks!" — it's noise that costs them a notification with no information gain.
+
+### 10e. Verify the replies posted correctly
+
+`gh api repos/lightpanda-io/browser/pulls/<n>/comments --jq '.[] | select(.in_reply_to_id == <comment-id>) | {body, html_url}'` confirms each reply landed under the right thread. Capture the `html_url` values in the report back to the user so they can audit if needed.
+
+If the maintainer requested re-review (left a top-level review with `state: CHANGES_REQUESTED`), and you've addressed everything, prompt re-review explicitly: `gh api repos/lightpanda-io/browser/pulls/<n>/requested_reviewers -X POST -f reviewers='["<username>"]'` — but only if the user asks for it.
