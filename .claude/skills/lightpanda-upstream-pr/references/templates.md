@@ -1,6 +1,15 @@
 # Templates
 
-Load this file when reaching Step 4 (implementation), Step 7 (issue), Step 8 (PR), or Step 9 (report). The fenced blocks below use ` ```` ` (four backticks) on the outside so the inner ` ``` ` mermaid/markdown fences survive copy-paste — strip the outer fence when pasting into GitHub.
+Load this file when reaching Step 4 (implementation), Step 6 (reproducer), Step 7 (issue), Step 8 (PR), or Step 9 (report). The fenced blocks below use ` ```` ` (four backticks) on the outside so the inner ` ``` ` mermaid/markdown fences survive copy-paste — strip the outer fence when pasting into GitHub.
+
+Sections:
+
+- [Implementation prompt (Step 4)](#implementation-prompt-step-4) — TDD brief for the Zig change
+- [Reproducer skeleton (Step 6)](#reproducer-skeleton-step-6) — `repro.js` + `repro.sh` with the non-default `chrome-remote-interface` config Lightpanda needs
+- [Issue body (Step 7)](#issue-body-step-7) — bug report with broken-vs-expected sequence diagrams
+- [Commit message (Step 8)](#commit-message-step-8) — area-prefixed, includes `Closes #<n>`
+- [PR description (Step 8)](#pr-description-step-8) — fix-pathway flowchart, test summary
+- [Final report to user (Step 9)](#final-report-to-user-step-9) — what shipped, what's next
 
 ---
 
@@ -44,6 +53,109 @@ gem's upstream wishlist: `<one-line description>`.
 5. Document any spec/CDP-protocol assumption in a code comment **only if** the
    assumption is non-obvious from the code itself.
 ````
+
+---
+
+## Reproducer skeleton (Step 6)
+
+Lightpanda's CDP endpoint behaves *differently enough* from Chrome that the default `chrome-remote-interface` config breaks. Two non-obvious gotchas, both folded into the skeleton below:
+
+- **Target discovery is empty.** `/json/list` returns `[]`, so the default `await CDP({port: 9222})` fails with `Error: No inspectable targets`. Pass `target: 'ws://127.0.0.1:9222/'` to skip discovery.
+- **Protocol descriptor isn't served.** `/json/protocol` returns 404, so `chrome-remote-interface` fails again with `Error: Not found`. Pass `local: true` to use its bundled descriptor.
+
+Plus a third gotcha that's not specific to Lightpanda but bites silently: a stale `lightpanda serve` left over from a previous run will keep answering CDP without ever loading the new test fixture, so the reproducer's readiness loop must do more than check that the port is open. The skeleton kills any prior listener on the CDP/HTTP ports, then probes `/json/version` and asserts the `Browser` field starts with `Lightpanda` before driving the harness.
+
+Copy the two files below into `repro/<id>-<slug>/` (which is gitignored — see Step 6a). Adjust the fixture URLs and the assertion at the bottom of `repro.js`. Cap the harness at ~80 lines of shell + ~50 of JS; if the bug needs more, isolate further.
+
+`repro.js` (CDP driver):
+
+````
+const CDP = require('chrome-remote-interface');
+
+const HTTP_PORT = process.env.HTTP_PORT || '9580';
+const CDP_PORT = parseInt(process.env.CDP_PORT || '9222', 10);
+
+(async () => {
+  let client;
+  try {
+    // target + local are *both* required against Lightpanda — see header above.
+    client = await CDP({ target: `ws://127.0.0.1:${CDP_PORT}/`, local: true });
+
+    const { targetId } = await client.send('Target.createTarget', { url: 'about:blank' });
+    const { sessionId } = await client.send('Target.attachToTarget', { targetId, flatten: true });
+
+    await client.send('Page.enable', {}, sessionId);
+    await client.send('Page.navigate', { url: `http://127.0.0.1:${HTTP_PORT}/<fixture>.html` }, sessionId);
+    await new Promise((r) => setTimeout(r, 500));
+
+    // <run the assertion that distinguishes broken vs. fixed; print observation;
+    //  exit 1 on bug observed, exit 0 on fix.>
+
+    await client.close();
+    process.exit(0);
+  } catch (e) {
+    console.error('ERROR:', e && e.stack ? e.stack : e);
+    if (client) try { await client.close(); } catch (_) {}
+    process.exit(2);
+  }
+})();
+````
+
+`repro.sh` (harness):
+
+````
+#!/usr/bin/env bash
+# <one-line description of what the script asserts>
+#
+# Prerequisites: node >= 18, python3, a lightpanda binary on PATH or LIGHTPANDA_BIN=...
+# Run:           ./repro.sh
+# Expected today (bug): <exact observed output>     exit 1
+# Expected after fix:   <exact expected output>     exit 0
+
+set -euo pipefail
+
+REPRO_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIGHTPANDA_BIN="${LIGHTPANDA_BIN:-lightpanda}"
+HTTP_PORT="${HTTP_PORT:-9580}"
+CDP_PORT="${CDP_PORT:-9222}"
+
+# Kill any prior listeners on our ports — a stale lightpanda will silently
+# keep answering CDP and break the harness (the new target is created against
+# the wrong browser). This is the root cause; the readiness probe below
+# defends against it as a backup.
+lsof -ti:"$CDP_PORT"  2>/dev/null | xargs -r kill 2>/dev/null || true
+lsof -ti:"$HTTP_PORT" 2>/dev/null | xargs -r kill 2>/dev/null || true
+
+PIDS=()
+cleanup() {
+  for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done
+}
+trap cleanup EXIT
+
+cd "$REPRO_DIR"
+python3 -m http.server "$HTTP_PORT" >http.log 2>&1 &
+PIDS+=("$!")
+
+LIGHTPANDA_DISABLE_TELEMETRY=true \
+  "$LIGHTPANDA_BIN" serve --host 127.0.0.1 --port "$CDP_PORT" >lightpanda.log 2>&1 &
+PIDS+=("$!")
+
+# Readiness probe: assert the listener is *Lightpanda*, not a stale Chrome or
+# a port collision answering 200s. /json/version must contain "Lightpanda".
+for _ in $(seq 1 50); do
+  body="$(curl -fsS "http://127.0.0.1:${CDP_PORT}/json/version" 2>/dev/null || true)"
+  if [[ "$body" == *'"Browser": "Lightpanda'* ]]; then break; fi
+  sleep 0.1
+done
+
+if [ ! -d node_modules/chrome-remote-interface ]; then
+  npm install --no-save --silent chrome-remote-interface
+fi
+
+exec node repro.js
+````
+
+Reference implementation (already verified to exit 1 against bug / format-correct against fix): `/Users/navid/code/browser/repro/a15-location-pathname/`.
 
 ---
 
@@ -218,6 +330,7 @@ Validation: <one-line — did the gem's workaround become deletable in principle
 Next:
 - Wait for nightly to ship the fix.
 - Follow-up gem PR: delete <workaround> in /Users/navid/code/capybara-lightpanda when nightly drops.
+- When the PR merges (and again when the fix ships in a tagged nightly), refresh the wishlist annotation in `references/upstream-wishlist.md` for `<ID>` — flip status from `(open as of YYYY-MM-DD)` to `merged ...` / `shipped in <nightly>`. The `/sync-upstream` skill audits this if you'd rather batch it.
 ```
 
 If you stopped before submitting (because the bug was already fixed, a duplicate exists, or the fix needed design discussion), the report explains why and what's needed to unblock — no issue/PR URL, but if you filed an issue without a PR, surface that URL.

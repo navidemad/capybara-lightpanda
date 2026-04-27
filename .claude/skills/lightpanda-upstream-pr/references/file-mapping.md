@@ -52,3 +52,32 @@ rg -n "method_name" /Users/navid/code/browser/src/cdp/domains/network.zig | head
 ```
 
 For JS APIs, look in `src/browser/<area>/` for `.zig` files — APIs are bound through Zig→V8 reflection (look for `pub const` declarations of method names).
+
+## Directory test runners
+
+Several `src/browser/webapi/<File>.zig` files own an entire `src/browser/tests/<dir>/` directory of HTML fixtures via `testing.htmlRunner("<dir>", .{})`. **Before adding a `test "..."` block in `webapi/<File>.zig` that calls `htmlRunner("<dir>/<file>.html", .{})`, check this table** — adding one duplicates work the directory runner already does, and reviewers flag it.
+
+| Directory | Owning test file | Add fixtures here |
+|---|---|---|
+| `tests/cdata/` | `webapi/CData.zig` | character data |
+| `tests/console/` | `webapi/Console.zig` | console.* APIs |
+| `tests/custom_elements/` | `webapi/CustomElementRegistry.zig` | custom-element registry |
+| `tests/document/` | `webapi/Document.zig` | Document / HTMLDocument APIs |
+| `tests/document_fragment/` | `webapi/DocumentFragment.zig` | document fragments |
+| `tests/element/` | `webapi/Element.zig` | Element + HTMLElement subclasses |
+| `tests/intersection_observer/` | `webapi/IntersectionObserver.zig` | IntersectionObserver |
+| `tests/mutation_observer/` | `webapi/MutationObserver.zig` | MutationObserver |
+| `tests/navigator/` | `webapi/Navigator.zig` | navigator.* |
+| `tests/node/` | `webapi/Node.zig` | Node tree / traversal |
+| `tests/performance_observer/` | `webapi/PerformanceObserver.zig` | PerformanceObserver |
+| `tests/shadowroot/` | `webapi/ShadowRoot.zig` | ShadowRoot |
+| `tests/window/` | `webapi/Window.zig` | window.*, **Location** ⚠, History |
+| `tests/worker/` | `webapi/Worker.zig` | Worker / WorkerGlobalScope |
+
+⚠ Note `Location.zig` lives under `webapi/` but its tests run via `Window.zig`'s `htmlRunner("window", .{})`. There is **no** `test "WebApi: Location"` block in `webapi/Location.zig` — adding one would re-execute `tests/window/location.html`. Drop fixtures into `tests/window/` instead.
+
+Other webapi files (`Performance.zig`, `Blob.zig`, `FileReader.zig`, `XMLSerializer.zig`, `TreeWalker.zig`, etc.) own a single `.html` file, not a directory — adding a sibling `test "..."` block in those is fine. Refresh this table when a new directory runner lands:
+
+```bash
+rg -n 'htmlRunner\("[a-z_]+", \.\{\}\)' /Users/navid/code/browser/src/browser/webapi/*.zig
+```

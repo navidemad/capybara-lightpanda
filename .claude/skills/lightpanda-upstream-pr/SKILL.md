@@ -22,8 +22,8 @@ The gem stays untouched in this skill. Removing the gem-side workaround happens 
 ## Reference files (load when needed)
 
 - `references/upstream-wishlist.md` — source of truth for items A1–A19, B1–B11. Read at Step 0.
-- `references/file-mapping.md` — wishlist item → gem-side workaround file + upstream Zig source file. Read at Steps 1c and 3.
-- `references/templates.md` — issue body, PR body, commit message, final report, implementation prompt. Read at Steps 4, 7, 8, 9.
+- `references/file-mapping.md` — wishlist item → gem-side workaround file + upstream Zig source file, plus a directory test-runner table for `webapi/`. Read at Steps 1c, 3, and 4.
+- `references/templates.md` — implementation prompt, reproducer skeleton, issue body, commit message, PR body, final report. Read at Steps 4, 6, 7, 8, 9.
 - `references/visual-verification.md` — GitHub markdown rendering checklist used by Steps 7c and 8e.
 
 ## Audience: write for a Zig browser engineer, not a Rubyist
@@ -51,7 +51,9 @@ User typically names the item directly ("fix A14"). If they don't:
 
 ### Step 0a: Recommended order if the user is undecided
 
-The wishlist's "Quick wins" section reflects the priority. If unsure, pick the smallest still-actionable item:
+The wishlist's "Quick wins" section reflects the priority. If unsure, pick the smallest still-actionable item.
+
+**First, filter through the wishlist's own annotations.** Each item in `references/upstream-wishlist.md` may carry a `**Upstream issue**:` / `**Upstream PR**:` line — items already filed by us are ineligible for this skill (don't open duplicates). Skim the candidates' wishlist entries before consulting the priority list below; Step 1b's `gh pr list` is the second-pass safety net, not the first.
 
 1. **A14** — `requestSubmit()` polyfill on `HTMLFormElement`. Smallest, isolated, easy to test. Good first PR.
 2. **A6** — `Page.reload` replays POST. Targeted CDP fix, single domain file.
@@ -156,6 +158,8 @@ git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix
 
 If `git status` is dirty (uncommitted work from a previous session, stray repro artifacts, etc.), stop and surface it to the user — do not stash, reset, or clean without permission. The user decides whether to keep, discard, or move that work.
 
+**Remote naming**: this clone uses two remotes — `origin = lightpanda-io/browser` (upstream, where `git pull` reads from) and a personal fork (e.g. `fork = navidemad/browser`, where pushes go). Run `git remote -v` to confirm. The pull above targets `origin`; **the push at Step 8a targets the fork** (`git push -u fork ...`) and `gh pr create` needs `--head <fork-owner>:<branch> --repo lightpanda-io/browser` since the source branch lives on the fork. If `git remote -v` shows only `origin` pointing at your fork, the convention collapses to plain `origin` — but verify before assuming.
+
 Pin the Zig toolchain via mise. The repo's `build.zig.zon` declares `minimum_zig_version = "0.15.2"` but does not commit a `.zig-version` / `.tool-versions` file, so each contributor manages their own pin. We use a local (gitignored) `mise.toml`:
 
 ```bash
@@ -182,6 +186,8 @@ If `mise exec -- zig version` prints anything other than `0.15.2`, stop and surf
 
 Use the implementation prompt template in `references/templates.md` to drive the Zig changes. The template can be applied two ways — work through it inline (default for small single-file changes) or paste it into a `general-purpose` subagent (better for multi-file changes or to keep main context lean). The template is self-contained either way; fill in the `<...>` placeholders before applying.
 
+Before adding a `test "..."` block in `src/browser/webapi/<File>.zig`, consult the **Directory test runners** table in `references/file-mapping.md`. Many webapi files own an entire `tests/<dir>/` directory via `htmlRunner("<dir>", .{})` — adding a sibling test block that re-runs a fixture in that directory duplicates work and gets flagged in review. Drop new fixtures into the directory the runner already covers and skip the extra `test "..."` block.
+
 Work TDD: failing test → confirm it fails → implement → confirm it passes → no regressions.
 
 ### 4a. Verification gates before moving on
@@ -193,7 +199,7 @@ Use the local commands from "Local build & test commands" — fast enough that a
 - A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> mise exec -- zig build test $V8` and confirm it passes.
 - Mentally toggle the fix off (or `git stash` the Zig change) and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix.
 - `mise exec -- zig build test $V8` (full suite, no filter) passes — catches regressions in adjacent code.
-- The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together.
+- The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
 - The diff matches the surrounding file's existing style (naming, comment density, helper layout) and contains no "while-we're-here" reformatting. Outsider PRs get reviewed line-by-line — reviewers reject mixed scope. Every changed line traces directly to the bug; if you wrote 200 lines and 50 would do, rewrite.
 - `git diff` shows only files relevant to the fix. No `mise.toml`, no editor config.
 
@@ -223,6 +229,8 @@ If the validation reveals a gap (fix works but doesn't fully obsolete the workar
 ## Step 6: Build the reproducer
 
 Before filing anything, build a self-contained reproducer the maintainer can run with no Ruby toolchain. This artifact is referenced by both the issue (Step 7) and the PR (Step 8), so do it once, well.
+
+A working `repro.js` + `repro.sh` skeleton lives in `references/templates.md` ("Reproducer skeleton (Step 6)"). It already encodes the non-default `chrome-remote-interface` config Lightpanda needs (`target: ws://...` + `local: true`), the `/json/version` readiness probe that asserts the listener is actually Lightpanda, and the port-cleanup pre-step. Start from that skeleton — don't rebuild it from scratch.
 
 ### 6a. Where to put it
 
@@ -295,7 +303,7 @@ git status                                     # confirm only intended files (no
 git diff --stat                                # confirm reasonable surface
 git add <specific files>                       # NEVER `git add -A` — the repro dir and mise.toml are local-only
 git commit                                     # use commit message template in references/templates.md — body MUST include "Closes #<issue-num>"
-git push -u origin fix-<id>-<slug>
+git push -u origin fix-<id>-<slug>             # if origin is your fork; on a two-remote setup substitute fork (see Step 2's "Remote naming")
 
 # Sanity-check the prepared PR body BEFORE invoking gh pr create:
 # - contains "Closes #<actual issue number from Step 7>" (not "<issue-num>" placeholder)
