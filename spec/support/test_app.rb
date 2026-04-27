@@ -254,7 +254,11 @@ class TestApp
 
   get "/lightpanda/set_cookie_and_redirect" do
     response.set_cookie("redirect_test", value: "survived_redirect", path: "/")
-    redirect "/lightpanda/get_test_cookie"
+    redirect "/lightpanda/echo_redirect_cookie"
+  end
+
+  get "/lightpanda/echo_redirect_cookie" do
+    request.cookies["redirect_test"] || "No cookie"
   end
 
   get "/lightpanda/set_samesite_cookie" do

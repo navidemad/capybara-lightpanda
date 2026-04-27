@@ -212,10 +212,6 @@ RSpec.describe Capybara::Lightpanda::Driver do
     it "sends redirect-set cookies on the follow-up request" do
       session.visit("/lightpanda/set_cookie_and_redirect")
       body = session.evaluate_script("document.body.textContent").strip
-      # Pre-existing Lightpanda limitation (verified on v0.2.7 and nightly):
-      # cookies set via Set-Cookie on a 302 response are stored in the jar
-      # but not sent on the immediate follow-up request to the redirect target.
-      pending "Lightpanda stores redirect cookies but doesn't send them on follow-up request" if body == "No cookie"
       expect(body).to include("survived_redirect")
     end
 

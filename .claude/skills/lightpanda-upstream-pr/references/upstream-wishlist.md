@@ -88,12 +88,12 @@ Use this file when:
 - **Gem workaround**: removed 2026-04-27. `MINIMUM_NIGHTLY_BUILD` bumped to 5816, the `querySelector{,All}` rewriter IIFE deleted from `index.js`, the polyfill regression test deleted from `driver_spec.rb`, and the polyfill mention dropped from `CLAUDE.md`. `bundle exec rake spec:incremental` confirmed 1396 examples passing (1 pre-existing #2187 flake).
 - **Drop-on-fix**: N/A — done.
 
-### A9. Cookies set on 302 redirect not sent on follow-up request
+### A9. ~~Cookies set on 302 redirect not sent on follow-up request~~ — NOT A BUG (gem fixture mismatch, fixed 2026-04-27)
 
-- **Today**: `Set-Cookie` on a 302 response is stored in the cookie jar but the immediate follow-up GET to the redirect target doesn't include it. Verified on v0.2.7 and current nightly.
-- **Want**: include the just-set cookie on the redirect-target request.
-- **Gem workaround**: none. Pending test in `spec/features/driver_spec.rb` (`sends redirect-set cookies on the follow-up request`).
-- **Drop-on-fix**: remove the `pending` annotation.
+- **Resolution**: Lightpanda has always sent the redirect-set cookie correctly on the follow-up GET. Verified empirically against nightly 5816 with a Python+CDP reproducer (302 with `Set-Cookie: redirect_test=survived` → `Location: /echo` → `/echo` receives `Cookie: redirect_test=survived`).
+- **What was actually broken**: the gem fixture at `spec/support/test_app.rb`. `/lightpanda/set_cookie_and_redirect` set a cookie named `redirect_test` and redirected to `/lightpanda/get_test_cookie`, but that route reads `request.cookies["lightpanda_test"]` (a different cookie set by an unrelated route). The assertion target always returned `"No cookie"` regardless of Lightpanda's actual behavior; the `pending` annotation hid the fixture mismatch.
+- **Gem-side fix (2026-04-27)**: added `/lightpanda/echo_redirect_cookie` route that reads `request.cookies["redirect_test"]`, repointed the redirect target, dropped the `pending` line in `driver_spec.rb:212`. Spec now passes against current nightly.
+- **Drop-on-fix**: N/A — done.
 
 ### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801, #1832)
 
