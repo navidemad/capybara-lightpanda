@@ -310,3 +310,259 @@ needed by Capybara users:
 If a future Capybara/Lightpanda use case needs any of the above, the
 polyfill's recursive-descent structure is small enough (~700 lines
 including comments) that adding them is a contained change.
+
+---
+
+# Zig port — implementation plan
+
+This section captures the foundation decisions for porting the
+polyfill into Lightpanda's Zig codebase. Decisions were made
+explicitly (not inferred); each row in the table below is locked.
+
+## Decisions
+
+| Area                | Choice                                                                         |
+|---------------------|--------------------------------------------------------------------------------|
+| API surface         | Full WHATWG `Document.evaluate` + `XPathResult`                                |
+| Spec strictness     | HTML-pragmatic — exact polyfill parity (lowercase `name()`, case-insensitive matching, lenient tokenizer) |
+| Coverage scope      | Match polyfill — 27 functions, 12 axes (`namespace::` stub), same documented stubs (`lang()`/`$var`/PI target) |
+| Result interface    | Full WHATWG `XPathResult` — all 7 result types, `iterateNext` + `snapshotItem` + `singleNodeValue` |
+| Test strategy       | Zig unit tests (parser + evaluator) + `src/browser/tests/xpath/*.html` behavior fixtures + gem CDP integration battery |
+| PR shape            | Single comprehensive PR (parser + evaluator + DOM API + `DOM.performSearch` wiring + tests) |
+| Submission          | PR-only — no prior issue. Compensate with a thorough PR description (mermaid sequence diagrams, link to this doc) |
+| Module location     | New `src/browser/xpath/` directory                                             |
+| `DOM.performSearch` | Wired into the new evaluator in the same PR                                    |
+| Test fixtures       | Mirror the gem's rich body fixture for the 91-case parity battery              |
+| Gem cleanup         | Drop polyfill in the same gem release that bumps `MINIMUM_NIGHTLY_BUILD` past the merge build |
+
+## Audit of current Lightpanda state
+
+Verified at `/Users/navid/code/browser` (date stamps in commit
+history):
+
+- `Document.evaluate` — **does not exist**. `Document.zig` (1108
+  lines) has no `evaluate` method.
+- `XPathResult`, `XPathEvaluator`, `XPathExpression` — **no Zig file
+  for any of them** under `src/browser/webapi/`.
+- `DOM.performSearch` — implemented at `src/cdp/domains/dom.zig:95`
+  but routes to `Selector.querySelectorAll` (`dom.zig:103`),
+  treating every query as a CSS selector regardless of syntax.
+- `Node.compareDocumentPosition` — already implemented at
+  `src/browser/webapi/Node.zig:823`. XPath sort uses it directly.
+- Tree-walking primitives (`firstChild`, `nextSibling`, `parentNode`,
+  `lastChild`, `previousSibling`, etc.) — all present on `Node.zig`.
+- Element attribute access — `Element` exposes attributes as a
+  collection; XPath attribute axis can iterate via the same
+  collection used by `getAttributeNames`.
+
+## Module layout — `src/browser/xpath/`
+
+Mirrors the existing `src/browser/webapi/selector/` shape (~3000 LOC
+across `Parser.zig`, `Selector.zig`, `List.zig`).
+
+```
+src/browser/xpath/
+├── Tokenizer.zig    — lexer; emits Token{kind, slice} stream
+├── Parser.zig       — recursive descent; produces an AST
+├── Ast.zig          — AST node types (Path, Step, Predicate, BinOp, FnCall, ...)
+├── Evaluator.zig    — tree walker; evaluates AST against a context node
+├── Functions.zig    — XPath 1.0 core function library (27 entries)
+└── Result.zig       — internal Result tagged union (NodeSet | Number | String | Boolean)
+```
+
+Public entry points (called from webapi/Document.zig and CDP):
+
+```zig
+pub fn evaluate(
+    arena: Allocator,
+    expression: []const u8,
+    context_node: *Node,
+    result_type: ResultType,
+) !*XPathResult;
+
+pub fn parseLeaky(arena: Allocator, expression: []const u8) !Ast.Expr;
+pub fn evalParsed(arena: Allocator, ast: Ast.Expr, context_node: *Node) !Result;
+```
+
+The split lets `XPathExpression` (W3C interface for cached
+expressions) reuse the parsed AST across multiple `evaluate` calls.
+
+## Webapi additions
+
+New files under `src/browser/webapi/`:
+
+```
+XPathResult.zig       — WHATWG XPathResult interface (~200 LOC)
+XPathEvaluator.zig    — WHATWG XPathEvaluator interface (~80 LOC)
+XPathExpression.zig   — WHATWG XPathExpression (cached parse) (~60 LOC)
+```
+
+`Document.zig` additions:
+
+```zig
+// new method on Document
+pub fn evaluate(
+    self: *Document,
+    expression: []const u8,
+    context_node: ?*Node,
+    resolver: ?js.Function,    // namespace resolver — accepted but unused (HTML mode)
+    result_type: u16,
+    result: ?*XPathResult,     // optional reuse of prior result object
+    frame: *Frame,
+) !*XPathResult;
+
+pub fn createExpression(
+    self: *Document,
+    expression: []const u8,
+    resolver: ?js.Function,
+    frame: *Frame,
+) !*XPathExpression;
+
+pub fn createNSResolver(self: *Document, node: *Node) ?*Node {
+    return node;  // HTML mode passthrough; W3C accepts a Node and returns one
+}
+```
+
+JS-bridge bindings inside Document's prototype struct (~line 1075,
+adjacent to the `createTreeWalker` / `createNodeIterator` block):
+
+```zig
+pub const evaluate = bridge.function(Document.evaluate, .{ .dom_exception = true });
+pub const createExpression = bridge.function(Document.createExpression, .{ .dom_exception = true });
+pub const createNSResolver = bridge.function(Document.createNSResolver, .{});
+```
+
+## `DOM.performSearch` wiring
+
+`src/cdp/domains/dom.zig:95-116` currently calls
+`Selector.querySelectorAll` for any query. New shape:
+
+```zig
+fn performSearch(cmd: *CDP.Command) !void {
+    // ... params unchanged ...
+
+    // Heuristic per Chrome: '/' or '//' prefix, or contains XPath axis (::)
+    // -> XPath. Otherwise CSS. Plain-text fallback (Chrome's third mode) not needed
+    // for current Capybara/Playwright traffic.
+    const list = if (isXPathQuery(params.query))
+        try xpath.searchAll(frame.window._document.asNode(), params.query, frame)
+    else
+        try Selector.querySelectorAll(frame.window._document.asNode(), params.query, frame);
+
+    // ... rest unchanged ...
+}
+
+fn isXPathQuery(q: []const u8) bool {
+    if (q.len == 0) return false;
+    if (q[0] == '/') return true;
+    if (q[0] == '.' and q.len >= 2 and q[1] == '/') return true;
+    if (q[0] == '(' and q.len >= 3 and (q[1] == '/' or (q[1] == '.' and q[2] == '/'))) return true;
+    return std.mem.indexOf(u8, q, "::") != null;
+}
+```
+
+The `xpath.searchAll` helper returns the same `Selector.List` shape
+that `dispatchSetChildNodes` already consumes — no downstream
+changes needed.
+
+## Test plan
+
+**Zig unit tests** (built into each module via `test "..." { ... }`):
+
+- `Tokenizer.zig` — token stream sanity for each operator class,
+  string literals, numeric literals with leading-dot, namespace
+  prefixes, double-char operators, EOF.
+- `Parser.zig` — AST shape for each grammar production. Round-trip
+  parse-then-stringify smoke tests.
+- `Evaluator.zig` — small in-memory DOM trees built via
+  `Document.createElement`/`appendChild`, then evaluator runs.
+  ~30 tests covering each axis and key predicate behaviors.
+
+**Behavior tests** at `src/browser/tests/xpath/`:
+
+- `xpath_conformance.html` — port of the gem's 91-case battery.
+  Same body fixture (h1, p, ul, table, sections with anchors, form,
+  comment, multi-class div, article). Each case becomes a
+  `testing.expectEqual(N, document.evaluate(xp, document, null,
+  XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength)`
+  line.
+- `xpath_result.html` — exercises every `XPathResult` result-type
+  constant, `iterateNext`, `snapshotItem`, `singleNodeValue`,
+  `numberValue`, `stringValue`, `booleanValue`.
+- `xpath_evaluator.html` — exercises `Document.createExpression`,
+  `XPathExpression.evaluate`, `Document.createNSResolver`.
+- `xpath_perform_search.html` (under `tests/cdp/`) — dispatches a
+  CDP `DOM.performSearch` with an XPath query and verifies the
+  returned node IDs.
+
+Wire each new HTML fixture with a corresponding `test "WebApi: ..."`
+block at the bottom of the matching Zig file:
+
+```zig
+test "WebApi: XPath conformance" {
+    try testing.htmlRunner("xpath/xpath_conformance", .{});
+}
+```
+
+**Gem integration battery** (already exists):
+`spec/features/driver_spec.rb` →
+`describe "XPath polyfill — XPath 1.0 conformance"`. After the
+upstream PR merges and a nightly ships, point the gem at the new
+binary, drop the polyfill, and run the battery — same 91 cases now
+exercising native `Document.evaluate` instead of the JS shim.
+
+## Gem follow-up (separate PR after upstream lands in nightly)
+
+1. Bump `Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD` to
+   the post-merge build number.
+2. Delete the `XPathEval` IIFE from
+   `lib/capybara/lightpanda/javascripts/index.js` (lines 72–785,
+   ~700 LOC). The `xpathFind` API at line 790 already prefers
+   native `Document.evaluate` when present and not polyfilled — so
+   removing the polyfill makes it always take the native path.
+2. Delete the `window.XPathResult` shim and the `document.evaluate`
+   shim at the bottom of `index.js` (lines ~1004–1022).
+3. Drop the four "XPath polyfill" re-injection lifecycle tests in
+   `spec/features/driver_spec.rb` (lines 249–279) — once XPath is
+   native, there's no polyfill to re-inject.
+4. Update `CLAUDE.md` and `.claude/rules/lightpanda-io.md` to remove
+   the XPathResult / `document.evaluate` workaround entries.
+5. Run `bundle exec rake spec:incremental`. The 91-case
+   conformance battery + 5 integration smoke tests + 5 Capybara
+   helper tests should all stay green.
+
+## PR description outline
+
+When opening the upstream PR, the body should include:
+
+1. **Scope** — single sentence: "Implements XPath 1.0 evaluation
+   via `Document.evaluate` and `XPathResult`, wires it into
+   `DOM.performSearch`, and adds the `XPathEvaluator`/
+   `XPathExpression` interfaces."
+2. **Mermaid sequence diagram** — `Document.evaluate` call →
+   tokenizer → parser → AST → evaluator → `XPathResult`. One
+   parallel diagram for `DOM.performSearch` showing the query-type
+   detection branch.
+3. **Coverage table** — the same axis/function/operator tables from
+   this document, marked as `implemented` / `stub`.
+4. **Stubs called out explicitly** — `lang()`, `namespace::`,
+   `processing-instruction(target)`, variable bindings. Each with
+   a one-line rationale ("HTML pragmatism, matches the prior
+   capybara-lightpanda polyfill which is the original motivation
+   for this PR").
+5. **Reference link** — to this `XPATH_COMPLIANCE.md` so reviewers
+   see the acceptance criteria.
+6. **Test plan** — count of Zig unit tests + behavior fixtures +
+   downstream gem battery.
+
+## Out of scope for the PR (track as follow-ups)
+
+- Strict W3C mode (case-sensitive, source-case `name()`, namespace
+  resolution). Add later if a non-HTML CDP user needs it.
+- XPath 2.0+ features (sequences, regex, dateTime).
+- `XPathNSResolver` callback resolution. Currently
+  `createNSResolver` returns the input node unchanged; a real
+  implementation would invoke the callback.
+- Named-function extension (XPath 1.0 §3.2 allows host environments
+  to register functions). Not required by Capybara/Playwright.
+
