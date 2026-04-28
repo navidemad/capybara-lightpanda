@@ -109,11 +109,14 @@ RSpec.configure do |config|
       /node #obscured\? should see overlapped elements as obscured/,
       /node #obscured\? should work in frames/,
       /node #obscured\? should work in nested iframes/,
-      # send_keys: special characters / modifier holding / key event
-      # generation — `Input.dispatchKeyEvent` doesn't carry modifier
-      # state across non-tuple keys and key codes are missing from events.
+      # `node #send_keys should send special characters` — `Input.dispatchKeyEvent`
+      # doesn't move the input caret on ArrowLeft/Home/End, so `:left` doesn't
+      # reposition the cursor mid-string. Upstream gap, not yet filed.
       /node #send_keys should send special characters/,
-      /node #send_keys should hold modifiers at top level/,
+      # `node #send_keys should generate key events` — `KeyboardEvent.keyCode`
+      # is hardcoded to 0 upstream. Gated on lightpanda-io/browser PR #2292
+      # (events: implement keyCode/charCode legacy attributes). Remove once
+      # that ships in nightly.
       /node #send_keys should generate key events/,
       # Lightpanda doesn't propagate `Referer` reliably, so any test
       # asserting the rendered referer fails.

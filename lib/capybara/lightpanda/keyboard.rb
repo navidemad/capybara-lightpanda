@@ -73,17 +73,58 @@ module Capybara
         @browser = browser
       end
 
+      # A top-level modifier symbol (`:shift`, `:ctrl`, `:alt`, `:meta`) is
+      # held for the remainder of the call — `send_keys('ocean', :shift, 'side')`
+      # types `oceanSIDE`. Modifier presses fire `keyDown` (not `rawKeyDown`)
+      # so JS keydown handlers see the modifier event; CDP's `rawKeyDown` is
+      # documented as "no JS keyDown event is generated" and would hide the
+      # modifier from listeners that count keydown events.
       def type(*keys)
+        active_mods = []
         keys.each do |key|
           case key
-          when Symbol then dispatch_key(key)
-          when String then key.each_char { |char| dispatch_char(char) }
-          when Array  then type_with_modifiers(key)
+          when Symbol
+            if MODIFIERS.key?(key)
+              press_modifier(key, active_mods)
+            else
+              dispatch_key_with_mods(key, active_mods)
+            end
+          when String
+            key.each_char { |char| dispatch_char_with_mods(char, active_mods) }
+          when Array
+            type_with_modifiers(key)
           end
         end
+        release_modifiers(active_mods)
       end
 
       private
+
+      def press_modifier(mod, active_mods)
+        return if active_mods.include?(mod)
+
+        send_key_event("keyDown", KEYS[mod])
+        active_mods << mod
+      end
+
+      def release_modifiers(active_mods)
+        active_mods.reverse_each { |m| send_key_event("keyUp", KEYS[m]) }
+        active_mods.clear
+      end
+
+      def dispatch_key_with_mods(key, active_mods)
+        return dispatch_key(key) if active_mods.empty?
+
+        modifier_value = active_mods.sum { |m| MODIFIERS[m] }
+        dispatch_modified(key, modifier_value, active_mods)
+      end
+
+      def dispatch_char_with_mods(char, active_mods)
+        return dispatch_char(char) if active_mods.empty?
+
+        modifier_value = active_mods.sum { |m| MODIFIERS[m] }
+        dispatch_modified_char(char, modifier_value, active_mods)
+      end
 
       def dispatch_key(key)
         definition = KEYS.fetch(key) { raise ArgumentError, "Unknown key: #{key.inspect}" }
@@ -98,7 +139,7 @@ module Capybara
         modifiers, chars = keys.partition { |k| k.is_a?(Symbol) && MODIFIERS.key?(k) }
         modifier_value = modifiers.sum { |m| MODIFIERS[m] }
 
-        modifiers.each { |m| send_key_event("rawKeyDown", KEYS[m]) }
+        modifiers.each { |m| send_key_event("keyDown", KEYS[m]) }
         chars.each { |key| dispatch_modified(key, modifier_value, modifiers) }
         modifiers.reverse_each { |m| send_key_event("keyUp", KEYS[m]) }
       end
