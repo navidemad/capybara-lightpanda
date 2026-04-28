@@ -118,20 +118,17 @@ RSpec.configure do |config|
       # (events: implement keyCode/charCode legacy attributes). Remove once
       # that ships in nightly.
       /node #send_keys should generate key events/,
-      # Lightpanda doesn't propagate `Referer` reliably, so any test
-      # asserting the rendered referer fails.
+      # Lightpanda doesn't propagate `Referer` reliably (PR #2283 merged
+      # 2026-04-28 08:01 UTC, AFTER the current nightly cut at 03:33 UTC —
+      # drop these once the next nightly publishes and MINIMUM_NIGHTLY_BUILD
+      # is bumped).
       /#visit should send a referer when following a link/,
       /#visit should preserve the original referer URL when following a redirect/,
+      /#visit should send a referer when submitting a form/,
       /#click_link should follow redirects back to itself/,
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
-      # `<input type=range>` has no slider DOM in Lightpanda — `set` writes
-      # the value but the browser doesn't clamp/validate it the way Chrome's
-      # range widget does. Only the "valid values" test fails — the "respect
-      # the range slider limits" test passes because Capybara doesn't drive
-      # below-min / above-max writes through the same code path.
-      /#fill_in with input\[type="range"\] should set the range slider to valid values/,
       # Frame-closed detection — Lightpanda doesn't expose enough state to
       # distinguish a closed iframe from a live one within the frame_stack.
       /#switch_to_frame works if the frame is closed/,
@@ -151,10 +148,12 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
-      # Lightpanda's `Page.reload` does not replay a POST navigation as a
-      # POST — it issues a fresh GET to the same URL, so the form action
-      # handler never runs again and the test's `post_count` doesn't bump.
-      /#refresh it reposts/,
+      # Lightpanda doesn't normalize textarea field values to CRLF when
+      # building the form-data set (HTML spec requires `\r\n` for textarea
+      # newlines on submit). File upstream as wishlist; until then any test
+      # asserting the wire-format LF→CRLF conversion fails.
+      %r{#click_button.*should convert lf to cr/lf in submitted textareas},
+      /#fill_in should handle newlines in a textarea/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }

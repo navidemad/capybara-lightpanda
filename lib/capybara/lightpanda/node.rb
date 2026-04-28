@@ -246,8 +246,6 @@ module Capybara
         raise ObsoleteNode.new(self, "Node is no longer attached to the document")
       end
 
-      # Trigger implicit form submission via the IMPLICIT_SUBMIT_JS pipeline
-      # (same fetch+swap as CLICK_JS, but without a submitter).
       def implicit_submit
         call(IMPLICIT_SUBMIT_JS)
         driver.browser.wait_for_idle
@@ -277,7 +275,7 @@ module Capybara
       # HTML implicit-submission: a trailing \n in a text-like input is like the
       # user pressing Enter — submits the form when there's a default submit
       # button OR exactly one text control. Strip the \n, set the value, then
-      # route through IMPLICIT_SUBMIT_JS so CLICK_JS's fetch+swap runs.
+      # trigger submission via IMPLICIT_SUBMIT_JS.
       def fill_text_input(type, str)
         if str.end_with?("\n") && TEXT_LIKE_INPUT_TYPES.include?(type)
           call(SET_VALUE_JS, truncate_to_maxlength(str.chomp))
@@ -357,35 +355,22 @@ module Capybara
         end
       end
 
-      # Form-submit click bypass for Lightpanda.
-      #
-      # Lightpanda's `form.submit()` does NOT navigate — it parses, validates, but
-      # never issues an HTTP request. And `document.write()` is a no-op (verified
-      # 2026-04-26: body length unchanged after open/write/close). So both the
-      # native submit path and the previous `fetch+document.write` workaround leave
-      # the page on the original URL with the form still rendered.
-      #
-      # For submit-button clicks we instead `fetch` the form action ourselves,
-      # parse the response with `DOMParser`, swap `document.body.innerHTML`, and
-      # `history.replaceState` the response URL. `_lightpanda` and the XPath
-      # polyfill survive the swap because we don't reload the document.
-      #
-      # For non-submit elements (links, regular buttons, anchors) we fall through
-      # to native `this.click()`. Turbo Drive's click handler — when Turbo is
-      # loaded — intercepts that natively, runs its own fetch+replaceWith, and
-      # works fine on Lightpanda after the `#id` rewriter polyfill in index.js.
+      # Click handler. Native `this.click()` for everything; we only intervene
+      # for three real Lightpanda gaps:
+      #   * `<label>` doesn't propagate clicks to its associated form control
+      #     (Capybara's `automatic_label_click` relies on this), so forward
+      #     explicitly to the linked checkbox/radio.
+      #   * Clicking a `<summary>` doesn't toggle its parent `<details>` — flip
+      #     `open` ourselves after dispatching the click.
+      #   * Clicking an `<input type=image>` doesn't submit the associated form
+      #     (file upstream as wishlist). After the click, call
+      #     `form.requestSubmit()` so the `submit` event still dispatches.
+      # Form submission via `<button>` / `<input type=submit>` works natively
+      # (PR #2244 + #2253 + #2279, in nightly), including formaction/formmethod/
+      # formenctype overrides on the submitter.
       CLICK_JS = <<~JS
         function() {
           var tag = this.tagName.toLowerCase();
-          var type = (this.type || '').toLowerCase();
-          // <button> with no `type` attribute defaults to submit per HTML.
-          var isSubmitBtn = (tag === 'button' && (type === '' || type === 'submit')) ||
-                            (tag === 'input' && (type === 'submit' || type === 'image'));
-          var form = isSubmitBtn ? this.form : null;
-          // Lightpanda doesn't propagate label clicks to their associated
-          // form control the way browsers do, so when Capybara clicks a
-          // <label> for a hidden checkbox/radio (automatic_label_click)
-          // we explicitly forward the click.
           if (tag === 'label') {
             this.click();
             var ctrl = null;
@@ -398,105 +383,20 @@ module Capybara
             }
             return;
           }
-          if (!form) {
-            this.click();
-            // Lightpanda doesn't toggle <details> when its <summary> is clicked.
-            // Walk up to the nearest <details> (only if click hit a summary
-            // and we haven't been preventDefault'd by user JS) and flip `open`.
-            if (tag === 'summary') {
-              var d = this.parentNode;
-              while (d && d.nodeType === 1 && d.tagName.toLowerCase() !== 'details') {
-                d = d.parentNode;
-              }
-              if (d && d.tagName && d.tagName.toLowerCase() === 'details') {
-                d.open = !d.open;
-              }
+          this.click();
+          if (tag === 'summary') {
+            var d = this.parentNode;
+            while (d && d.nodeType === 1 && d.tagName.toLowerCase() !== 'details') {
+              d = d.parentNode;
+            }
+            if (d && d.tagName && d.tagName.toLowerCase() === 'details') {
+              d.open = !d.open;
             }
             return;
           }
-
-          // Fire the submit event first so user JS handlers can intercept and
-          // preventDefault — but skip this when Turbo is loaded, because Turbo's
-          // submit pipeline throws on Lightpanda (and the gem already handles the
-          // navigation below). Turbo's link-click pipeline still works fine.
-          if (typeof Turbo === 'undefined') {
-            var ev;
-            if (typeof SubmitEvent === 'function') {
-              ev = new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: this });
-            } else {
-              ev = new Event('submit', { bubbles: true, cancelable: true });
-              ev.submitter = this;
-            }
-            var allowed = form.dispatchEvent(ev);
-            if (!allowed) return;
+          if (tag === 'input' && (this.type || '').toLowerCase() === 'image' && this.form) {
+            this.form.requestSubmit();
           }
-
-          // No handler intercepted — fetch + swap ourselves because Lightpanda's
-          // native form.submit() does not navigate.
-          // Pass the submitter so the button is serialized at its document
-          // position alongside the form's other named controls.
-          var formData;
-          try { formData = new FormData(form, this); }
-          catch (e) { formData = new FormData(form); }
-          var submitterName = this.getAttribute('name');
-          if (submitterName && !formData.has(submitterName)) {
-            // Lightpanda's FormData(form, submitter) may omit a <button> with no
-            // explicit value attribute; HTML says the value falls back to
-            // textContent, so feed that in ourselves when the entry is missing.
-            var submitterValue = this.getAttribute('value');
-            if (submitterValue === null) {
-              submitterValue = (tag === 'button') ? (this.textContent || '') : '';
-            }
-            formData.append(submitterName, submitterValue);
-          }
-
-          var action = this.getAttribute('formaction') || form.getAttribute('action') || window.location.href;
-          try { action = new URL(action, window.location.href).href; } catch (e) {}
-          var method = (this.getAttribute('formmethod') || form.getAttribute('method') || 'GET').toUpperCase();
-
-          var enctype = (this.getAttribute('formenctype') ||
-                         form.getAttribute('enctype') ||
-                         'application/x-www-form-urlencoded').toLowerCase();
-          // Lightpanda's URLSearchParams.toString() drops the `=` when the value
-          // is an empty string (`{key: ""}` serializes as `key`, not `key=`),
-          // which makes the server parse the field as nil instead of "". Lightpanda
-          // also doesn't perform the HTML-spec LF→CRLF normalization for textarea
-          // values during form submission. Build the query string by hand so both
-          // round-trip correctly.
-          var formEncode = function(fd) {
-            var pairs = [];
-            for (var entry of fd.entries()) {
-              var value = entry[1];
-              if (typeof value === 'string') {
-                // Normalize line endings to CRLF per HTML form-data set spec.
-                value = value.replace(/\\r\\n|\\r|\\n/g, '\\r\\n');
-              }
-              pairs.push(encodeURIComponent(entry[0]).replace(/%20/g, '+') +
-                         '=' +
-                         encodeURIComponent(value).replace(/%20/g, '+'));
-            }
-            return pairs.join('&');
-          };
-          var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
-          if (method === 'GET') {
-            var sep = action.indexOf('?') >= 0 ? '&' : '?';
-            action = action + sep + formEncode(formData);
-          } else if (enctype === 'multipart/form-data') {
-            // Pass FormData directly — fetch sets Content-Type with the correct boundary.
-            opts.body = formData;
-          } else {
-            opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-            opts.body = formEncode(formData);
-          }
-
-          return fetch(action, opts).then(function(r) {
-            return r.text().then(function(html) { return { url: r.url, html: html }; });
-          }).then(function(o) {
-            var doc = new DOMParser().parseFromString(o.html, 'text/html');
-            document.title = (doc.title || '');
-            document.body.innerHTML = doc.body.innerHTML;
-            try { history.replaceState(null, '', o.url); } catch (e) {}
-          });
         }
       JS
 
@@ -548,77 +448,25 @@ module Capybara
         }
       JS
 
-      # HTML implicit-submission: when the user presses Enter in a text-like
-      # field, the form is submitted if either (a) there's a default submit
-      # button, or (b) the form has exactly one submittable text control.
-      # `this` is the input. Mirror CLICK_JS's submit pipeline so the gem's
-      # fetch+swap path runs (Lightpanda's form.submit() doesn't navigate).
+      # HTML implicit-submission: a trailing \n in a text-like input acts like
+      # pressing Enter — submits the form if it has a default submit button OR
+      # exactly one submittable text control. Click the default button (so
+      # click handlers fire) or fall back to `form.requestSubmit()` so the
+      # `submit` event still dispatches.
       IMPLICIT_SUBMIT_JS = <<~JS
         function() {
           var form = this.form;
           if (!form) return;
-          var hasDefault = !!form.querySelector(
+          var btn = form.querySelector(
             'button[type=submit], button:not([type]), input[type=submit], input[type=image]'
           );
-          if (!hasDefault) {
-            var textInputs = form.querySelectorAll(
-              'input[type=text], input[type=email], input[type=password], ' +
-              'input[type=url], input[type=tel], input[type=search], ' +
-              'input[type=number], input:not([type])'
-            );
-            if (textInputs.length !== 1) return;
-          }
-
-          if (typeof Turbo === 'undefined') {
-            var ev;
-            if (typeof SubmitEvent === 'function') {
-              ev = new SubmitEvent('submit', { bubbles: true, cancelable: true });
-            } else {
-              ev = new Event('submit', { bubbles: true, cancelable: true });
-            }
-            var allowed = form.dispatchEvent(ev);
-            if (!allowed) return;
-          }
-
-          var formData = new FormData(form);
-          var action = form.getAttribute('action') || window.location.href;
-          try { action = new URL(action, window.location.href).href; } catch (e) {}
-          var method = (form.getAttribute('method') || 'GET').toUpperCase();
-          var enctype = (form.getAttribute('enctype') || 'application/x-www-form-urlencoded').toLowerCase();
-
-          var formEncode = function(fd) {
-            var pairs = [];
-            for (var entry of fd.entries()) {
-              var value = entry[1];
-              if (typeof value === 'string') {
-                value = value.replace(/\\r\\n|\\r|\\n/g, '\\r\\n');
-              }
-              pairs.push(encodeURIComponent(entry[0]).replace(/%20/g, '+') +
-                         '=' +
-                         encodeURIComponent(value).replace(/%20/g, '+'));
-            }
-            return pairs.join('&');
-          };
-
-          var opts = { method: method, credentials: 'same-origin', redirect: 'follow' };
-          if (method === 'GET') {
-            var sep = action.indexOf('?') >= 0 ? '&' : '?';
-            action = action + sep + formEncode(formData);
-          } else if (enctype === 'multipart/form-data') {
-            opts.body = formData;
-          } else {
-            opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-            opts.body = formEncode(formData);
-          }
-
-          return fetch(action, opts).then(function(r) {
-            return r.text().then(function(html) { return { url: r.url, html: html }; });
-          }).then(function(o) {
-            var doc = new DOMParser().parseFromString(o.html, 'text/html');
-            document.title = (doc.title || '');
-            document.body.innerHTML = doc.body.innerHTML;
-            try { history.replaceState(null, '', o.url); } catch (e) {}
-          });
+          if (btn) { btn.click(); return; }
+          var textInputs = form.querySelectorAll(
+            'input[type=text], input[type=email], input[type=password], ' +
+            'input[type=url], input[type=tel], input[type=search], ' +
+            'input[type=number], input:not([type])'
+          );
+          if (textInputs.length === 1) form.requestSubmit();
         }
       JS
 

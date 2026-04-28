@@ -680,33 +680,6 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
-  # Plain (non-Turbo) form submission via fetch + DOMParser swap
-  # ───────────────────────────────────────────────
-  #
-  # Lightpanda's native `form.submit()` is a no-op (no navigation), and
-  # `document.write()` doesn't replace the body. CLICK_JS works around both by
-  # firing the submit event for user handlers, then — if not preventDefault'd —
-  # fetching the form action and swapping document.body.innerHTML.
-
-  describe "plain form submission (Lightpanda fetch+swap)" do
-    before { session.visit("/lightpanda/form_test") }
-
-    it "POSTs the form and renders the result page after click" do
-      session.find(:css, "#name").set("Probe")
-      session.find(:css, "#test-form button[type=submit], #test-form input[type=submit]").click
-      expect(session).to have_css("pre#results", wait: 2)
-      expect(session.find(:css, "pre#results").text).to include("Probe")
-    end
-
-    it "preserves the _lightpanda polyfill across the body swap" do
-      session.find(:css, "#name").set("Probe")
-      session.find(:css, "#test-form button[type=submit], #test-form input[type=submit]").click
-      session.has_css?("pre#results", wait: 2)
-      expect(session.evaluate_script("typeof window._lightpanda")).to eq("object")
-    end
-  end
-
-  # ───────────────────────────────────────────────
   # Turbo compatibility (fetch submit)
   # ───────────────────────────────────────────────
 
