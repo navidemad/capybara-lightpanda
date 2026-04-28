@@ -41,7 +41,7 @@ gh pr list --repo lightpanda-io/browser --author navidemad --state all --limit 2
 For each PR returned, classify by state:
 
 - **OPEN** — note PR number, title, and how long it's been open. If `lightpanda-io.md` references the PR (e.g. "PR #2244 OPEN, … When merged: remove …"), confirm the note still matches reality.
-- **MERGED** — high-priority finding. The gem-side workaround the PR was meant to obsolete can probably be removed. Add an entry in the report's **Workarounds to re-evaluate** bucket with: PR number, what gem code it unblocks, what test or spec validates the removal. Don't recommend removal without confirming the merge is actually shipped in the nightly the gem currently consumes — fix landed in `main` doesn't always mean fix is in the binary `Process.rb` downloads.
+- **MERGED** — high-priority finding. The gem-side workaround the PR was meant to obsolete can probably be removed. Add an entry in the report's **Workarounds to re-evaluate** bucket with: PR number, what gem code it unblocks, what test or spec validates the removal. Validation runs against a locally-built `main` binary (see "Build local browser from main" below) — don't wait for the nightly the gem currently consumes, since `main` HEAD usually leads nightly by hours or days. When recommending removal, also call out which `MINIMUM_NIGHTLY_BUILD` the user must bump in `lib/capybara/lightpanda/process.rb` before merging the gem-side cleanup so end-users (who don't build locally) aren't broken.
 - **CLOSED (not merged)** — investigate. Either upstream rejected our approach, or the PR was superseded. Update `lightpanda-io.md` to drop any reference that assumed it would land, and check whether the underlying bug needs a new gem-side workaround.
 
 When `lightpanda-io.md` mentions a PR by number (search for `PR #` in that file), keep its state line in sync with what `gh pr view` reports. Stale "PR #X OPEN" notes against an actually-merged PR are exactly the kind of speculative claim Step 4 of SKILL.md tells us to avoid.
@@ -72,7 +72,78 @@ Also scan for new methods that could simplify our code (e.g., `Page.createIsolat
 
 ```bash
 gh release list --repo lightpanda-io/browser --limit 5
+gh release view nightly --repo lightpanda-io/browser --json publishedAt,assets
 ```
+
+The nightly build number (e.g. `5816` in `1.0.0-nightly.5816+a578f4d6`) is the floor for `MINIMUM_NIGHTLY_BUILD` recommendations. Get it from one of the assets' filename or the published timestamp — don't guess.
+
+## Build local browser from main (only when needed)
+
+**When to run this**: only if Step 3 categorization produced at least one entry in the **Workaround removal** bucket (i.e. a previously-broken upstream behavior was fixed, and the gem still has a workaround). Otherwise skip — the build is slow and unnecessary for pure recon.
+
+When required, build before validating any workaround-removal recommendation. `main` HEAD usually leads nightly by hours/days, so this is the only way to validate same-day.
+
+**Don't edit anything in `/Users/navid/code/browser`** — that's the user's upstream contribution worktree. Read-only access (git pull, build) is fine; never edit, branch, or commit there from this skill.
+
+If the worktree has uncommitted changes or is on a non-`main` branch, **stop and ask the user** — they may have an in-progress upstream contribution. Don't auto-stash or auto-checkout.
+
+```bash
+cd /Users/navid/code/browser
+git status --porcelain  # must be empty before proceeding
+git rev-parse --abbrev-ref HEAD  # must be 'main' before proceeding
+git fetch origin && git pull --ff-only origin main
+git rev-parse HEAD  # record this sha — goes into the report
+```
+
+**Skip the build if up to date.** If `zig-out/bin/lightpanda` exists and its mtime is newer than the HEAD commit's author date, the binary already matches `main` — reuse it. Otherwise:
+
+```bash
+LP_V8=$(ls -t /Users/navid/code/browser/.lp-cache/prebuilt-v8/*.a | head -1)
+echo "Using V8 archive: $LP_V8"
+mise exec -- zig build -Doptimize=ReleaseFast -Dprebuilt_v8_path="$LP_V8"
+```
+
+The V8 archive name encodes the V8 version (e.g. `libc_v8_14.0.365.4_macos_aarch64.a`); pick the most recent file rather than hardcoding the version, since it changes when the upstream `build.zig` bumps the V8 prebuilt.
+
+After the build, **do not run specs unprompted**. Print a one-line handoff for the user, then pause:
+
+```
+Built lightpanda from main (HEAD <sha>, V8 <archive name>).
+To validate the workaround-removal recommendations, run:
+
+  LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+
+(spec:incremental can take 10+ min — your call.)
+```
+
+Record the HEAD sha in the report's **Workarounds to re-evaluate** entries so the validation context is reproducible.
+
+## Audit obsolete spec skip patterns
+
+After workaround removal, also audit `spec/spec_helper.rb`'s skip patterns — Lightpanda fixes browser-side gaps independently of the workarounds we file PRs for, so patterns can quietly become obsolete or over-broad without anyone noticing.
+
+The gem has a built-in audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* the previously-skipped specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
+
+```bash
+AUDIT_SKIPS=1 LIGHTPANDA_PATH=/Users/navid/code/browser/zig-out/bin/lightpanda \
+  bundle exec rspec spec/features/session_spec.rb \
+  --format json --out /tmp/audit.json
+```
+
+Then extract the passes:
+
+```bash
+ruby -rjson -e '
+data = JSON.parse(File.read("/tmp/audit.json"))
+passed = data["examples"].select { |e| e["status"] == "passed" }
+puts "Total: #{data["examples"].size}, passed: #{passed.size}, failed: #{data["examples"].count { |e| e["status"] == "failed" }}"
+passed.each { |e| puts "  #{e["full_description"]}" }
+'
+```
+
+Each passing example points at a skip pattern that's either fully obsolete (drop it) or too broad (narrow it). When narrowing, prefer patterns that match the actual failing description rather than the whole describe-block — e.g. `/#accept_confirm should accept the confirm/` instead of the blanket `/#accept_confirm/`.
+
+After narrowing, re-run the full session spec without `AUDIT_SKIPS` to confirm the un-skipped specs pass deterministically (no flakes), and that the pending count dropped by the expected amount. Add the audit findings to the **Workarounds to re-evaluate** bucket in the report.
 
 ## Categorize findings
 

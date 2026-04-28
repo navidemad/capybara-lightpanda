@@ -58,7 +58,7 @@ module Capybara
       end
 
       def all
-        result = browser.command("Network.getCookies")
+        result = browser.command("Network.getAllCookies")
         (result["cookies"] || []).map { |c| Cookie.new(c) }
       end
 
@@ -88,29 +88,8 @@ module Capybara
         browser.command("Network.deleteCookies", **params)
       end
 
-      # Lightpanda gotchas observed on current nightly:
-      #   * `Network.clearBrowserCookies` raises `InvalidParams` (so it does NOT
-      #     clear anything despite the upstream PR #1821 / >= v0.2.6 note).
-      #   * `Network.getCookies` (no `urls` param) is scoped to the CURRENT
-      #     page's origin — cookies set on previously-visited domains are
-      #     invisible from a different page.
-      #   * `Network.getCookies` on `about:blank` raises `InvalidDomain`.
-      #
-      # To honor Capybara's `reset_session! removes ALL cookies` contract
-      # across multiple test domains (e.g. `localhost` AND `127.0.0.1`), we
-      # iterate every origin Browser has navigated to and per-origin call
-      # `Network.getCookies(urls: [origin])` then `Network.deleteCookies(url:)`.
-      # The bulk-clear call is still attempted first as a fast path / future-
-      # proofing for when upstream fixes it.
       def clear
-        begin
-          browser.command("Network.clearBrowserCookies")
-        rescue BrowserError, TimeoutError, StandardError
-          # InvalidParams on current nightly; pre-v0.2.6 used to crash the
-          # WebSocket. Either way, fall through to per-origin sweep.
-        end
-
-        sweep_visited_origins
+        browser.command("Network.clearBrowserCookies")
       end
 
       # Persist all current cookies to a YAML file (ferrum parity).
@@ -130,35 +109,6 @@ module Capybara
       end
 
       private
-
-      def sweep_visited_origins
-        origins = browser.visited_origins.to_a
-        return if origins.empty?
-
-        result = browser.command("Network.getCookies", urls: origins)
-        cookies = result["cookies"] || []
-        cookies.each do |cookie|
-          # CDP needs either domain or url; build a url from the cookie's
-          # own domain+path so we don't mismatch (e.g. cookie domain `.x.test`
-          # against an origin we tracked as `https://x.test:443`).
-          url = cookie_url(cookie)
-          params = { name: cookie["name"] }
-          params[:url] = url if url
-          params[:domain] = cookie["domain"] unless url
-          browser.command("Network.deleteCookies", **params)
-        end
-      rescue StandardError
-        # Connection lost or origin no longer valid; nothing more to do.
-      end
-
-      def cookie_url(cookie)
-        domain = cookie["domain"].to_s.sub(/\A\./, "")
-        return nil if domain.empty?
-
-        scheme = cookie["secure"] ? "https" : "http"
-        path = cookie["path"] || "/"
-        "#{scheme}://#{domain}#{path}"
-      end
 
       # set() takes keyword args, but YAML round-trips give us a hash with the
       # raw CDP keys (camelCase). Normalize and forward.
