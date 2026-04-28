@@ -787,94 +787,28 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
-  # XPath finding
+  # XPath finding (Capybara integration smoke)
+  #
+  # These tests route through `session.find(:xpath, ...)` and
+  # `session.all(:xpath, ...)` — exercising the full driver path
+  # (visibility filtering, error retry, Capybara wrapping). Comprehensive
+  # polyfill-engine coverage lives in the next describe block.
   # ───────────────────────────────────────────────
 
   describe "XPath finding" do
     before { session.visit("/lightpanda/elements") }
 
-    it "finds elements by simple XPath" do
-      items = session.all(:xpath, "//li")
-      expect(items.length).to eq(3)
+    it "round-trips a simple xpath through session.all" do
+      expect(session.all(:xpath, "//li").length).to eq(3)
     end
 
-    it "finds element by XPath with attribute predicate" do
-      el = session.find(:xpath, "//h1[@id='heading']")
-      expect(el.text).to eq("Heading")
+    it "round-trips a Capybara-style class selector through session.find" do
+      el = session.find(:xpath, "//*[contains(concat(' ', @class, ' '), ' item ')]", match: :first)
+      expect(el.tag_name).to eq("li")
     end
 
-    it "finds elements by XPath with class" do
-      rows = session.all(:xpath, "//tr[@class='row']")
-      expect(rows.length).to eq(2)
-    end
-
-    it "handles union operator" do
-      items = session.all(:xpath, "//h1 | //p")
-      expect(items.length).to be >= 2
-    end
-
-    it "handles contains()" do
-      el = session.find(:xpath, "//h1[contains(., 'Heading')]")
-      expect(el.tag_name).to eq("h1")
-    end
-
-    it "handles normalize-space()" do
-      el = session.find(:xpath, "//*[normalize-space(.) = 'Heading']")
-      expect(el.tag_name).to eq("h1")
-    end
-
-    it "handles not()" do
-      items = session.all(:xpath, "//h1[not(@class)]")
-      expect(items).not_to be_empty
-    end
-
-    it "handles and/or in predicates" do
-      items = session.all(:xpath, "//*[@id='heading' or @id='paragraph']")
-      expect(items.length).to eq(2)
-    end
-
-    it "handles descendant axis" do
-      items = session.all(:xpath, "//ul/descendant::li")
-      expect(items.length).to eq(3)
-    end
-
-    it "handles parent axis" do
-      el = session.find(:xpath, "//li/parent::ul")
-      expect(el.tag_name).to eq("ul")
-    end
-
-    it "handles following-sibling axis" do
-      items = session.all(:xpath, "//li[1]/following-sibling::li")
-      expect(items.length).to eq(2)
-    end
-
-    it "handles starts-with()" do
-      el = session.find(:xpath, "//*[starts-with(@id, 'head')]")
-      expect(el.tag_name).to eq("h1")
-    end
-
-    it "handles text() node test" do
-      el = session.find(:xpath, "//p[text()]", match: :first)
-      expect(el.text).not_to be_empty
-    end
-
-    it "handles position predicate" do
-      el = session.find(:xpath, "//li[1]")
-      expect(el.text).to eq("Item 1")
-    end
-
-    it "handles last()" do
-      el = session.find(:xpath, "//li[last()]")
-      expect(el.text).to eq("Item 3")
-    end
-
-    it "handles self:: axis" do
-      items = session.all(:xpath, "//li[self::li]")
-      expect(items.length).to eq(3)
-    end
-
-    it "handles ancestor:: axis" do
-      el = session.find(:xpath, "//li/ancestor::ul")
+    it "evaluates count() in a predicate through session.find" do
+      el = session.find(:xpath, "//ul[count(li) = 3]")
       expect(el.tag_name).to eq("ul")
     end
 
@@ -891,22 +825,227 @@ RSpec.describe Capybara::Lightpanda::Driver do
       el = session.find(:xpath, "//li[3]/preceding-sibling::*[1]")
       expect(el.text).to eq("Item 2")
     end
+  end
 
-    it "handles concat()" do
-      el = session.find(:xpath, "//*[contains(concat(' ', @class, ' '), ' item ')]", match: :first)
-      expect(el.tag_name).to eq("li")
+  # ───────────────────────────────────────────────
+  # XPath polyfill — XPath 1.0 conformance
+  #
+  # Hits window._lightpanda.xpathFind directly with a rich body fixture
+  # and a battery covering every axis, function, operator, and edge case
+  # relevant to Capybara users. Bypasses Capybara wrapping so failures
+  # localize to the polyfill engine. Element counts in the expected
+  # column are derived from the fixture below — keep in sync if the
+  # fixture changes.
+  # ───────────────────────────────────────────────
+
+  describe "XPath polyfill — XPath 1.0 conformance" do
+    fixture_body = <<~HTML
+      <h1 id="heading" class="primary">Hello World</h1>
+      <p id="p1" lang="en" data-x="1">First paragraph with <em>emphasis</em>.</p>
+      <p id="p2" class="note">Second paragraph.</p>
+      <ul id="list">
+        <li class="item odd">Item 1</li>
+        <li class="item even">Item 2</li>
+        <li class="item odd">Item 3</li>
+        <li class="item even">Item 4</li>
+        <li class="item odd">Item 5</li>
+      </ul>
+      <table id="t">
+        <thead><tr><th>Name</th><th>Age</th></tr></thead>
+        <tbody>
+          <tr class="r"><td>Alice</td><td>30</td></tr>
+          <tr class="r"><td>Bob</td><td>25</td></tr>
+          <tr class="r"><td>Carol</td><td>40</td></tr>
+        </tbody>
+      </table>
+      <div id="container">
+        <section id="s1"><span>A</span><span>B</span></section>
+        <section id="s2"><a href="/foo" id="link1">Click me</a></section>
+        <section id="s3"><a href="/bar" id="link2">Other link</a></section>
+      </div>
+      <form id="form">
+        <label for="name">Name</label>
+        <input id="name" type="text" name="name" value="">
+        <input id="email" type="email" name="email" value="">
+        <input id="hidden" type="hidden" name="csrf" value="x">
+        <input id="checkbox" type="checkbox" name="agree">
+        <button id="btn" type="submit">Submit</button>
+      </form>
+      <!-- a comment node -->
+      <div id="multi-class" class="alpha beta gamma"></div>
+      <article id="art">
+        <p>One</p>
+        <p>Two</p>
+        <p>Three</p>
+      </article>
+    HTML
+
+    cases = [
+      # Absolute paths
+      ["/html",                                                 1, "absolute root child"],
+      ["/html/body",                                            1, "/html/body absolute"],
+      ["/",                                                     1, "root only"],
+
+      # Descendant abbreviations
+      ["//h1",                                                  1, "// descendant"],
+      ["//ul/li",                                               5, "/ child"],
+      ["//ul//li",                                              5, "// nested descendant"],
+      [".",                                                     1, "self ."],
+      [".//li",                                                 5, "context-rel descendant"],
+
+      # Wildcards
+      ["//section/*",                                           4, "//section/* (2 spans + 2 anchors)"],
+      ["//*[@id='heading']",                                    1, "//*[@id]"],
+
+      # Axes
+      ["//li[1]/following-sibling::li",                         4, "following-sibling"],
+      ["//li[5]/preceding-sibling::li",                         4, "preceding-sibling"],
+      ["//li/parent::ul",                                       1, "parent::"],
+      ["//li/ancestor::body",                                   1, "ancestor::body"],
+      ["//li/ancestor-or-self::body",                           1, "ancestor-or-self::"],
+      ["//li[3]/preceding::li",                                 2, "preceding axis"],
+      ["//li[1]/following::li",                                 4, "following axis"],
+      ["//ul/descendant::li",                                   5, "descendant axis"],
+      ["//ul/descendant-or-self::li",                           5, "descendant-or-self::li"],
+      ["//section[1]/child::span",                              2, "child:: explicit"],
+      ["//*[@id='heading']/self::h1",                           1, "self:: type guard"],
+
+      # Attribute axis (a[1] picks the first <a> child per parent;
+      # 2 sections contain anchors, each with 2 attributes)
+      ["//a[1]/attribute::href",                                2, "attribute::href"],
+      ["//a[1]/@*",                                             4, "@* (2 anchors x 2 attrs)"],
+
+      # Position predicates
+      ["//li[1]",                                               1, "[1]"],
+      ["//li[last()]",                                          1, "[last()]"],
+      ["//li[last() - 1]",                                      1, "[last() - 1]"],
+      ["//li[position() = 1]",                                  1, "explicit position()"],
+      ["//li[position() > 2]",                                  3, "position > 2"],
+      ["//li[position() mod 2 = 1]",                            3, "position mod 2 = 1 (odd)"],
+      ["(//li)[1]",                                             1, "(//li)[1] filter on group"],
+      ["(//section)[2]",                                        1, "(//section)[2] grouped"],
+
+      # Reverse-axis proximity-order predicates
+      ["//li[3]/preceding-sibling::li[1]",                      1, "reverse axis [1] = nearest"],
+      ["//li[5]/ancestor::*[1]",                                1, "ancestor::*[1] = parent ul"],
+
+      # Multi-predicate / chained
+      ["//li[contains(concat(' ', @class, ' '), ' even ')][2]", 1, "filter then position [2]"],
+      ["//*[@id='heading' and @class='primary']",               1, "and"],
+      ["//*[@id='heading' or @id='p1']",                        2, "or"],
+
+      # Sub-path predicates
+      ["//section[a]",                                          2, "section with a child"],
+      ["//section[count(span) = 2]",                            1, "count() in predicate"],
+      ["//ul[count(li) = 5]",                                   1, "count() = 5"],
+      ["//tr[td[1]]",                                           3, "tr with first td (sub-step)"],
+      ["//tr[td/text() = 'Bob']",                               1, "deep sub-path equality"],
+
+      # String functions
+      ["//*[starts-with(@id, 'link')]",                         2, "starts-with"],
+      ["//*[normalize-space() = 'Hello World']",                1, "normalize-space() default arg"],
+      ["//*[normalize-space(.) = 'Item 1']",                    1, "normalize-space(arg)"],
+      ["//*[concat(@id, '-x') = 'heading-x']",                  1, "concat"],
+      ["//*[substring(@id, 1, 1) = 'p']",                       2, "substring (3 args)"],
+      ["//*[substring(@id, 2, 1) = '1' and starts-with(@id, 'p')]", 1, "substring constrained"],
+      ["//p[translate(@id, 'p', 'q') = 'q1']",                  1, "translate"],
+      ["//*[substring-before(@id, '1') = 'p']",                 1, "substring-before"],
+      ["//*[substring-after(@id, 'lin') = 'k1']",               1, "substring-after"],
+
+      # Number functions
+      ["//tr[number(td[2]) > 28]",                              2, "number() conversion in compare"],
+      ["//tr[floor(number(td[2]) div 10) = 3]",                 1, "floor + div"],
+      ["//tr[ceiling(number(td[2]) div 10) = 3]",               2, "ceiling + div"],
+      ["//tr[round(number(td[2]) div 10) = 3]",                 2, "round half-up"],
+      ["//ul[sum(li/@data-len) = 0]",                           1, "sum() over empty path -> 0"],
+
+      # Boolean functions
+      ["//p[boolean(@lang)]",                                   1, "boolean()"],
+      ["//*[false()]",                                          0, "false() always-false"],
+
+      # name() / local-name()
+      ["//*[name() = 'h1']",                                    1, "name() of context"],
+      ["//*[local-name() = 'h1']",                              1, "local-name() of context"],
+
+      # id()
+      ["id('heading')",                                         1, "id()"],
+      ["id('heading p1')",                                      2, "id() multi-token"],
+      ["id(//em/parent::p/@id)",                                1, "id() on attribute string-value"],
+
+      # Union
+      ["//h1 | //title",                                        2, "union (h1 + host page <title>)"],
+      ["//h1 | //*[@id='p1']",                                  2, "union of 2 different selectors"],
+      ["//*[@id='heading'] | //*[@id='heading']",               1, "self-union dedups"],
+
+      # Arithmetic
+      ["//li[position() + 1 = 3]",                              1, "+"],
+      ["//li[position() - 1 = 0]",                              1, "-"],
+      ["//li[position() * 2 = 4]",                              1, "* multiply"],
+      ["//li[position() div 2 = 1]",                            1, "div"],
+      ["//li[(position() mod 2) = 0]",                          2, "mod"],
+
+      # Comparison
+      ["//tr[number(td[2]) = 30]",                              1, "= numeric"],
+      # NaN != 30 is TRUE per IEEE 754 (NaN equals nothing). The header tr's
+      # td[2] = 'Age' → NaN, so it also matches the != comparison.
+      ["//tr[number(td[2]) != 30]",                             3, "!= numeric (header NaN passes)"],
+      ["//tr[number(td[2]) < 30]",                              1, "< numeric"],
+      ["//tr[number(td[2]) <= 30]",                             2, "<= numeric"],
+      ["//tr[number(td[2]) > 30]",                              1, "> numeric"],
+      ["//tr[number(td[2]) >= 30]",                             2, ">= numeric"],
+      ["//tr[td[2] = 30]",                                      1, "string-vs-number coercion"],
+      ["//tr[td[2] = '30']",                                    1, "string-vs-string equality"],
+
+      # Node tests
+      ["//comment()",                                           1, "comment() node test"],
+
+      # Capybara-style real-world expressions
+      [".//a[contains(normalize-space(string(.)), 'Click me')]", 1, "Capybara link locator"],
+      [".//input[(./@type = 'text')]",                          1, "Capybara text-field"],
+      [".//*[@id='heading']",                                   1, "find-by-id"],
+      [".//li[contains(concat(' ', @class, ' '), ' even ')]",   2, "class contains pattern"],
+
+      # Tricky / edge
+      ["//*[@id='heading']/text()",                             1, "text() child of element"],
+      ["//em/parent::p",                                        1, "parent of inline"],
+      ["//p[em]",                                               1, "p with em descendant"],
+      ["//p[not(em)]",                                          4, "p without em"],
+      ["//section[a/@href = '/foo']",                           1, "deep attribute eq"],
+      ["//ul/li[last()][position() = last()]",                  1, "double last()"],
+      ["//ul[string(count(li)) = '5']",                         1, "string() of number"],
+      ["//body[count(//*[contains(@class, 'item')]) = 5]",      1, "nested count of contains()"],
+    ].freeze
+
+    before do
+      session.visit("/lightpanda/simple")
+      session.execute_script("document.body.innerHTML = #{fixture_body.dump}")
     end
 
-    it "handles translate() for case-insensitive match" do
-      xpath = "//*[translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', " \
-              "'abcdefghijklmnopqrstuvwxyz') = 'heading']"
-      el = session.find(:xpath, xpath)
-      expect(el.tag_name).to eq("h1")
-    end
+    it "evaluates a battery of XPath 1.0 expressions" do
+      aggregate_failures "XPath 1.0 conformance" do
+        cases.each do |xp, expected, desc|
+          result = session.evaluate_script(<<~JS)
+            (function() {
+              try {
+                var r = window._lightpanda.xpathFind(#{xp.dump}, document);
+                return { ok: true, n: (r && r.length) || 0 };
+              } catch (e) {
+                return { ok: false, err: String((e && e.message) || e) };
+              }
+            })()
+          JS
 
-    it "handles count()" do
-      el = session.find(:xpath, "//ul[count(li) = 3]")
-      expect(el.tag_name).to eq("ul")
+          if result.is_a?(Hash) && result["ok"]
+            expect(result["n"]).to(
+              eq(expected),
+              "[#{desc}] #{xp} → got #{result['n']}, expected #{expected}"
+            )
+          else
+            err = result.is_a?(Hash) ? result["err"] : result.inspect
+            raise "[#{desc}] #{xp} → error: #{err}"
+          end
+        end
+      end
     end
   end
 
