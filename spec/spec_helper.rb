@@ -145,10 +145,6 @@ RSpec.configure do |config|
       # geometry & viewport (Page.getLayoutMetrics is hardcoded 1920x1080).
       /#all with obscured filter should not find nodes on top outside the viewport when false/,
       /#all with obscured filter should find top nodes outside the viewport when true/,
-      # ShadowRoot textContent — Lightpanda preserves source-template
-      # whitespace differently than Chrome (see lightpanda-io.md known bug 8),
-      # which leaks into `node #shadow_root should get visible text`.
-      /node #shadow_root should get visible text/,
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
