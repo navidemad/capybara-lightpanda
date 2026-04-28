@@ -177,6 +177,43 @@ Use this file when:
 - **Gem workaround**: implicit. The fetch+swap in `CLICK_JS` reads `formaction`/`formmethod`/`formenctype` directly off the submitter button before issuing the fetch.
 - **Drop-on-fix**: trim the formaction/formmethod/formenctype handling out of `CLICK_JS` once the fix ships in nightly. Combined with the now-stale A4 cleanup, the entire `CLICK_JS` fetch+swap path becomes deletable (~150 LOC). The text-content fallback for `<button name>` without explicit `value` may need a separate small probe before deletion.
 
+### A21. `:disabled` selector / "actually disabled" doesn't inherit through `<fieldset>` / `<select>` / `<optgroup>`
+
+- **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `el.matches(':disabled')` only checks the element's own `disabled` content attribute. `src/browser/webapi/selector/List.zig:537-541` reads `el.getAttributeSafe("disabled") != null` directly — no ancestor walk. So `<fieldset disabled><input></fieldset>` reports `input.matches(':disabled') === false`, and similarly for `<select disabled>` / `<optgroup disabled>` containing `<option>`. The `disabled` IDL attribute on form controls is also own-attribute only (which is spec-compliant for the IDL — the inheritance is supposed to surface through `:disabled`, form submission filtering, and event-target dispatch).
+- **Want**: per [HTML §4.10.18.3 "Enabling and disabling form controls"](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#enabling-and-disabling-form-controls), a form control is "actually disabled" when its own `disabled` attribute is set OR a disabled ancestor `<fieldset>` contains it (with the first-`<legend>` exception — descendants of the first legend stay enabled). `<option>` should also be `:disabled` when an ancestor `<optgroup disabled>` or `<select disabled>` contains it. `:disabled` and the `:enabled` complement need to walk ancestors accordingly.
+- **Upstream issue/PR**: not filed.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isDisabled` walks ancestor `<fieldset>` / `<optgroup>` / `<select>` to honor the inherited cases, with the fieldset-first-legend exception (~28 LOC). Called from `DISABLED_JS` in `lib/capybara/lightpanda/node.rb:678`, which backs `Node#disabled?`.
+- **Drop-on-fix**: replace the polyfill with `el.matches(':disabled')` and inline the call at the `DISABLED_JS` constant. Drops `_lightpanda.isDisabled` (~28 LOC).
+
+### A22. `Element.isContentEditable` not implemented
+
+- **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `Element.isContentEditable` is not exposed as an IDL attribute. The only `contenteditable` reference in the Zig source is `src/browser/interactive.zig:258` (semantic-tree categorization for `LP.getInteractiveElements`); no accessor on `Element` or `HtmlElement`. Reading `el.isContentEditable` returns `undefined`.
+- **Want**: per [HTML §7.7.5.2 "The isContentEditable IDL attribute"](https://html.spec.whatwg.org/multipage/interaction.html#dom-iscontenteditable), `Element.isContentEditable` returns `true` when the element's effective content editable state is "true" — own `contenteditable` attribute non-`false`, OR closest ancestor with non-`false` `contenteditable` attribute (the inheritance walk).
+- **Upstream issue/PR**: not filed.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isContentEditable` falls back to walking the ancestor chain looking for a non-`false` `contenteditable` attribute when `el.isContentEditable` is falsy/missing (~12 LOC). Called from `EDITABLE_HOST_JS` in `lib/capybara/lightpanda/node.rb:676`, which backs `Node#content_editable?`.
+- **Drop-on-fix**: replace the polyfill with native `el.isContentEditable` and inline the read at the `EDITABLE_HOST_JS` constant. ~12 LOC.
+
+### A23. `Element.innerText` doesn't insert block-level line breaks
+
+- **Today (verified 2026-04-28 against `main` HEAD via source inspection — restates the residual gap noted under A13's retraction)**: `_getInnerText` at `src/browser/webapi/element/Html.zig:226-268` recurses through children and emits `\n` only for `<br>`. No display:block / display:list-item line breaks; no hidden-descendant filtering (source even has a `// TODO check if elt is hidden` comment at line 241); no line-collapsing pass. Empirically, nested-block fixtures return `"Ancestor Ancestor Ancestor Child  ASibling  "` (no newlines) where Chrome returns the same content with `\n` inserted around block boundaries.
+- **Want**: implement [the HTML innerText algorithm](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute) — required line breaks around block-level boxes, hidden-descendant filtering via `getComputedStyle().display`, the line-collapsing pass that drops required line breaks adjacent to empty blocks. Multi-day Zig project (per A13 notes); needs `getComputedStyle` access from inside the writer-driven walker.
+- **Upstream issue/PR**: not filed.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb:505`, which backs `Node#visible_text` (and hence `text(:visible)`).
+- **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The "phantom newline around empty block" gem-side gap noted in A13 (the `/\S/.test(out)` guard) also goes away if the upstream impl properly collapses required line breaks around empty blocks.
+
+### A24. User-agent stylesheet only honors `[hidden]` — missing default `display:none` for unrendered elements
+
+- **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `StyleManager.hasDisplayNone` at `src/browser/StyleManager.zig:239-243` honors only the `[hidden]` attribute as a UA-stylesheet rule. Grepping `src/browser/{StyleManager.zig,css/}` and `src/browser/webapi/Element.zig` for tag-name UA defaults (`script`/`style`/`head`/`title`/`noscript`/`template`/`details`/`input[type=hidden]`) turns up nothing. Empirically, `getComputedStyle(scriptEl).display` returns the inherited default (e.g. `'block'` from `<body>`) instead of `'none'`, and `el.checkVisibility()` returns `true` for `<head>`, `<script>`, `<style>`, `<noscript>`, `<template>`, `<title>`, `<input type="hidden">`, and the collapsed children of `<details>:not([open])>*:not(summary)`.
+- **Want**: per the [HTML Rendering spec §15.3.1 "Hidden elements"](https://html.spec.whatwg.org/multipage/rendering.html#hidden-elements), the UA stylesheet maps these tags and selector patterns to `display: none`:
+  - `area, base, basefont, datalist, head, link, meta, noembed, noframes, param, rp, script, source, style, template, track, title { display: none; }`
+  - `input[type="hidden" i] { display: none; }`
+  - `details:not([open]) > *:not(summary) { display: none; }`
+  
+  With these baked into `hasDisplayNone` (or a built-in UA stylesheet pass that runs before user CSS), `el.checkVisibility()` matches Chrome for all of the above without per-call special cases.
+- **Upstream issue**: #2293, **Upstream PR**: #2294 (open as of 2026-04-28, by us).
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isVisible` (~30 LOC) walks ancestors itself: rejects HEAD/TEMPLATE/NOSCRIPT/SCRIPT/STYLE/TITLE tags and `<input type="hidden">`, walks ancestors looking for `[hidden]` and closed `<details>`, special-cases `<summary>` as visible inside a closed `<details>`, then falls back to `el.checkVisibility()` and `getComputedStyle()` for the rest. The comparable Cuprite helper at `lib/capybara/cuprite/javascripts/index.js#isVisible` (~25 LOC) only checks `display`/`visibility`/`opacity` at each ancestor — Chrome's UA stylesheet handles every other case implicitly.
+- **Drop-on-fix**: simplify `_lightpanda.isVisible` down to roughly Cuprite's shape — drop the tag-name allowlist, the `[hidden]` ancestor walk, the `<details>` open/`<summary>` carve-out. Keep the `offsetParent === null` fallback for ancestor `display:none` since that still requires real layout. ~20 LOC saved + the polyfill becomes substantially less surprising.
+
 ---
 
 ## B. Missing CDP / DOM methods
@@ -321,10 +358,14 @@ If all of section A + B land upstream, the gem can shed roughly:
 | **A14 — requestSubmit polyfill** | ~20 | Polyfill IIFE in index.js |
 | **A11 — NoExecutionContextError race** | ~15 + 4 call-sites | `with_default_context_wait` |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (don't fully remove — keep readyState as safety net) |
+| **A21 — `:disabled` inheritance** | ~28 | `_lightpanda.isDisabled` polyfill |
+| **A22 — `Element.isContentEditable`** | ~12 | `_lightpanda.isContentEditable` polyfill |
+| **A23 — `Element.innerText` block-level newlines** | ~50 | `_lightpanda.visibleText` polyfill |
+| **A24 — UA stylesheet display:none defaults** | ~20 | Slim `_lightpanda.isVisible` to Cuprite-shape |
 | **B4 — file uploads** | adds ~30, removes 26 skips | Net positive: enables a feature |
 | **A15, A16, A17, A18, B5–B11 — assorted** | 30+ skip patterns | Removes spec_helper skip list entries |
 
-**Total drop-on-fix surface**: roughly **~1100 LOC of gem-side code becomes deletable**, plus ~50 spec_helper skip patterns become removable. The XPath polyfill alone is ~700 LOC. Removing the JS-side hacks would also let us delete most of the `_lightpanda` namespace IIFE in `index.js`.
+**Total drop-on-fix surface**: roughly **~1220 LOC of gem-side code becomes deletable**, plus ~50 spec_helper skip patterns become removable. The XPath polyfill alone is ~700 LOC. Removing the JS-side hacks would also let us delete most of the `_lightpanda` namespace IIFE in `index.js`.
 
 ---
 
