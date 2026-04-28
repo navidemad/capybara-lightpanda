@@ -116,12 +116,13 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `handle_navigation_crash` reconnects on `@client.closed?` and retries the navigation once. Without this, full-app crashes ripple as `DeadBrowserError` on the next CDP call.
 - **Drop-on-fix**: remove `handle_navigation_crash` and the reconnect/retry logic. ~30 LOC.
 
-### A13. `textContent` whitespace differs from Chrome (surfaced 2026-04-26)
+### A13. ~~`textContent` whitespace differs from Chrome~~ — NOT A BUG (misdiagnosed, retracted 2026-04-28)
 
-- **Today**: Lightpanda preserves source-template whitespace differently. Multi-level nested fixtures normalize to different whitespace patterns than Chrome — surfaces in Capybara's `#ancestor` shared spec where `text: "Ancestor\nAncestor\nAncestor"` matches in Chrome but not in Lightpanda.
-- **Want**: spec-compliant text node coalescing matching Chrome's html5ever output.
-- **Gem workaround**: tests use regex `text:` instead of literal `\n`-containing strings. No code-side workaround possible — lives in Lightpanda's html5ever / DOM text-node coalescing path.
-- **Drop-on-fix**: simplify Capybara test fixtures that currently use regexes.
+- **Resolution**: Lightpanda's `Element.textContent` is spec-compliant. Verified empirically against `1.0.0-dev.5817+716b6f33` with a CDP probe at `/tmp/a13-probe/repro.sh`: for the `with_html.erb` nested-div fixture, `el.textContent` byte-exactly matches the [HTML Living Standard descendant-text-content concatenation](https://dom.spec.whatwg.org/#concept-descendant-text-content). The wishlist's primary failing-test example (`#ancestor` with `text: "Ancestor\nAncestor\nAncestor"`) **passes** on current build.
+- **What was wrong with the original entry**: the wishlist diagnosed the bug as living in "Lightpanda's html5ever / DOM text-node coalescing path", but `textContent` was never broken — the surfacing failure routes through `node.text(:visible)` → `Node#visible_text` → the gem's `_lightpanda.visibleText` JS polyfill, NOT through `textContent`. With CSSOM merged (PR #1797, 2026-03-23), `getComputedStyle(div).display === 'block'` works, the polyfill emits block-level newlines correctly, and the test passes.
+- **Real residual upstream gap (separate, not pursued here)**: Lightpanda's native `Element.innerText` (`src/browser/webapi/element/Html.zig:226-268`) recurses through children and only emits `\n` for `<br>` — it doesn't insert required line breaks at block-level boundaries per the [innerText algorithm](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute). Empirically: probe2 returns `"Ancestor Ancestor Ancestor Child  ASibling  "` (no newlines) for the same fixture. The gem polyfills around this with `_lightpanda.visibleText`, so no test surfaces the native gap. A future upstream PR could fix native `innerText` and obsolete ~150 LOC of gem polyfill — not in scope today (multi-day Zig project; needs `getComputedStyle` access from inside the writer-driven walker + line-break collapsing rules).
+- **Real residual gem-side gap (separate)**: `node #shadow_root should get visible text` still fails because `_lightpanda.visibleText` (`lib/capybara/lightpanda/javascripts/index.js:953`) wraps every `display:block` element with `\n…\n` even when the element has no visible content — an empty `<div id="nested_shadow_host">` between two inline siblings introduces a phantom line break, so `"some text scroll.html"` becomes `"some text\nscroll.html"`. Chrome's innerText collapses required line breaks around empty blocks. File as gem-side TODO.
+- **Drop-on-fix**: N/A.
 
 ### A14. `requestSubmit()` not implemented on `HTMLFormElement`
 
@@ -190,6 +191,7 @@ Use this file when:
 ### B2. `Page.getNavigationHistory` / `Page.navigateToHistoryEntry` not implemented
 
 - **Want**: standard CDP history APIs.
+- **Upstream issue**: #2288, **Upstream PR**: #2289 (open as of 2026-04-28, by us).
 - **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `back` and `forward` use JS `history.back()` / `history.forward()` instead.
 - **Drop-on-fix**: switch to the CDP methods (more reliable than JS for cross-origin history).
 
@@ -209,13 +211,18 @@ Use this file when:
 
 ### B5. `Input.dispatchKeyEvent` modifier flags incomplete
 
-- **Want**: correct propagation of shift/ctrl/alt/meta modifier state across key events; correct keyCode/code attributes on KeyboardEvent.
+- **Today (verified 2026-04-28 against `main` HEAD `2bbf23b3`)**: probed via `/tmp/b5-probe/`. Three independent issues surface in the three skip-listed specs:
+  1. `KeyboardEvent.keyCode` and `charCode` are hardcoded stubs returning `0` (`KeyboardEvent.zig:273-282`). Fails `should generate key events` (test expects `keyCode=84` for 't'-key keydown, observes `0`). **Upstream issue**: #2291, **Upstream PR**: #2292 (open as of 2026-04-28, by us).
+  2. `Input.dispatchKeyEvent` for `ArrowLeft`/`ArrowRight`/`Home`/`End` doesn't move the input caret. Fails `should send special characters` (which uses `:left` to position the cursor mid-string before inserting a char). **Not yet filed.**
+  3. **Gem-side**: `Capybara::Lightpanda::Keyboard#type` doesn't track standalone modifier symbols as sticky modifiers — `'ocean', :shift, 'side'` types `oceanside` instead of `oceanSIDE`. Modifier flags themselves DO propagate (probe 1 confirmed `shiftKey: true` on the resulting KeyboardEvent), so this is a Ruby-side state-tracking bug, not Lightpanda's responsibility.
+- **Want**: see the three sub-items above. PR #2292 only addresses (1).
 - **Gem workaround**: none useful. Skip-listed: `node #send_keys should send special characters`, `should hold modifiers at top level`, `should generate key events`.
-- **Drop-on-fix**: remove skip patterns.
+- **Drop-on-fix**: when #2292 ships in nightly, remove the `should generate key events` skip pattern. The other two skip patterns need (2) and (3) to be addressed independently.
 
 ### B6. `validity` API not implemented
 
 - **Want**: `el.validity.valid`, `el.validity.valueMissing`, `el.validationMessage`.
+- **Upstream issue**: #2284, **Upstream PR**: #2286 (open as of 2026-04-28, by us).
 - **Gem workaround**: none. Skip-listed: `#has_field with valid should be true if field is valid`, `should be false if field is invalid`.
 - **Drop-on-fix**: remove skip patterns.
 
