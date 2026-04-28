@@ -43,21 +43,24 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 Target.createTarget          Target.attachToTarget
 Page.enable                  Page.navigate
 Page.reload                  Page.loadEventFired (event)
-Page.getLayoutMetrics        Page.captureScreenshot
-Runtime.evaluate             Runtime.callFunctionOn
-Runtime.getProperties        Runtime.releaseObject
+Page.addScriptToEvaluateOnNewDocument                    Page.getLayoutMetrics
+Page.captureScreenshot       Page.javascriptDialogOpening (event)
+Runtime.enable               Runtime.evaluate
+Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
+Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
 DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
-Network.enable               Network.disable
-Network.getCookies           Network.setCookie
-Network.deleteCookies        Network.clearBrowserCookies (safe on >= v0.2.6)
+DOM.describeNode
+Network.getAllCookies        Network.setCookie
+Network.deleteCookies        Network.clearBrowserCookies
 ```
 
 ### CDP Methods NOT Available (gem uses JS workarounds)
 
 ```
 Page.getNavigationHistory    → gem uses history.back()/history.forward() JS instead
+                                (PR #2289 OPEN — when merged, switch to native CDP)
 Page.navigateToHistoryEntry  → gem uses history.back()/history.forward() JS instead
-Network.getAllCookies         → does not exist; gem uses Network.getCookies
+                                (PR #2289 OPEN — when merged, switch to native CDP)
 ```
 
 ### CDP Methods Partially Implemented (event but no handler)
@@ -79,31 +82,33 @@ Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS (commit 7208934b, 2026-
 ### CDP Methods Recently Implemented
 
 ```
-Network.setUserAgentOverride → IMPLEMENTED (PR #2139, merged ~2026-04-11)
+Network.setUserAgentOverride   → IMPLEMENTED (PR #2139, merged ~2026-04-11)
 Emulation.setUserAgentOverride → IMPLEMENTED (PR #2153, merged 2026-04-14)
-Page.createIsolatedWorld → NOW WORKING (PR #2164, merged 2026-04-16). Previously returned
-                            wrong executeContextId; fix pulls correct value from v8 inspector.
+Page.createIsolatedWorld       → NOW WORKING (PR #2164, merged 2026-04-16). Previously returned
+                                  wrong executeContextId; fix pulls correct value from v8 inspector.
+Network.getAllCookies          → IMPLEMENTED (PR #2255, merged 2026-04-27, in nightly ≥5817).
+                                  Gem now calls this in Cookies#all.
+Network.clearBrowserCookies    → ACCEPTS empty params (PR #2255, merged 2026-04-27, in nightly ≥5817).
+                                  Gem now calls this in Cookies#clear.
 ```
 
 ### Available CDP Methods (not yet used by this gem)
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
-Page.addScriptToEvaluateOnNewDocument  (WORKING — PR #1993 merged 2026-03-30)
-Page.removeScriptToEvaluateOnNewDocument (PR #1993 merged 2026-03-30)
+Page.removeScriptToEvaluateOnNewDocument
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
 Page.printToPDF (fake PDF — PR #2197 merged 2026-04-20)
 DOM.resolveNode              DOM.getBoxModel (now returns real getBoundingClientRect geometry)
-DOM.describeNode             DOM.scrollIntoViewIfNeeded
+DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
 Network.setExtraHTTPHeaders  Network.setCacheDisabled (stub)
-Network.setUserAgentOverride (now implemented — PR #2139)
-Runtime.enable               Runtime.addBinding
-Runtime.runIfWaitingForDebugger (stub)
+Network.setUserAgentOverride
+Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
 Fetch.enable                 Fetch.disable
 Fetch.continueRequest        Fetch.failRequest
@@ -129,13 +134,7 @@ LP.getStructuredData         LP.waitForSelector
    - This gem works around it with `document.readyState` polling fallback in `Browser#go_to`
    - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable (#1801 still open)
 
-2. **`Network.clearBrowserCookies` + `Network.getAllCookies`** — fix MERGED upstream, NOT yet in nightly (verified 2026-04-27 on `1.0.0-nightly.5816+a578f4d6`)
-   - **History**: PR #1821 (>= v0.2.6) added the missing `clearRetainingCapacity()` call on the in-memory cookie jar (stopped the WebSocket crash). But an inverted-logic guard in `clearBrowserCookies` then rejected any caller sending `params: {}` (which is most CDP clients) with `InvalidParams`. `Network.getAllCookies` was missing from the dispatch enum entirely.
-   - **PR #2255 MERGED 2026-04-27 04:15 UTC, by us** — drops the inverted guard and adds `getAllCookies` to the dispatch. NOT in today's nightly (`5816`, built 03:18 UTC, ~57 min before the merge). Empirically verified on 5816: `Network.getAllCookies` → `UnknownMethod`, `Network.clearBrowserCookies` (empty params) → `InvalidParams`.
-   - **Action when next nightly ships**: bump `MINIMUM_NIGHTLY_BUILD` past the post-merge build, then in `Cookies#clear` drop the per-origin `sweep_visited_origins` workaround and trust the bulk `clearBrowserCookies` call. Also switch `Cookies#all` to `Network.getAllCookies` (currently `Network.getCookies`, origin-scoped). Removes `Browser#visited_origins`, `record_visited_origin`, and the `sweep_visited_origins` private method (~50 LOC total).
-   - Until then, the existing workaround stands: `Cookies#clear` calls `clearBrowserCookies` (currently no-op), then sweeps per-origin via `Network.getCookies(urls: visited_origins)` + `Network.deleteCookies(url: ...)`. `Browser#visited_origins` accumulates `scheme://host:port` strings as the gem navigates.
-   - `Network.getCookies` (without `urls`) is scoped to the current page's origin — cookies on previously-visited domains are invisible from a different page; `Network.getCookies` on `about:blank` raises `InvalidDomain`. The `urls:` parameter accepts a list and returns cross-domain cookies (verified working).
-   - `Network.deleteCookies(name:, url:)` works correctly per-origin.
+2. ~~**`Network.clearBrowserCookies` + `Network.getAllCookies`**~~ — RESOLVED both upstream (PR #2255 merged 2026-04-27) and gem-side (cookies.rb cleanup landed; `MINIMUM_NIGHTLY_BUILD = 5817`). Current `Cookies#all` calls `Network.getAllCookies`; `Cookies#clear` calls bulk `Network.clearBrowserCookies`; `Browser#visited_origins` / `record_visited_origin` / `sweep_visited_origins` no longer exist. Verified empirically against `1.0.0-dev.5839+2bbf23b3`. Historical context retained for `Network.deleteCookies(name:, url:)` per-origin behavior, which still works as expected.
 
 3. **`XPathResult` not implemented**
    - `document.evaluate` and the `XPathResult` interface do not exist in Lightpanda
@@ -161,13 +160,9 @@ LP.getStructuredData         LP.waitForSelector
    - Node references (objectIds) become invalid after navigation
 
 7. **Turbo Drive `#id` selector engine bug — FULLY RESOLVED (upstream + gem, 2026-04-27)**
-   - **History**: `document.body = newBody` setter was missing → fixed by PR #2215 (merged 2026-04-23, shipped in nightly 2026-04-24). After that landed, the CSS selector engine still had a bug: `querySelector('#id')` / `querySelectorAll('#id')` returned null / `[]` after the body was mutated via `innerHTML` and then replaced via `replaceWith` (Turbo Drive's snapshot-then-swap pattern). `getElementById('id')` and `[id="id"]` always worked; only the `#id` shorthand was broken because `Frame.getElementByIdFromNode` (the fast path) only consulted the `lookup` map and missed elements that had moved to `_removed_ids` after a body removal.
-   - **Upstream fix (PR #2244, merged 2026-04-27 00:46 UTC, commit `e1e9a0d7`, filed by us)**: on `lookup` miss, walk `_removed_ids` + scope root and re-register, mirroring the existing `Document.getElementById` / `ShadowRoot.getElementById` recovery.
-   - **Confirmed in nightly 5816+** (`1.0.0-nightly.5816+a578f4d6`, built 2026-04-27 03:18 UTC). Empirically verified.
-   - **Gem-side cleanup completed (2026-04-27)**: `Process::MINIMUM_NIGHTLY_BUILD` bumped to 5816 in `lib/capybara/lightpanda/process.rb`, the `Document.prototype.querySelector{,All}` / `Element.prototype.querySelector{,All}` rewriter IIFE was removed from `lib/capybara/lightpanda/javascripts/index.js`, the polyfill regression test was removed from `spec/features/driver_spec.rb`, and the gem-side polyfill mention was dropped from `CLAUDE.md`. `bundle exec rake spec:incremental` → 1396 examples, all pass (1 pre-existing #2187 frame-context flake).
-   - **Disabler note (kept for context)**: the `Turbo.session.drive = false` auto-disabler that was previously at `javascripts/index.js:48-63` was removed earlier (2026-04-25). Turbo Drive runs natively.
-   - **Remaining gem workaround for plain forms**: `fetch()` + body-innerHTML swap in `CLICK_JS` / `IMPLICIT_SUBMIT_JS` (`lib/capybara/lightpanda/node.rb`) — **stale, slated for removal 2026-04-27**. Originally added under wishlist A4, since retracted (Known Bug #9 above). Native `form.submit()` works fine on current nightly; the workaround was a misdiagnosis.
-   - **Turbo Frames (GET navigation)**: Already work — lazy-loading via `src=` and scoped link navigation use Turbo's fetch + innerHTML replacement on the frame element.
+   - **History**: `document.body = newBody` setter was missing → fixed by PR #2215 (merged 2026-04-23). After that landed, the CSS selector engine still had a bug where `querySelector('#id')` returned null after `innerHTML` mutation + `replaceWith` (Turbo Drive's snapshot-then-swap). Fixed by PR #2244 (merged 2026-04-27 00:46 UTC, by us): `Frame.getElementByIdFromNode` walks `_removed_ids` + scope root on `lookup` miss.
+   - **Confirmed in nightly ≥5816**, gem-side cleanup landed (`MINIMUM_NIGHTLY_BUILD` = 5817, querySelector rewriter IIFE removed from `index.js`, polyfill regression test removed from `driver_spec.rb`).
+   - **Turbo Frames (GET navigation)**: work natively via Turbo's fetch + frame-element innerHTML replacement.
 
 8. ~~**`textContent` whitespace differs from Chrome**~~ — RETRACTED 2026-04-28 (misdiagnosis, see wishlist A13)
    - **Empirical retraction against `1.0.0-dev.5817+716b6f33`**: `Element.textContent` for the `with_html.erb` nested-div fixture matches the [HTML Living Standard descendant-text-content concatenation](https://dom.spec.whatwg.org/#concept-descendant-text-content) byte-for-byte. The Capybara `#ancestor` test (`el.ancestor('//div', text: "Ancestor\nAncestor\nAncestor")`) **passes** on current build. Probe at `/tmp/a13-probe/`.
@@ -175,33 +170,38 @@ LP.getStructuredData         LP.waitForSelector
    - **Real residual upstream gap (separate, not in scope today)**: native `Element.innerText` (`src/browser/webapi/element/Html.zig:226-268`, `_getInnerText`) doesn't insert required line breaks at block-level boundaries per the [innerText algorithm](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute) — it recurses through children and only emits `\n` for `<br>`. Empirically returns `"Ancestor Ancestor Ancestor Child  ASibling  "`. Gem polyfill hides this; no test surfaces the native gap. Future PR opportunity (~150 LOC gem polyfill drop on fix; multi-day Zig project).
    - **Real residual gem-side gap (separate)**: `node #shadow_root should get visible text` still fails because `_lightpanda.visibleText` (`lib/capybara/lightpanda/javascripts/index.js:953`) wraps every `display:block` element with `\n…\n` even when empty — phantom line break between siblings. File as gem-side TODO.
 
-9. ~~**`form.submit()` does NOT navigate** and **`document.write()` is a no-op**~~ — RETRACTED 2026-04-27 (gem misdiagnosis, both work natively)
-   - **Empirical retraction against `1.0.0-nightly.5816+a578f4d6`**: native `form.submit()` (POST + GET), `submit_button.click()`, `form.requestSubmit()`, and Enter-in-text-input implicit submission **all navigate correctly** to the form action and render the response page. `document.open(); document.write(html); document.close()` correctly replaces `document.body.innerHTML`. CDP probes at `/tmp/a4-probe/` (probe-button-click.js, probe-implicit.js, probe-doc-write.js) all PASS without any gem workaround active.
-   - **What was wrong with the original entry**: the 2026-04-26 gem commit `35ee402` ("Expand session_spec coverage with incremental runner and gem-side fixes") added a fetch+swap workaround in `CLICK_JS` based on the assumption that `submitForm` doesn't navigate. But `git blame src/browser/Frame.zig:3756-3768` shows `submitForm` has been calling `scheduleNavigationWithArena(arena, action, opts, .{ .form = target_frame })` since at least 2026-03-24 — the upstream fix predated the gem workaround by a month. The gem author likely saw a related symptom (perhaps the `#id` selector regression Known Bug #7, fixed by PR #2244) and attributed it to form submission.
-   - **Gem-side cleanup (TODO 2026-04-27)**: simplify `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) to call native `this.click()` for submit buttons, drop the SubmitEvent synthesis + fetch + DOMParser + body.innerHTML swap, drop the Turbo bypass branch (verify Turbo case still works first). Remove `IMPLICIT_SUBMIT_JS` and the `\n`-routing branch in `Node#fill_text_input`. Keep label-click forwarding (real Lightpanda gap) and `<summary>`/`<details>` toggle (real Lightpanda gap). ~150 LOC drop. Verify with `bundle exec rake spec:incremental`.
-   - **Test coverage**: `driver_spec.rb` regression block "plain form submission (Lightpanda fetch+swap)" still passes after the cleanup if native submission works as the probes show.
+9. ~~**`form.submit()` does NOT navigate** and **`document.write()` is a no-op**~~ — RETRACTED 2026-04-27 (gem misdiagnosis, both work natively); gem-side cleanup completed 2026-04-28
+   - **Empirical retraction**: native `form.submit()` (POST + GET), `submit_button.click()`, `form.requestSubmit()`, and Enter-in-text-input implicit submission **all navigate correctly**. `document.open(); document.write(html); document.close()` correctly replaces `document.body.innerHTML`.
+   - **Gem-side cleanup landed 2026-04-28**: `CLICK_JS` simplified to `this.click()` (with label-click + summary/details + image-button special cases — see Known Bugs #10, #11 below), `IMPLICIT_SUBMIT_JS` rewritten to click default submit button or fall back to `form.requestSubmit()`, "plain form submission (Lightpanda fetch+swap)" describe block removed from `driver_spec.rb`. ~160 LOC dropped from `node.rb`. `bundle exec rake spec:incremental` → 1396 examples, 0 failures, 97 pending against nightly 5839.
+   - **Origin of the misdiagnosis**: the 2026-04-26 gem commit `35ee402` added a fetch+swap workaround in `CLICK_JS` based on the assumption that `submitForm` doesn't navigate. But `git blame src/browser/Frame.zig` shows `submitForm` has called `scheduleNavigationWithArena` since at least 2026-03-24 — the upstream fix predated the gem workaround by a month. Likely related to the `#id` selector regression (Known Bug #7) attributed to the wrong root cause.
+
+10. **`<input type=image>` click does not submit the form** (real Lightpanda gap, surfaced by 2026-04-28 cleanup)
+    - Native `imageBtn.click()` fires the click event but never schedules a navigation, even though the button has an associated `<form>` and a default `submit` type. Image buttons are HTML4-era — the spec requires the form to be submitted with `name.x` / `name.y` coordinate fields appended.
+    - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) special-cases `<input type=image>` and calls `form.requestSubmit()` after the click. Coordinate fields are NOT appended (Capybara tests don't assert on them), but the form submits. ~5 LOC.
+    - **Wishlist**: file upstream — `Frame.submitForm` should be reachable from the `<input type=image>` click path (probably needs `Element.click()` for image inputs to call into the same submission machinery as `<input type=submit>`).
+
+11. **Textarea field values not normalized to CRLF on form submission** (real Lightpanda gap, surfaced by 2026-04-28 cleanup)
+    - Per HTML's [form-data set algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set), `<textarea>` field values must have line endings normalized to `\r\n` before serialization. Native form submission on Lightpanda sends raw `\n`. Affects both `application/x-www-form-urlencoded` and likely `multipart/form-data`.
+    - **No gem workaround**: pre-normalizing in `Node#set` would over-normalize (textarea would display `\r\n` in the DOM). The previous fetch+swap pipeline did the conversion in JS during form encoding, but native form submission lives in Lightpanda's HTTP layer.
+    - **Spec impact**: 2 skip patterns added in `spec/spec_helper.rb` (`#click_button.*should convert lf to cr/lf in submitted textareas` + `#fill_in should handle newlines in a textarea`).
+    - **Wishlist**: file upstream — `Frame.submitForm` (or wherever the form-data set is constructed) should normalize textarea values per the spec.
 
 ### Open Fix PRs (not yet merged)
 
 - **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
 - **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
-- **PR #2259** (by us): **Page.reload replays POST**. Fixes #2258 — currently `Browser#refresh` (which calls `Page.reload`) silently downgrades a POST navigation to a GET. When merged: removes the `#refresh it reposts` skip pattern in `spec/spec_helper.rb`.
-- **PR #2261** (by us): **handleJavaScriptDialog drives confirm/prompt return values**. Fixes #2260 — currently `accept_modal(:confirm|:prompt)` cannot influence the JS return value (Lightpanda auto-dismisses). When merged: rewires `Browser#prepare_modals` to call `Page.handleJavaScriptDialog` (off the dispatch thread); removes 4 modal skip patterns in `spec/spec_helper.rb`.
-- **PR #2264** (by us): skip FormData entry for `<select>` with no selectedness candidate. When merged: removes the `#click_button on HTML4 form should not serialize a select tag without options` skip pattern.
-- **PR #2267** (by us): clamp `<input type=range>` value to min/max. When merged: removes `#fill_in with input[type="range"]` range-related skip patterns.
-- **PR #2269** (by us): decode CSS escape sequences inside quoted attribute values in selectors. When merged: removes any `[attr="value\\\:foo"]` selector skip patterns (verify which specs were skipped for this reason before removal).
-- **PR #2279** (by us): honor `formaction` / `formmethod` / `formenctype` on submit button. When merged: lets the gem's `CLICK_JS` workaround drop its own override-attribute reads — they'd be honored natively by `form.submit()` once we drop the fetch+swap workaround (see "Recently Merged Fixes Awaiting Nightly" below).
+- **PR #2261** (by us, opened 2026-04-27): **handleJavaScriptDialog drives confirm/prompt return values**. Fixes #2260 — currently `accept_modal(:confirm|:prompt)` cannot influence the JS return value (Lightpanda auto-dismisses). When merged: rewires `Browser#prepare_modals` to call `Page.handleJavaScriptDialog` (off the dispatch thread); removes 4 modal skip patterns in `spec/spec_helper.rb`.
+- **PR #2289** (by us, opened 2026-04-28): **Page.getNavigationHistory + Page.navigateToHistoryEntry**. When merged: `Browser#back` / `#forward` can switch from `history.back()` / `history.forward()` JS to native CDP commands, removing the JS workaround documented in CLAUDE.md.
+- **PR #2286** (by us, opened 2026-04-28): **HTML constraint validation API**. When merged: removes the `#has_field with valid` skip patterns (lines 141-142 of `spec/spec_helper.rb`).
+- **PR #2294** (by us, opened 2026-04-28): **CSS UA stylesheet display:none defaults for unrendered elements** (HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/TITLE + `[type=hidden]`). When merged: lets `_lightpanda.isVisible` (`javascripts/index.js:834-865`) collapse to roughly Cuprite's shape (~20 LOC saved); see Cuprite "Diverged on purpose" entry in `ruby-cdp-peers.md`.
 
 ### Recently Merged Upstream PRs Awaiting a Public Nightly
 
-The public nightly tag last refreshed **2026-04-27 03:34 UTC**, snapshotting build `5816`. The following PRs merged AFTER that build started, so they are present in `lightpanda-io/browser@main` (and in any locally-built binary at sha `ef3305a7` or later) but NOT yet in the publicly-distributed nightly. When a fresh nightly ships (build 5817+), bump `Process::MINIMUM_NIGHTLY_BUILD` and apply the gem-side cleanups below.
+The public nightly tag last refreshed **2026-04-28 03:33 UTC**, snapshotting commit `2bbf23b3` (PR #2280 merge), build **5839**. PRs merged after that timestamp are in `main` but NOT in the publicly-distributed nightly. When the next nightly ships, bump `Process::MINIMUM_NIGHTLY_BUILD` and apply the gem-side cleanups below.
 
-- **PR #2255** (by us, merged 2026-04-27 04:15 UTC): `Network.clearBrowserCookies` accepts empty params; `Network.getAllCookies` added to dispatch. Gem cleanup: drop the per-origin sweep in `Cookies#clear`, switch `Cookies#all` to `Network.getAllCookies`, remove `Browser#visited_origins` / `record_visited_origin` / `sweep_visited_origins` (~50 LOC).
-- **PR #2257** (by us, merged 2026-04-27 10:31 UTC): assigning `window.location.pathname` or `.search` now navigates. Gem cleanup: remove 5 `assert_current_path` / `has_current_path` skip patterns in `spec/spec_helper.rb`.
-- **PR #2253** (by us, merged 2026-04-27 04:20 UTC): `form.requestSubmit()` (no argument) now fires a `SubmitEvent` with `.submitter === null` (was previously `.submitter === form`, breaking Turbo's submitter sniff). Gem-side: the `requestSubmit` polyfill in `lib/capybara/lightpanda/javascripts/index.js:1019-1045` has been dead code since PR #1984 (Mar 25) added native `requestSubmit`; the polyfill's `if (!HTMLFormElement.prototype.requestSubmit)` guard means it's a no-op on any nightly newer than v0.2.7. Worth deleting on the next cleanup pass — purely a JS payload reduction, no behavior change.
-- **PR #2265** (by us, merged 2026-04-27 10:15 UTC): URL fragment inherited across fragment-less redirect. Gem cleanup: remove the `#current_url maintains fragment` skip pattern.
-- **PR #2251** (karlseguin, merged 2026-04-27): same-url navigate now actually reloads (was previously short-circuited as a fragment change even when the fragment didn't change). No direct gem-side action — surfaces as a stability fix for tests that assign `iframe.src = sameUrl` or `location.href = location.href`.
+- **PR #2283** (by us, merged 2026-04-28 08:01 UTC): `Referer` header sent on cross-page navigations. Gem cleanup: remove `#visit should send a referer when following a link`, `#visit should preserve the original referer URL when following a redirect`, `#click_link should follow redirects back to itself` skip patterns (`spec/spec_helper.rb:122-126`).
+- **PR #2292** (by us, merged 2026-04-28 07:46 UTC): `KeyboardEvent.keyCode` and `charCode` legacy attributes implemented (gated on `isTrusted`, plus Enter charCode). Gem cleanup: remove the `node #send_keys should generate key events` skip pattern (`spec/spec_helper.rb:119`).
 
 ### Upstream Open Issues That Affect This Gem
 
@@ -214,7 +214,6 @@ The public nightly tag last refreshed **2026-04-27 03:34 UTC**, snapshotting bui
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed (PR #2078 merged 2026-04-14, more APIs in PR #2208/#2218); SharedWorker still missing and many Worker APIs still unimplemented, so issue stays open. |
-| #2258 | Navigation | `Page.reload` regresses POST navigations to GET. Affects `Browser#refresh` after a POST. Our PR #2259 OPEN. |
 | #2260 | Modal | `Page.handleJavaScriptDialog` cannot influence `confirm()`/`prompt()` return values (Lightpanda auto-dismisses before handler runs). Our PR #2261 OPEN proposes a pre-arm model. |
 
 ### General Limitations
