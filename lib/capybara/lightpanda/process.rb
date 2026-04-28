@@ -3,7 +3,7 @@
 module Capybara
   module Lightpanda
     class Process
-      READY_PATTERN = /server running.*address=(\d+\.\d+\.\d+\.\d+:\d+)/
+      READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
       # First nightly with the cookie/navigation/redirect fixes that let the gem
