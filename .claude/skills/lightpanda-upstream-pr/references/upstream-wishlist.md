@@ -218,6 +218,22 @@ Use this file when:
 - **Gem workaround**: none. The default value is internal to the JS engine when `prompt()` is called and isn't visible to the gem before the dialog opens, so a gem-side fallback isn't possible. Skip-listed: `#accept_prompt should accept the prompt with no message when there is a default`.
 - **Drop-on-fix**: remove the 1 skip pattern.
 
+### A28. `<label>` click does not run activation behavior on associated form control
+
+- **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: clicking a `<label>` whose `for=` references a checkbox/radio fires the click event on the label itself but does not invoke the labeled control's activation behavior — `cb.checked` stays at its prior value. Empirical probe: `<input type=checkbox id=cb1>` + `<label for=cb1>` + `lab.click()` → `{ before: false, after: false }`. Source: `src/browser/webapi/element/Html.zig:310 click()` short-circuits disabled controls then dispatches the bubble event, with no [activation behavior](https://html.spec.whatwg.org/multipage/interaction.html#activation) for `<label>` (HTML §4.10.4 "If the element has no defined activation behavior, run [the labeled control's activation behavior]"). `Label.zig` already exposes `getControl()` for the resolution, just not the activation step.
+- **Want**: when an HTMLLabelElement's click activation runs and is not consumed by an interactive descendant, run the labeled control's activation behavior (i.e., what `el.click()` does for `<input type=checkbox|radio|submit|...>`). Mirrors Chrome's `HTMLLabelElement::DefaultEventHandler`.
+- **Upstream issue**: not yet filed.
+- **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<label>`, resolves the control via `htmlFor`/wrapping, and calls `.click()` on it explicitly (~10 LOC). Capybara's `automatic_label_click` setting depends on this for radio/checkbox tests.
+- **Drop-on-fix**: remove the label branch from `CLICK_JS`. ~10 LOC.
+
+### A29. `<summary>` click does not toggle parent `<details>.open`
+
+- **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: clicking a `<summary>` element fires the click event but does not toggle the parent `<details>`'s `open` attribute. Empirical probe: `<details><summary>` + `sum.click()` → `{ before: false, after: false }`. `Details.zig` exposes `getOpen`/`setOpen` but does not register a click activation handler on `<summary>` children. Per [HTML §4.11.1.2 "Activation behavior of `<summary>`"](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-summary-element), the activation behavior is "if the element is a summary element that is a child of a details element, toggle the parent's `open` attribute".
+- **Want**: register an activation behavior on `<summary>` that toggles `parentElement.open` when the parent is a `<details>` and the summary is the first such child. Should also fire the `toggle` event on the details, per spec, but Capybara tests only assert on the `open` attribute.
+- **Upstream issue**: not yet filed.
+- **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<summary>`, walks to parent `<details>`, and flips `open` after dispatching the click (~6 LOC).
+- **Drop-on-fix**: remove the summary/details branch from `CLICK_JS`. ~6 LOC.
+
 ---
 
 ## B. Missing CDP / DOM methods
