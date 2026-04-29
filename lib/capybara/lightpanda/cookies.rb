@@ -5,6 +5,8 @@ require "yaml"
 module Capybara
   module Lightpanda
     class Cookies
+      include Enumerable
+
       # Typed wrapper around a CDP cookie hash so callers don't have to remember
       # the camelCase keys (`httpOnly`, `sameSite`, …) the CDP returns. Mirrors
       # ferrum's Cookies::Cookie. `attributes` exposes the raw hash for callers
@@ -62,8 +64,17 @@ module Capybara
         (result["cookies"] || []).map { |c| Cookie.new(c) }
       end
 
+      # Yields each Cookie. Powers `Enumerable` (so callers can do
+      # `cookies.find { … }`, `cookies.select { … }`, `cookies.to_a`, …
+      # without going through `all` first).
+      def each(&block)
+        return enum_for(:each) unless block
+
+        all.each(&block)
+      end
+
       def get(name)
-        all.find { |cookie| cookie.name == name }
+        find { |cookie| cookie.name == name }
       end
 
       def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, expires: nil)

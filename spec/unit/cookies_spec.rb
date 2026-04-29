@@ -139,4 +139,34 @@ RSpec.describe Capybara::Lightpanda::Cookies do
       end
     end
   end
+
+  describe "Enumerable" do
+    let(:browser) { instance_double("Browser") }
+    let(:cookies) { described_class.new(browser) }
+
+    let(:raw_cookies) do
+      [
+        { "name" => "a", "value" => "1", "domain" => ".example.com", "path" => "/" },
+        { "name" => "b", "value" => "2", "domain" => ".other.com", "path" => "/" },
+      ]
+    end
+
+    before do
+      allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => raw_cookies)
+    end
+
+    it "yields each cookie" do
+      yielded = cookies.map(&:name)
+      expect(yielded).to eq(%w[a b])
+    end
+
+    it "supports Enumerable methods like find/select/map" do
+      expect(cookies.find { |c| c.name == "b" }.value).to eq("2")
+      expect(cookies.select { |c| c.domain.include?("example") }.map(&:name)).to eq(["a"])
+    end
+
+    it "returns an Enumerator when called without a block" do
+      expect(cookies.each).to be_a(Enumerator)
+    end
+  end
 end
