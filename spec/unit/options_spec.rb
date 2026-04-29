@@ -19,6 +19,10 @@ RSpec.describe Capybara::Lightpanda::Options do
       expect(options.timeout).to eq(15)
     end
 
+    it "uses default handshake_timeout" do
+      expect(options.handshake_timeout).to eq(5)
+    end
+
     it "uses default process_timeout" do
       expect(options.process_timeout).to eq(10)
     end
@@ -78,7 +82,8 @@ RSpec.describe Capybara::Lightpanda::Options do
     it "includes all standard options" do
       options = described_class.new
       hash = options.to_h
-      expect(hash).to include(:host, :port, :timeout, :process_timeout, :window_size, :browser_path, :headless)
+      expect(hash).to include(:host, :port, :timeout, :handshake_timeout, :process_timeout, :window_size,
+                              :browser_path, :headless)
     end
 
     it "excludes ws_url when not explicitly set" do

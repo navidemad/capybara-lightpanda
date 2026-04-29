@@ -133,7 +133,7 @@ module Capybara
         def read_handshake_response
           started_at = Time.now
 
-          while @status != :open && Time.now - started_at < @options.timeout
+          while @status != :open && Time.now - started_at < @options.handshake_timeout
             next unless @socket.wait_readable(0.1)
 
             begin
@@ -144,7 +144,9 @@ module Capybara
             end
           end
 
-          raise TimeoutError, "WebSocket connection timeout" unless @status == :open
+          return if @status == :open
+
+          raise TimeoutError, "WebSocket handshake timed out after #{@options.handshake_timeout}s"
         end
 
         def parse_message(data)
