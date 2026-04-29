@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "open3"
+
 module Capybara
   module Lightpanda
     class Process
@@ -212,23 +214,42 @@ module Capybara
         @pid = nil
       end
 
+      # Auto-recover when a previous Lightpanda is still bound to our port.
+      # Best-effort: relies on `lsof` to map port → pid (macOS / most Linux
+      # distros). Where `lsof` isn't on PATH, we surface a clear error rather
+      # than silently failing the retry — the user can free the port manually.
       def kill_process_on_port(port)
         port = port.to_i
         return if port <= 0
 
-        pids = `lsof -ti tcp:#{port} 2>/dev/null`.strip
-        return if pids.empty?
+        pids = pids_listening_on(port)
+        if pids.nil?
+          raise BinaryError,
+                "Port #{port} is in use and `lsof` is unavailable to identify the holder. " \
+                "Free the port manually or install lsof to enable automatic recovery."
+        end
 
-        pids.split("\n").each do |pid_str|
-          pid = pid_str.strip.to_i
-          next if pid <= 0
-
+        pids.each do |pid|
           ::Process.kill("TERM", pid)
         rescue Errno::ESRCH, Errno::EPERM
           nil
         end
 
         sleep 0.5
+      end
+
+      # Returns an array of PIDs holding the TCP port, [] if none, or nil if
+      # `lsof` itself isn't available on this system.
+      def pids_listening_on(port)
+        stdout, _, status = Open3.capture3("lsof", "-ti", "tcp:#{port}")
+        return [] unless status.success?
+
+        stdout.split("\n").filter_map do |line|
+          pid = line.strip.to_i
+          pid.positive? ? pid : nil
+        end
+      rescue Errno::ENOENT
+        nil
       end
 
       # Class method so the finalizer proc doesn't capture `self` (which
