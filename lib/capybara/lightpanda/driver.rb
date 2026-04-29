@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "forwardable"
+require "uri"
 
 module Capybara
   module Lightpanda
@@ -16,6 +17,7 @@ module Capybara
         @app = app
         @options = options
         @browser = nil
+        @started = false
       end
 
       def browser
@@ -30,6 +32,7 @@ module Capybara
       end
 
       def visit(url)
+        @started = true
         browser.go_to(url)
       end
 
@@ -84,11 +87,26 @@ module Capybara
         unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args)))
       end
 
+      # -- Network Inspection --
+
+      # Network tracker (lazily auto-enabled). Exposes `traffic`, `clear`,
+      # `wait_for_idle`, header overrides, etc. Cuprite parity.
+      def network
+        browser.network
+      end
+
+      # Block until in-flight HTTP traffic settles. Auto-enables the tracker
+      # on first call so callers don't have to remember to flip it on.
+      # Returns true on success, false on timeout.
+      def wait_for_network_idle(timeout: 5, connections: 0)
+        network.enable
+        network.wait_for_idle(timeout: timeout, connections: connections)
+      end
+
       # -- Cookie Management --
 
       def set_cookie(name, value, **options)
-        cookie_options = {}
-        cookie_options[:domain] = options[:domain] if options[:domain]
+        cookie_options = { domain: options[:domain] || default_domain }
         cookie_options[:path] = options[:path] if options[:path]
         cookie_options[:secure] = options[:secure] if options.key?(:secure)
         if options.key?(:httpOnly) || options.key?(:http_only)
@@ -182,6 +200,7 @@ module Capybara
         browser.clear_frames
         browser.reset_modals
         browser.cookies.clear
+        browser.network.clear
         browser.go_to("about:blank")
       rescue StandardError
         @browser&.quit
@@ -230,6 +249,24 @@ module Capybara
       # `{objectId: …}` for the CDP payload. Cuprite's `native_args` pattern.
       def native_args(args)
         args.map { |a| a.is_a?(Capybara::Node::Element) ? a.base : a }
+      end
+
+      # Lightpanda's `Network.setCookie` requires either `domain` or `url`
+      # (storage.zig → Cookie.parseDomain). When the caller doesn't supply one,
+      # use the host of the current page if any, else `Capybara.app_host`,
+      # else loopback. Cuprite parity — lets pre-visit cookie setup just work.
+      def default_domain
+        candidate = (@started && safe_uri_host(browser.current_url)) ||
+                    safe_uri_host(Capybara.app_host)
+        candidate || "127.0.0.1"
+      end
+
+      def safe_uri_host(url)
+        return nil if url.nil? || url.empty? || url == "about:blank"
+
+        URI(url).host
+      rescue URI::InvalidURIError
+        nil
       end
 
       # Walk through evaluate-script results turning DOM-node markers (the
