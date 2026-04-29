@@ -31,7 +31,6 @@ module Capybara
         @session_id = nil
         @started = false
         @page_events_enabled = false
-        @modal_responses = []
         @modal_messages = []
         @modal_handler_installed = false
         @frame_stack = []
@@ -461,14 +460,14 @@ module Capybara
       end
 
       # -- Modal/Dialog Support --
-      # Lightpanda auto-dismisses dialogs in headless mode: alert→OK,
-      # confirm→false, prompt→null. Page.javascriptDialogOpening fires
-      # (since 2026-04-03), so we capture messages for find_modal, but
-      # Page.handleJavaScriptDialog always errors with "No dialog is showing"
-      # and we never call it (the dispatch thread cannot make synchronous
-      # CDP calls without deadlocking). @modal_responses is retained so
-      # accept_modal/dismiss_modal preserve their API contract; the
-      # accept/dismiss choice is informational only.
+      # Lightpanda's JS dialogs (alert/confirm/prompt) are driven via the
+      # `LP.handleJavaScriptDialog` pre-arm model (PR #2261, nightly ≥5900):
+      # the client sends `LP.handleJavaScriptDialog {accept, promptText}`
+      # BEFORE the action that triggers the dialog, and the response is
+      # consumed when the dialog opens. `Page.javascriptDialogOpening` still
+      # fires, so we capture the message text for `find_modal`. Single-shot:
+      # `pending_dialog_response` is one slot, so a second pre-arm before
+      # the first dialog opens overwrites the first.
 
       def prepare_modals
         return if @modal_handler_installed
@@ -477,20 +476,21 @@ module Capybara
 
         on("Page.javascriptDialogOpening") do |params|
           @modal_messages << { type: params["type"], message: params["message"] }
-          @modal_responses.shift
         end
 
         @modal_handler_installed = true
       end
 
-      def accept_modal(type, text: nil)
+      def accept_modal(_type, text: nil)
         prepare_modals
-        @modal_responses << { accept: true, text: text, type: type.to_s }
+        params = { accept: true }
+        params[:promptText] = text if text
+        page_command("LP.handleJavaScriptDialog", **params)
       end
 
-      def dismiss_modal(type)
+      def dismiss_modal(_type)
         prepare_modals
-        @modal_responses << { accept: false, type: type.to_s }
+        page_command("LP.handleJavaScriptDialog", accept: false)
       end
 
       def find_modal(type, text: nil, wait: options.timeout)
@@ -514,7 +514,6 @@ module Capybara
       end
 
       def reset_modals
-        @modal_responses.clear
         @modal_messages.clear
       end
 
