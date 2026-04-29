@@ -40,13 +40,12 @@ Use this file when:
 - **Gem workaround**: removed alongside A1 — `Cookies#all` uses `Network.getAllCookies` for the cross-origin case.
 - **Drop-on-fix**: N/A — done alongside A1.
 
-### A3. `Page.handleJavaScriptDialog` always errors
+### A3. `Page.handleJavaScriptDialog` always errors — FIXED + SHIPPED + GEM CLEANED UP (one residual)
 
-- **Today**: returns `-32000 No dialog is showing`. Dialogs auto-dismiss in headless mode (alert→OK, confirm→false, prompt→null) before a handler can intervene. The CDP method exists since commit 7208934b (2026-04-06) but has no effect.
-- **Want**: support deferred dialog handling — `accept`/`promptText` should override the auto-dismiss return value.
-- **Upstream issue**: #2260, **Upstream PR**: #2261 (open as of 2026-04-27, by us — pre-arm model).
-- **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `prepare_modals` / `accept_modal` / `dismiss_modal` / `find_modal` capture messages via `Page.javascriptDialogOpening` for matching, but never call `handleJavaScriptDialog`. Result: `accept_modal(:confirm|:prompt)` cannot influence the JS return value.
-- **Drop-on-fix**: rewire modal handlers to actually call `Page.handleJavaScriptDialog` (must be off the dispatch thread to avoid the synchronous-CDP-from-event-handler deadlock). Removes 4 skip-list patterns in `spec/spec_helper.rb` (`#accept_confirm`, `#accept_prompt`, `#accept_alert if text doesn't match`, `#accept_alert nested modals`). ~30 LOC + skip patterns.
+- **Resolution**: `Page.handleJavaScriptDialog` deliberately stays as `-32000 No dialog is showing` (commit `8cc82d1d`, 2026-04-29) and points clients at the new `LP.handleJavaScriptDialog` pre-arm method. **PR #2261 MERGED 2026-04-29**, in nightly ≥5900. Pre-arm model: client sends `LP.handleJavaScriptDialog {accept, promptText}` BEFORE the action that triggers the dialog; Lightpanda's BC stashes the response in `pending_dialog_response` (single slot) and consumes it when the dialog opens.
+- **Gem cleanup landed 2026-04-29**: `Browser#accept_modal` / `#dismiss_modal` (`lib/capybara/lightpanda/browser.rb`) send the LP command immediately on call (which lands before the `Driver#accept_modal { block.call }` runs). `prepare_modals` keeps the `Page.javascriptDialogOpening` handler for message capture (drives `find_modal`). `@modal_responses` queue dropped. 4 skip patterns removed in `spec/spec_helper.rb` (`#accept_confirm`, `#accept_prompt should accept the prompt`, `#accept_prompt should allow special characters`, `#accept_alert nested modals`).
+- **Residual gap (A27)**: when `promptText` is null/missing, Lightpanda returns null/empty rather than falling back to the JS prompt's `defaultText` argument. Skip pattern `#accept_prompt should accept the prompt with no message when there is a default` retained. See A27 below.
+- **Drop-on-fix**: N/A — done. (A27 covers the residual.)
 
 ### A4. ~~`form.submit()` does not navigate~~ — NOT A BUG (gem misdiagnosis, retracted 2026-04-27); GEM CLEANUP DONE 2026-04-28
 
@@ -211,6 +210,14 @@ Use this file when:
 - **Gem workaround**: none. Pre-normalizing in `Node#set` would over-normalize (textarea would display `\r\n` chars). The fix has to live in Lightpanda's HTTP layer. Skip-listed: `#click_button.*should convert lf to cr/lf in submitted textareas`, `#fill_in should handle newlines in a textarea`.
 - **Drop-on-fix**: remove the 2 skip patterns.
 
+### A27. `LP.handleJavaScriptDialog` doesn't fall back to dialog `defaultText` when `promptText` is null
+
+- **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: a JS prompt has the form `prompt(message, defaultText)` — when the user accepts without typing, the prompt's return value is `defaultText` (or `""` if absent). Pre-arming `LP.handleJavaScriptDialog {accept: true}` with no `promptText` makes Lightpanda return null/empty regardless of the dialog's `defaultText` argument. Surfaced 2026-04-29 by the Capybara spec `#accept_prompt should accept the prompt with no message when there is a default`, which expects "John Smith" (the dialog's defaultText) and gets nothing back from the page.
+- **Want**: when `pending_dialog_response.prompt_text` is null AND `accept` is true, the prompt's return value should be the dialog's `defaultText` (i.e., the second argument to `prompt()`). When `accept` is false, return null per spec regardless. Behavior to mirror Chrome.
+- **Upstream issue**: not yet filed.
+- **Gem workaround**: none. The default value is internal to the JS engine when `prompt()` is called and isn't visible to the gem before the dialog opens, so a gem-side fallback isn't possible. Skip-listed: `#accept_prompt should accept the prompt with no message when there is a default`.
+- **Drop-on-fix**: remove the 1 skip pattern.
+
 ---
 
 ## B. Missing CDP / DOM methods
@@ -247,11 +254,11 @@ Use this file when:
 
 Three independent issues:
 
-  1. **`KeyboardEvent.keyCode` and `charCode` legacy attributes hardcoded to 0** — FIXED UPSTREAM, AWAITING NEXT NIGHTLY. **Upstream issue**: #2291, **Upstream PR**: **#2292 MERGED 2026-04-28 07:46 UTC, by us, NOT in current nightly** (built 03:33 UTC, ~4h before merge). Implementation gates on `isTrusted` (CDP-driven events get correct keyCode), and adds Enter charCode. Skip pattern `node #send_keys should generate key events` remains until next nightly publishes.
+  1. **`KeyboardEvent.keyCode` and `charCode` legacy attributes** — PARTIALLY FIXED, RESIDUAL ISSUE. **PR #2292 MERGED 2026-04-28** (in nightly ≥5900, by us) implements `keyCode`/`charCode` and adds Enter charCode, BUT gates on `isTrusted: true`. Verified empirically 2026-04-29 against build 5918: events from `Input.dispatchKeyEvent` still report `keyCode: 0` because `isTrusted` is false on synthetic CDP-dispatched events. The Capybara test `node #send_keys should generate key events` asserts on these synthetic events, so it still fails. **Want**: loosen the gate so `Input.dispatchKeyEvent` emits keyCode/charCode regardless of `isTrusted`. Browsers don't normally expose synthetic events with isTrusted=true (it's a security boundary), but CDP-driven test environments are expected to surface the values. Cross-check Chrome: `Input.dispatchKeyEvent` emits events with keyCode populated. **Upstream issue**: not yet filed (was #2291, but that's resolved by #2292 — needs a follow-up issue for the CDP path). Skip pattern `node #send_keys should generate key events` retained.
   2. **`Input.dispatchKeyEvent` for `ArrowLeft`/`ArrowRight`/`Home`/`End` doesn't move the input caret**. Fails `should send special characters` (which uses `:left` to position the cursor mid-string before inserting a char). **Not yet filed.**
   3. **Gem-side bug** (separate — handled in 2b623164): `Capybara::Lightpanda::Keyboard#type` tracks standalone modifier symbols as sticky modifiers. Modifier flags propagate via CDP correctly; this was a Ruby-side state-tracking issue.
 - **Gem workaround**: none. Skip-listed: `node #send_keys should send special characters` (#2), `should generate key events` (#1).
-- **Drop-on-fix**: remove the `should generate key events` skip pattern when #2292 ships in nightly. `should send special characters` requires sub-item (2) to be filed and fixed.
+- **Drop-on-fix**: remove the `should generate key events` skip pattern when #1 is fully resolved. `should send special characters` requires sub-item (2) to be filed and fixed.
 
 ### B6. `validity` API not implemented
 

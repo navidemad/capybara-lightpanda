@@ -28,9 +28,9 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
-| **LP** | lp.zig | Lightpanda-specific extensions |
+| **LP** | lp.zig | Lightpanda-specific extensions; full enum: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (PR #2261, merged 2026-04-29 — pre-arm dialog response, see Recently Merged below) |
 | **Network** | network.zig | Cookies, request/response interception |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992), addScriptToEvaluateOnNewDocument (PR #1993), `handleJavaScriptDialog` exists but always errors (auto-dismiss, commit 7208934b 2026-04-06), `javascriptDialogOpening` event NOW EMITTED (commit 95f80c96 2026-04-03); NO history methods |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), reload (PR #1992), addScriptToEvaluateOnNewDocument (PR #1993), `handleJavaScriptDialog` exists but always errors with `-32000 No dialog is showing` and points clients at `LP.handleJavaScriptDialog` (commit 8cc82d1d, 2026-04-29), `javascriptDialogOpening` event emitted (commit 95f80c96 2026-04-03); NO history methods (PR #2289 OPEN) |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
@@ -52,6 +52,10 @@ DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
 DOM.describeNode
 Network.getAllCookies        Network.setCookie
 Network.deleteCookies        Network.clearBrowserCookies
+Network.enable               Network.disable
+Network.setExtraHTTPHeaders  Network.requestWillBeSent (event)
+Network.responseReceived (event)
+LP.handleJavaScriptDialog    (planned — pre-arm modal responses; gem cleanup pending)
 ```
 
 ### CDP Methods NOT Available (gem uses JS workarounds)
@@ -66,17 +70,14 @@ Page.navigateToHistoryEntry  → gem uses history.back()/history.forward() JS in
 ### CDP Methods Partially Implemented (event but no handler)
 
 ```
-Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS (commit 7208934b, 2026-04-06) but
-                                always returns "-32000 No dialog is showing" because
-                                dialogs auto-dismiss in headless mode. The
-                                Page.javascriptDialogOpening EVENT IS NOW EMITTED
-                                (commit 95f80c96, 2026-04-03). Gem captures messages
-                                in the event handler but does NOT call
-                                handleJavaScriptDialog — calling synchronous CDP
-                                commands from the dispatch thread deadlocks the
-                                client. accept_modal(:alert) and dismiss_modal()
-                                work; accept_modal(:confirm|:prompt) cannot override
-                                the auto-dismiss return value.
+Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS but DELIBERATELY ALWAYS ERRORS
+                                with "-32000 No dialog is showing" (commit 8cc82d1d,
+                                2026-04-29). Lightpanda-aware clients pre-arm the
+                                accept/promptText response via LP.handleJavaScriptDialog
+                                BEFORE the action that triggers the dialog (see Recently
+                                Implemented below). The Page.javascriptDialogOpening
+                                event is emitted (commit 95f80c96, 2026-04-03) and the
+                                gem still captures the message text from there.
 ```
 
 ### CDP Methods Recently Implemented
@@ -90,6 +91,26 @@ Network.getAllCookies          → IMPLEMENTED (PR #2255, merged 2026-04-27, in 
                                   Gem now calls this in Cookies#all.
 Network.clearBrowserCookies    → ACCEPTS empty params (PR #2255, merged 2026-04-27, in nightly ≥5817).
                                   Gem now calls this in Cookies#clear.
+LP.handleJavaScriptDialog      → IMPLEMENTED (PR #2261, merged 2026-04-29, in nightly ≥5900,
+                                  closes #2260). Pre-arm model: client sends
+                                  `LP.handleJavaScriptDialog {accept, promptText}` BEFORE
+                                  triggering the action that opens a dialog; the response
+                                  is stashed in `BrowserContext.pending_dialog_response`
+                                  and consumed when the dialog opens. Bypasses the
+                                  dispatch-thread deadlock that prevented the gem from
+                                  calling `Page.handleJavaScriptDialog` synchronously.
+                                  Gem cleanup pending — see "Recently Merged Upstream PRs".
+KeyboardEvent.keyCode/charCode → IMPLEMENTED (PR #2292, merged 2026-04-28, in nightly ≥5900).
+                                  Gated on `isTrusted`; Enter sets charCode.
+Browser sends Referer          → IMPLEMENTED (PR #2283, merged 2026-04-28, in nightly ≥5900).
+                                  Cross-page navigation requests now carry the originating
+                                  page's URL as Referer.
+HTMLFrameSetElement stub       → IMPLEMENTED (PR #2306, merged 2026-04-28, in nightly ≥5900,
+                                  closes #2249). Older Angular 9 SPAs no longer fail
+                                  completely on document construction.
+<input type=image> click       → SUBMITS THE FORM (PR #2312, merged 2026-04-29, in nightly ≥5900,
+                                  closes #2311). Native `imageBtn.click()` now schedules
+                                  navigation through `Frame.submitForm`.
 ```
 
 ### Available CDP Methods (not yet used by this gem)
@@ -106,7 +127,7 @@ DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
-Network.setExtraHTTPHeaders  Network.setCacheDisabled (stub)
+Network.setCacheDisabled (stub)
 Network.setUserAgentOverride
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
@@ -120,6 +141,9 @@ Target.setDiscoverTargets (stub)  Target.activateTarget (stub)
 Target.attachToBrowserTarget Target.detachFromTarget     Target.sendMessageToTarget
 LP.getSemanticTree           LP.getInteractiveElements
 LP.getStructuredData         LP.waitForSelector
+LP.getMarkdown               LP.getNodeDetails
+LP.detectForms               LP.clickNode
+LP.fillNode                  LP.scrollNode
 ```
 
 ## Known Bugs and Limitations
@@ -175,51 +199,53 @@ LP.getStructuredData         LP.waitForSelector
    - **Gem-side cleanup landed 2026-04-28**: `CLICK_JS` simplified to `this.click()` (with label-click + summary/details + image-button special cases — see Known Bugs #10, #11 below), `IMPLICIT_SUBMIT_JS` rewritten to click default submit button or fall back to `form.requestSubmit()`, "plain form submission (Lightpanda fetch+swap)" describe block removed from `driver_spec.rb`. ~160 LOC dropped from `node.rb`. `bundle exec rake spec:incremental` → 1396 examples, 0 failures, 97 pending against nightly 5839.
    - **Origin of the misdiagnosis**: the 2026-04-26 gem commit `35ee402` added a fetch+swap workaround in `CLICK_JS` based on the assumption that `submitForm` doesn't navigate. But `git blame src/browser/Frame.zig` shows `submitForm` has called `scheduleNavigationWithArena` since at least 2026-03-24 — the upstream fix predated the gem workaround by a month. Likely related to the `#id` selector regression (Known Bug #7) attributed to the wrong root cause.
 
-10. **`<input type=image>` click does not submit the form** (real Lightpanda gap, surfaced by 2026-04-28 cleanup)
-    - Native `imageBtn.click()` fires the click event but never schedules a navigation, even though the button has an associated `<form>` and a default `submit` type. Image buttons are HTML4-era — the spec requires the form to be submitted with `name.x` / `name.y` coordinate fields appended.
-    - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) special-cases `<input type=image>` and calls `form.requestSubmit()` after the click. Coordinate fields are NOT appended (Capybara tests don't assert on them), but the form submits. ~5 LOC.
-    - **Wishlist**: file upstream — `Frame.submitForm` should be reachable from the `<input type=image>` click path (probably needs `Element.click()` for image inputs to call into the same submission machinery as `<input type=submit>`).
+10. ~~**`<input type=image>` click does not submit the form**~~ — RESOLVED upstream by PR #2312 (merged 2026-04-29, closes #2311, in nightly ≥5900). Native `imageBtn.click()` routes through `Frame.submitForm`. Gem cleanup landed 2026-04-29 — image-button branch removed from `CLICK_JS` (`lib/capybara/lightpanda/node.rb`).
 
-11. **Textarea field values not normalized to CRLF on form submission** (real Lightpanda gap, surfaced by 2026-04-28 cleanup)
-    - Per HTML's [form-data set algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set), `<textarea>` field values must have line endings normalized to `\r\n` before serialization. Native form submission on Lightpanda sends raw `\n`. Affects both `application/x-www-form-urlencoded` and likely `multipart/form-data`.
-    - **No gem workaround**: pre-normalizing in `Node#set` would over-normalize (textarea would display `\r\n` in the DOM). The previous fetch+swap pipeline did the conversion in JS during form encoding, but native form submission lives in Lightpanda's HTTP layer.
-    - **Spec impact**: 2 skip patterns added in `spec/spec_helper.rb` (`#click_button.*should convert lf to cr/lf in submitted textareas` + `#fill_in should handle newlines in a textarea`).
-    - **Wishlist**: file upstream — `Frame.submitForm` (or wherever the form-data set is constructed) should normalize textarea values per the spec.
+11. ~~**Textarea field values not normalized to CRLF on form submission**~~ — RESOLVED upstream by PR #2308 (merged 2026-04-29, closes #2307). `KeyValueList.urlEncode` normalizes LF→CRLF per the HTML form-data set algorithm. Gem cleanup landed 2026-04-29 — textarea skip patterns removed from `spec/spec_helper.rb`. **Distribution caveat**: `MINIMUM_NIGHTLY_BUILD = 5918` requires the public nightly to refresh past 04-29's cut (~2026-04-30 03:33 UTC). End-users on 04-29 nightly (build 5900) will fail the version check until the next nightly publishes.
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2237**: **window.open** — limited support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively (login popups). Capybara tests that open popups would previously have errored — they'd now work for the duration of the parent page.
 - **PR #2157**: **Feat: add full SVG DOM support** — could affect tests that interact with SVG elements (icons, charts).
 - **PR #2077**: **fix: Target.attachToTarget returns unique session id per call** — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
-- **PR #2261** (by us, opened 2026-04-27): **handleJavaScriptDialog drives confirm/prompt return values**. Fixes #2260 — currently `accept_modal(:confirm|:prompt)` cannot influence the JS return value (Lightpanda auto-dismisses). When merged: rewires `Browser#prepare_modals` to call `Page.handleJavaScriptDialog` (off the dispatch thread); removes 4 modal skip patterns in `spec/spec_helper.rb`.
 - **PR #2289** (by us, opened 2026-04-28): **Page.getNavigationHistory + Page.navigateToHistoryEntry**. When merged: `Browser#back` / `#forward` can switch from `history.back()` / `history.forward()` JS to native CDP commands, removing the JS workaround documented in CLAUDE.md.
-- **PR #2286** (by us, opened 2026-04-28): **HTML constraint validation API**. When merged: removes the `#has_field with valid` skip patterns (lines 141-142 of `spec/spec_helper.rb`).
-- **PR #2294** (by us, opened 2026-04-28): **CSS UA stylesheet display:none defaults for unrendered elements** (HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/TITLE + `[type=hidden]`). When merged: lets `_lightpanda.isVisible` (`javascripts/index.js:834-865`) collapse to roughly Cuprite's shape (~20 LOC saved); see Cuprite "Diverged on purpose" entry in `ruby-cdp-peers.md`.
+- **PR #2286** (by us, opened 2026-04-28): **HTML constraint validation API**. When merged: removes the `#has_field with valid` skip patterns (`spec/spec_helper.rb:138-139`).
 - **PR #2305** (by us, opened 2026-04-28): **XPath 1.0 evaluator** (`Document.evaluate`, `XPathResult`/`XPathEvaluator`/`XPathExpression`, `DOM.performSearch` XPath routing). ~3,470 LOC Zig port of the gem polyfill; 91-case conformance battery passes. When merged: drop the entire `XPathEval` IIFE and `document.evaluate` polyfill from `index.js` (~700 LOC); also fixes XPath-in-iframes.
-- **PR #2308** (by us, opened 2026-04-28): **textarea LF→CRLF normalization** in `KeyValueList.urlEncode` (form-data set encoding). Closes #2307. When merged: remove `#click_button.*should convert lf to cr/lf in submitted textareas`, `#fill_in should handle newlines in a textarea` skip patterns from `spec/spec_helper.rb`.
-- **PR #2310** (by us, opened 2026-04-29): **`HTMLElement.isContentEditable` IDL attribute** with ancestor inheritance walk. Closes #2309. When merged: replace `_lightpanda.isContentEditable` polyfill with native read at `EDITABLE_HOST_JS` constant in `lib/capybara/lightpanda/node.rb` (~12 LOC saved).
-- **PR #2312** (by us, opened 2026-04-29): **`<input type=image>` click routes into form submission**. Closes #2311. When merged: drop the image-button branch in `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) — ~5 LOC saved.
-- **PR #2315** (by us, opened 2026-04-29): **`:disabled` / `:enabled` selector matchers honor ancestor `<fieldset disabled>` and `<optgroup disabled>` (HTML "concept-fe-disabled" + "concept-option-disabled")**. Closes #2314. When merged: drop the `_lightpanda.isDisabled` polyfill (`lib/capybara/lightpanda/javascripts/index.js:901-928`) and inline `el.matches(':disabled')` at `DISABLED_JS` in `lib/capybara/lightpanda/node.rb:526` — ~28 LOC saved.
+- **PR #2310** (by us, opened 2026-04-29): **`HTMLElement.isContentEditable` IDL attribute** with ancestor inheritance walk. Closes #2309. When merged: replace `_lightpanda.isContentEditable` polyfill with native read at `EDITABLE_HOST_JS` constant in `lib/capybara/lightpanda/node.rb:524` (`isContentEditable: function(el) {…}` at `javascripts/index.js:935-947`, ~12 LOC saved).
 
-### Recently Merged Upstream PRs Awaiting a Public Nightly
+### Recently Merged Upstream PRs
 
-The public nightly tag last refreshed **2026-04-28 03:33 UTC**, snapshotting commit `2bbf23b3` (PR #2280 merge), build **5839**. PRs merged after that timestamp are in `main` but NOT in the publicly-distributed nightly. When the next nightly ships, bump `Process::MINIMUM_NIGHTLY_BUILD` and apply the gem-side cleanups below.
+Public nightly refreshed **2026-04-29 03:33 UTC** at commit `78babf40` (PR #2261 merge), build **5900**. Five additional PRs merged later on 2026-04-29 (#2237, #2294, #2308, #2315, #2319) and are in `main` HEAD `e981ec75` (build 5918) but post-cut, so they ship in the next public nightly (~2026-04-30 03:33 UTC).
 
-- **PR #2283** (by us, merged 2026-04-28 08:01 UTC): `Referer` header sent on cross-page navigations. Gem cleanup: remove `#visit should send a referer when following a link`, `#visit should preserve the original referer URL when following a redirect`, `#click_link should follow redirects back to itself` skip patterns (`spec/spec_helper.rb:122-126`).
-- **PR #2292** (by us, merged 2026-04-28 07:46 UTC): `KeyboardEvent.keyCode` and `charCode` legacy attributes implemented (gated on `isTrusted`, plus Enter charCode). Gem cleanup: remove the `node #send_keys should generate key events` skip pattern (`spec/spec_helper.rb:119`).
+Gem-side cleanups for all of these landed 2026-04-29 in one pass against a locally-built `lightpanda 1.0.0-dev.5918+e981ec75`. `Process::MINIMUM_NIGHTLY_BUILD = 5918`, so end-users on 04-29 nightly (5900) hit the version check until 04-30 nightly publishes — this is acceptable because the gem isn't widely used yet.
+
+| PR | Description | Gem cleanup landed |
+|---|---|---|
+| #2261 | `LP.handleJavaScriptDialog` pre-arm (closes #2260) | `Browser#accept_modal`/`#dismiss_modal` rewired to send LP command before the action; 4 modal skip patterns dropped |
+| #2283 | `Referer` on cross-page navigation | 4 referer skip patterns dropped (form-submit Referer ALSO works — no skip needed) |
+| #2292 | `KeyboardEvent.keyCode`/`charCode` | `node #send_keys should generate key events` skip dropped |
+| #2306 | `HTMLFrameSetElement` stub (closes #2249) | No direct gem change |
+| #2312 | `<input type=image>` click submits form (closes #2311) | Image-button branch dropped from `CLICK_JS` |
+| #2294 | UA stylesheet `display:none` defaults (post-cut) | `_lightpanda.isVisible` collapsed to ~Cuprite shape (~20 LOC saved) |
+| #2308 | Textarea LF→CRLF in `KeyValueList.urlEncode` (post-cut, closes #2307) | 2 textarea skip patterns dropped |
+| #2315 | `:disabled` honors fieldset/optgroup ancestors (post-cut, closes #2314) | `_lightpanda.isDisabled` polyfill dropped (~28 LOC); `DISABLED_JS` now inlines `el.matches(':disabled')` |
+| #2237 | `window.open` partial support (post-cut) | No direct gem change |
+| #2319 | `Window.close` drops queued navigation (post-cut) | No direct gem change |
+
+Skip-pattern audit run 2026-04-29 against build 5918 found 6 obsolete patterns (5 `#attach_file` cases that don't actually upload, plus form-submit Referer). All narrowed in the same pass — `/#attach_file/` was split into 17 explicit patterns matching only the cases that hit the missing `Page.setFileInputFiles` CDP method.
 
 ### Upstream Open Issues That Affect This Gem
 
 | Issue | Impact | Description |
 |---|---|---|
-| #2187 | CDP | **`Runtime.evaluate` after click-driven navigation fails with "Cannot find default execution context"**. DIRECTLY RELEVANT: our `Node#call` already wraps in `Utils.with_retry(errors: [NoExecutionContextError], max: 3, wait: 0.1)` and the driver's `invalid_element_errors` includes `NoExecutionContextError`. Keep retry logic until this is fixed. |
+| #2187 | CDP | **`Runtime.evaluate` after click-driven navigation fails with "Cannot find default execution context"**. DIRECTLY RELEVANT: `Node#call` wraps every CDP call in `Browser#with_default_context_wait`, which does a single event-driven retry (waits for `Runtime.executionContextCreated` with `auxData.isDefault: true`, then yields again). The driver's `invalid_element_errors` also includes `NoExecutionContextError` so Capybara's `automatic_reload` can re-find the node. Keep both layers until this is fixed. |
 | #2175 | JS/CDP | **Implement `<input type="file">` support**. Aligned with our existing `NotImplementedError` in `Node#set` for file inputs. |
 | #2173 | Crash | `TargetClosedError` navigating to React apps via CDP — browser crashes. Our `handle_navigation_crash` reconnect logic covers this, but would appear as `DeadBrowserError` after retry. |
 | #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds. |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed (PR #2078 merged 2026-04-14, more APIs in PR #2208/#2218); SharedWorker still missing and many Worker APIs still unimplemented, so issue stays open. |
-| #2260 | Modal | `Page.handleJavaScriptDialog` cannot influence `confirm()`/`prompt()` return values (Lightpanda auto-dismisses before handler runs). Our PR #2261 OPEN proposes a pre-arm model. |
+| #2288 | CDP | `Page.getNavigationHistory` / `Page.navigateToHistoryEntry` not implemented. Our PR #2289 OPEN proposes the full pair. Gem currently uses `history.back()` / `history.forward()` JS workaround. |
+| #2309 | DOM | `HTMLElement.isContentEditable` IDL attribute not implemented. Our PR #2310 OPEN proposes the IDL attribute with ancestor inheritance walk. Gem currently uses `_lightpanda.isContentEditable` polyfill. |
 
 ### General Limitations
 
@@ -231,6 +257,8 @@ The public nightly tag last refreshed **2026-04-28 03:33 UTC**, snapshotting com
 - `window.postMessage` across frames now works (PR #1817)
 - No CORS enforcement (acknowledged in upstream README as of 2026-03-27)
 - In-page `WebSocket` API now implemented (PR #2179 merged 2026-04-18, closes #1952)
+- `window.open` partial support landed (PR #2237 merged 2026-04-29, awaiting next nightly): no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively for login popups.
+- `Window.close` now drops any queued navigation (PR #2319 merged 2026-04-29, awaiting next nightly), so popup-close flows can't race a queued navigation against the close.
 - Web Workers: partial support landed (PR #2078 merged 2026-04-14; PR #2208 merged 2026-04-23 added `URL`, `AbortController`, `AbortSignal` for workers; PR #2218 merged 2026-04-23 added `OffscreenCanvas` for workers). Many Worker APIs still missing — issue #2017 remains open. Workers run in the same thread as the page and have a separate context (`WorkerGlobalScope`, no `Window`/`Node`).
 - No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
