@@ -356,18 +356,14 @@ module Capybara
       end
 
       # Click handler. Native `this.click()` for everything; we only intervene
-      # for three real Lightpanda gaps:
+      # for two real Lightpanda gaps:
       #   * `<label>` doesn't propagate clicks to its associated form control
       #     (Capybara's `automatic_label_click` relies on this), so forward
       #     explicitly to the linked checkbox/radio.
       #   * Clicking a `<summary>` doesn't toggle its parent `<details>` — flip
       #     `open` ourselves after dispatching the click.
-      #   * Clicking an `<input type=image>` doesn't submit the associated form
-      #     (file upstream as wishlist). After the click, call
-      #     `form.requestSubmit()` so the `submit` event still dispatches.
-      # Form submission via `<button>` / `<input type=submit>` works natively
-      # (PR #2244 + #2253 + #2279, in nightly), including formaction/formmethod/
-      # formenctype overrides on the submitter.
+      # Form submission via `<button>` / `<input type=submit>` / `<input type=image>`
+      # works natively (PR #2244 + #2253 + #2279 + #2312, in nightly ≥5900).
       CLICK_JS = <<~JS
         function() {
           var tag = this.tagName.toLowerCase();
@@ -392,10 +388,6 @@ module Capybara
             if (d && d.tagName && d.tagName.toLowerCase() === 'details') {
               d.open = !d.open;
             }
-            return;
-          }
-          if (tag === 'input' && (this.type || '').toLowerCase() === 'image' && this.form) {
-            this.form.requestSubmit();
           }
         }
       JS
