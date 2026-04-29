@@ -49,36 +49,32 @@ RSpec.configure do |config|
     description = metadata[:full_description]
     next unless description
 
-    # Lightpanda auto-dismisses JS dialogs (alert→OK, confirm→false, prompt→null)
-    # and `Page.handleJavaScriptDialog` always errors. So tests that need the page's
-    # JS to observe a non-default return value can't pass; specs that only inspect
-    # the captured message ("should return the message presented") or the
-    # ModalNotFound path ("if the message doesn't match") work fine and run.
-    # See `.claude/rules/lightpanda-io.md` known-bug item on `Page.handleJavaScriptDialog`.
-    modal_patterns = [
-      /#accept_confirm should accept the confirm/,
-      /#accept_confirm should work with nested modals/,
-      /#accept_prompt should accept the prompt/,
-      /#accept_prompt should allow special characters/,
-      /#accept_alert.*work with nested modals/,
-    ].freeze
-
-    if modal_patterns.any? { |re| description =~ re }
-      if audit_skips
-        metadata[:skip_audit] = true
-      else
-        metadata[:skip] = "Lightpanda auto-dismisses JS dialogs; can't override return values"
-      end
-      next
-    end
-
     # Browser-level limitations whose Capybara shared spec isn't tagged with
     # a `requires:` flag we can pass through `capybara_skip`. Each entry maps
     # to a documented Lightpanda CDP gap in `.claude/rules/lightpanda-io.md`.
     browser_limitation_patterns = [
       # File uploads — `Page.setFileInputFiles` not implemented (upstream
       # #2175); `Node#set` raises NotImplementedError for `<input type=file>`.
-      /#attach_file/,
+      # Narrowed to skip only the cases that actually attempt an upload —
+      # the no-file / locator-error / make-visible-error variants pass
+      # because they don't hit the missing CDP method.
+      /#attach_file with normal form should set a file path/,
+      /#attach_file with normal form should be able to set on element if no locator passed/,
+      /#attach_file with normal form casts to string/,
+      /#attach_file with multipart form should set a file path/,
+      /#attach_file with multipart form should send prior hidden field/,
+      /#attach_file with multipart form should send content type/,
+      /#attach_file with multipart form should not break when uploading/,
+      /#attach_file with multipart form should not break when using HTML5/,
+      /#attach_file with multipart form should not send anything when attaching no files/,
+      /#attach_file with multipart form should not append files/,
+      /#attach_file with multipart form should fire change/,
+      /#attach_file with :exact option should set a file path/,
+      /#attach_file with :make_visible option applies/,
+      /#attach_file with :make_visible option accepts/,
+      /#attach_file with :make_visible option resets/,
+      /#attach_file with :make_visible option should fire/,
+      /#attach_file with a block/,
       # Click coordinate / modifier / delay tests rely on real geometry and
       # `Input.dispatchMouseEvent` modifier flags. `Page.getLayoutMetrics`
       # returns hardcoded 1920x1080 and modifier propagation is incomplete.
@@ -113,19 +109,17 @@ RSpec.configure do |config|
       # doesn't move the input caret on ArrowLeft/Home/End, so `:left` doesn't
       # reposition the cursor mid-string. Upstream gap, not yet filed.
       /node #send_keys should send special characters/,
-      # `node #send_keys should generate key events` — `KeyboardEvent.keyCode`
-      # is hardcoded to 0 upstream. Gated on lightpanda-io/browser PR #2292
-      # (events: implement keyCode/charCode legacy attributes). Remove once
-      # that ships in nightly.
+      # `node #send_keys should generate key events` — PR #2292 implements
+      # KeyboardEvent.keyCode/charCode but gates on `isTrusted: true`, so
+      # the keyCode values aren't visible to assertions made on synthetic
+      # events. Upstream follow-up needed.
       /node #send_keys should generate key events/,
-      # Lightpanda doesn't propagate `Referer` reliably (PR #2283 merged
-      # 2026-04-28 08:01 UTC, AFTER the current nightly cut at 03:33 UTC —
-      # drop these once the next nightly publishes and MINIMUM_NIGHTLY_BUILD
-      # is bumped).
-      /#visit should send a referer when following a link/,
-      /#visit should preserve the original referer URL when following a redirect/,
-      /#visit should send a referer when submitting a form/,
-      /#click_link should follow redirects back to itself/,
+      # `#accept_prompt should accept the prompt with no message when there
+      # is a default` — Lightpanda's LP.handleJavaScriptDialog pre-arm
+      # accepts `promptText`, but when promptText is null/missing it returns
+      # null/empty rather than falling back to the dialog's defaultText.
+      # Upstream follow-up needed.
+      /#accept_prompt should accept the prompt with no message when there is a default/,
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
@@ -148,12 +142,6 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
-      # Lightpanda doesn't normalize textarea field values to CRLF when
-      # building the form-data set (HTML spec requires `\r\n` for textarea
-      # newlines on submit). File upstream as wishlist; until then any test
-      # asserting the wire-format LF→CRLF conversion fails.
-      %r{#click_button.*should convert lf to cr/lf in submitted textareas},
-      /#fill_in should handle newlines in a textarea/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }

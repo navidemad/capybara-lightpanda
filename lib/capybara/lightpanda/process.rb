@@ -8,14 +8,18 @@ module Capybara
       READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # First nightly with the cookie/navigation/redirect fixes that let the gem
-      # drop several workarounds: PR #2255 (Network.clearBrowserCookies empty
-      # params + Network.getAllCookies), PR #2257 (window.location.pathname /
-      # .search assignment triggers navigation), PR #2265 (URL fragment inherited
-      # across fragment-less redirect). Rejecting older builds lets Cookies#clear
-      # rely on the bulk-clear call, Cookies#all use Network.getAllCookies, and
-      # current-path / fragment specs run unskipped.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5817")
+      # Floor for the cookie/navigation/redirect/modal/keyboard/css fixes the
+      # gem now relies on: PR #2255 (Network.clearBrowserCookies empty params
+      # + Network.getAllCookies), PR #2257 (window.location.pathname/.search
+      # assignment triggers navigation), PR #2265 (URL fragment inherited
+      # across fragment-less redirect), PR #2261 (LP.handleJavaScriptDialog
+      # pre-arm), PR #2283 (Referer on cross-page nav), PR #2292
+      # (KeyboardEvent.keyCode/charCode), PR #2294 (UA stylesheet display:none
+      # for HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/TITLE/[type=hidden]), PR #2308
+      # (textarea LF→CRLF), PR #2312 (<input type=image> click submits form),
+      # PR #2315 (:disabled honors fieldset/optgroup ancestors). Public nightly
+      # 5918 cuts ~2026-04-30; users running an older nightly need to update.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5918")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 
