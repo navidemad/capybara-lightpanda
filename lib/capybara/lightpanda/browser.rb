@@ -800,23 +800,9 @@ module Capybara
       end
 
       def wait_for_page_load(url, retried:)
-        starting_url = safe_current_url
-        deadline = monotonic_time + @options.timeout
-        loaded = Utils::Event.new
-
-        handler = proc { loaded.set }
-        @client.on("Page.loadEventFired", &handler)
-
-        @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
-
-        # Give loadEventFired a brief window (fast path), then fall back
-        # to readyState polling with the remaining budget.
-        unless loaded.wait([2, @options.timeout].min)
-          remaining = deadline - monotonic_time
-          poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+        deadline = await_navigation do
+          @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
         end
-
-        @client.off("Page.loadEventFired", handler)
         handle_navigation_crash(url, deadline, retried: retried)
       end
 
@@ -872,23 +858,37 @@ module Capybara
 
       # Wait for a navigation triggered by the given block.
       # Uses the same loadEventFired + readyState fallback as go_to.
-      def wait_for_navigation
+      def wait_for_navigation(&)
         enable_page_events
+        await_navigation(&)
+      end
 
+      # Common navigation lifecycle shared by `wait_for_page_load` (fresh
+      # `Page.navigate`) and `wait_for_navigation` (back / forward / reload).
+      # Subscribes to Page.loadEventFired, runs the trigger, waits briefly for
+      # the event, falls back to readyState polling for the remaining budget.
+      # The handler is unsubscribed via `ensure` so a raising trigger doesn't
+      # leak a subscription onto the next navigation. Returns the deadline so
+      # the caller can decide whether to attempt crash recovery.
+      def await_navigation
         starting_url = safe_current_url
         deadline = monotonic_time + @options.timeout
         loaded = Utils::Event.new
         handler = proc { loaded.set }
         @client.on("Page.loadEventFired", &handler)
 
-        yield
+        begin
+          yield
 
-        unless loaded.wait([2, @options.timeout].min)
-          remaining = deadline - monotonic_time
-          poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+          unless loaded.wait([2, @options.timeout].min)
+            remaining = deadline - monotonic_time
+            poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
+          end
+        ensure
+          @client.off("Page.loadEventFired", handler)
         end
 
-        @client.off("Page.loadEventFired", handler)
+        deadline
       end
 
       # Poll document.readyState as a fallback when Page.loadEventFired
