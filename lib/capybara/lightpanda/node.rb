@@ -339,17 +339,17 @@ module Capybara
         driver.browser.with_default_context_wait do
           driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
         end
-      rescue BrowserError => e
-        case e.message
-        when /MouseEventFailed/i
-          raise MouseEventFailed.new(self, e.response&.dig("message"))
-        else
-          raise
-        end
       rescue JavaScriptError => e
         case e.class_name
         when "InvalidSelector"
           raise InvalidSelector.new(e.message, nil, args.first)
+        else
+          raise
+        end
+      rescue BrowserError => e
+        case e.message
+        when /MouseEventFailed/i
+          raise MouseEventFailed.new(self, e.response&.dig("message"))
         else
           raise
         end

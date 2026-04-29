@@ -285,7 +285,7 @@ module Capybara
       # Release a remote object reference to free V8 memory.
       def release_object(remote_object_id)
         page_command("Runtime.releaseObject", objectId: remote_object_id)
-      rescue BrowserError, NoExecutionContextError
+      rescue BrowserError
         # Object may already be released or context destroyed
       end
 

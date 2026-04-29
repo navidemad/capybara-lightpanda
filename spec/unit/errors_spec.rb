@@ -5,23 +5,39 @@ require "capybara/lightpanda/errors"
 
 RSpec.describe "Capybara::Lightpanda errors" do
   describe "hierarchy" do
-    it "all errors inherit from Capybara::Lightpanda::Error" do
-      base = Capybara::Lightpanda::Error
-      expect(Capybara::Lightpanda::ProcessTimeoutError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::BinaryNotFoundError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::BinaryError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::UnsupportedPlatformError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::DeadBrowserError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::TimeoutError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::BrowserError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::JavaScriptError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::NodeNotFoundError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::NoExecutionContextError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::ObsoleteNode.superclass).to eq(base)
-      expect(Capybara::Lightpanda::MouseEventFailed.superclass).to eq(base)
-      expect(Capybara::Lightpanda::InvalidSelector.superclass).to eq(base)
-      expect(Capybara::Lightpanda::NoSuchPageError.superclass).to eq(base)
-      expect(Capybara::Lightpanda::StatusError.superclass).to eq(base)
+    it "all errors descend from Capybara::Lightpanda::Error" do
+      [
+        Capybara::Lightpanda::ProcessTimeoutError,
+        Capybara::Lightpanda::BinaryNotFoundError,
+        Capybara::Lightpanda::BinaryError,
+        Capybara::Lightpanda::UnsupportedPlatformError,
+        Capybara::Lightpanda::DeadBrowserError,
+        Capybara::Lightpanda::TimeoutError,
+        Capybara::Lightpanda::BrowserError,
+        Capybara::Lightpanda::JavaScriptError,
+        Capybara::Lightpanda::NodeNotFoundError,
+        Capybara::Lightpanda::NoExecutionContextError,
+        Capybara::Lightpanda::ObsoleteNode,
+        Capybara::Lightpanda::MouseEventFailed,
+        Capybara::Lightpanda::InvalidSelector,
+        Capybara::Lightpanda::NoSuchPageError,
+        Capybara::Lightpanda::StatusError,
+      ].each do |klass|
+        expect(klass.ancestors).to include(Capybara::Lightpanda::Error)
+      end
+    end
+
+    it "CDP-class errors are catchable as BrowserError" do
+      [
+        Capybara::Lightpanda::DeadBrowserError,
+        Capybara::Lightpanda::JavaScriptError,
+        Capybara::Lightpanda::NodeNotFoundError,
+        Capybara::Lightpanda::NoExecutionContextError,
+        Capybara::Lightpanda::ObsoleteNode,
+        Capybara::Lightpanda::MouseEventFailed,
+      ].each do |klass|
+        expect(klass.ancestors).to include(Capybara::Lightpanda::BrowserError)
+      end
     end
 
     it "base error inherits from StandardError" do
@@ -30,11 +46,21 @@ RSpec.describe "Capybara::Lightpanda errors" do
   end
 
   describe Capybara::Lightpanda::BrowserError do
-    it "captures the response and message" do
-      response = { "message" => "Something went wrong", "code" => -32_601 }
+    it "captures the response and exposes message/code/data" do
+      response = { "message" => "Something went wrong", "code" => -32_601, "data" => "extra" }
       error = described_class.new(response)
       expect(error.message).to eq("Something went wrong")
       expect(error.response).to eq(response)
+      expect(error.code).to eq(-32_601)
+      expect(error.data).to eq("extra")
+    end
+
+    it "accepts a plain string for callsites that raise with a literal" do
+      error = described_class.new("plain message")
+      expect(error.message).to eq("plain message")
+      expect(error.response).to be_nil
+      expect(error.code).to be_nil
+      expect(error.data).to be_nil
     end
   end
 
@@ -64,6 +90,17 @@ RSpec.describe "Capybara::Lightpanda errors" do
       }
       error = described_class.new(response)
       expect(error.message).to eq("Uncaught error")
+    end
+
+    it "captures stack_trace when CDP supplies one" do
+      response = {
+        "exceptionDetails" => {
+          "exception" => { "className" => "Error", "description" => "oops" },
+          "stackTrace" => { "callFrames" => [{ "functionName" => "f", "url" => "u" }] },
+        },
+      }
+      error = described_class.new(response)
+      expect(error.stack_trace).to eq("callFrames" => [{ "functionName" => "f", "url" => "u" }])
     end
   end
 
