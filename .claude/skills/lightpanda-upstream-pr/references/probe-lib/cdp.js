@@ -28,6 +28,12 @@ function makeClient(url = 'ws://127.0.0.1:9222/') {
   let nextId = 1;
   const pending = new Map();
   const handlers = new Map();
+  // Drain in-flight promises if the socket dies — without this, a Lightpanda
+  // crash mid-probe (issue #2173 etc.) leaves callers awaiting forever.
+  const drainPending = (reason) => {
+    for (const { reject } of pending.values()) reject(new Error(reason));
+    pending.clear();
+  };
   ws.on('message', (raw) => {
     const m = JSON.parse(raw.toString());
     if (m.id != null && pending.has(m.id)) {
@@ -40,6 +46,8 @@ function makeClient(url = 'ws://127.0.0.1:9222/') {
       if (fn) fn(m.params, m.sessionId);
     }
   });
+  ws.on('close', () => drainPending('WebSocket closed before response'));
+  ws.on('error', (e) => drainPending(`WebSocket error: ${e.message}`));
   return {
     send(method, params = {}, sessionId) {
       const id = nextId++;
@@ -77,19 +85,24 @@ async function connect(opts = {}) {
 
     // eval(expr) -> the JS value (returnByValue: true). Throws on JS exception.
     // Auto-retries the post-navigation execution-context race (Lightpanda
-    // issue #2187: "-32000 Cannot find default execution context") because
-    // every probe hits it the first time it runs `eval` after `navigate`.
+    // issue #2187: "-32000 Cannot find default execution context") up to 3×
+    // because every probe hits it the first time it runs `eval` after
+    // `navigate`, and on slow loads one retry isn't always enough. Matches
+    // the gem's `Utils::Event` + `with_default_context_wait` cadence.
     async eval(expression, { awaitPromise = false } = {}) {
       const send = () => client.send('Runtime.evaluate', {
         expression, returnByValue: true, awaitPromise,
       }, sessionId);
       let r;
-      try {
-        r = await send();
-      } catch (e) {
-        if (!/Cannot find default execution context/.test(e.message)) throw e;
-        await sleep(150);
-        r = await send();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          r = await send();
+          break;
+        } catch (e) {
+          if (!/Cannot find default execution context/.test(e.message)) throw e;
+          if (attempt === 2) throw e;
+          await sleep(150);
+        }
       }
       if (r.exceptionDetails) {
         throw new Error(`JS exception: ${r.exceptionDetails.text}`);
@@ -100,6 +113,11 @@ async function connect(opts = {}) {
     // navigate(url) -> resolves once Page.loadEventFired OR readyState==='complete',
     // whichever comes first (within ~3s). Lightpanda's loadEventFired is unreliable
     // on complex pages; the readyState fallback covers that.
+    //
+    // Note: the underlying `Page.navigate` CDP promise can hang indefinitely on
+    // issue #1801 pages (Wikipedia, complex SPAs). Probes are short-lived and
+    // exit on completion, so we let that promise leak rather than fight a timeout
+    // race that'd make the polling loop more complex.
     //
     // Settling check: do one final eval after the polling loop exits to make sure
     // V8's default execution context has been (re)created. Without this, the

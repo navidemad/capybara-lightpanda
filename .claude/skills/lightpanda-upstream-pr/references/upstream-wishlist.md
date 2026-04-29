@@ -160,19 +160,19 @@ Use this file when:
 - **Gem cleanup**: dropped alongside the A4 `CLICK_JS` cleanup (2026-04-28). The gem's old fetch+swap path used to read these off the submitter explicitly; native form submission now does it.
 - **Drop-on-fix**: N/A — done.
 
-### A21. `:disabled` selector / "actually disabled" doesn't inherit through `<fieldset>` / `<select>` / `<optgroup>`
+### A21. `:disabled` selector / "actually disabled" doesn't inherit through `<fieldset>` / `<optgroup>`
 
-- **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `el.matches(':disabled')` only checks the element's own `disabled` content attribute. `src/browser/webapi/selector/List.zig:537-541` reads `el.getAttributeSafe("disabled") != null` directly — no ancestor walk. So `<fieldset disabled><input></fieldset>` reports `input.matches(':disabled') === false`, and similarly for `<select disabled>` / `<optgroup disabled>` containing `<option>`. The `disabled` IDL attribute on form controls is also own-attribute only (which is spec-compliant for the IDL — the inheritance is supposed to surface through `:disabled`, form submission filtering, and event-target dispatch).
-- **Want**: per [HTML §4.10.18.3 "Enabling and disabling form controls"](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#enabling-and-disabling-form-controls), a form control is "actually disabled" when its own `disabled` attribute is set OR a disabled ancestor `<fieldset>` contains it (with the first-`<legend>` exception — descendants of the first legend stay enabled). `<option>` should also be `:disabled` when an ancestor `<optgroup disabled>` or `<select disabled>` contains it. `:disabled` and the `:enabled` complement need to walk ancestors accordingly.
-- **Upstream issue/PR**: not filed.
-- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isDisabled` walks ancestor `<fieldset>` / `<optgroup>` / `<select>` to honor the inherited cases, with the fieldset-first-legend exception (~28 LOC). Called from `DISABLED_JS` in `lib/capybara/lightpanda/node.rb:678`, which backs `Node#disabled?`.
+- **Today (verified 2026-04-29 against `main` HEAD + nightly 5839 via CDP probe)**: `el.matches(':disabled')` only checks the element's own `disabled` content attribute. `src/browser/webapi/selector/List.zig:537-541` reads `el.getAttributeSafe("disabled") != null` directly — no ancestor walk. So `<fieldset disabled><input></fieldset>` reports `input.matches(':disabled') === false`, and `<optgroup disabled><option></optgroup>` reports `option.matches(':disabled') === false`. Empirical 8-case CDP probe at `repro/a21-disabled-inheritance/` confirms 3 of 8 cases mismatch the spec.
+- **Want**: per [HTML §4.10.18.3 "Enabling and disabling form controls"](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#enabling-and-disabling-form-controls), a form control (button/input/select/textarea/form-associated custom) is "actually disabled" when its own `disabled` attribute is set OR a disabled ancestor `<fieldset>` contains it (with the first-`<legend>` exception). `<option>` is `:disabled` per [HTML §4.10.10 "concept-option-disabled"](https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-disabled) when its own attribute is set OR its parent is an `<optgroup disabled>`. Note `<option>` does NOT inherit from `<select disabled>` or `<fieldset disabled>` — only `<optgroup disabled>` parent contributes (verified against Chrome 130).
+- **Upstream issue**: #2314, **Upstream PR**: #2315 (open as of 2026-04-29, by us — routes `:disabled`/`:enabled` matchers through `Element.isDisabled`; extends `isDisabled` to recognize the `<option>` + `<optgroup disabled>` case while keeping the fieldset walk).
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isDisabled` walks ancestor `<fieldset>` / `<optgroup>` / `<select>` to honor the inherited cases, with the fieldset-first-legend exception (~28 LOC). Called from `DISABLED_JS` in `lib/capybara/lightpanda/node.rb:678`, which backs `Node#disabled?`. Note the polyfill overreaches slightly vs. spec by treating `<option>` inside `<select disabled>` as disabled (line 910); the upstream fix targets spec-correct behavior.
 - **Drop-on-fix**: replace the polyfill with `el.matches(':disabled')` and inline the call at the `DISABLED_JS` constant. Drops `_lightpanda.isDisabled` (~28 LOC).
 
 ### A22. `Element.isContentEditable` not implemented
 
 - **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `Element.isContentEditable` is not exposed as an IDL attribute. The only `contenteditable` reference in the Zig source is `src/browser/interactive.zig:258` (semantic-tree categorization for `LP.getInteractiveElements`); no accessor on `Element` or `HtmlElement`. Reading `el.isContentEditable` returns `undefined`.
 - **Want**: per [HTML §7.7.5.2 "The isContentEditable IDL attribute"](https://html.spec.whatwg.org/multipage/interaction.html#dom-iscontenteditable), `Element.isContentEditable` returns `true` when the element's effective content editable state is "true" — own `contenteditable` attribute non-`false`, OR closest ancestor with non-`false` `contenteditable` attribute (the inheritance walk).
-- **Upstream issue/PR**: not filed.
+- **Upstream issue**: #2309, **Upstream PR**: #2310 (open as of 2026-04-29, by us — HTMLElement only; SVGElement out of scope, no IDL accessors there yet).
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isContentEditable` falls back to walking the ancestor chain looking for a non-`false` `contenteditable` attribute when `el.isContentEditable` is falsy/missing (~12 LOC). Called from `EDITABLE_HOST_JS` in `lib/capybara/lightpanda/node.rb:676`, which backs `Node#content_editable?`.
 - **Drop-on-fix**: replace the polyfill with native `el.isContentEditable` and inline the read at the `EDITABLE_HOST_JS` constant. ~12 LOC.
 
@@ -199,15 +199,15 @@ Use this file when:
 
 - **Today (nightly 5839)**: native `imageBtn.click()` fires the click event but never schedules a navigation, even though the button's `form` is set and the default `type` is `submit`. Surfaced 2026-04-28 when the gem dropped the `CLICK_JS` fetch+swap pipeline — 7 image-button submit specs in `session_spec.rb` started failing because Lightpanda doesn't route image-button clicks into `Frame.submitForm`.
 - **Want**: per [HTML §4.10.18.6.4 "Submit buttons"](https://html.spec.whatwg.org/multipage/input.html#image-button-state-(type=image)), clicking an `<input type=image>` should submit the form with `name.x` / `name.y` coordinate fields appended to the form data set. The submission path should mirror `<input type=submit>` (which already works after PR #2244).
-- **Upstream issue/PR**: not filed.
+- **Upstream issue**: #2311, **Upstream PR**: #2312 (open as of 2026-04-29, by us — extends `Frame.handleClick`'s `.input` arm to match `.image`; FormData.collectForm's image-submitter branch already emits `name.x`/`name.y` correctly so only the routing is changed).
 - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) special-cases `<input type=image>` and calls `form.requestSubmit()` after the click (~5 LOC). Coordinate fields (`name.x` / `name.y`) are NOT appended; Capybara tests don't assert on them, but a real-app spec that read those server-side would fail.
 - **Drop-on-fix**: remove the image-button branch in `CLICK_JS`. ~5 LOC.
 
 ### A26. Textarea field values not normalized to CRLF on form submission
 
-- **Today (nightly 5839)**: native form submission sends raw `\n` for `<textarea>` field values; should be `\r\n` per HTML's [form-data set algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set) (step "If entry's value is a string, replace every occurrence of U+000D (CR) not followed by U+000A (LF), and every occurrence of U+000A (LF) not preceded by U+000D (CR), in entry's value, by a string consisting of U+000D (CR) and U+000A (LF)"). Affects both `application/x-www-form-urlencoded` and likely `multipart/form-data`. Surfaced 2026-04-28 when the gem dropped its fetch+swap path (the JS `formEncode` did the CRLF conversion).
-- **Want**: normalize textarea field values to CRLF in `Frame.submitForm` (or wherever the form-data set is constructed). The same normalization applies during the per-entry value processing for both encodings.
-- **Upstream issue/PR**: not filed.
+- **Today (nightly 5839)**: native form submission sends raw `\n` for `<textarea>` field values; should be `\r\n` per HTML's [form-data set algorithm](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set) (step "If entry's value is a string, replace every occurrence of U+000D (CR) not followed by U+000A (LF), and every occurrence of U+000A (LF) not preceded by U+000D (CR), in entry's value, by a string consisting of U+000D (CR) and U+000A (LF)"). Affects `application/x-www-form-urlencoded` POST bodies and the GET query-string path. Surfaced 2026-04-28 when the gem dropped its fetch+swap path (the JS `formEncode` did the CRLF conversion).
+- **Want**: normalize textarea field values to CRLF in the form-data set encoder. The same normalization applies during the per-entry value processing for both encodings.
+- **Upstream issue**: #2307, **Upstream PR**: #2308 (open as of 2026-04-28, by us — adds `writeFormLineEnd` helper to `KeyValueList.urlEncodeValueUtf8` / `urlEncodeValueLegacy`, gated on `mode == .form`; `URLSearchParams.toString()` (`mode == .query`) intentionally untouched per the URL standard).
 - **Gem workaround**: none. Pre-normalizing in `Node#set` would over-normalize (textarea would display `\r\n` chars). The fix has to live in Lightpanda's HTTP layer. Skip-listed: `#click_button.*should convert lf to cr/lf in submitted textareas`, `#fill_in should handle newlines in a textarea`.
 - **Drop-on-fix**: remove the 2 skip patterns.
 
@@ -217,10 +217,11 @@ Use this file when:
 
 ### B1. `XPathResult` interface and `document.evaluate` not implemented
 
-- **Today**: `document.evaluate` is undefined; `XPathResult` constants don't exist.
-- **Want**: native XPath 1.0 evaluator on Document.
+- **Today (nightly 5839)**: `document.evaluate` is undefined; `XPathResult` constants don't exist; `DOM.performSearch` only handles CSS queries.
+- **Want**: native XPath 1.0 evaluator on Document, plus the WHATWG `XPathResult` / `XPathEvaluator` / `XPathExpression` surface, plus XPath query routing in `DOM.performSearch` (gives Playwright/Puppeteer/Capybara XPath-via-CDP).
+- **Upstream PR**: #2305 (open as of 2026-04-28, by us — Zig port of the gem polyfill, ~3,470 LOC: tokenizer/parser/evaluator/functions/result + WHATWG webapi types + `DOM.performSearch` heuristic; matches polyfill semantics including `lang()` → `false`, `namespace::` → `[]`, lowercased `name()`/`local-name()`). 91-case conformance battery passes; full behavior spec in [XPATH_COMPLIANCE.md](https://github.com/navidemad/capybara-lightpanda/blob/main/XPATH_COMPLIANCE.md). No associated issue — the PR is a downstream coordination move.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — full XPath 1.0 evaluator (~700 LOC) covering tokenizer, parser, AST evaluation, all 13 axes, 27 functions. Exposed as `window._lightpanda.xpathFind` and as `document.evaluate` polyfill.
-- **Drop-on-fix**: remove the entire `XPathEval` IIFE and the `XPathResult`/`document.evaluate` polyfill. ~700 LOC.
+- **Drop-on-fix**: remove the entire `XPathEval` IIFE and the `XPathResult`/`document.evaluate` polyfill. ~700 LOC. Also fixes XPath-in-iframes (the polyfill is only registered on the top frame via `Page.addScriptToEvaluateOnNewDocument`).
 
 ### B2. `Page.getNavigationHistory` / `Page.navigateToHistoryEntry` not implemented
 
@@ -375,14 +376,28 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 
 ## Quick wins (for upstream contributors)
 
-Highest-impact open / unfiled items:
+### Open PRs awaiting upstream review (filed by us)
 
-1. **B1 (`XPathResult` / `document.evaluate`)** — biggest LOC savings (~700 LOC). Native implementation would also fix XPath-in-iframes and edge cases in the gem's evaluator.
-2. **A24 (UA stylesheet display:none)** — PR #2294 already filed. Fixes `el.checkVisibility()` for HEAD/SCRIPT/STYLE/etc. without per-call special cases. Lets the gem collapse `_lightpanda.isVisible` to Cuprite shape.
-3. **B2 (`Page.getNavigationHistory` / `navigateToHistoryEntry`)** — PR #2289 already filed. Replaces JS `history.back()` / `history.forward()` with the spec-compliant CDP path; better cross-origin behavior.
-4. **A3 (`handleJavaScriptDialog`)** — PR #2261 already filed. Fixes confirm/prompt return-value override; small upstream change.
-5. **A25 (`<input type=image>` submit)** — not yet filed. Small targeted fix in the click-handling path; should mirror `<input type=submit>` post-PR-#2244.
-6. **A26 (textarea LF→CRLF normalization)** — not yet filed. Single-spot fix in `Frame.submitForm` (or the form-data-set construction).
+Reviewer focus would unlock most of the remaining gem-side cleanup. Listed by drop-on-fix impact:
+
+1. **B1 — `XPathResult` / `document.evaluate` (PR #2305)** — biggest LOC savings (~700 LOC). Zig port of the gem polyfill; 91-case conformance battery passes. Also fixes XPath-in-iframes (the polyfill is only registered on the top frame) and routes `DOM.performSearch` XPath queries.
+2. **A24 — UA stylesheet display:none (PR #2294)** — fixes `el.checkVisibility()` for HEAD/SCRIPT/STYLE/etc. Lets the gem collapse `_lightpanda.isVisible` to Cuprite shape (~20 LOC).
+3. **B2 — `Page.getNavigationHistory` / `navigateToHistoryEntry` (PR #2289)** — replaces JS `history.back()` / `history.forward()` with the spec-compliant CDP path; better cross-origin behavior.
+4. **A3 — `handleJavaScriptDialog` (PR #2261)** — pre-arm model so `accept_modal(:confirm|:prompt)` can override the auto-dismiss return value. Removes ~30 LOC + 4 skip patterns.
+5. **B6 — Constraint validation API (PR #2286)** — `el.validity.*` and `el.validationMessage`; removes 2 skip patterns.
+6. **A22 — `Element.isContentEditable` (PR #2310)** — HTMLElement IDL accessor with ancestor inheritance; replaces ~12 LOC polyfill.
+7. **A25 — `<input type=image>` submit (PR #2312)** — routes image-button clicks into `Frame.submitForm`; removes ~5 LOC of `CLICK_JS` special-casing.
+8. **A26 — Textarea LF→CRLF normalization (PR #2308)** — `KeyValueList.urlEncode` form-data fix; removes 2 skip patterns.
+9. **A21 — `:disabled` ancestor inheritance through `<fieldset>` / `<optgroup>` (PR #2315)** — ~28 LOC drop-on-fix; routes `:disabled`/`:enabled` selector matchers through `Element.isDisabled` and extends `isDisabled` for the `<option>` + `<optgroup disabled>` case.
+
+### Unfiled items most worth claiming (need authors)
+
+1. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest unfiled LOC saving.
+2. **A12 — WebSocket dies on complex page navigation (#1849)** — ~30 LOC drop-on-fix; partial fix from PR #1850 in 2026-03 didn't fully close the issue.
+3. **A11 — `Runtime.evaluate` "Cannot find default execution context" race (#2187)** — ~15 LOC + 4 call-sites; needs queue-or-await around `executionContextCreated`.
+4. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing.
+5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 26 skip patterns. Net positive: enables a feature.
+6. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
 
 ## What this gem won't ever fix (run cuprite)
 

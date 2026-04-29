@@ -1,6 +1,8 @@
 # File Mapping: Wishlist Item → Source
 
-Two maps. One points at the gem-side workaround (read-only — gives you the spec the upstream fix has to match). The other points at the upstream Zig source you'll edit.
+Two maps for items still pending upstream. Resolved or retracted items (annotated `FIXED + SHIPPED + GEM CLEANED UP` or `NOT A BUG (retracted ...)` in `references/upstream-wishlist.md`) are intentionally absent — the gem-side workaround has been deleted post-fix, and the upstream Zig file is no longer a useful starting point. Cross-reference the wishlist heading status before adding rows here.
+
+Last reconciled: 2026-04-29.
 
 ## Item → gem-side workaround (`/Users/navid/code/capybara-lightpanda/`)
 
@@ -8,16 +10,12 @@ Read these for context before editing the Zig side. The workaround pins down the
 
 | Item | File on gem side |
 |---|---|
-| A1, A2, B3 | `lib/capybara/lightpanda/cookies.rb` (sweep_visited_origins) |
-| A3 | `lib/capybara/lightpanda/browser.rb` (prepare_modals, accept_modal, etc.) |
-| A4, A5 | `lib/capybara/lightpanda/node.rb` (CLICK_JS, IMPLICIT_SUBMIT_JS) |
-| A8 | `lib/capybara/lightpanda/javascripts/index.js` (querySelector rewriter) |
-| A10 | `lib/capybara/lightpanda/browser.rb` (wait_for_page_load) |
-| A11 | `lib/capybara/lightpanda/browser.rb` (with_default_context_wait) |
-| A12 | `lib/capybara/lightpanda/browser.rb` (handle_navigation_crash) |
-| A14 | `lib/capybara/lightpanda/javascripts/index.js` (requestSubmit polyfill) |
-| B1 | `lib/capybara/lightpanda/javascripts/index.js` (XPathEval IIFE) |
-| B2 | `lib/capybara/lightpanda/browser.rb` (back, forward) |
+| A3 | `lib/capybara/lightpanda/browser.rb` (`prepare_modals` line 473; modal capture via `Page.javascriptDialogOpening` event — does NOT call `handleJavaScriptDialog`. PR #2261 OPEN proposes the upstream pre-arm model.) |
+| A10 | `lib/capybara/lightpanda/browser.rb` (`go_to` line 136 — readyState polling fallback; `wait_for_page_load` line 802) |
+| A11 | `lib/capybara/lightpanda/browser.rb` (`with_default_context_wait` line 165 — wraps the post-nav `NoExecutionContextError` race in a retry loop) |
+| A12 | `lib/capybara/lightpanda/browser.rb` (`handle_navigation_crash` line 827 — reconnects on `TargetClosedError` / `DeadBrowserError`) |
+| B1 | `lib/capybara/lightpanda/javascripts/index.js` (`XPathEval` IIFE line 74; `xpathFind` line 790; `document.evaluate` shim line 1013 — XPath 1.0 evaluator + spec polyfill, ~700 LOC) |
+| B2 | `lib/capybara/lightpanda/browser.rb` (`back` line 173, `forward` line 177 — JS `history.back()` / `history.forward()`. PR #2289 OPEN proposes native `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`.) |
 
 ## Item → upstream Zig source (`/Users/navid/code/browser/`)
 
@@ -27,22 +25,13 @@ CDP domain files live at `src/cdp/domains/<domain>.zig`. Browser-internal logic 
 
 | Item | Likely file(s) |
 |---|---|
-| A1 (`Network.clearBrowserCookies`) | `src/cdp/domains/network.zig` (dispatch enum + handler) |
-| A2 (`Network.getCookies` scope) | `src/cdp/domains/network.zig` (handler reads current page origin — change to enumerate jar) |
-| A3 (`handleJavaScriptDialog`) | `src/cdp/domains/page.zig` (dispatch handler — currently always errors) + dialog plumbing in `src/browser/Page.zig` |
-| A4 (`form.submit()`) | `src/browser/forms/HTMLFormElement.zig` (or wherever `submit` is bound) |
-| A5 (`document.write`) | `src/browser/document/Document.zig` |
-| A6 (`Page.reload` replays POST) | `src/cdp/domains/page.zig` (reload handler) + `src/browser/Page.zig` (navigation history entry shape) |
-| A7 (`<select>` empty FormData) | `src/browser/forms/` (FormData construction) |
-| A8 (`#id` selector) | `src/browser/css/` (selector engine, `Frame.getElementByIdFromNode`) |
-| A10 (`Page.loadEventFired`) | `src/browser/Page.zig` (navigation lifecycle) + `src/cdp/domains/page.zig` (event emission) |
-| A11 (NoExecutionContextError) | `src/cdp/domains/runtime.zig` (evaluate — add wait/queue for new context) |
-| A14 (`requestSubmit`) | `src/browser/forms/HTMLFormElement.zig` |
-| A15 (`location.pathname` navigation) | `src/browser/dom/Location.zig` (or similar) |
-| B1 (`XPathResult`/`document.evaluate`) | New: `src/browser/dom/XPathEvaluator.zig` (large) |
-| B2 (history CDP methods) | `src/cdp/domains/page.zig` (add new dispatch entries) |
-| B3 (`Network.getAllCookies`) | `src/cdp/domains/network.zig` (add dispatch entry) |
-| B4 (`setFileInputFiles`) | `src/cdp/domains/page.zig` + file input plumbing in `src/browser/forms/` |
+| A3 (`handleJavaScriptDialog` accepts/dismisses) | `src/cdp/domains/page.zig` (dispatch handler — currently always errors `-32000 No dialog is showing`) + dialog plumbing in `src/browser/Page.zig` |
+| A10 (`Page.loadEventFired` unreliable) | `src/browser/Page.zig` (navigation lifecycle) + `src/cdp/domains/page.zig` (event emission ordering — see PR #2032's reorder of Loaded vs. DOMContentLoaded) |
+| A11 (NoExecutionContextError after click-driven nav) | `src/cdp/domains/runtime.zig` (`evaluate` — add wait/queue for context recreation) |
+| A12 (WebSocket dies on complex navigation) | `src/server/*.zig` (WebSocket framing) — verify still reproduces; PR #1850 (merged 2026-03-16) addressed the original #1849, so wishlist may be stale for this item |
+| B1 (`XPathResult` / `document.evaluate`) | New: `src/browser/dom/XPathEvaluator.zig` (large — port the gem's XPath 1.0 evaluator from `index.js`) |
+| B2 (history CDP methods) | `src/cdp/domains/page.zig` (add `getNavigationHistory` + `navigateToHistoryEntry` dispatch entries) — PR #2289 OPEN |
+| B4 (`setFileInputFiles`) | `src/cdp/domains/page.zig` (dispatch) + file input plumbing in `src/browser/forms/` (#2175) |
 
 To find the dispatch enum for CDP additions:
 

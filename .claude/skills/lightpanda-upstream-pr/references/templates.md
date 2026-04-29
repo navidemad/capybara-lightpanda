@@ -36,22 +36,47 @@ gem's upstream wishlist: `<one-line description>`.
 - Primary: `<file from file-mapping.md>`
 - Related: `<any test fixtures or sibling files>`
 
-**TDD steps**:
+**TDD steps** (local builds are fast — `mise exec --` activates Zig 0.15.2 and `$V8` reuses the prebuilt V8 archive, so `check` finishes in <10s and a filtered `test` in 30s–2min):
+
 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes
    use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file
    (pattern: see existing tests in `src/cdp/domains/network.zig`). For JS API
    fixes use HTML fixtures under `src/browser/tests/<area>/` (pattern: see
-   `src/browser/tests/element/duplicate_ids.html` from PR #2244).
-2. Mentally trace the failing test against current `main` and confirm it
-   would fail. Do NOT run `zig build test` (or any `zig build` variant) —
-   local Zig builds are forbidden (slow on the user's machine); upstream CI
-   verifies on push.
+   `src/browser/tests/element/duplicate_ids.html` from PR #2244). Before
+   adding a `test "..."` block in `webapi/<File>.zig`, consult the
+   "Directory test runners" table in `references/file-mapping.md` — many
+   webapi files own an entire `tests/<dir>/` directory via
+   `htmlRunner("<dir>", .{})` and an extra block duplicates work.
+2. Run the targeted test against unmodified production and confirm it
+   **fails**:
+   `TEST_FILTER='<test name>' mise exec -- zig build test $V8`.
+   Both halves of `TEST_FILTER` are substring matches via `std.mem.indexOf`
+   — be specific (e.g. `'WebApi: Element#attribute_value_escapes.html'` for
+   an HTML fixture, `'cdp.network: clearBrowserCookies'` for a Zig unit test).
 3. Implement the fix in `<primary file>`. Keep the diff minimal — no
    surrounding cleanup, no formatting churn unrelated to the fix.
-4. Mentally trace the test against the fixed code path and confirm it would
-   now pass. Push the branch and let upstream CI run `zig build test` for
-   the real verification — never run it locally.
-5. Document any spec/CDP-protocol assumption in a code comment **only if** the
+4. Re-run the targeted test and confirm it **passes**. Then run
+   `mise exec -- zig build check $V8` (project-wide type-check) and
+   `mise exec -- zig build test $V8` (full unit-test suite, no filter) to
+   catch regressions in adjacent code. Cross-reference any failures against
+   the "Known-flaky-on-macOS tests" list in `SKILL.md` — only investigate
+   failures NOT on that list.
+5. Toggle the fix off and confirm the targeted test **fails again** — this
+   proves the test exercises the fix, not some unrelated path. Use the
+   pattern that matches where the test lives (full detail in `SKILL.md`
+   Step 4a):
+   - **Test in the same `.zig` file as the fix** (common for CDP changes):
+     surgically `Edit` the production lines back to their pre-fix shape;
+     don't `git stash` (sweeps the new test out alongside the fix and the
+     re-run reports `0 of 0 tests passed`).
+   - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common
+     for `htmlRunner` directories): `git checkout main -- <production-file>`,
+     then restore via `git checkout HEAD -- <production-file>` AFTER
+     committing the fix (HEAD == main pre-commit means the restore is a
+     silent no-op that loses your fix).
+   Restore the fix and confirm the targeted test passes once more before
+   moving on.
+6. Document any spec/CDP-protocol assumption in a code comment **only if** the
    assumption is non-obvious from the code itself.
 ````
 
