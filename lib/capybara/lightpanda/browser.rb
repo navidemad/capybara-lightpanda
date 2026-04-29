@@ -160,13 +160,14 @@ module Capybara
       # Run the block; if it raises NoExecutionContextError (the navigation
       # race window — lightpanda-io/browser#2187), wait for the next default
       # context to be signaled by Runtime.executionContextCreated, then
-      # retry once. Replaces blind 100 ms sleep retries.
-      def with_default_context_wait(timeout: 1.0)
-        yield
-      rescue NoExecutionContextError
-        raise unless wait_for_default_context(timeout)
-
-        yield
+      # retry. Up to `attempts` total tries; defaults to 3, can be bumped
+      # for stubborn flakes. Each retry blocks up to `timeout` seconds for
+      # the executionContextCreated signal — no blind sleeps.
+      def with_default_context_wait(timeout: 1.0, attempts: 3)
+        Utils::Attempt.with_retry(errors: NoExecutionContextError, max: attempts, wait: 0) do
+          wait_for_default_context(timeout)
+          yield
+        end
       end
 
       def back
