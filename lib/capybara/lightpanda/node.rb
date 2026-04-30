@@ -356,29 +356,16 @@ module Capybara
       end
 
       # Click handler. Native `this.click()` for everything; we only intervene
-      # for two real Lightpanda gaps:
-      #   * `<label>` doesn't propagate clicks to its associated form control
-      #     (Capybara's `automatic_label_click` relies on this), so forward
-      #     explicitly to the linked checkbox/radio.
+      # for one residual Lightpanda gap:
       #   * Clicking a `<summary>` doesn't toggle its parent `<details>` — flip
-      #     `open` ourselves after dispatching the click.
-      # Form submission via `<button>` / `<input type=submit>` / `<input type=image>`
-      # works natively (PR #2244 + #2253 + #2279 + #2312, in nightly ≥5900).
+      #     `open` ourselves after dispatching the click. (Drop this branch when
+      #     PR #2326 merges and `MINIMUM_NIGHTLY_BUILD` is bumped past it.)
+      # Native works as of build ≥5940: `<label>` activation (PR #2324),
+      # `<input type=image>` form submission (PR #2312), `<button>` / `<input
+      # type=submit>` (PR #2244 + #2253 + #2279).
       CLICK_JS = <<~JS
         function() {
           var tag = this.tagName.toLowerCase();
-          if (tag === 'label') {
-            this.click();
-            var ctrl = null;
-            var forId = this.getAttribute('for');
-            if (forId) ctrl = this.ownerDocument.getElementById(forId);
-            if (!ctrl) ctrl = this.querySelector('input, select, textarea');
-            if (ctrl) {
-              var ctype = (ctrl.type || '').toLowerCase();
-              if (ctype === 'checkbox' || ctype === 'radio') ctrl.click();
-            }
-            return;
-          }
           this.click();
           if (tag === 'summary') {
             var d = this.parentNode;

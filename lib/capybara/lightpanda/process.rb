@@ -17,9 +17,12 @@ module Capybara
       # (KeyboardEvent.keyCode/charCode), PR #2294 (UA stylesheet display:none
       # for HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/TITLE/[type=hidden]), PR #2308
       # (textarea LF→CRLF), PR #2312 (<input type=image> click submits form),
-      # PR #2315 (:disabled honors fieldset/optgroup ancestors). Public nightly
-      # 5918 cuts ~2026-04-30; users running an older nightly need to update.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5918")
+      # PR #2315 (:disabled honors fieldset/optgroup ancestors), PR #2322
+      # (LP dialog defaultText fallback when promptText is null), PR #2324
+      # (<label> click runs activation behavior on labeled control). Build
+      # 5940 = main HEAD e42acc53 (2026-04-30); ships in the next public
+      # nightly (~2026-05-01 03:33 UTC).
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5940")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

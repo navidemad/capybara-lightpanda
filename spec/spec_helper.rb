@@ -114,12 +114,6 @@ RSpec.configure do |config|
       # the keyCode values aren't visible to assertions made on synthetic
       # events. Upstream follow-up needed.
       /node #send_keys should generate key events/,
-      # `#accept_prompt should accept the prompt with no message when there
-      # is a default` — Lightpanda's LP.handleJavaScriptDialog pre-arm
-      # accepts `promptText`, but when promptText is null/missing it returns
-      # null/empty rather than falling back to the dialog's defaultText.
-      # Upstream follow-up needed.
-      /#accept_prompt should accept the prompt with no message when there is a default/,
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
