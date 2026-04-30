@@ -212,9 +212,9 @@ Use this file when:
 
 ### A27. `LP.handleJavaScriptDialog` doesn't fall back to dialog `defaultText` when `promptText` is null
 
-- **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: a JS prompt has the form `prompt(message, defaultText)` — when the user accepts without typing, the prompt's return value is `defaultText` (or `""` if absent). Pre-arming `LP.handleJavaScriptDialog {accept: true}` with no `promptText` makes Lightpanda return null/empty regardless of the dialog's `defaultText` argument. Surfaced 2026-04-29 by the Capybara spec `#accept_prompt should accept the prompt with no message when there is a default`, which expects "John Smith" (the dialog's defaultText) and gets nothing back from the page.
+- **Today (verified 2026-04-29 against `main` HEAD `6e881e0a`, build 5920)**: a JS prompt has the form `prompt(message, defaultText)` — when the user accepts without typing, the prompt's return value is `defaultText` (or `""` if absent). Pre-arming `LP.handleJavaScriptDialog {accept: true}` with no `promptText` makes Lightpanda return null/empty regardless of the dialog's `defaultText` argument. Surfaced 2026-04-29 by the Capybara spec `#accept_prompt should accept the prompt with no message when there is a default`, which expects "John Smith" (the dialog's defaultText) and gets nothing back from the page. Empirical 3-case CDP probe at `repro/a27-prompt-default-text/` confirms the bug: `accept` with no `promptText` returns `""` instead of the dialog's `defaultText`.
 - **Want**: when `pending_dialog_response.prompt_text` is null AND `accept` is true, the prompt's return value should be the dialog's `defaultText` (i.e., the second argument to `prompt()`). When `accept` is false, return null per spec regardless. Behavior to mirror Chrome.
-- **Upstream issue**: not yet filed.
+- **Upstream issue**: #2321, **Upstream PR**: #2322 (open as of 2026-04-29, by us — `Window.zig`'s `prompt` JS binding now keeps its second argument named `default_text` instead of discarding it as `_`, and the post-accept return is `response.prompt_text orelse default_text orelse ""`).
 - **Gem workaround**: none. The default value is internal to the JS engine when `prompt()` is called and isn't visible to the gem before the dialog opens, so a gem-side fallback isn't possible. Skip-listed: `#accept_prompt should accept the prompt with no message when there is a default`.
 - **Drop-on-fix**: remove the 1 skip pattern.
 
@@ -222,7 +222,7 @@ Use this file when:
 
 - **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: clicking a `<label>` whose `for=` references a checkbox/radio fires the click event on the label itself but does not invoke the labeled control's activation behavior — `cb.checked` stays at its prior value. Empirical probe: `<input type=checkbox id=cb1>` + `<label for=cb1>` + `lab.click()` → `{ before: false, after: false }`. Source: `src/browser/webapi/element/Html.zig:310 click()` short-circuits disabled controls then dispatches the bubble event, with no [activation behavior](https://html.spec.whatwg.org/multipage/interaction.html#activation) for `<label>` (HTML §4.10.4 "If the element has no defined activation behavior, run [the labeled control's activation behavior]"). `Label.zig` already exposes `getControl()` for the resolution, just not the activation step.
 - **Want**: when an HTMLLabelElement's click activation runs and is not consumed by an interactive descendant, run the labeled control's activation behavior (i.e., what `el.click()` does for `<input type=checkbox|radio|submit|...>`). Mirrors Chrome's `HTMLLabelElement::DefaultEventHandler`.
-- **Upstream issue**: not yet filed.
+- **Upstream issue**: #2323, **Upstream PR**: #2324 (open as of 2026-04-29, by us — adds a `.label` arm to `Frame.handleClick` that resolves via `Label.getControl` and dispatches a synthetic click on the labeled control).
 - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<label>`, resolves the control via `htmlFor`/wrapping, and calls `.click()` on it explicitly (~10 LOC). Capybara's `automatic_label_click` setting depends on this for radio/checkbox tests.
 - **Drop-on-fix**: remove the label branch from `CLICK_JS`. ~10 LOC.
 
@@ -230,7 +230,7 @@ Use this file when:
 
 - **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: clicking a `<summary>` element fires the click event but does not toggle the parent `<details>`'s `open` attribute. Empirical probe: `<details><summary>` + `sum.click()` → `{ before: false, after: false }`. `Details.zig` exposes `getOpen`/`setOpen` but does not register a click activation handler on `<summary>` children. Per [HTML §4.11.1.2 "Activation behavior of `<summary>`"](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-summary-element), the activation behavior is "if the element is a summary element that is a child of a details element, toggle the parent's `open` attribute".
 - **Want**: register an activation behavior on `<summary>` that toggles `parentElement.open` when the parent is a `<details>` and the summary is the first such child. Should also fire the `toggle` event on the details, per spec, but Capybara tests only assert on the `open` attribute.
-- **Upstream issue**: not yet filed.
+- **Upstream issue**: #2325, **Upstream PR**: #2326 (open as of 2026-04-29, by us — `.generic` arm in `Frame.handleClick` that gates on `_tag == .summary`, walks parent siblings to confirm first-summary, toggles via existing `Details.setOpen`. Fires neither `ToggleEvent` (Lightpanda lacks the type) nor activation on descendant clicks (same gap as `<a>`/`<label>` today, broader scope).
 - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<summary>`, walks to parent `<details>`, and flips `open` after dispatching the click (~6 LOC).
 - **Drop-on-fix**: remove the summary/details branch from `CLICK_JS`. ~6 LOC.
 
@@ -280,7 +280,8 @@ Three independent issues:
 
 - **Today (nightly 5839)**: `el.validity` is undefined; `el.validationMessage` empty. Empirically `TypeError: Cannot read properties of undefined (reading 'valid')` when accessed.
 - **Want**: `el.validity.valid`, `el.validity.valueMissing`, etc., and `el.validationMessage` per the [HTML constraint validation API](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#the-constraint-validation-api).
-- **Upstream issue**: #2284, **Upstream PR**: #2286 (OPEN as of 2026-04-28, by us).
+- **Upstream issue**: #2284, **Upstream PR**: #2286 (OPEN as of 2026-04-29, by us; rebased on `origin/main` HEAD `3b3e4e41`, mergeable).
+- **Maintainer feedback (2026-04-29)**: Karl questioned the use case in a top-level comment ("the server should already enforce the constraints"). Replied with the headless-test-automation argument — CDP clients assert client-side state without round-tripping the server, the constraint logic is already in Lightpanda (only the query surface is missing), and SPA submit handlers calling `form.checkValidity()` throw `TypeError` today. Offered a smaller starting cut (Input-only, defer Select/TextArea/Button/Form) as an off-ramp. Awaiting his response. Reply: https://github.com/lightpanda-io/browser/pull/2286#issuecomment-4344400646.
 - **Gem workaround**: none. Skip-listed: `#has_field with valid should be true if field is valid`, `should be false if field is invalid`.
 - **Drop-on-fix**: remove the 2 `#has_field with valid` skip patterns.
 

@@ -100,6 +100,13 @@ LP.handleJavaScriptDialog      → IMPLEMENTED (PR #2261, merged 2026-04-29, in 
                                   dispatch-thread deadlock that prevented the gem from
                                   calling `Page.handleJavaScriptDialog` synchronously.
                                   Gem cleanup pending — see "Recently Merged Upstream PRs".
+LP.handleJavaScriptDialog      → defaultText fallback (PR #2322, merged 2026-04-30, awaiting
+  defaultText fallback            ≥5945 nightly, closes #2321). When the gem pre-arms
+                                  `LP.handleJavaScriptDialog {accept: true}` with no
+                                  `promptText` and the page calls `prompt(msg, defaultText)`,
+                                  Lightpanda now returns `defaultText` (Chrome parity)
+                                  instead of "". Lets `accept_modal(:prompt)` without
+                                  `with:` surface the dialog's prebuilt default value.
 KeyboardEvent.keyCode/charCode → IMPLEMENTED (PR #2292, merged 2026-04-28, in nightly ≥5900).
                                   Gated on `isTrusted`; Enter sets charCode.
 Browser sends Referer          → IMPLEMENTED (PR #2283, merged 2026-04-28, in nightly ≥5900).
@@ -111,6 +118,11 @@ HTMLFrameSetElement stub       → IMPLEMENTED (PR #2306, merged 2026-04-28, in 
 <input type=image> click       → SUBMITS THE FORM (PR #2312, merged 2026-04-29, in nightly ≥5900,
                                   closes #2311). Native `imageBtn.click()` now schedules
                                   navigation through `Frame.submitForm`.
+<label> click activation       → IMPLEMENTED (PR #2324, merged 2026-04-30, awaiting ≥5945
+                                  nightly, closes #2323). `Frame.handleClick` now resolves
+                                  the labeled control via `Label.getControl` and dispatches
+                                  a synthetic `.click()`. Gem cleanup pending — see
+                                  "Recently Merged Upstream PRs".
 ```
 
 ### Available CDP Methods (not yet used by this gem)
@@ -201,7 +213,7 @@ LP.fillNode                  LP.scrollNode
 
 10. ~~**`<input type=image>` click does not submit the form**~~ — RESOLVED upstream by PR #2312 (merged 2026-04-29, closes #2311, in nightly ≥5900). Native `imageBtn.click()` routes through `Frame.submitForm`. Gem cleanup landed 2026-04-29 — image-button branch removed from `CLICK_JS` (`lib/capybara/lightpanda/node.rb`).
 
-11. ~~**Textarea field values not normalized to CRLF on form submission**~~ — RESOLVED upstream by PR #2308 (merged 2026-04-29, closes #2307). `KeyValueList.urlEncode` normalizes LF→CRLF per the HTML form-data set algorithm. Gem cleanup landed 2026-04-29 — textarea skip patterns removed from `spec/spec_helper.rb`. **Distribution caveat**: `MINIMUM_NIGHTLY_BUILD = 5918` requires the public nightly to refresh past 04-29's cut (~2026-04-30 03:33 UTC). End-users on 04-29 nightly (build 5900) will fail the version check until the next nightly publishes.
+11. ~~**Textarea field values not normalized to CRLF on form submission**~~ — RESOLVED upstream by PR #2308 (merged 2026-04-29, closes #2307). `KeyValueList.urlEncode` normalizes LF→CRLF per the HTML form-data set algorithm. Gem cleanup landed 2026-04-29 — textarea skip patterns removed from `spec/spec_helper.rb`. **Distribution caveat (verified 2026-04-30)**: `MINIMUM_NIGHTLY_BUILD = 5918` is satisfied by Linux nightly 5932 (04-30 cut at HEAD `1f40c309`), but **macOS nightly assets are still 04-29 cut at build 5900** — the macOS GHA build jobs missed the 04-30 cycle. macOS end-users hit `BinaryError "build 5900 < required 5918"` until the macOS jobs catch up.
 
 ### Open Fix PRs (not yet merged)
 
@@ -211,12 +223,13 @@ LP.fillNode                  LP.scrollNode
 - **PR #2286** (by us, opened 2026-04-28): **HTML constraint validation API**. When merged: removes the `#has_field with valid` skip patterns (`spec/spec_helper.rb:138-139`).
 - **PR #2305** (by us, opened 2026-04-28): **XPath 1.0 evaluator** (`Document.evaluate`, `XPathResult`/`XPathEvaluator`/`XPathExpression`, `DOM.performSearch` XPath routing). ~3,470 LOC Zig port of the gem polyfill; 91-case conformance battery passes. When merged: drop the entire `XPathEval` IIFE and `document.evaluate` polyfill from `index.js` (~700 LOC); also fixes XPath-in-iframes.
 - **PR #2310** (by us, opened 2026-04-29): **`HTMLElement.isContentEditable` IDL attribute** with ancestor inheritance walk. Closes #2309. When merged: replace `_lightpanda.isContentEditable` polyfill with native read at `EDITABLE_HOST_JS` constant in `lib/capybara/lightpanda/node.rb:524` (`isContentEditable: function(el) {…}` at `javascripts/index.js:935-947`, ~12 LOC saved).
+- **PR #2326** (by us, opened 2026-04-29): **`<summary>` click toggles parent `<details>.open`**. Closes #2325. When merged: drop the summary/details branch from `CLICK_JS` (`lib/capybara/lightpanda/node.rb:367-393`, ~6 LOC saved). Pairs with PR #2324 — once both ship, the `CLICK_JS` constant collapses to a one-liner `function() { this.click() }` (the label arm goes with #2324 in nightly ≥5945).
 
 ### Recently Merged Upstream PRs
 
-Public nightly refreshed **2026-04-29 03:33 UTC** at commit `78babf40` (PR #2261 merge), build **5900**. Five additional PRs merged later on 2026-04-29 (#2237, #2294, #2308, #2315, #2319) and are in `main` HEAD `e981ec75` (build 5918) but post-cut, so they ship in the next public nightly (~2026-04-30 03:33 UTC).
+Public nightly refreshed **2026-04-30 03:33 UTC** for Linux x86_64/aarch64 at HEAD `1f40c309` (PR #2290 merge), build **5932**. **macOS nightly assets are stale at 2026-04-29 03:26 UTC, build 5900** (HEAD `78babf40`) — the macOS GHA jobs missed the 04-30 cut, so `Capybara::Lightpanda::Binary.ensure_nightly` on macOS still gets the 04-29 build. With `Process::MINIMUM_NIGHTLY_BUILD = 5918`, macOS end-users currently fail the version check until the macOS nightly catches up.
 
-Gem-side cleanups for all of these landed 2026-04-29 in one pass against a locally-built `lightpanda 1.0.0-dev.5918+e981ec75`. `Process::MINIMUM_NIGHTLY_BUILD = 5918`, so end-users on 04-29 nightly (5900) hit the version check until 04-30 nightly publishes — this is acceptable because the gem isn't widely used yet.
+Five additional PRs merged later on 2026-04-30 (#2327, #2331, #2324, #2322; #2326 still open) are in `main` HEAD `e42acc53` (build **5940**) but post-cut, so they ship in the next public nightly (~2026-05-01 03:33 UTC, build ~5945).
 
 | PR | Description | Gem cleanup landed |
 |---|---|---|
@@ -225,13 +238,18 @@ Gem-side cleanups for all of these landed 2026-04-29 in one pass against a local
 | #2292 | `KeyboardEvent.keyCode`/`charCode` | `node #send_keys should generate key events` skip dropped |
 | #2306 | `HTMLFrameSetElement` stub (closes #2249) | No direct gem change |
 | #2312 | `<input type=image>` click submits form (closes #2311) | Image-button branch dropped from `CLICK_JS` |
-| #2294 | UA stylesheet `display:none` defaults (post-cut) | `_lightpanda.isVisible` collapsed to ~Cuprite shape (~20 LOC saved) |
-| #2308 | Textarea LF→CRLF in `KeyValueList.urlEncode` (post-cut, closes #2307) | 2 textarea skip patterns dropped |
-| #2315 | `:disabled` honors fieldset/optgroup ancestors (post-cut, closes #2314) | `_lightpanda.isDisabled` polyfill dropped (~28 LOC); `DISABLED_JS` now inlines `el.matches(':disabled')` |
-| #2237 | `window.open` partial support (post-cut) | No direct gem change |
-| #2319 | `Window.close` drops queued navigation (post-cut) | No direct gem change |
+| #2294 | UA stylesheet `display:none` defaults | `_lightpanda.isVisible` collapsed to ~Cuprite shape (~20 LOC saved) |
+| #2308 | Textarea LF→CRLF in `KeyValueList.urlEncode` (closes #2307) | 2 textarea skip patterns dropped |
+| #2315 | `:disabled` honors fieldset/optgroup ancestors (closes #2314) | `_lightpanda.isDisabled` polyfill dropped (~28 LOC); `DISABLED_JS` now inlines `el.matches(':disabled')` |
+| #2237 | `window.open` partial support | No direct gem change |
+| #2319 | `Window.close` drops queued navigation | No direct gem change |
+| #2320 | Fix segfault on `Frame` deinit | No direct gem change (stability win for long sessions) |
+| #2282 | `<input type=file>` foundation (FormData entries can hold `*File`, multipart encoding) | **No direct gem change yet** — the PR explicitly does NOT enable file uploads; both new code paths assert `entry.value == file` is `unreachable`. Track for follow-up that wires `Page.setFileInputFiles`. |
+| #2322 | LP dialog `defaultText` fallback when `promptText` is null (post-04-30 cut, closes #2321) | **Pending nightly ≥5945**: drop `/#accept_prompt should accept the prompt with no message when there is a default/` skip pattern (`spec/spec_helper.rb:122`). |
+| #2324 | `<label>` click runs activation behavior (post-04-30 cut, closes #2323) | **Pending nightly ≥5945**: drop the entire label arm from `CLICK_JS` (`lib/capybara/lightpanda/node.rb:367-381`, ~12 LOC). |
+| #2327 | Cookie: don't allow JS to mutate `HttpOnly` cookies (post-04-30 cut) | No direct gem change (security alignment with Chrome). |
 
-Skip-pattern audit run 2026-04-29 against build 5918 found 6 obsolete patterns (5 `#attach_file` cases that don't actually upload, plus form-submit Referer). All narrowed in the same pass — `/#attach_file/` was split into 17 explicit patterns matching only the cases that hit the missing `Page.setFileInputFiles` CDP method.
+Skip-pattern audit run 2026-04-29 against build 5918 found 6 obsolete patterns (5 `#attach_file` cases that don't actually upload, plus form-submit Referer). All narrowed in the same pass — `/#attach_file/` was split into 17 explicit patterns matching only the cases that hit the missing `Page.setFileInputFiles` CDP method. **Re-running the audit against build 5945** (once the macOS nightly catches up) is expected to surface the prompt-default skip and validate the CLICK_JS label-branch removal.
 
 ### Upstream Open Issues That Affect This Gem
 
