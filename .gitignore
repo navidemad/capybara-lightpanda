@@ -12,3 +12,4 @@
 *.png
 !docs/static/img/*.png
 .playwright-mcp/
+.zig-cache/
