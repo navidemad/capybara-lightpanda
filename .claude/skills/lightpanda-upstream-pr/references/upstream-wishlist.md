@@ -167,13 +167,12 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isDisabled` walks ancestor `<fieldset>` / `<optgroup>` / `<select>` to honor the inherited cases, with the fieldset-first-legend exception (~28 LOC). Called from `DISABLED_JS` in `lib/capybara/lightpanda/node.rb:678`, which backs `Node#disabled?`. Note the polyfill overreaches slightly vs. spec by treating `<option>` inside `<select disabled>` as disabled (line 910); the upstream fix targets spec-correct behavior.
 - **Drop-on-fix**: replace the polyfill with `el.matches(':disabled')` and inline the call at the `DISABLED_JS` constant. Drops `_lightpanda.isDisabled` (~28 LOC).
 
-### A22. `Element.isContentEditable` not implemented
+### A22. `Element.isContentEditable` — IDL attribute landed but always returns false (cannot drop polyfill)
 
-- **Today (verified 2026-04-28 against `main` HEAD via source inspection)**: `Element.isContentEditable` is not exposed as an IDL attribute. The only `contenteditable` reference in the Zig source is `src/browser/interactive.zig:258` (semantic-tree categorization for `LP.getInteractiveElements`); no accessor on `Element` or `HtmlElement`. Reading `el.isContentEditable` returns `undefined`.
-- **Want**: per [HTML §7.7.5.2 "The isContentEditable IDL attribute"](https://html.spec.whatwg.org/multipage/interaction.html#dom-iscontenteditable), `Element.isContentEditable` returns `true` when the element's effective content editable state is "true" — own `contenteditable` attribute non-`false`, OR closest ancestor with non-`false` `contenteditable` attribute (the inheritance walk).
-- **Upstream issue**: #2309, **Upstream PR**: #2310 (open as of 2026-04-29, by us — HTMLElement only; SVGElement out of scope, no IDL accessors there yet).
-- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.isContentEditable` falls back to walking the ancestor chain looking for a non-`false` `contenteditable` attribute when `el.isContentEditable` is falsy/missing (~12 LOC). Called from `EDITABLE_HOST_JS` in `lib/capybara/lightpanda/node.rb:676`, which backs `Node#content_editable?`.
-- **Drop-on-fix**: replace the polyfill with native `el.isContentEditable` and inline the read at the `EDITABLE_HOST_JS` constant. ~12 LOC.
+- **Today (verified 2026-05-01 against `main` HEAD `9a9e79eb`, build 5948)**: `HTMLElement.isContentEditable` IDL accessor exists (`src/browser/webapi/element/Html.zig:398-407`), but the implementation always returns `false`. PR #2310 (by us) originally implemented the spec-correct walk, but the maintainer added commit `2af95af6` immediately before merge that strips the return path: it walks ancestors per HTML §7.7.5.2, but only to emit `log.info(.not_implemented, "IsContentEditable", ...)` when the spec answer would be `true` — the function unconditionally returns `false`. Rationale (from the commit body): Lightpanda has no caret/keyboard editing pipeline, so a spec-correct `true` would route Puppeteer's `dispatchKeyEvent` into a silently-noop input pipeline; routing to `false` and logging the unsupported case surfaces the gap in telemetry rather than masquerading as a working state.
+- **Upstream issue/PR**: #2309 CLOSED 2026-04-30, PR #2310 MERGED 2026-04-30 (with the maintainer override).
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js:910-921` — `_lightpanda.isContentEditable` falls back to walking the ancestor chain looking for a non-`false` `contenteditable` attribute when `el.isContentEditable` is falsy/missing (~12 LOC). Called from `EDITABLE_HOST_JS` in `lib/capybara/lightpanda/node.rb:503`, which backs `Node#content_editable?`. **Polyfill MUST stay** — replacing it with the native read would force every `Node#content_editable?` call to return false.
+- **Drop-on-fix**: blocked indefinitely, contingent on Lightpanda implementing a real keyboard-editing pipeline. Until then, the gem polyfill is load-bearing.
 
 ### A23. `Element.innerText` doesn't insert block-level line breaks
 
@@ -210,21 +209,17 @@ Use this file when:
 - **Gem workaround**: none. Pre-normalizing in `Node#set` would over-normalize (textarea would display `\r\n` chars). The fix has to live in Lightpanda's HTTP layer. Skip-listed: `#click_button.*should convert lf to cr/lf in submitted textareas`, `#fill_in should handle newlines in a textarea`.
 - **Drop-on-fix**: remove the 2 skip patterns.
 
-### A27. `LP.handleJavaScriptDialog` doesn't fall back to dialog `defaultText` when `promptText` is null
+### A27. `LP.handleJavaScriptDialog` doesn't fall back to dialog `defaultText` when `promptText` is null — FIXED + SHIPPED + GEM CLEANED UP
 
-- **Today (verified 2026-04-29 against `main` HEAD `6e881e0a`, build 5920)**: a JS prompt has the form `prompt(message, defaultText)` — when the user accepts without typing, the prompt's return value is `defaultText` (or `""` if absent). Pre-arming `LP.handleJavaScriptDialog {accept: true}` with no `promptText` makes Lightpanda return null/empty regardless of the dialog's `defaultText` argument. Surfaced 2026-04-29 by the Capybara spec `#accept_prompt should accept the prompt with no message when there is a default`, which expects "John Smith" (the dialog's defaultText) and gets nothing back from the page. Empirical 3-case CDP probe at `repro/a27-prompt-default-text/` confirms the bug: `accept` with no `promptText` returns `""` instead of the dialog's `defaultText`.
-- **Want**: when `pending_dialog_response.prompt_text` is null AND `accept` is true, the prompt's return value should be the dialog's `defaultText` (i.e., the second argument to `prompt()`). When `accept` is false, return null per spec regardless. Behavior to mirror Chrome.
-- **Upstream issue**: #2321, **Upstream PR**: #2322 (open as of 2026-04-29, by us — `Window.zig`'s `prompt` JS binding now keeps its second argument named `default_text` instead of discarding it as `_`, and the post-accept return is `response.prompt_text orelse default_text orelse ""`).
-- **Gem workaround**: none. The default value is internal to the JS engine when `prompt()` is called and isn't visible to the gem before the dialog opens, so a gem-side fallback isn't possible. Skip-listed: `#accept_prompt should accept the prompt with no message when there is a default`.
-- **Drop-on-fix**: remove the 1 skip pattern.
+- **Today (verified 2026-05-01 against `main` HEAD `9a9e79eb`, build 5948)**: PR #2322 (by us, MERGED 2026-04-30) lets `Window.zig`'s `prompt` keep its second argument as `default_text` and returns `response.prompt_text orelse default_text orelse ""` on accept, matching Chrome.
+- **Upstream issue**: #2321 CLOSED 2026-04-30. **Upstream PR**: #2322 MERGED 2026-04-30, in Linux nightly ≥5944.
+- **Gem cleanup landed in commit `5e10ce10`** (2026-04-30): `#accept_prompt should accept the prompt with no message when there is a default` skip pattern dropped from `spec/spec_helper.rb`.
 
-### A28. `<label>` click does not run activation behavior on associated form control
+### A28. `<label>` click does not run activation behavior on associated form control — FIXED + SHIPPED + GEM CLEANED UP
 
-- **Today (verified 2026-04-29 against `main` HEAD `e981ec75`, build 5918)**: clicking a `<label>` whose `for=` references a checkbox/radio fires the click event on the label itself but does not invoke the labeled control's activation behavior — `cb.checked` stays at its prior value. Empirical probe: `<input type=checkbox id=cb1>` + `<label for=cb1>` + `lab.click()` → `{ before: false, after: false }`. Source: `src/browser/webapi/element/Html.zig:310 click()` short-circuits disabled controls then dispatches the bubble event, with no [activation behavior](https://html.spec.whatwg.org/multipage/interaction.html#activation) for `<label>` (HTML §4.10.4 "If the element has no defined activation behavior, run [the labeled control's activation behavior]"). `Label.zig` already exposes `getControl()` for the resolution, just not the activation step.
-- **Want**: when an HTMLLabelElement's click activation runs and is not consumed by an interactive descendant, run the labeled control's activation behavior (i.e., what `el.click()` does for `<input type=checkbox|radio|submit|...>`). Mirrors Chrome's `HTMLLabelElement::DefaultEventHandler`.
-- **Upstream issue**: #2323, **Upstream PR**: #2324 (open as of 2026-04-29, by us — adds a `.label` arm to `Frame.handleClick` that resolves via `Label.getControl` and dispatches a synthetic click on the labeled control).
-- **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<label>`, resolves the control via `htmlFor`/wrapping, and calls `.click()` on it explicitly (~10 LOC). Capybara's `automatic_label_click` setting depends on this for radio/checkbox tests.
-- **Drop-on-fix**: remove the label branch from `CLICK_JS`. ~10 LOC.
+- **Today (verified 2026-05-01 against `main` HEAD `9a9e79eb`, build 5948)**: PR #2324 (by us, MERGED 2026-04-30) adds a `.label` arm to `Frame.handleClick` that resolves the labeled control via `Label.getControl` and dispatches a synthetic click. Capybara's `automatic_label_click` flow now works natively.
+- **Upstream issue**: #2323 CLOSED 2026-04-30. **Upstream PR**: #2324 MERGED 2026-04-30, in Linux nightly ≥5944.
+- **Gem cleanup landed in commit `5e10ce10`** (2026-04-30): label arm dropped from `CLICK_JS` in `lib/capybara/lightpanda/node.rb`.
 
 ### A29. `<summary>` click does not toggle parent `<details>.open`
 
@@ -377,7 +372,6 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **A24 — UA stylesheet display:none defaults** | ~20 | Slim `_lightpanda.isVisible` to Cuprite-shape (PR #2294 OPEN) |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
 | **A11 — NoExecutionContextError race** | ~15 + 4 call-sites | `with_default_context_wait` |
-| **A22 — `Element.isContentEditable`** | ~12 | `_lightpanda.isContentEditable` polyfill |
 | **A25 — `<input type=image>` submit** | ~5 | Image-button branch in `CLICK_JS` |
 | **B4 — file uploads** | adds ~30, removes 26 skips | Net positive: enables a feature |
 | **B2 — Page.getNavigationHistory** | ~5 + CLAUDE.md note | Switch `Browser#back`/`#forward` to CDP (PR #2289 OPEN) |
@@ -393,8 +387,9 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **A14 — requestSubmit polyfill** | ~20 | DONE pre-2026-04-28 |
 | **A20 — formaction/formmethod/formenctype** | bundled with A4 | DONE 2026-04-28 (PR #2279 + gem cleanup) |
 | **A6, A7, A15, A16, A17, B7 — assorted skip patterns** | 9 patterns | DONE 2026-04-28 (PRs all merged + spec_helper cleaned) |
+| **A22 — `Element.isContentEditable`** | NOT a drop-on-fix anymore | PR #2310 MERGED 2026-04-30 but the maintainer rewrote the implementation to always return `false` (commit `2af95af6`). Polyfill remains load-bearing — see A22 above. |
 
-**Total remaining drop-on-fix surface**: roughly **~915 LOC of gem-side code** plus ~12 spec_helper skip patterns. The XPath polyfill alone is ~700 LOC.
+**Total remaining drop-on-fix surface**: roughly **~903 LOC of gem-side code** plus ~12 spec_helper skip patterns. The XPath polyfill alone is ~700 LOC.
 
 ---
 
@@ -409,8 +404,7 @@ Reviewer focus would unlock most of the remaining gem-side cleanup. Listed by dr
 3. **B2 — `Page.getNavigationHistory` / `navigateToHistoryEntry` (PR #2289)** — replaces JS `history.back()` / `history.forward()` with the spec-compliant CDP path; better cross-origin behavior.
 4. **A3 — `handleJavaScriptDialog` (PR #2261)** — pre-arm model so `accept_modal(:confirm|:prompt)` can override the auto-dismiss return value. Removes ~30 LOC + 4 skip patterns.
 5. **B6 — Constraint validation API (PR #2286)** — `el.validity.*` and `el.validationMessage`; removes 2 skip patterns.
-6. **A22 — `Element.isContentEditable` (PR #2310)** — HTMLElement IDL accessor with ancestor inheritance; replaces ~12 LOC polyfill.
-7. **A25 — `<input type=image>` submit (PR #2312)** — routes image-button clicks into `Frame.submitForm`; removes ~5 LOC of `CLICK_JS` special-casing.
+6. **A25 — `<input type=image>` submit (PR #2312)** — routes image-button clicks into `Frame.submitForm`; removes ~5 LOC of `CLICK_JS` special-casing.
 8. **A26 — Textarea LF→CRLF normalization (PR #2308)** — `KeyValueList.urlEncode` form-data fix; removes 2 skip patterns.
 9. **A21 — `:disabled` ancestor inheritance through `<fieldset>` / `<optgroup>` (PR #2315)** — ~28 LOC drop-on-fix; routes `:disabled`/`:enabled` selector matchers through `Element.isDisabled` and extends `isDisabled` for the `<option>` + `<optgroup disabled>` case.
 
