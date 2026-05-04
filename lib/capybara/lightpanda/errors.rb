@@ -46,11 +46,23 @@ module Capybara
       attr_reader :class_name, :stack_trace
 
       def initialize(response)
-        @class_name = response.dig("exceptionDetails", "exception", "className")
-        @stack_trace = response.dig("exceptionDetails", "stackTrace")
-        message = response.dig("exceptionDetails", "exception", "description") ||
-                  response.dig("exceptionDetails", "text")
-        super(message)
+        details = response["exceptionDetails"] || {}
+        exception = details["exception"] || {}
+        @class_name = exception["className"]
+        @stack_trace = details["stackTrace"]
+        base = exception["description"] || details["text"] || "JsException"
+        parts = [base]
+        parts << "(#{@class_name})" if @class_name && !base.include?(@class_name)
+        if (val = exception["value"])
+          parts << "value=#{val.inspect}"
+        end
+        if (frames = @stack_trace && @stack_trace["callFrames"])
+          formatted = frames.first(5).map do |f|
+            "#{f['functionName'].to_s.empty? ? '<anon>' : f['functionName']} @ #{f['url']}:#{f['lineNumber']}:#{f['columnNumber']}"
+          end
+          parts << "stack:\n  #{formatted.join("\n  ")}"
+        end
+        super(parts.join(" | "))
       end
     end
 

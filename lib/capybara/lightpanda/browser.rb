@@ -204,7 +204,10 @@ module Capybara
       def evaluate(expression, *args)
         if args.empty?
           response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
-          raise JavaScriptError, response if response["exceptionDetails"]
+          if response["exceptionDetails"]
+            debug_js_failure("evaluate", expression, response)
+            raise JavaScriptError, response
+          end
 
           return unwrap_call_result(response["result"])
         end
@@ -223,6 +226,15 @@ module Capybara
         wrapped = "function() { #{expression} }"
         call_with_args(wrapped, args, return_by_value: false)
         nil
+      end
+
+      # When LIGHTPANDA_DEBUG=1 is set, log the JS expression and full CDP
+      # response for every JsException to STDERR. Invaluable for isolating
+      # which exact JS triggers an upstream Lightpanda bug.
+      def debug_js_failure(site, expression, response)
+        return unless ENV["LIGHTPANDA_DEBUG"]
+
+        warn "[lightpanda:#{site}] expression:\n#{expression}\n[lightpanda:#{site}] response:\n#{response.inspect}\n"
       end
 
       # Evaluate async JS with a callback. The user's script receives
@@ -249,7 +261,10 @@ module Capybara
       # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
       def evaluate_with_ref(expression)
         response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
-        raise JavaScriptError, response if response["exceptionDetails"]
+        if response["exceptionDetails"]
+          debug_js_failure("evaluate_with_ref", expression, response)
+          raise JavaScriptError, response
+        end
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -269,7 +284,10 @@ module Capybara
         params[:arguments] = args.map { |a| serialize_argument(a) } unless args.empty?
 
         response = page_command("Runtime.callFunctionOn", **params)
-        raise JavaScriptError, response if response["exceptionDetails"]
+        if response["exceptionDetails"]
+          debug_js_failure("call_function_on", function_declaration, response)
+          raise JavaScriptError, response
+        end
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -716,7 +734,10 @@ module Capybara
       end
 
       def handle_evaluate_response(response)
-        raise JavaScriptError, response if response["exceptionDetails"]
+        if response["exceptionDetails"]
+          debug_js_failure("handle_evaluate_response", "(unknown — already-issued call)", response)
+          raise JavaScriptError, response
+        end
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -738,7 +759,10 @@ module Capybara
           arguments: args.map { |a| serialize_argument(a) },
         }
         response = page_command("Runtime.callFunctionOn", **params)
-        raise JavaScriptError, response if response["exceptionDetails"]
+        if response["exceptionDetails"]
+          debug_js_failure("call_with_args", function_declaration, response)
+          raise JavaScriptError, response
+        end
 
         return_by_value ? handle_evaluate_response(response) : unwrap_call_result(response["result"])
       end
