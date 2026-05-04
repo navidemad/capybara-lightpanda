@@ -355,7 +355,43 @@ module Capybara
         end
       end
 
-      CLICK_JS = "function() { this.click() }"
+      # Lightpanda's Zig browser has two click-related limitations when invoked
+      # via `Runtime.callFunctionOn` with objectId binding:
+      #   1. `HTMLElement.prototype.click()` and `MouseEvent` dispatch throw
+      #      a generic JsException.
+      #   2. A synthetic click that bubbles to `document` triggers Turbo Drive's
+      #      delegated handler, which itself crashes on Lightpanda (touches an
+      #      unimplemented browser API).
+      # Workaround:
+      #   • Dispatch a synthetic `Event('click')` that bubbles, so Stimulus
+      #     controllers (which listen via document-level delegation) still see
+      #     the click. Wrap in try/catch so Turbo's crash doesn't surface.
+      #   • Then explicitly trigger the default action ourselves: form.submit()
+      #     for submit buttons, location.href for links.
+      # TODO: drop once https://github.com/lightpanda-io/browser implements
+      # `Element.click()` and stops crashing inside Turbo's click handler.
+      CLICK_JS = <<~JS
+        function() {
+          var clickEvt = new Event('click', { bubbles: true, cancelable: true });
+          var notCancelled = true;
+          try {
+            notCancelled = this.dispatchEvent(clickEvt);
+          } catch (e) { /* defensive — polyfills.js handles the bubble crash */ }
+          // Si un handler (Turbo, Stimulus) a appelé preventDefault, il prend
+          // en charge la default action — ne pas la dupliquer.
+          if (!notCancelled || clickEvt.defaultPrevented) return;
+          if (this.tagName === 'BUTTON' && this.type === 'submit' && this.form) {
+            // Dispatch un submit event que Turbo Drive peut intercepter.
+            // `form.submit()` natif bypasse l'event submit (per spec),
+            // donc on l'émet manuellement avant le fallback.
+            var submitEvt = new Event('submit', { bubbles: true, cancelable: true });
+            var submitOk = this.form.dispatchEvent(submitEvt);
+            if (submitOk && !submitEvt.defaultPrevented) this.form.submit();
+          } else if (this.tagName === 'A' && this.href && this.target !== '_blank') {
+            window.location.href = this.href;
+          }
+        }
+      JS
 
       VISIBLE_JS = "function() { return _lightpanda.isVisible(this); }"
 
@@ -464,9 +500,14 @@ module Capybara
 
       SET_CHECKBOX_JS = <<~JS
         function(value) {
-          // Use `click()` so user-installed click/change handlers fire and
-          // observe a real toggle. No-op if already in the requested state.
-          if (this.checked !== value) this.click();
+          // Lightpanda's `click()` is broken via callFunctionOn (cf CLICK_JS),
+          // so we toggle the property manually and fire the events a real
+          // user-driven click would emit so handlers still observe the change.
+          if (this.checked === value) return;
+          this.checked = value;
+          this.dispatchEvent(new Event('input', { bubbles: true }));
+          this.dispatchEvent(new Event('change', { bubbles: true }));
+          this.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
         }
       JS
 
