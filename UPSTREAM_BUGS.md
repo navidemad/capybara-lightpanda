@@ -96,9 +96,73 @@ PR #2253 (mergé 2026-04-27) implémente `requestSubmit()` avec `event.submitter
 
 ---
 
-## Investigation à mener — Turbo Drive fetch lifecycle
+## Bug #6 — `fetch(url, { body: new FormData(...) })` n'encode pas en multipart
 
-Symptôme observé sur un projet Rails 8 + Turbo : avec les workarounds en place, Turbo Drive intercepte correctement les events `click` et `submit` (preventDefault appelé), mais le fetch HTTP qui devrait suivre n'est jamais émis (vérifié dans les logs Rails). Probablement un bug dans `fetch`, `FormData` ou `XMLHttpRequest` qui crash silencieusement dans le code interne de Turbo. À documenter en bug séparé après isolation.
+`fetch()` reçoit bien un `FormData` mais le coerce en string via `String(formData)` (qui retourne `"[object FormData]"`), URL-encode cette string, et envoie le tout en `Content-Type: application/x-www-form-urlencoded`. Le serveur reçoit donc une seule clé bidon `"object FormData"` à la place des entrées du FormData. Reproductible sur build `1.0.0-dev.6013+6b896ba2` (vérifié 2026-05-04).
+
+### Repro minimal
+
+```js
+var fd = new FormData();
+fd.append('name', 'Bob');
+fd.append('count', '42');
+fetch('/echo', { method: 'POST', body: fd })
+  .then(function(r) { return r.json(); })
+  .then(function(j) { console.log(j); });
+```
+
+### Ce qu'on observe côté serveur (Sinatra `request.content_type` + `params`)
+
+```ruby
+{
+  "method"       => "POST",
+  "content_type" => "application/x-www-form-urlencoded",   # devrait être "multipart/form-data; boundary=..."
+  "params"       => { "object FormData" => nil },           # devrait être { "name" => "Bob", "count" => "42" }
+  "raw_body_len" => 17                                       # = length("object%20FormData")
+}
+```
+
+### Ce qu'un navigateur conforme produit (HTML §6.4 fetch + XHR steps 4.4)
+
+`fetch` doit invoquer le « extract a body » algorithme défini par [Fetch §6.5](https://fetch.spec.whatwg.org/#concept-bodyinit-extract). Pour un `FormData`, ça produit un `multipart/form-data; boundary=…` avec une `MIME boundary` séparant chaque entrée de `name`/`value`. Lightpanda saute cette étape et tombe directement sur le fallback `String(body)` qu'il applique aux strings nues.
+
+### Surface concernée — vérifié dans le même probe pass
+
+| body                                                                | Encoding produit | Server reçoit |
+|---|---|---|
+| `"name=A&role=B"` (string nue)                                       | `application/x-www-form-urlencoded` | ✅ `{ name: "A", role: "B" }` |
+| `new URLSearchParams([["name","C"],["count","7"]])`                  | `application/x-www-form-urlencoded` | ✅ `{ name: "C", count: "7" }` |
+| `new FormData()` + `fd.append(...)`                                  | `application/x-www-form-urlencoded` | ❌ `{ "object FormData" => nil }` |
+
+Donc seul `FormData` est cassé. Toutes les autres formes de `body` documentées par la spec marchent (`Blob`, `ArrayBuffer`, `ReadableStream` non testés).
+
+### Impact
+
+Bloquant pour Turbo Drive : tous les `<form>` submits passent par `new FormData(form)` côté Turbo. Sans encoding multipart correct, le serveur ne reçoit aucun champ → 422 systématique sur les form submits Turbo.
+
+Aussi bloquant pour les **uploads de fichier** côté JS — `<input type=file>` sérialisé via `FormData` perd la pièce jointe.
+
+### Workaround côté gem
+
+Aucun. Le bug est dans le code C/Zig de `fetch` côté Lightpanda — pas accessible depuis JS. Les apps Hotwire qui veulent contourner doivent encoder manuellement en `URLSearchParams` (qui marche) :
+
+```js
+// Au lieu de
+fetch(url, { method: 'POST', body: new FormData(form) });
+
+// Côté Turbo on remplacerait par (impossible sans monkey-patcher Turbo) :
+var qs = new URLSearchParams(new FormData(form).entries());
+fetch(url, { method: 'POST', body: qs });
+```
+
+### À vérifier upstream
+
+L'algorithme « extract a body » de Fetch (probablement dans `src/browser/webapi/fetch/` côté Zig) ne discrimine pas le type `FormData`. Voir si :
+
+1. `instanceof FormData` est implémenté pour les inputs entrants
+2. Si oui, brancher l'encodage multipart standard (boundary aléatoire `------WebKitFormBoundary…`, header `Content-Disposition: form-data; name="…"` par entry)
+
+Modèle : `URLSearchParams` est déjà géré correctement, l'API de discrimination existe donc déjà dans le code.
 
 ---
 
@@ -107,7 +171,9 @@ Symptôme observé sur un projet Rails 8 + Turbo : avec les workarounds en place
 Tous les bugs upstream sont isolés en deux étapes :
 
 1. Comparaison du même test Capybara entre Selenium/Cuprite (qui passent) et Lightpanda (qui échoue).
-2. Réduction du repro JS minimal en exécutant des fragments via `Capybara.driver.evaluate_script` et `browser.call_function_on`. Si le repro Capybara reproduit mais le repro CDP-pur ne reproduit pas, suspecter une mauvaise attribution gem-side du symptôme (ex. : Bug #3 listener-throw qui surface comme `JsException` au boundary du `call_function_on`, fait passer Bug #1 pour cassé alors qu'il ne l'est pas — d'où la rétractation Bug #1 ci-dessus).
+2. Réduction du repro JS minimal en exécutant des fragments via `Capybara.driver.evaluate_script` et `browser.call_function_on`. Si le repro Capybara reproduit mais le repro CDP-pur ne reproduit pas, suspecter une mauvaise attribution gem-side du symptôme (ex. : Bug #3 listener-throw qui surface comme `JsException` au boundary du `call_function_on`, fait passer Bug #1 pour cassé alors qu'il ne l'est pas — d'où la rétractation Bug #1 ci-dessus). Suspecter aussi des bugs du test (cf. Bug #6 trouvé après isolation de mon `arguments[0]` au lieu de `arguments[arguments.length - 1]` : tous les "async timeouts" qu'on voyait initialement étaient des erreurs de spec, pas des bugs upstream).
+
+`spec/features/hotwire_zones_probe_spec.rb` couvre les 4 grandes surfaces dont Turbo Drive / Stimulus dépendent (fetch + FormData, `<template>` + DOMParser, MutationObserver, History API + popstate). Sur build 6013, **20/21 passes** ; le seul échec est Bug #6 ci-dessus.
 
 L'enrichissement de `Capybara::Lightpanda::JavaScriptError` (className + stack trace dans le message) et la variable d'environnement `LIGHTPANDA_DEBUG=1` (qui logge l'expression et la réponse CDP à chaque échec) ont rendu la chasse aux bugs nettement plus rapide.
 
@@ -120,3 +186,4 @@ L'enrichissement de `Capybara::Lightpanda::JavaScriptError` (className + stack t
 | #3 `dispatchEvent` halt sur listener throw | broken | broken (scope précisé) | A33 wishlist. Polyfill load-bearing. |
 | #4 `HTMLDialogElement.{showModal, show, close}` | broken | broken | B12 wishlist. À driver upstream. |
 | #5 `HTMLFormElement.requestSubmit()` | broken | ✅ fixed (PR #2253) | A14 wishlist (mergé). |
+| #6 `fetch + FormData` ne fait pas multipart | non testé | broken (verified 6013) | Nouveau — bloque tous les form submits Turbo. À filer en wishlist. |
