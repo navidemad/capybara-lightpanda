@@ -412,6 +412,94 @@ class TestApp
 
   # -- Page with multiple element types for tag_name testing --
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Upstream-bug fixtures.
+  # Each page exposes a minimal scenario where a real browser succeeds and
+  # Lightpanda fails without the gem-side workaround. See UPSTREAM_BUGS.md.
+  # ─────────────────────────────────────────────────────────────────────
+
+  # Bug #3 — synthetic clicks must bubble to document so delegated handlers
+  # (Stimulus, Turbo) see the event. The test inspects window.__hits which
+  # records every click that reached document.
+  get "/lightpanda/upstream/event_delegation" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Event delegation</title></head>
+        <body>
+          <button id="leaf-btn" type="button">Leaf</button>
+          <script>
+            window.__hits = [];
+            document.addEventListener('click', function(e) {
+              window.__hits.push({ phase: 'doc', target: e.target && e.target.id });
+            });
+            document.body.addEventListener('click', function(e) {
+              window.__hits.push({ phase: 'body', target: e.target && e.target.id });
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  # Bug #4 — native <dialog>. Page exposes a button that calls showModal()
+  # and another that calls close(). Tests assert the [open] attribute.
+  get "/lightpanda/upstream/dialog" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Dialog</title></head>
+        <body>
+          <dialog id="d">
+            <p>I am modal</p>
+            <button id="dialog-close" type="button" onclick="document.getElementById('d').close('done')">Close</button>
+          </dialog>
+          <button id="open-modal" type="button" onclick="document.getElementById('d').showModal()">Open modal</button>
+          <button id="open-show" type="button" onclick="document.getElementById('d').show()">Open non-modal</button>
+          <script>
+            window.__closeEvents = [];
+            document.getElementById('d').addEventListener('close', function() {
+              window.__closeEvents.push(document.getElementById('d').returnValue);
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  # Bug #1 — Element.click() via callFunctionOn. Local handler must run for
+  # plain buttons; submit-button click must POST the form.
+  get "/lightpanda/upstream/click_target" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Click target</title></head>
+        <body>
+          <button id="counter-btn" type="button">Count</button>
+          <p id="counter">0</p>
+          <form id="submit-form" action="/lightpanda/upstream/click_submitted" method="post">
+            <input type="hidden" name="payload" value="from-button">
+            <button id="submit-btn" type="submit">Submit</button>
+          </form>
+          <a id="nav-link" href="/lightpanda/other">Go elsewhere</a>
+          <script>
+            (function() {
+              var n = 0;
+              document.getElementById('counter-btn').addEventListener('click', function() {
+                n += 1;
+                document.getElementById('counter').textContent = String(n);
+              });
+            })();
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  post "/lightpanda/upstream/click_submitted" do
+    "<!DOCTYPE html><html><body><h1 id='ok'>Got payload=#{Rack::Utils.escape_html(params['payload'].to_s)}</h1></body></html>"
+  end
+
   get "/lightpanda/elements" do
     <<~HTML
       <!DOCTYPE html>

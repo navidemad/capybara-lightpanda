@@ -65,7 +65,7 @@ RSpec.describe "Capybara::Lightpanda errors" do
   end
 
   describe Capybara::Lightpanda::JavaScriptError do
-    it "extracts class_name and description" do
+    it "extracts class_name and description, appending the className tag" do
       response = {
         "exceptionDetails" => {
           "exception" => {
@@ -76,31 +76,78 @@ RSpec.describe "Capybara::Lightpanda errors" do
       }
       error = described_class.new(response)
       expect(error.class_name).to eq("TypeError")
-      expect(error.message).to eq("Cannot read property 'foo' of null")
+      expect(error.message).to include("Cannot read property 'foo' of null")
+      expect(error.message).to include("(TypeError)")
+    end
+
+    it "skips the className tag when the description already mentions it" do
+      response = {
+        "exceptionDetails" => {
+          "exception" => {
+            "className" => "TypeError",
+            "description" => "TypeError: foo is not a function",
+          },
+        },
+      }
+      error = described_class.new(response)
+      expect(error.message).to eq("TypeError: foo is not a function")
     end
 
     it "falls back to text when description is missing" do
       response = {
         "exceptionDetails" => {
           "text" => "Uncaught error",
-          "exception" => {
-            "className" => "Error",
-          },
+          "exception" => { "className" => "Error" },
         },
       }
       error = described_class.new(response)
-      expect(error.message).to eq("Uncaught error")
+      expect(error.message).to include("Uncaught error")
+      expect(error.message).to include("(Error)")
     end
 
-    it "captures stack_trace when CDP supplies one" do
+    it "falls back to a generic 'JsException' label when nothing is provided" do
+      error = described_class.new("exceptionDetails" => {})
+      expect(error.message).to eq("JsException")
+    end
+
+    it "appends a non-string thrown value when present (e.g. `throw 42`)" do
+      response = {
+        "exceptionDetails" => {
+          "exception" => { "className" => "Number", "value" => 42 },
+        },
+      }
+      error = described_class.new(response)
+      expect(error.message).to include("value=42")
+    end
+
+    it "captures stack_trace and formats up to 5 frames in the message" do
+      frames = (1..7).map do |i|
+        { "functionName" => "fn#{i}", "url" => "f#{i}.js", "lineNumber" => i, "columnNumber" => 0 }
+      end
       response = {
         "exceptionDetails" => {
           "exception" => { "className" => "Error", "description" => "oops" },
-          "stackTrace" => { "callFrames" => [{ "functionName" => "f", "url" => "u" }] },
+          "stackTrace" => { "callFrames" => frames },
         },
       }
       error = described_class.new(response)
-      expect(error.stack_trace).to eq("callFrames" => [{ "functionName" => "f", "url" => "u" }])
+      expect(error.stack_trace).to eq("callFrames" => frames)
+      expect(error.message).to include("stack:")
+      expect(error.message).to include("fn1 @ f1.js:1:0")
+      expect(error.message).to include("fn5 @ f5.js:5:0")
+      expect(error.message).not_to include("fn6") # capped at 5 frames
+    end
+
+    it "labels anonymous frames as <anon> in the formatted stack" do
+      response = {
+        "exceptionDetails" => {
+          "exception" => { "className" => "Error", "description" => "oops" },
+          "stackTrace" => { "callFrames" => [{ "functionName" => "", "url" => "", "lineNumber" => 0,
+                                               "columnNumber" => 19, }] },
+        },
+      }
+      error = described_class.new(response)
+      expect(error.message).to include("<anon> @ :0:19")
     end
   end
 
