@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.2.0] - 2026-05-04
+
+Reliability and feature polish as Lightpanda matured. **Update Lightpanda before upgrading**: this release requires a current nightly (the gem will tell you if yours is too old).
+
+### Added
+
+- `Driver#wait_for_network_idle(timeout:, connections:)` — wait until in-flight HTTP requests drop to a threshold. Useful for SPAs and pages with deferred XHR.
+- `handshake_timeout` driver option — cap how long the gem waits for the browser process to come up, separate from per-command timeouts.
+- `Cookies` is now `Enumerable` — `cookies.find`, `cookies.select`, etc. work directly.
+- `set_cookie` now infers the domain from the current URL (or `Capybara.app_host`) when you don't pass one.
+
+### Changed
+
+- `accept_modal(:confirm)` and `accept_modal(:prompt)` now actually drive the JS return value. Previously they only captured the dialog message; the page-side `confirm()` / `prompt()` always saw the dismiss outcome.
+- `prompt` dialogs now respect the `defaultText` argument when you call `accept_modal(:prompt)` without `with:`.
+- Form interactions are noticeably more reliable on Turbo Drive pages, redirects, and JS-heavy SPAs — many subtle navigation/form-submit edge cases are now handled natively.
+- All transient CDP errors inherit from `BrowserError`. A single `rescue Capybara::Lightpanda::BrowserError` catches the lot.
+
+### Fixed
+
+- Capybara's `node #send_keys should generate key events`, `#has_field with valid`, `#fill_in` with range/date/time inputs, `#refresh reposts`, `attach_file` (most cases), `accept_confirm`, label clicks, image-button submits, and `<summary>` clicks all pass against the new nightly floor.
+- A subscription leak in `Page.loadEventFired` after navigation could slowly accumulate listeners on long-running suites.
+- `visibleText` no longer inserts a stray newline between adjacent empty block elements.
+- A clearer error message when `lsof` isn't installed and the gem can't reclaim a stuck port.
+
+### Removed
+
+- Most of the gem's JS polyfills — Lightpanda implements these natively now: the `#id` selector rewriter, the form-submission fetch+swap, the label/image-button/summary click handlers, and large parts of the visibility/disabled-state polyfills. No code change required on your end; tests should just pass.
+
+### Internal
+
+- 91-case XPath 1.0 conformance battery (replaced ad-hoc specs).
+- README redesign.
+
 ## [0.1.0] - 2026-04-27
 
 Initial release. Capybara driver for the [Lightpanda](https://github.com/lightpanda-io/browser) headless browser.
