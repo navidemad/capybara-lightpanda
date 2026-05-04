@@ -164,7 +164,11 @@ RSpec.describe "Lightpanda Hotwire-zone probes" do
       expect(result.dig("json", "params", "count")).to eq("7")
     end
 
-    it "POSTs a FormData body that the server can parse" do
+    # All 4 tests below assert different facets of UPSTREAM_BUGS.md Bug #6.
+    # Keep them grouped: passing one but not the others would point at a
+    # different (sub-)bug than the one we want fixed.
+
+    it "POSTs a FormData body that the server can parse (Bug #6)" do
       result = session.evaluate_async_script(<<~JS)
         var done = arguments[arguments.length - 1];
         var fd = new FormData();
@@ -177,19 +181,89 @@ RSpec.describe "Lightpanda Hotwire-zone probes" do
       JS
 
       expect(result["ok"]).to be(true), "FormData fetch failed: #{result.inspect}"
-      # KNOWN BROKEN — see UPSTREAM_BUGS.md Bug #6.
-      # Lightpanda coerces the FormData object to its string form
-      # ("[object FormData]"), URL-encodes that, and sets content_type
-      # to application/x-www-form-urlencoded — instead of producing a
-      # proper multipart/form-data body. The server therefore parses a
-      # single bogus key "object FormData" with nil value.
       expect(result.dig("json", "params", "name")).to eq("Bob"),
-                                                      "FormData should be encoded as multipart, " \
-                                                      "got #{result.dig('json', 'params').inspect} " \
-                                                      "(content_type=#{result.dig('json', 'content_type').inspect}, " \
-                                                      "raw_body_len=#{result.dig('json', 'raw_body_len').inspect})"
+                                                      "FormData entries should be parseable, " \
+                                                      "got #{result.dig('json', 'params').inspect}"
       expect(result.dig("json", "params", "count")).to eq("42")
-      expect(result.dig("json", "raw_body_len")).to be > 0
+    end
+
+    it "POSTs FormData with the multipart Content-Type (Bug #6 — symptom marker)" do
+      # Key signature of Bug #6: when fetch sends a FormData body, the
+      # Content-Type MUST be `multipart/form-data; boundary=<random>`,
+      # not `application/x-www-form-urlencoded`. The wrong content-type
+      # is the most lisible "the body coercion fell through to String()"
+      # marker — even before checking the body content.
+      result = session.evaluate_async_script(<<~JS)
+        var done = arguments[arguments.length - 1];
+        var fd = new FormData();
+        fd.append('k', 'v');
+        fetch('/lightpanda/probe/echo', { method: 'POST', body: fd })
+          .then(function(r) { return r.json(); })
+          .then(function(j) { done({ ok: true, json: j }); })
+          .catch(function(e) { done({ ok: false, err: String(e) }); });
+      JS
+
+      expect(result.dig("json", "content_type").to_s).to start_with("multipart/form-data"),
+                                                         "expected multipart/form-data Content-Type, " \
+                                                         "got #{result.dig('json', 'content_type').inspect}"
+    end
+
+    it "POSTs FormData built from an existing <form> via `new FormData(form)` (Bug #6 — Turbo path)" do
+      # This is THE shape Turbo Drive uses on every form submit:
+      # `new FormData(form)` extracts the form's inputs into a FormData,
+      # then fetches with that body. Identical bug surface to the
+      # constructor-then-append case, but worth covering explicitly so
+      # that a partial upstream fix that handles only one constructor
+      # variant doesn't fool the suite.
+      session.execute_script(<<~JS)
+        var f = document.createElement('form');
+        f.id = 'probe-form';
+        f.innerHTML =
+          '<input name="name" value="Bob">' +
+          '<input name="count" value="42">';
+        document.body.appendChild(f);
+      JS
+
+      result = session.evaluate_async_script(<<~JS)
+        var done = arguments[arguments.length - 1];
+        var fd = new FormData(document.getElementById('probe-form'));
+        fetch('/lightpanda/probe/echo', { method: 'POST', body: fd })
+          .then(function(r) { return r.json(); })
+          .then(function(j) { done({ ok: true, json: j }); })
+          .catch(function(e) { done({ ok: false, err: String(e) }); });
+      JS
+
+      expect(result["ok"]).to be(true), "FormData(form) fetch failed: #{result.inspect}"
+      expect(result.dig("json", "params", "name")).to eq("Bob")
+      expect(result.dig("json", "params", "count")).to eq("42")
+    end
+
+    it "XHR + FormData also fails the same way (Bug #6 — single root cause)" do
+      # XHR uses a different code path from fetch for body init. If both
+      # fail with the same `[object FormData]` symptom, the upstream fix
+      # likely lives at a shared body-coercion site and a single PR
+      # covers both. If only fetch fails, the bugs are split and need
+      # separate PRs.
+      result = session.evaluate_async_script(<<~JS)
+        var done = arguments[arguments.length - 1];
+        var fd = new FormData();
+        fd.append('via', 'xhr');
+        var x = new XMLHttpRequest();
+        x.open('POST', '/lightpanda/probe/echo', true);
+        x.onload = function() {
+          try { done({ ok: true, json: JSON.parse(x.responseText) }); }
+          catch (e) { done({ ok: false, parseErr: String(e), raw: x.responseText }); }
+        };
+        x.onerror = function() { done({ ok: false, err: 'xhr-onerror' }); };
+        x.send(fd);
+      JS
+
+      expect(result["ok"]).to be(true), "XHR + FormData failed entirely: #{result.inspect}"
+      expect(result.dig("json", "params", "via")).to eq("xhr"),
+                                                     "XHR + FormData entries should be parseable; " \
+                                                     "if this fails the same way as fetch+FormData, " \
+                                                     "the upstream fix is shared between the two paths " \
+                                                     "(common body-init coercion). got=#{result.dig('json', 'params').inspect}"
     end
   end
 

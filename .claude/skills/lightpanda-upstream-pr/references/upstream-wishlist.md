@@ -259,13 +259,39 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/polyfills.js` — `patchDispatch` IIFE (~45 LOC) monkey-patches `EventTarget.prototype.dispatchEvent` to catch the surfaced `JsException`, then re-walks `parentNode` manually, calling `orig.call(node, event)` on each ancestor and spoofing `event.target` / `event.currentTarget` via `Object.defineProperty`. Pairs with `CLICK_JS` (`lib/capybara/lightpanda/node.rb`, ~22 LOC) which dispatches click events via JS-level `dispatchEvent` (so the patch can rescue them) and falls back to manual default-action (`form.submit()` / `location.href`). Suffices for Stimulus / Turbo (which don't inspect `eventPhase` or `composedPath`) but breaks the spec on `eventPhase` (always 0 for spoofed targets), `CAPTURING_PHASE` (skipped entirely), and `composedPath` (not polyfilled).
 - **Drop-on-fix**: remove the `patchDispatch` IIFE from `polyfills.js` (~45 LOC) AND collapse `CLICK_JS` to `"function() { this.click(); }"` (one-liner; ~22 LOC saved). The `SET_CHECKBOX_JS` simplification already landed. Total: ~67 LOC across two files. Restores spec-correct `eventPhase`, capture-phase listeners, and `composedPath`.
 
-### A34. `fetch(url, { body: new FormData(...) })` does not encode multipart — `[object FormData]` URL-encoded as `application/x-www-form-urlencoded`
+### A34. `fetch` and `XHR` send `FormData` as `[object FormData]` instead of multipart-encoding it
 
-- **Today (verified 2026-05-04 against build `1.0.0-dev.6013+6b896ba2` via `spec/features/hotwire_zones_probe_spec.rb` "POSTs a FormData body that the server can parse")**: `fetch()` accepts a `FormData` instance as `body`, but instead of running the [Fetch §6.5 "extract a body" algorithm](https://fetch.spec.whatwg.org/#concept-bodyinit-extract) it falls through to `String(body)` (`"[object FormData]"`), URL-encodes that string, and sends `Content-Type: application/x-www-form-urlencoded` with body `"object%20FormData"`. The server receives a single bogus key `"object FormData"` with no value. The `FormData` entries are never serialized. The same probe pass confirms `body: "name=A&role=B"` and `body: new URLSearchParams([...])` both encode correctly — only the `FormData` branch falls through to string coercion.
-- **Want**: per [Fetch §6.5 "extract a body"](https://fetch.spec.whatwg.org/#concept-bodyinit-extract) step 8, when the input is a `FormData` object, multipart-encode it (`multipart/form-data; boundary=…`) with one part per entry: `Content-Disposition: form-data; name="<key>"`, value, then boundary. The discrimination plumbing already exists upstream (URLSearchParams works), the FormData branch is just missing.
-- **Upstream issue/PR**: not filed. Likely lives in `src/browser/webapi/fetch/` (or wherever the Body init coercion happens).
-- **Gem workaround**: none possible from JS land — the bug is below the JS API surface. Apps that hit Turbo Drive form submits on Lightpanda will see 422s server-side. The doable JS-level patch would be to monkey-patch `window.fetch` to detect `body instanceof FormData`, manually URL-encode entries, and force `Content-Type: application/x-www-form-urlencoded` — but that breaks file uploads (`<input type=file>`) which require true multipart. Not implementing this in the gem until upstream lands a fix.
-- **Drop-on-fix**: nothing to remove gem-side (no workaround installed). Unblocks: every Turbo Drive form submission + every JS-driven file upload.
+- **Today (verified 2026-05-04 against build `1.0.0-dev.6013+6b896ba2` via `spec/features/hotwire_zones_probe_spec.rb` Zone 1 — 4 dedicated tests)**: Body coercion at the JS→Zig bridge falls through to `toString()` for any `body` that isn't a string/Blob/Stream. URLSearchParams happens to work because its native `toString()` returns a properly URL-encoded query string — but FormData's `toString()` is `"[object FormData]"`. The server therefore receives `Content-Type: application/x-www-form-urlencoded` with body `"object%20FormData"` (17 bytes), parsed as a single bogus key `"object FormData"` with `nil` value. **Identical surface for all 4 facets covered by the probe**:
+
+  | Probe shape | Symptom |
+  |---|---|
+  | `fetch(url, { body: new FormData() + .append(...) })` | `params: {"object FormData" => nil}` |
+  | `fetch(url, { body: new FormData(form) })` (the Turbo Drive shape) | `params: {"object FormData" => nil}` |
+  | `fetch(url, { body: fd })` Content-Type assertion | `application/x-www-form-urlencoded` instead of `multipart/form-data; boundary=…` |
+  | `XMLHttpRequest.send(fd)` | `params: {"object FormData" => nil}` — **identical** to fetch |
+
+  → fetch and XHR share the same broken body-coercion path. **One upstream fix covers both.**
+
+- **Want**: per [Fetch §6.5 "extract a body"](https://fetch.spec.whatwg.org/#concept-bodyinit-extract) step 8, when the body is a `FormData` instance, generate a random boundary, multipart-encode the entries (`Content-Disposition: form-data; name="<key>"` per part), and set `Content-Type: multipart/form-data; boundary=<boundary>`. Per [XHR §4.7.6 "send()"](https://xhr.spec.whatwg.org/#dom-xmlhttprequest-send), same algorithm.
+
+- **Upstream issue/PR**: not filed. **Pinpoint of the fix** (verified by reading `/Users/navid/code/browser` source):
+  - **Site to patch**: `src/browser/webapi/net/Request.zig:48-55`. The `InitOpts.body` field is typed `?[]const u8` — a flat string. The JS→Zig bridge thus coerces every JSValue body argument via `toString()` before it ever reaches Zig logic. Need to widen the type to a tagged union, e.g.:
+    ```zig
+    pub const BodyInit = union(enum) {
+        bytes: []const u8,
+        form_data: *FormData,
+        url_search_params: *URLSearchParams,
+        blob: *Blob,
+        // …
+    };
+    ```
+    similar to `src/browser/webapi/net/Response.zig:67-72` which already exposes a (narrower) `BodyInit` union — that file is the existing model to widen.
+  - **Encoder is already in place**: `src/browser/webapi/net/FormData.zig:174` exposes `pub fn write(opts: WriteOpts, writer: *std.Io.Writer) !void` with `opts.encoding = .formdata` taking a boundary. The full `multipartEncode` algorithm is at `src/browser/webapi/net/FormData.zig:198`. The PR's job is to wire this into the Request body branch and emit the matching `Content-Type` header.
+  - XHR-side equivalent will share the union; verify by grepping for `.send(` handlers in `XMLHttpRequest.zig` (or equivalent file) and routing them through the same `BodyInit` extractor.
+
+- **Gem workaround**: none possible from JS land — the bug is below the JS API surface. Apps that hit Turbo Drive form submits on Lightpanda will see 422/400s server-side. A JS-level monkey-patch of `window.fetch` to detect `body instanceof FormData`, URL-encode entries, and force `Content-Type: application/x-www-form-urlencoded` would work for fields-only forms but breaks file uploads (`<input type=file>`) which require true multipart. Not implementing this in the gem until upstream lands a fix.
+
+- **Drop-on-fix**: nothing to remove gem-side (no workaround installed). The 4 probe tests in `spec/features/hotwire_zones_probe_spec.rb` Zone 1 turn green and become regression coverage for the upstream encoder. Unblocks: every Turbo Drive form submission + every JS-driven `XMLHttpRequest`-based form post + every `<input type=file>` upload that goes through `FormData`.
 
 ---
 

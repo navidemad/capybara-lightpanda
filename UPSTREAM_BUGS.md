@@ -126,15 +126,19 @@ fetch('/echo', { method: 'POST', body: fd })
 
 `fetch` doit invoquer le « extract a body » algorithme défini par [Fetch §6.5](https://fetch.spec.whatwg.org/#concept-bodyinit-extract). Pour un `FormData`, ça produit un `multipart/form-data; boundary=…` avec une `MIME boundary` séparant chaque entrée de `name`/`value`. Lightpanda saute cette étape et tombe directement sur le fallback `String(body)` qu'il applique aux strings nues.
 
-### Surface concernée — vérifié dans le même probe pass
+### Surface concernée — vérifié dans le même probe pass (4 tests dédiés Zone 1)
 
-| body                                                                | Encoding produit | Server reçoit |
+| Path                                                                 | Content-Type                        | Server reçoit |
 |---|---|---|
-| `"name=A&role=B"` (string nue)                                       | `application/x-www-form-urlencoded` | ✅ `{ name: "A", role: "B" }` |
-| `new URLSearchParams([["name","C"],["count","7"]])`                  | `application/x-www-form-urlencoded` | ✅ `{ name: "C", count: "7" }` |
-| `new FormData()` + `fd.append(...)`                                  | `application/x-www-form-urlencoded` | ❌ `{ "object FormData" => nil }` |
+| `fetch(body: "name=A&role=B")` (string nue)                          | `application/x-www-form-urlencoded` | ✅ `{ name: "A", role: "B" }` |
+| `fetch(body: new URLSearchParams([...]))`                            | `application/x-www-form-urlencoded` | ✅ `{ name: "C", count: "7" }` |
+| `fetch(body: new FormData())` + `fd.append(...)`                     | `application/x-www-form-urlencoded` | ❌ `{ "object FormData" => nil }` |
+| `fetch(body: new FormData(form))` (the Turbo Drive shape)            | `application/x-www-form-urlencoded` | ❌ `{ "object FormData" => nil }` |
+| **`XMLHttpRequest.send(formData)`** (different code path)            | `application/x-www-form-urlencoded` | ❌ `{ "object FormData" => nil }` |
 
-Donc seul `FormData` est cassé. Toutes les autres formes de `body` documentées par la spec marchent (`Blob`, `ArrayBuffer`, `ReadableStream` non testés).
+Conclusions :
+- Seul `FormData` est cassé. Les autres formes documentées par la spec (`Blob`, `ArrayBuffer`, `ReadableStream`) non testées.
+- **fetch et XHR ont la même signature de bug** → un seul fix upstream couvre les deux paths. La cause racine est partagée (cf. site à patcher en bas du `Want` de A34 dans le wishlist).
 
 ### Impact
 
