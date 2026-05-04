@@ -237,6 +237,28 @@ Use this file when:
 - **Gem workaround**: `:html_validation` flag in `capybara_skip` list (`spec/features/session_spec.rb`) — pends Capybara's `#has_field with validation message` specs which target a `<input pattern>` field.
 - **Drop-on-fix**: remove `:html_validation` from the `capybara_skip` list. 1 line in `spec/features/session_spec.rb` + the skip comment above it.
 
+### A31. ~~`HTMLElement.click()` throws via `Runtime.callFunctionOn`~~ — NOT A BUG (gem misdiagnosis, retracted 2026-05-04)
+
+- **Resolution**: native `el.click()` invoked via `Runtime.callFunctionOn` with an `objectId`-bound `this` works correctly on current public nightly (`1.0.0-nightly.6005+b8144d3e`, build 6005). Verified empirically via probe at `/Users/navid/code/browser/repro/a31-a32-a33-verify/probe.js` + `probe2.js`: returned `OK`, no `exceptionDetails`, all 4 ancestor listeners fire (leaf → mid → body → doc) with `event.target` preserved.
+- **What was actually wrong**: gem commit `2fdcf32` (2026-05-04) added the `CLICK_JS` workaround based on `UPSTREAM_BUGS.md` Bug #1, which described `el.click()` as throwing `JsException` via `callFunctionOn`. The gem author's repro was likely run against an earlier nightly that had since been fixed, OR the symptom misattributed a different bug (the throwing-listener case — see A33 below — produces an identical `JsException` at the gem's call site).
+- **Gem cleanup landed 2026-05-04**: `SET_CHECKBOX_JS` collapsed to `function(value) { if (this.checked !== value) this.click(); }` (was ~12 LOC). `CLICK_JS` itself **stays in its prior form** because it's still load-bearing for A33 (see below) — the JS-level dispatch is what allows `polyfills.js`'s `patchDispatch` IIFE to rescue throwing-listener bubble propagation. Comment block above `CLICK_JS` rewritten to point at A33 / DOM §2.9 instead of the retracted A31.
+- **Drop-on-fix**: N/A — done.
+
+### A32. ~~`dispatchEvent(new MouseEvent(...))` throws via `Runtime.callFunctionOn`~~ — NOT A BUG (gem misdiagnosis, retracted 2026-05-04)
+
+- **Resolution**: `this.dispatchEvent(new MouseEvent('click', { bubbles: true }))` invoked via `Runtime.callFunctionOn` returns `OK` with no `exceptionDetails` on current public nightly. Same probe as A31. The plain `Event` constructor also works — both are spec-compliant.
+- **What was actually wrong**: same root cause as A31. `UPSTREAM_BUGS.md` Bug #2 was described as a sibling of Bug #1; both are retracted together.
+- **Gem cleanup**: none needed. `CLICK_JS` already uses plain `Event` (cheaper construction); switching to `MouseEvent` for `click(x:, y:, modifiers:)` fidelity is a future ergonomics improvement, not a bug fix. File as gem-side TODO if real-app users start asking for coordinate/modifier-aware clicks.
+- **Drop-on-fix**: N/A — done.
+
+### A33. `dispatchEvent` halts on listener throw instead of reporting exception (DOM §2.9 step 4 violation)
+
+- **Today (verified 2026-05-04 against public nightly `1.0.0-nightly.6005+b8144d3e`, build 6005, via empirical spec re-run with `polyfills.js`'s `patchDispatch` IIFE removed)**: bubble propagation works correctly on the happy path (verified in probe2 — leaf → mid → body → doc with `event.target` preserved). **But** if any listener invoked during dispatch throws an exception, Lightpanda halts the entire dispatch path: subsequent listeners on the same node are skipped AND ancestor propagation never runs. The exception bubbles out of `dispatchEvent` to the caller. Per `spec/features/upstream_bugs_spec.rb` "invokes the document handler even when the local handler throws" — running this case without the polyfill produces a `JavaScriptError: Error: JsException` at the gem's `call_function_on` boundary, with `window.__hits` containing only the leaf phase. Real-world impact: a buggy Stimulus controller or a Turbo Drive edge-case throw silently disables document-level delegation across the whole page until the next navigation.
+- **Want**: per [DOM §2.9 "Dispatching events"](https://dom.spec.whatwg.org/#concept-event-dispatch), the inner-invoke step says "If an exception is thrown by listener's callback, then ... If exception is non-null, then report exception." "Report" means surface to the global error handler / `window.onerror`, NOT halt the dispatch loop. Each listener's callback is wrapped in its own catch; the dispatch algorithm must continue invoking the remaining listeners and the bubble/capture walk regardless.
+- **Upstream issue/PR**: not filed. Likely fix is a `try/catch` around each callback invocation inside the dispatch loop in `src/browser/webapi/event/EventTarget.zig` (or wherever Lightpanda calls back into V8 for each listener), with the caught exception forwarded to the inspector / global error handler instead of propagating up the call stack.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/polyfills.js` — `patchDispatch` IIFE (~45 LOC) monkey-patches `EventTarget.prototype.dispatchEvent` to catch the surfaced `JsException`, then re-walks `parentNode` manually, calling `orig.call(node, event)` on each ancestor and spoofing `event.target` / `event.currentTarget` via `Object.defineProperty`. Pairs with `CLICK_JS` (`lib/capybara/lightpanda/node.rb`, ~22 LOC) which dispatches click events via JS-level `dispatchEvent` (so the patch can rescue them) and falls back to manual default-action (`form.submit()` / `location.href`). Suffices for Stimulus / Turbo (which don't inspect `eventPhase` or `composedPath`) but breaks the spec on `eventPhase` (always 0 for spoofed targets), `CAPTURING_PHASE` (skipped entirely), and `composedPath` (not polyfilled).
+- **Drop-on-fix**: remove the `patchDispatch` IIFE from `polyfills.js` (~45 LOC) AND collapse `CLICK_JS` to `"function() { this.click(); }"` (one-liner; ~22 LOC saved). The `SET_CHECKBOX_JS` simplification already landed. Total: ~67 LOC across two files. Restores spec-correct `eventPhase`, capture-phase listeners, and `composedPath`.
+
 ---
 
 ## B. Missing CDP / DOM methods
@@ -321,6 +343,18 @@ Three independent issues:
 - **Fix**: rewrite `GET_PATH_JS` in the gem to mirror Cuprite's algorithm. The gem already injects an XPath polyfill (`document.evaluate` + `XPathResult`) via `addScriptToEvaluateOnNewDocument`, so the same JS works.
 - **Action**: file as a gem-side TODO instead of an upstream PR. Not actionable through this skill.
 
+### B12. `HTMLDialogElement.prototype.{showModal, show, close}` not implemented
+
+- **Today (observed 2026-05-04 against public nightly `1.0.0-nightly.6005+b8144d3e`; full repro in `spec/features/upstream_bugs_spec.rb` "Bug #4 — HTMLDialogElement polyfill" + `UPSTREAM_BUGS.md` Bug #4)**: the `HTMLDialogElement` constructor exists (`typeof HTMLDialogElement === 'function'`) but `prototype.showModal`, `prototype.show`, `prototype.close`, and `prototype.returnValue` are all `undefined`. Calling any of them throws `TypeError: d.showModal is not a function`. Blocks any UI built on the native `<dialog>` element (very common in Rails 8 + DaisyUI / Tailwind UI / shadcn).
+- **Want**: per [HTML §4.11.4 "The dialog element"](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element), implement on `HTMLDialogElement.prototype`:
+  - `show()` — adds the `open` content attribute if not already set; non-modal display.
+  - `showModal()` — throws `InvalidStateError` if `[open]` is already present; otherwise sets `[open]` and (in Chrome) adds the dialog to the top layer + sets a backdrop. Lightpanda has no rendering so the focus-trap / backdrop / top-layer can be no-ops, but `[open]` MUST flip and the dialog MUST become visible to selectors.
+  - `close([returnValue])` — removes `[open]`, sets `returnValue` if argument given, queues a `close` event.
+  - `returnValue` getter/setter, `cancel` event on Esc (Esc handling is out of scope without input events).
+- **Upstream issue/PR**: not filed. Mirrors the shape of the recently-merged `HTMLFormElement.prototype.requestSubmit` PR (A14) — single Zig file under `src/browser/webapi/element/html/`, ~3 prototype methods, no V8/CDP-runtime entanglement. Probably the smallest discrete missing-API gap in the gem.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/polyfills.js:8-36` (~30 LOC) — adds `showModal` (with `InvalidStateError` parity), `show`, `close([returnValue])` on the prototype. Toggles `[open]` and dispatches a `'close'` event. No focus trap, no backdrop, no top-layer (Lightpanda has no layout anyway).
+- **Drop-on-fix**: remove the dialog block from `polyfills.js`. ~30 LOC. The spec test in `spec/features/upstream_bugs_spec.rb` becomes a regression check for the upstream implementation.
+
 ---
 
 ## C. Inherent limitations (out of scope — keep cuprite for these)
@@ -373,9 +407,11 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | Item | LOC saved | Reason |
 |---|---|---|
 | **B1 — XPath evaluator** | ~700 | Whole `XPathEval` IIFE in index.js |
+| **A33 — `dispatchEvent` listener-throw halts dispatch** | ~67 | `patchDispatch` IIFE in `polyfills.js` (~45) + `CLICK_JS` collapse (~22) |
 | **A23 — `Element.innerText` block-level newlines** | ~50 | `_lightpanda.visibleText` polyfill |
 | **A3 — handleJavaScriptDialog** | ~30 + 4 skips | Modal handlers + 4 spec_helper skip patterns |
 | **A12 — WebSocket nav crash** | ~30 | `handle_navigation_crash` reconnect |
+| **B12 — `HTMLDialogElement` methods** | ~30 | Dialog block in `polyfills.js` |
 | **A21 — `:disabled` inheritance** | ~28 | `_lightpanda.isDisabled` polyfill |
 | **A24 — UA stylesheet display:none defaults** | ~20 | Slim `_lightpanda.isVisible` to Cuprite-shape (PR #2294 OPEN) |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
@@ -397,7 +433,7 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **A6, A7, A15, A16, A17, B7 — assorted skip patterns** | 9 patterns | DONE 2026-04-28 (PRs all merged + spec_helper cleaned) |
 | **A22 — `Element.isContentEditable`** | NOT a drop-on-fix anymore | PR #2310 MERGED 2026-04-30 but the maintainer rewrote the implementation to always return `false` (commit `2af95af6`). Polyfill remains load-bearing — see A22 above. |
 
-**Total remaining drop-on-fix surface**: roughly **~903 LOC of gem-side code** plus ~12 spec_helper skip patterns. The XPath polyfill alone is ~700 LOC.
+**Total remaining drop-on-fix surface**: roughly **~1,030 LOC of gem-side code** plus ~12 spec_helper skip patterns. The XPath polyfill alone is ~700 LOC. A33 (the narrowed listener-throw bug) + B12 (HTMLDialogElement) account for ~97 LOC of `polyfills.js` + `node.rb` workarounds. A31 + A32 retracted as misdiagnoses (see below).
 
 ---
 
@@ -418,12 +454,14 @@ Reviewer focus would unlock most of the remaining gem-side cleanup. Listed by dr
 
 ### Unfiled items most worth claiming (need authors)
 
-1. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest unfiled LOC saving.
-2. **A12 — WebSocket dies on complex page navigation (#1849)** — ~30 LOC drop-on-fix; partial fix from PR #1850 in 2026-03 didn't fully close the issue.
-3. **A11 — `Runtime.evaluate` "Cannot find default execution context" race (#2187)** — ~15 LOC + 4 call-sites; needs queue-or-await around `executionContextCreated`.
-4. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing.
-5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 26 skip patterns. Net positive: enables a feature.
-6. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+1. **A33 — `dispatchEvent` halts on listener throw (DOM §2.9 step 4 violation)** — ~67 LOC drop-on-fix. Real-world impact: a buggy Stimulus controller or Turbo Drive edge-case throw silently disables document-level event delegation across the page. Likely fix is a `try/catch` around each callback invocation inside the dispatch loop in `src/browser/webapi/event/EventTarget.zig` with the caught exception forwarded to the global error handler instead of propagating to the dispatch caller. Small, isolated reproducer (3 listeners, 1 throwing).
+2. **B12 — `HTMLDialogElement.{showModal, show, close}`** — ~30 LOC drop-on-fix; smallest, cleanest scope. Pure missing-API addition; mirrors A14 (`requestSubmit`) shape exactly. Good first-PR candidate.
+3. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest single-item LOC saving.
+4. **A12 — WebSocket dies on complex page navigation (#1849)** — ~30 LOC drop-on-fix; partial fix from PR #1850 in 2026-03 didn't fully close the issue.
+5. **A11 — `Runtime.evaluate` "Cannot find default execution context" race (#2187)** — ~15 LOC + 4 call-sites; needs queue-or-await around `executionContextCreated`.
+6. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing.
+7. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 26 skip patterns. Net positive: enables a feature.
+8. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
 
 ## What this gem won't ever fix (run cuprite)
 
