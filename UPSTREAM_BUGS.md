@@ -72,7 +72,7 @@ Limites du workaround : pas de `CAPTURING_PHASE`, `eventPhase` incorrect pour le
 
 Probable `try/catch` autour de chaque invocation de callback dans le dispatch loop (`src/browser/webapi/event/EventTarget.zig` ou équivalent), avec l'exception attrapée forwardée à l'inspector / global error handler au lieu de remonter l'appelant.
 
----
+### Fix upstream attendu
 
 ## Bug #4 — `HTMLDialogElement.prototype.{showModal, show, close}` non implémentés
 
