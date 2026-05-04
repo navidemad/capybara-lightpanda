@@ -355,29 +355,7 @@ module Capybara
         end
       end
 
-      # Click handler. Native `this.click()` for everything; we only intervene
-      # for one residual Lightpanda gap:
-      #   * Clicking a `<summary>` doesn't toggle its parent `<details>` — flip
-      #     `open` ourselves after dispatching the click. (Drop this branch when
-      #     PR #2326 merges and `MINIMUM_NIGHTLY_BUILD` is bumped past it.)
-      # Native works as of build ≥5940: `<label>` activation (PR #2324),
-      # `<input type=image>` form submission (PR #2312), `<button>` / `<input
-      # type=submit>` (PR #2244 + #2253 + #2279).
-      CLICK_JS = <<~JS
-        function() {
-          var tag = this.tagName.toLowerCase();
-          this.click();
-          if (tag === 'summary') {
-            var d = this.parentNode;
-            while (d && d.nodeType === 1 && d.tagName.toLowerCase() !== 'details') {
-              d = d.parentNode;
-            }
-            if (d && d.tagName && d.tagName.toLowerCase() === 'details') {
-              d.open = !d.open;
-            }
-          }
-        }
-      JS
+      CLICK_JS = "function() { this.click() }"
 
       VISIBLE_JS = "function() { return _lightpanda.isVisible(this); }"
 

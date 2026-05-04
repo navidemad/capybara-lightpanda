@@ -121,10 +121,6 @@ RSpec.configure do |config|
       # distinguish a closed iframe from a live one within the frame_stack.
       /#switch_to_frame works if the frame is closed/,
       /#within_frame works if the frame is closed/,
-      # `validity` API not implemented — `el.validity` returns undefined,
-      # so `:valid` filter and `el.validationMessage` don't work.
-      /#has_field with valid should be true if field is valid/,
-      /#has_field with valid should be false if field is invalid/,
       # CSS text-transform / case sensitivity for invisible text — depends
       # on getComputedStyle returning cascade-resolved `text-transform`,
       # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.

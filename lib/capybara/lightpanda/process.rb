@@ -8,21 +8,24 @@ module Capybara
       READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # Floor for the cookie/navigation/redirect/modal/keyboard/css fixes the
-      # gem now relies on: PR #2255 (Network.clearBrowserCookies empty params
-      # + Network.getAllCookies), PR #2257 (window.location.pathname/.search
-      # assignment triggers navigation), PR #2265 (URL fragment inherited
-      # across fragment-less redirect), PR #2261 (LP.handleJavaScriptDialog
-      # pre-arm), PR #2283 (Referer on cross-page nav), PR #2292
-      # (KeyboardEvent.keyCode/charCode), PR #2294 (UA stylesheet display:none
-      # for HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/TITLE/[type=hidden]), PR #2308
-      # (textarea LF→CRLF), PR #2312 (<input type=image> click submits form),
-      # PR #2315 (:disabled honors fieldset/optgroup ancestors), PR #2322
-      # (LP dialog defaultText fallback when promptText is null), PR #2324
-      # (<label> click runs activation behavior on labeled control). Build
-      # 5940 = main HEAD e42acc53 (2026-04-30); ships in the next public
-      # nightly (~2026-05-01 03:33 UTC).
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("5940")
+      # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms
+      # fixes the gem now relies on: PR #2255 (Network.clearBrowserCookies
+      # empty params + Network.getAllCookies), PR #2257
+      # (window.location.pathname/.search assignment triggers navigation),
+      # PR #2265 (URL fragment inherited across fragment-less redirect),
+      # PR #2261 (LP.handleJavaScriptDialog pre-arm), PR #2283 (Referer on
+      # cross-page nav), PR #2292 (KeyboardEvent.keyCode/charCode), PR #2294
+      # (UA stylesheet display:none for HEAD/SCRIPT/STYLE/NOSCRIPT/TEMPLATE/
+      # TITLE/[type=hidden]), PR #2308 (textarea LF→CRLF), PR #2312 (<input
+      # type=image> click submits form), PR #2315 (:disabled honors fieldset/
+      # optgroup ancestors), PR #2322 (LP dialog defaultText fallback when
+      # promptText is null), PR #2324 (<label> click runs activation behavior
+      # on labeled control), PR #2286 (HTML constraint validation API:
+      # el.validity, validationMessage, checkValidity, reportValidity),
+      # PR #2342 (<summary> click toggles parent <details>.open). Build
+      # 6005 = main HEAD 0420802f (2026-05-04); ships in nightly published
+      # 2026-05-04 03:44 UTC for all four platforms.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6005")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 
