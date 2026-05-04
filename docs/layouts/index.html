@@ -620,18 +620,18 @@
                   Gate it on an env var so your existing driver stays the
                   default.
                 </p>
-                {{ transform.Highlight `# spec/support/capybara.rb · or
-                test/support/... if ENV["BROWSER"] == "lightpanda" require
-                "capybara-lightpanda" Capybara.javascript_driver = :lightpanda
-                end` "ruby" "" }}
+{{ transform.Highlight `# spec/support/capybara.rb · or test/support/...
+if ENV["BROWSER"] == "lightpanda"
+  require "capybara-lightpanda"
+  Capybara.javascript_driver = :lightpanda
+end` "ruby" "" }}
               </div>
             </li>
             <li class="beta__step-row">
               <span class="beta__step-no" aria-hidden="true">3</span>
               <div class="beta__step-body">
                 <p class="beta__step-line">Run one suite. Decide.</p>
-                {{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails
-                test test/system/` "console" "" }}
+{{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails test test/system/` "console" "" }}
               </div>
             </li>
           </ol>
