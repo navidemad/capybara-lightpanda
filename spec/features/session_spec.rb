@@ -23,7 +23,11 @@ Capybara::SpecHelper.run_specs(
   #   :response_headers  — CDP doesn't expose response headers.
   #   :trigger           — driver doesn't implement Node#trigger.
   #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
-  #   :html_validation   — element.validationMessage not exposed.
+  #   :html_validation   — `validationMessage` works for required/valueMissing
+  #                        (PR #2286) but `pattern` IDL accessor returns null
+  #                        and `suffersPatternMismatch` is a TODO stub in Input.zig
+  #                        (needs V8 RegExp eval from Zig). Capybara's two specs
+  #                        target a `pattern` field, so they fail with empty msg.
   #   :download          — no file download support.
   #   :active_element    — Tab-key focus traversal isn't implemented, and
   #                        `el.click()` doesn't focus form controls the way

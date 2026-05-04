@@ -229,6 +229,14 @@ Use this file when:
 - **Gem workaround**: `CLICK_JS` (`lib/capybara/lightpanda/node.rb`) detects `<summary>`, walks to parent `<details>`, and flips `open` after dispatching the click (~6 LOC).
 - **Drop-on-fix**: remove the summary/details branch from `CLICK_JS`. ~6 LOC.
 
+### A30. `HTMLInputElement.pattern` IDL accessor + `validity.patternMismatch` not implemented
+
+- **Today (verified 2026-05-04 against public nightly `1.0.0-nightly.6005+b8144d3e`, `main` HEAD `0420802f`)**: `HTMLInputElement.prototype.pattern` is not registered on the JS prototype — `inp.pattern` returns `undefined` even when `getAttribute('pattern')` returns the regex. `Input.suffersPatternMismatch` is a TODO stub returning `false`, so `validity.patternMismatch` never fires for `<input pattern="…">` and `validationMessage` is empty for any pattern-violating value. This is the explicit deferral from PR #2286 ("`patternMismatch` — needs JS RegExp evaluation from Zig […]; no clean Zig-side path yet"). `valueMissing` / `typeMismatch` / range / length paths from PR #2286 all work correctly.
+- **Want**: per [HTML §4.10.5.3.5](https://html.spec.whatwg.org/multipage/input.html#the-pattern-attribute), reflect `pattern` as an IDL accessor on `HTMLInputElement` and implement `suffersPatternMismatch` by evaluating `new RegExp("^(?:" + pattern + ")$", "v").test(value)` via V8 on the owner frame. Apply only to text-like input types; treat empty value and unparseable regex as no constraint.
+- **Upstream issue**: #2351, **Upstream PR**: #2352 (open as of 2026-05-04, by us — `getPattern`/`setPattern` mirror `getMin`/`setMin`, `pattern = bridge.accessor(...)` registered, `suffersPatternMismatch` rewritten to `frame.js.localScope` + `ls.local.exec` with JSON-encoded interpolation; `ValidityState.getPatternMismatch` plumbs `*Frame`).
+- **Gem workaround**: `:html_validation` flag in `capybara_skip` list (`spec/features/session_spec.rb`) — pends Capybara's `#has_field with validation message` specs which target a `<input pattern>` field.
+- **Drop-on-fix**: remove `:html_validation` from the `capybara_skip` list. 1 line in `spec/features/session_spec.rb` + the skip comment above it.
+
 ---
 
 ## B. Missing CDP / DOM methods
