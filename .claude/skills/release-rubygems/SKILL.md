@@ -54,6 +54,17 @@ Use commit-message intent (and the diff if a message is ambiguous) to bin commit
 
 Note: the existing 0.1.0 entry uses topical headings (Driver, CDP client, Cookies, etc.) because it's a first-release inventory. From 0.2.0 onward, use Keep-a-Changelog Added/Changed/Fixed — that's the more useful framing for incremental releases. Don't mimic 0.1.0's structure.
 
+**Write for the audience: Rails developers using the gem to test their apps.** They are NOT browser engineers. They want to know what changed *in their test suite*, not what happened in the engine. Apply these rules:
+
+- **Cite behavior, not mechanisms.** "Form interactions are more reliable on Turbo Drive pages" beats "drop CLICK_JS fetch+swap workaround now that Frame.submitForm calls scheduleNavigationWithArena natively". The reader doesn't know what `CLICK_JS` is — they know whether their `click_button` tests pass.
+- **No upstream PR numbers.** Phrases like "PR #2261", "upstream PR #2342", "via Lightpanda PR" are noise to a Rails dev. They don't open the Lightpanda repo. State the user-visible result and stop.
+- **No Zig / V8 / CDP / "polyfill" / "wishlist" jargon.** If a sentence requires the reader to know what `Page.handleJavaScriptDialog` is, or what a "JS bundle injected via `Page.addScriptToEvaluateOnNewDocument`" means, rewrite it as the observable behavior change.
+- **Frame Removed entries as "no code change required on your end".** When a polyfill leaves the gem because Lightpanda now does it natively, the user-facing impact is *nothing changes for them* — emphasize that, don't enumerate every dropped helper.
+- **Lead with the upgrade action, if any.** "Update Lightpanda before upgrading" or "Driver options moved" should land in the first sentence of the section heading or as a top-of-entry note, not buried in a bullet.
+- **Default to fewer bullets, denser prose.** A single sentence covering "modals now actually drive the JS return value end-to-end" beats three bullets explaining the pre-arm flow.
+- **Skip-pattern bookkeeping is not a feature.** "13+ obsolete skip patterns dropped" tells the reader nothing actionable. Either name the *capability* now working ("Capybara's `#has_field with valid` specs now pass") or omit it.
+- **Internal section is for things the reader might still notice but doesn't act on** — README redesign, test infra rewrites. Keep it short. CI changes, sync-upstream audits, wishlist tracking, and skill refinements belong nowhere in the user-facing changelog.
+
 Show the user the draft as a fenced markdown block and ask: "Edit anything? Reply 'looks good' to apply, or paste the revised version." Iterate until they approve. Don't write to CHANGELOG.md before approval — easier to keep iterating in chat than to edit-and-revert.
 
 ## Step 3 — Apply the bump
