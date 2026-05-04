@@ -355,35 +355,22 @@ module Capybara
         end
       end
 
-      # Lightpanda's Zig browser has two click-related limitations when invoked
-      # via `Runtime.callFunctionOn` with objectId binding:
-      #   1. `HTMLElement.prototype.click()` and `MouseEvent` dispatch throw
-      #      a generic JsException.
-      #   2. A synthetic click that bubbles to `document` triggers Turbo Drive's
-      #      delegated handler, which itself crashes on Lightpanda (touches an
-      #      unimplemented browser API).
-      # Workaround:
-      #   • Dispatch a synthetic `Event('click')` that bubbles, so Stimulus
-      #     controllers (which listen via document-level delegation) still see
-      #     the click. Wrap in try/catch so Turbo's crash doesn't surface.
-      #   • Then explicitly trigger the default action ourselves: form.submit()
-      #     for submit buttons, location.href for links.
-      # TODO: drop once https://github.com/lightpanda-io/browser implements
-      # `Element.click()` and stops crashing inside Turbo's click handler.
+      # Native `this.click()` reaches all ancestors on the happy path, but if any
+      # listener throws (Stimulus / Turbo edge cases) Lightpanda halts dispatch
+      # instead of reporting the exception per DOM §2.9 step 4 (see UPSTREAM_BUGS.md
+      # Bug #3). Dispatching via JS routes through `polyfills.js`'s patchDispatch
+      # IIFE, which catches the throw and re-walks parents manually so document-
+      # level delegated handlers still see the event. Manual default action then
+      # stands in for the activation behavior native click() would run.
       CLICK_JS = <<~JS
         function() {
           var clickEvt = new Event('click', { bubbles: true, cancelable: true });
           var notCancelled = true;
           try {
             notCancelled = this.dispatchEvent(clickEvt);
-          } catch (e) { /* defensive — polyfills.js handles the bubble crash */ }
-          // Si un handler (Turbo, Stimulus) a appelé preventDefault, il prend
-          // en charge la default action — ne pas la dupliquer.
+          } catch (e) { /* patchDispatch in polyfills.js rescues bubble phase */ }
           if (!notCancelled || clickEvt.defaultPrevented) return;
           if (this.tagName === 'BUTTON' && this.type === 'submit' && this.form) {
-            // Dispatch un submit event que Turbo Drive peut intercepter.
-            // `form.submit()` natif bypasse l'event submit (per spec),
-            // donc on l'émet manuellement avant le fallback.
             var submitEvt = new Event('submit', { bubbles: true, cancelable: true });
             var submitOk = this.form.dispatchEvent(submitEvt);
             if (submitOk && !submitEvt.defaultPrevented) this.form.submit();
@@ -500,14 +487,7 @@ module Capybara
 
       SET_CHECKBOX_JS = <<~JS
         function(value) {
-          // Lightpanda's `click()` is broken via callFunctionOn (cf CLICK_JS),
-          // so we toggle the property manually and fire the events a real
-          // user-driven click would emit so handlers still observe the change.
-          if (this.checked === value) return;
-          this.checked = value;
-          this.dispatchEvent(new Event('input', { bubbles: true }));
-          this.dispatchEvent(new Event('change', { bubbles: true }));
-          this.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+          if (this.checked !== value) this.click();
         }
       JS
 
