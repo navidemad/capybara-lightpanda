@@ -4,161 +4,189 @@ Inventaire des limitations du binaire Lightpanda découvertes en exécutant des 
 
 Quand un bug est résolu upstream, le polyfill correspondant dans `lib/capybara/lightpanda/javascripts/polyfills.js` peut être retiré (les `if (!feature)` font de toute façon des no-ops).
 
-## Bug #1 — `HTMLElement.prototype.click()` non implémenté via `Runtime.callFunctionOn`
+---
 
-`Element.click()` lève `JsException` quand la méthode est invoquée via une fonction CDP `Runtime.callFunctionOn` avec un `objectId` lié — alors que la même méthode marche via `Runtime.evaluate` direct.
+## Bug #1 — `Element.prototype.click()` lève `JsException` quand invoqué via `Runtime.callFunctionOn`
 
-### Repro
+`element.click()` jette une exception générique quand la méthode est appelée depuis le corps d'une fonction CDP `Runtime.callFunctionOn` avec un `objectId` lié — alors que la même méthode marche correctement via `Runtime.evaluate`. Reproductible sur **build `1.0.0-dev.6013+6b896ba2`** (vérifié 2026-05-04).
+
+### Repro minimal — JavaScript
+
+```js
+// 1. Page setup
+document.body.innerHTML = '<button id="b" type="button">x</button>';
+const btn = document.getElementById('b');
+btn.addEventListener('click', () => console.log('clicked!'));
+```
+
+### Repro côté CDP
+
+#### A. Path qui marche — `Runtime.evaluate` (no objectId binding)
+
+```json
+{
+  "method": "Runtime.evaluate",
+  "params": {
+    "expression": "document.getElementById('b').click()",
+    "awaitPromise": true,
+    "returnByValue": false
+  }
+}
+```
+
+→ Renvoie `{"result": {"type": "undefined"}}`, le handler de l'event `click` est invoqué. **OK.**
+
+#### B. Path qui échoue — `Runtime.callFunctionOn` avec `this` lié à l'objet
+
+```json
+{
+  "method": "Runtime.callFunctionOn",
+  "params": {
+    "objectId": "<oid de #b>",
+    "functionDeclaration": "function() { this.click() }",
+    "awaitPromise": true,
+    "returnByValue": true
+  }
+}
+```
+
+→ Renvoie une réponse avec `exceptionDetails` :
+
+```json
+{
+  "exceptionDetails": {
+    "exceptionId": 14,
+    "text": "Uncaught",
+    "lineNumber": 0,
+    "columnNumber": 19,
+    "stackTrace": {
+      "callFrames": [
+        { "functionName": "", "scriptId": "57", "url": "", "lineNumber": 0, "columnNumber": 19 }
+      ]
+    },
+    "exception": {
+      "type": "object",
+      "subtype": "error",
+      "className": "Error",
+      "description": "Error: JsException\n    at HTMLButtonElement.<anonymous> (<anonymous>:1:20)"
+    }
+  }
+}
+```
+
+La position `1:20` (`columnNumber`) correspond au caractère `(` de `click()` dans `function() { this.click() }`. Le handler `click` n'est **jamais** appelé.
+
+### Caractérisation
+
+Sur le même `objectId` lié au `<button>`, dans le même appel `callFunctionOn` :
+
+| JS executé via callFunctionOn | Résultat |
+|---|---|
+| `this.click()` | ❌ `JsException` à 1:20 |
+| `HTMLElement.prototype.click.call(this)` | ❌ `JsException` à 1:43 |
+| `var f = this.click; f.call(this)` | ❌ `JsException` à 1:37 |
+| `this.focus()` | ✅ OK |
+| `this.blur()` | ✅ OK |
+| `this.getBoundingClientRect()` | ✅ OK |
+| `this.tagName` | ✅ retourne `"BUTTON"` |
+| `setTimeout(() => this.click(), 0)` | ✅ OK — handler invoqué |
+
+Quand on enveloppe dans un `try/catch` JS et qu'on inspecte :
+
+```js
+function() {
+  var info = { typeofClick: typeof this.click };
+  try { this.click(); info.threw = null; }
+  catch (e) { info.threw = String(e); info.errorName = e && e.name; }
+  return info;
+}
+```
+
+→ `{ "typeofClick": "function", "threw": "Error: JsException", "errorName": "Error" }`
+
+Donc :
+- `Element.prototype.click` **existe** comme `function`
+- Mais l'appel synchrone direct depuis le contexte `callFunctionOn` lève une exception JS interne au binding Zig
+- L'exception est attrapable côté JS (try/catch fonctionne), donc remontée par le V8 isolate normalement
+- L'asynchronicité (`setTimeout`) débloque l'appel — ce qui suggère que le bug est lié à l'état du contexte d'exécution synchrone immédiatement à l'intérieur de `callFunctionOn`
+
+### Surface concernée
+
+Reproduit pour tous les éléments testés (chacun avec son binding `JsApi` Zig dédié) :
+
+| Élément | Stack frame du throw |
+|---|---|
+| `<button type=button>` | `HTMLButtonElement.<anonymous>` |
+| `<button type=submit>` | `HTMLButtonElement.<anonymous>` |
+| `<a href>` | `HTMLAnchorElement.<anonymous>` |
+| `<input type=checkbox>` | `HTMLInputElement.<anonymous>` |
+| `<summary>` | `browser.webapi.element.html.Generic.JsApi.<anonymous>` |
+
+La frame pour `<summary>` expose le chemin Zig interne : c'est bien le code natif `browser.webapi.element.html.Generic.JsApi` qui throw — pas un bug côté V8 / CDP.
+
+### Impact
+
+Bloque toute interaction utilisateur via Capybara puisque `click_on`, `find(...).click`, etc. passent tous par `Runtime.callFunctionOn` avec un objectId pour appeler la méthode native du DOM. Sans workaround, la suite système d'une app Hotwire échoue dès le premier `click_on`.
+
+### Workaround dans le gem
+
+Voir `Capybara::Lightpanda::Node::CLICK_JS` :
 
 ```ruby
-# Capybara::Lightpanda::Browser path
-btn_object_id = node.remote_object_id
-browser.call_function_on(btn_object_id, "function() { this.click() }")
-# => Capybara::Lightpanda::JavaScriptError: Error: JsException
-#    at HTMLButtonElement.<anonymous> (<anonymous>:1:20)
+CLICK_JS = <<~JS
+  function() {
+    var clickEvt = new Event('click', { bubbles: true, cancelable: true });
+    var notCancelled = true;
+    try {
+      notCancelled = this.dispatchEvent(clickEvt);
+    } catch (e) { /* defensive */ }
+    if (!notCancelled || clickEvt.defaultPrevented) return;
+    if (this.tagName === 'BUTTON' && this.type === 'submit' && this.form) {
+      var submitEvt = new Event('submit', { bubbles: true, cancelable: true });
+      var submitOk = this.form.dispatchEvent(submitEvt);
+      if (submitOk && !submitEvt.defaultPrevented) this.form.submit();
+    } else if (this.tagName === 'A' && this.href && this.target !== '_blank') {
+      window.location.href = this.href;
+    }
+  }
+JS
 ```
 
-```js
-// Browser-side equivalent (succeeds in Chromium, throws in Lightpanda)
-// (executed in the context of a callFunctionOn frame with `this` bound to a button)
-this.click();
-```
+Stratégie :
+1. Dispatcher un `Event('click')` synthétique qui bubble (vu par Stimulus, Turbo Drive, etc.) — `dispatchEvent`, contrairement à `click()`, n'a pas le bug
+2. Si le default n'a pas été prévenu, déclencher manuellement la default action (`form.submit()`, `window.location.href`)
 
-### Impact
+Limite : ne couvre pas tous les détails fidèles d'un vrai click (pas de coordonnées `clientX/Y`, pas de `MouseEvent` avec `button: 0`). Suffisant pour Hotwire et la plupart des UI.
 
-Tous les `click_on` de Capybara passent par `node.click` qui invoque `this.click()` via callFunctionOn. Bloquant pour toute interaction utilisateur.
+### À vérifier upstream
 
-### Workaround
+Hypothèse pour le commit fix : l'implémentation de `Element.click()` dans `browser/src/webapi/element/element.zig` (ou équivalent) tente probablement d'accéder à un état du contexte V8 (isolate, scope, microtask queue) qui n'est pas valide quand l'appel arrive synchroniquement depuis `Runtime.callFunctionOn`. Le fait que `setTimeout` débloque suggère qu'une queue de microtasks ou une transition de scope manque entre le retour de `callFunctionOn` et l'invocation native.
 
-Voir `Capybara::Lightpanda::Node::CLICK_JS` — dispatch d'un `Event('click', { bubbles: true })` synthétique + fallback `form.submit()` / `location.href`.
-
----
-
-## Bug #2 — `MouseEvent` dispatch crash via `Runtime.callFunctionOn`
-
-`dispatchEvent(new MouseEvent(...))` lève `JsException` dans le même contexte que le bug #1. Différent de `Event(...)` qui lui fonctionne.
-
-### Repro
-
-```js
-// Via callFunctionOn avec `this` bound à un Element
-this.dispatchEvent(new MouseEvent('click', { bubbles: true })); // throws JsException
-this.dispatchEvent(new Event('click', { bubbles: true }));      // OK (mais cf bug #3)
-```
-
-### Impact
-
-Empêche d'utiliser `MouseEvent` comme alternative à `.click()`. Pas de manière de simuler un vrai click utilisateur (avec coordonnées, button, modifiers) au niveau JS.
-
-### Workaround
-
-Idem #1 — utiliser `Event('click', ...)` à la place.
-
----
-
-## Bug #3 — Crash pendant la propagation de `dispatchEvent` aux ancêtres
-
-L'event est correctement délivré aux listeners locaux sur la cible, puis lève `JsException` quand il commence à remonter (capture/bubble) vers les ancêtres. Conséquence : tous les handlers délégués au niveau `document` (Stimulus, Turbo Drive) sont sautés.
-
-### Repro
-
-```js
-const btn = document.createElement('button');
-document.body.appendChild(btn);
-
-let localHit = false;
-let docHit = false;
-btn.addEventListener('click', () => localHit = true);
-document.addEventListener('click', () => docHit = true);
-
-let threw = null;
-try {
-  btn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
-} catch (e) {
-  threw = String(e);
-}
-
-console.log({ localHit, docHit, threw });
-// Expected (Chromium): { localHit: true, docHit: true, threw: null }
-// Actual (Lightpanda): { localHit: true, docHit: false, threw: 'Error: JsException' }
-```
-
-### Impact
-
-**Le bug le plus impactant** pour les apps Hotwire :
-- Stimulus utilise event delegation au document — ses controllers ne reçoivent jamais le click.
-- Turbo Drive intercepte clicks et submits au document — désactivé silencieusement.
-- Tout pattern « event listener at document » est cassé.
-
-### Workaround
-
-Voir `polyfills.js` — monkey-patch de `EventTarget.prototype.dispatchEvent` qui intercepte le crash et propage manuellement l'event à chaque `parentNode`, en spoofant `event.target` via `Object.defineProperty` pour que les handlers délégués reçoivent la cible originale.
-
-Limites du workaround : la propagation manuelle ne respecte pas exactement la spec DOM (pas de phase `CAPTURING_PHASE`, `eventPhase` incorrect, `composedPath` non polyfilled). Suffisant pour Stimulus/Turbo qui n'inspectent pas ces propriétés, mais peut casser des handlers plus exotiques.
-
----
-
-## Bug #4 — `HTMLDialogElement.prototype.{showModal, show, close}` non implémentés
-
-Le constructor `HTMLDialogElement` existe mais aucune des trois méthodes n'est définie sur son prototype.
-
-### Repro
-
-```js
-const d = document.createElement('dialog');
-document.body.appendChild(d);
-
-console.log(typeof HTMLDialogElement);     // 'function'
-console.log(typeof d.showModal);            // 'undefined'   (Chromium: 'function')
-console.log(typeof d.show);                 // 'undefined'   (Chromium: 'function')
-console.log(typeof d.close);                // 'undefined'   (Chromium: 'function')
-
-d.showModal();                              // throws: TypeError: d.showModal is not a function
-```
-
-### Impact
-
-Bloquant pour toutes les UI utilisant `<dialog>` natif (très courant en Rails 8 + DaisyUI / Tailwind UI). Le dialog n'a jamais l'attribut `open`, donc invisible.
-
-### Workaround
-
-Voir `polyfills.js` — ajoute `showModal()`, `show()`, `close()` sur `HTMLDialogElement.prototype`. Implémentation : toggle de l'attribut `open`, dispatch d'un event `'close'` sur close. Pas de gestion du focus trap modal ni du backdrop (Lightpanda n'a pas de moteur de layout de toute façon).
-
----
-
-## Bug #5 — `HTMLFormElement.prototype.requestSubmit()` non implémenté
-
-`form.requestSubmit()` (qui dispatch un `submit` event suivi du POST natif) est non défini.
-
-### Repro
-
-```js
-const f = document.createElement('form');
-console.log(typeof f.requestSubmit);  // 'undefined'  (Chromium: 'function')
-f.requestSubmit();                     // throws: TypeError
-```
-
-### Impact
-
-`requestSubmit()` est l'API moderne pour soumettre un form en émettant l'event `submit` (alors que `form.submit()` natif le bypasse). Sans elle, on ne peut pas combiner « émet l'event submit » + « fait le POST natif » en une seule call.
-
-### Workaround
-
-Pas de polyfill explicite ; CLICK_JS dispatche manuellement `Event('submit')` puis appelle `form.submit()` si le default n'a pas été prévenu.
+Vérifier aussi pourquoi `focus()` / `blur()` / `getBoundingClientRect()` n'ont pas le même problème — leur implémentation Zig pourrait servir de modèle pour fixer `click()`.
 
 ---
 
 ## Investigation à mener — Turbo Drive fetch lifecycle
 
-Symptôme observé après application des polyfills #3 et #4 : Turbo Drive intercepte correctement les events `click` et `submit` (preventDefault appelé), mais le fetch HTTP qui devrait suivre n'est jamais émis (vérifié dans les logs Rails). Probablement un bug dans `fetch`, `FormData` ou `XMLHttpRequest` qui crash silencieusement dans le fetch interne de Turbo. À documenter en bug #6+ après isolation.
+Symptôme observé sur un projet Rails 8 + Turbo : avec les workarounds en place, Turbo Drive intercepte correctement les events `click` et `submit` (preventDefault appelé), mais le fetch HTTP qui devrait suivre n'est jamais émis (vérifié dans les logs Rails). Probablement un bug dans `fetch`, `FormData` ou `XMLHttpRequest` qui crash silencieusement dans le code interne de Turbo. À documenter en bug séparé après isolation.
 
 ---
 
 ## Méthode de découverte
 
-Tous les bugs ci-dessus ont été isolés en deux étapes :
+Tous les bugs upstream sont isolés en deux étapes :
 
 1. Comparaison du même test Capybara entre Selenium/Cuprite (qui passent) et Lightpanda (qui échoue).
 2. Réduction du repro JS minimal en exécutant des fragments via `Capybara.driver.evaluate_script` et `browser.call_function_on`.
 
 L'enrichissement de `Capybara::Lightpanda::JavaScriptError` (className + stack trace dans le message) et la variable d'environnement `LIGHTPANDA_DEBUG=1` (qui logge l'expression et la réponse CDP à chaque échec) ont rendu la chasse aux bugs nettement plus rapide.
+
+## Statut historique
+
+| Bug | Build 5267 (brew, 2026-04) | Build 6013 (2026-05-04) |
+|---|---|---|
+| #1 `Element.click()` via callFunctionOn | broken | **broken — voir ci-dessus** |
+| #2 `MouseEvent` dispatch via callFunctionOn | broken | ✅ fixed |
+| #3 bubble continue quand un listener throw | broken | ✅ fixed |
+| #4 `HTMLDialogElement.{showModal, show, close}` | broken | broken (out of scope ici) |
+| #5 `HTMLFormElement.requestSubmit()` | broken | ✅ fixed |
