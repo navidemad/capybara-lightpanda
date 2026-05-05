@@ -37,8 +37,29 @@ jobs:
       - name: Install Lightpanda
         run: |
           curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
-          chmod +x lightpanda
+          chmod a+x lightpanda
           sudo mv lightpanda /usr/local/bin/
-          lightpanda version
       - name: Examples
         run: bundle exec rake examples:all
+
+  shared-specs:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.3", "4.0"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Install Lightpanda
+        run: |
+          curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
+          chmod a+x lightpanda
+          sudo mv lightpanda /usr/local/bin/
+      - name: Capybara shared specs
+        run: bundle exec rake spec:shared
