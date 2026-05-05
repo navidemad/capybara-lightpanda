@@ -17,35 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ruby: ["3.3", "4.0"]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
-      - run: bundle exec rubocop
-
-  test:
-    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ruby: ["3.3", "4.0"]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
-      - run: bundle exec rake test:unit
-
-  examples:
+  check:
     if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
     runs-on: ubuntu-latest
     strategy:
@@ -58,11 +30,15 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - name: Lint
+        run: bundle exec rubocop
+      - name: Unit tests
+        run: bundle exec rake test:unit
       - name: Install Lightpanda
         run: |
           curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
           chmod +x lightpanda
           sudo mv lightpanda /usr/local/bin/
           lightpanda version
-      - name: Run examples
+      - name: Examples
         run: bundle exec rake examples:all
