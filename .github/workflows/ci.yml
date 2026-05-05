@@ -34,11 +34,6 @@ jobs:
         run: bundle exec rubocop
       - name: Unit tests
         run: bundle exec rake test:unit
-      - name: Install Lightpanda
-        run: |
-          curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
-          chmod a+x lightpanda
-          sudo mv lightpanda /usr/local/bin/
       - name: Examples
         run: bundle exec rake examples:all
 
@@ -56,10 +51,5 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - name: Install Lightpanda
-        run: |
-          curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux -o lightpanda
-          chmod a+x lightpanda
-          sudo mv lightpanda /usr/local/bin/
       - name: Capybara shared specs
         run: bundle exec rake spec:shared
