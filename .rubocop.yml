@@ -23,6 +23,7 @@ Style/OneClassPerFile:
   Enabled: true
   Exclude:
     - examples/**/*.rb
+    - test/**/*
 
 Layout/LineLength:
   Max: 120
@@ -36,17 +37,20 @@ Metrics/ClassLength:
     - lib/capybara/lightpanda/node.rb
     - lib/capybara/lightpanda/process.rb
     - spec/**/*
+    - test/**/*
     - examples/**/*.rb
 
 Metrics/MethodLength:
   Max: 30
   Exclude:
     - examples/**/*.rb
+    - test/**/*
 
 Metrics/AbcSize:
   Max: 25
   Exclude:
     - examples/**/*.rb
+    - test/**/*
 
 Metrics/CyclomaticComplexity:
   Max: 10
@@ -57,12 +61,14 @@ Metrics/ParameterLists:
 Metrics/BlockLength:
   Exclude:
     - spec/**/*
+    - test/**/*
     - Rakefile
     - examples/**/*.rb
 
 Lint/EmptyBlock:
   Exclude:
     - spec/**/*
+    - test/**/*
 
 Lint/UselessConstantScoping:
   Enabled: false

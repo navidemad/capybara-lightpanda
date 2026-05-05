@@ -13,6 +13,8 @@ end
 group :test do
   gem "launchy", "~> 2.5"
   gem "logger"
+  gem "minitest", "~> 5.0"
+  gem "mocha", "~> 2.0"
   gem "ostruct"
   gem "puma", "~> 6"
   gem "rspec", "~> 3.0"

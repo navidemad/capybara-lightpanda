@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "bundler/setup"
+require_relative "../test_helper"
 require "capybara/lightpanda/errors"
 
-RSpec.describe "Capybara::Lightpanda errors" do
+describe "Capybara::Lightpanda errors" do
   describe "hierarchy" do
     it "all errors descend from Capybara::Lightpanda::Error" do
       [
@@ -23,7 +23,7 @@ RSpec.describe "Capybara::Lightpanda errors" do
         Capybara::Lightpanda::NoSuchPageError,
         Capybara::Lightpanda::StatusError,
       ].each do |klass|
-        expect(klass.ancestors).to include(Capybara::Lightpanda::Error)
+        assert_includes klass.ancestors, Capybara::Lightpanda::Error
       end
     end
 
@@ -36,31 +36,31 @@ RSpec.describe "Capybara::Lightpanda errors" do
         Capybara::Lightpanda::ObsoleteNode,
         Capybara::Lightpanda::MouseEventFailed,
       ].each do |klass|
-        expect(klass.ancestors).to include(Capybara::Lightpanda::BrowserError)
+        assert_includes klass.ancestors, Capybara::Lightpanda::BrowserError
       end
     end
 
     it "base error inherits from StandardError" do
-      expect(Capybara::Lightpanda::Error.superclass).to eq(StandardError)
+      assert_equal StandardError, Capybara::Lightpanda::Error.superclass
     end
   end
 
   describe Capybara::Lightpanda::BrowserError do
     it "captures the response and exposes message/code/data" do
       response = { "message" => "Something went wrong", "code" => -32_601, "data" => "extra" }
-      error = described_class.new(response)
-      expect(error.message).to eq("Something went wrong")
-      expect(error.response).to eq(response)
-      expect(error.code).to eq(-32_601)
-      expect(error.data).to eq("extra")
+      error = Capybara::Lightpanda::BrowserError.new(response)
+      assert_equal "Something went wrong", error.message
+      assert_equal response, error.response
+      assert_equal(-32_601, error.code)
+      assert_equal "extra", error.data
     end
 
     it "accepts a plain string for callsites that raise with a literal" do
-      error = described_class.new("plain message")
-      expect(error.message).to eq("plain message")
-      expect(error.response).to be_nil
-      expect(error.code).to be_nil
-      expect(error.data).to be_nil
+      error = Capybara::Lightpanda::BrowserError.new("plain message")
+      assert_equal "plain message", error.message
+      assert_nil error.response
+      assert_nil error.code
+      assert_nil error.data
     end
   end
 
@@ -74,10 +74,10 @@ RSpec.describe "Capybara::Lightpanda errors" do
           },
         },
       }
-      error = described_class.new(response)
-      expect(error.class_name).to eq("TypeError")
-      expect(error.message).to include("Cannot read property 'foo' of null")
-      expect(error.message).to include("(TypeError)")
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_equal "TypeError", error.class_name
+      assert_includes error.message, "Cannot read property 'foo' of null"
+      assert_includes error.message, "(TypeError)"
     end
 
     it "skips the className tag when the description already mentions it" do
@@ -89,8 +89,8 @@ RSpec.describe "Capybara::Lightpanda errors" do
           },
         },
       }
-      error = described_class.new(response)
-      expect(error.message).to eq("TypeError: foo is not a function")
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_equal "TypeError: foo is not a function", error.message
     end
 
     it "falls back to text when description is missing" do
@@ -100,14 +100,14 @@ RSpec.describe "Capybara::Lightpanda errors" do
           "exception" => { "className" => "Error" },
         },
       }
-      error = described_class.new(response)
-      expect(error.message).to include("Uncaught error")
-      expect(error.message).to include("(Error)")
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_includes error.message, "Uncaught error"
+      assert_includes error.message, "(Error)"
     end
 
     it "falls back to a generic 'JsException' label when nothing is provided" do
-      error = described_class.new("exceptionDetails" => {})
-      expect(error.message).to eq("JsException")
+      error = Capybara::Lightpanda::JavaScriptError.new("exceptionDetails" => {})
+      assert_equal "JsException", error.message
     end
 
     it "appends a non-string thrown value when present (e.g. `throw 42`)" do
@@ -116,8 +116,8 @@ RSpec.describe "Capybara::Lightpanda errors" do
           "exception" => { "className" => "Number", "value" => 42 },
         },
       }
-      error = described_class.new(response)
-      expect(error.message).to include("value=42")
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_includes error.message, "value=42"
     end
 
     it "captures stack_trace and formats up to 5 frames in the message" do
@@ -130,12 +130,12 @@ RSpec.describe "Capybara::Lightpanda errors" do
           "stackTrace" => { "callFrames" => frames },
         },
       }
-      error = described_class.new(response)
-      expect(error.stack_trace).to eq("callFrames" => frames)
-      expect(error.message).to include("stack:")
-      expect(error.message).to include("fn1 @ f1.js:1:0")
-      expect(error.message).to include("fn5 @ f5.js:5:0")
-      expect(error.message).not_to include("fn6") # capped at 5 frames
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_equal({ "callFrames" => frames }, error.stack_trace)
+      assert_includes error.message, "stack:"
+      assert_includes error.message, "fn1 @ f1.js:1:0"
+      assert_includes error.message, "fn5 @ f5.js:5:0"
+      refute_includes error.message, "fn6" # capped at 5 frames
     end
 
     it "labels anonymous frames as <anon> in the formatted stack" do
@@ -146,32 +146,32 @@ RSpec.describe "Capybara::Lightpanda errors" do
                                                "columnNumber" => 19, }] },
         },
       }
-      error = described_class.new(response)
-      expect(error.message).to include("<anon> @ :0:19")
+      error = Capybara::Lightpanda::JavaScriptError.new(response)
+      assert_includes error.message, "<anon> @ :0:19"
     end
   end
 
   describe Capybara::Lightpanda::ObsoleteNode do
     it "captures the node reference" do
-      node = double("node")
-      error = described_class.new(node)
-      expect(error.node).to eq(node)
-      expect(error.message).to eq("Element is no longer attached to the DOM")
+      node = mock("node")
+      error = Capybara::Lightpanda::ObsoleteNode.new(node)
+      assert_equal node, error.node
+      assert_equal "Element is no longer attached to the DOM", error.message
     end
 
     it "accepts a custom message" do
-      node = double("node")
-      error = described_class.new(node, "custom message")
-      expect(error.message).to eq("custom message")
+      node = mock("node")
+      error = Capybara::Lightpanda::ObsoleteNode.new(node, "custom message")
+      assert_equal "custom message", error.message
     end
   end
 
   describe Capybara::Lightpanda::MouseEventFailed do
     it "parses position and selector from message" do
-      node = double("node")
-      error = described_class.new(node, "at position (100, 200) selector: #btn")
-      expect(error.position).to eq({ x: 100, y: 200 })
-      expect(error.selector).to eq("#btn")
+      node = mock("node")
+      error = Capybara::Lightpanda::MouseEventFailed.new(node, "at position (100, 200) selector: #btn")
+      assert_equal({ x: 100, y: 200 }, error.position)
+      assert_equal "#btn", error.selector
     end
   end
 end

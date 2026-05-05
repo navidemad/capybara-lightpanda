@@ -3,25 +3,35 @@
 require "English"
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
+require "rake/testtask"
 
-RSpec::Core::RakeTask.new(:spec) do |t|
-  t.pattern = "spec/features/driver_spec.rb"
-end
-
+# RSpec is retained solely for the Capybara shared-spec battery, which is
+# distributed in RSpec format by the capybara gem itself. Local tests live
+# under test/ and use Minitest::Spec.
 RSpec::Core::RakeTask.new("spec:shared") do |t|
   t.pattern = "spec/features/session_spec.rb"
 end
 
-RSpec::Core::RakeTask.new("spec:all") do |t|
-  t.pattern = "spec/**/*_spec.rb"
+Rake::TestTask.new(:test) do |t|
+  t.libs << "lib" << "test"
+  t.test_files = FileList["test/features/driver_test.rb"]
+  t.warning = false
 end
 
-RSpec::Core::RakeTask.new("spec:unit") do |t|
-  t.pattern = "spec/unit/**/*_spec.rb"
-end
+namespace :test do
+  Rake::TestTask.new(:unit) do |t|
+    t.libs << "lib" << "test"
+    t.test_files = FileList["test/unit/*_test.rb"]
+    t.warning = false
+  end
 
-namespace :spec do
-  desc "Run spec files one at a time, recording pass/fail in tmp/spec_progress.json. " \
+  Rake::TestTask.new(:all) do |t|
+    t.libs << "lib" << "test"
+    t.test_files = FileList["test/**/*_test.rb"]
+    t.warning = false
+  end
+
+  desc "Run test files one at a time, recording pass/fail in tmp/test_progress.json. " \
        "Skips files already passing. Env: CLEAR=1 resets progress, FAIL_FAST=1 stops on first failure, " \
        "ONLY=<glob> restricts the file set."
   task :incremental do
@@ -30,13 +40,13 @@ namespace :spec do
     require "digest"
     require "time"
 
-    progress_path = "tmp/spec_progress.json"
-    logs_dir = "tmp/spec_logs"
+    progress_path = "tmp/test_progress.json"
+    logs_dir = "tmp/test_logs"
     FileUtils.mkdir_p(logs_dir)
 
-    pattern = ENV["ONLY"] || "spec/**/*_spec.rb"
+    pattern = ENV["ONLY"] || "test/**/*_test.rb"
     files = Dir[pattern]
-    abort "No spec files matched #{pattern}" if files.empty?
+    abort "No test files matched #{pattern}" if files.empty?
 
     if ENV["CLEAR"] == "1" && File.exist?(progress_path)
       File.delete(progress_path)
@@ -56,7 +66,7 @@ namespace :spec do
     total = files.size
     run_started = Time.now
 
-    puts "spec:incremental — #{total} file(s) to consider"
+    puts "test:incremental — #{total} file(s) to consider"
     puts "  pattern:        #{pattern}"
     puts "  progress file:  #{progress_path}"
     puts "  log dir:        #{logs_dir}"
@@ -72,11 +82,10 @@ namespace :spec do
         puts "#{pos} SKIP   #{file}  (passed #{entry['ran_at']}, #{entry['duration']}s)"
         next
       end
-      only_failures = entry && entry["status"] == "failed" && entry["sha"] == sha
       reason =
         if entry.nil?                    then "never run"
         elsif entry["sha"] != sha        then "file changed"
-        elsif entry["status"] == "failed" then "previously failed (--only-failures)"
+        elsif entry["status"] == "failed" then "previously failed (rerun whole file)"
         else "stale: #{entry['status']}"
         end
 
@@ -86,15 +95,14 @@ namespace :spec do
       puts "         log → #{log_path}"
       started = Time.now
       summary_line = nil
-      rspec_cmd = ["bundle", "exec", "rspec", file, "--format", "documentation"]
-      rspec_cmd << "--only-failures" if only_failures
+      ruby_cmd = ["bundle", "exec", "ruby", "-Ilib", "-Itest", file]
       ok = File.open(log_path, "w") do |log|
-        IO.popen([*rspec_cmd, { err: %i[child out] }]) do |io|
+        IO.popen([*ruby_cmd, { err: %i[child out] }]) do |io|
           io.each_line do |line|
             $stdout.write(line)
             $stdout.flush
             log.write(line)
-            summary_line = line.strip if line =~ /\A\d+ examples?,/
+            summary_line = line.strip if line =~ /\A\d+ runs?,/
           end
         end
         $CHILD_STATUS.success?
@@ -129,7 +137,7 @@ namespace :spec do
 
     elapsed = (Time.now - run_started).round(2)
 
-    puts "\n========== spec:incremental summary =========="
+    puts "\n========== test:incremental summary =========="
     puts "Total files:     #{files.size}"
     puts "Skipped (green): #{skipped.size}"
     puts "Ran:             #{ran.size}"
@@ -144,9 +152,12 @@ namespace :spec do
     end
     puts "Progress file:  #{progress_path}"
 
-    abort "spec:incremental: #{failed.size} file(s) failed" unless failed.empty?
+    abort "test:incremental: #{failed.size} file(s) failed" unless failed.empty?
   end
 end
+
+desc "Run the full test suite (Minitest test:all + RSpec spec:shared)"
+task suite: %w[test:all spec:shared]
 
 require "rubocop/rake_task"
 RuboCop::RakeTask.new
@@ -182,5 +193,4 @@ namespace :examples do
   task all: %i[plain turbo]
 end
 
-task default: %i[spec:unit rubocop]
-task test: :spec
+task default: %i[test:unit rubocop]

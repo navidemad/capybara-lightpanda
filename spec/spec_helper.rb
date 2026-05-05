@@ -4,8 +4,8 @@ require "bundler/setup"
 require "rspec"
 require "socket"
 require "capybara/spec/spec_helper"
+require "capybara/spec/test_app"
 require "capybara-lightpanda"
-require_relative "support/test_app"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 
