@@ -126,6 +126,49 @@ RSpec.describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
+  # Node#trigger
+  # ───────────────────────────────────────────────
+
+  describe "Node#trigger" do
+    it "dispatches a focus event so listeners fire" do
+      session.visit("/lightpanda/trigger_test")
+      session.find(:css, "#focusable").trigger(:focus)
+      expect(session).to have_css("#result", text: "focus-fired")
+    end
+
+    it "dispatches a SubmitEvent (not a plain Event) on form submit" do
+      session.visit("/lightpanda/trigger_test")
+      session.find(:css, "#submittable").trigger(:submit)
+      expect(session).to have_css("#result", text: "submit-fired:SubmitEvent")
+    end
+
+    it "dispatches an arbitrary custom event by name" do
+      session.visit("/lightpanda/trigger_test")
+      session.find(:css, "#custom-target").trigger("lp:custom")
+      expect(session).to have_css("#result", text: "custom-fired")
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Selector error surfacing
+  # ───────────────────────────────────────────────
+
+  describe "invalid selectors" do
+    it "raises InvalidSelector for malformed CSS at the document scope" do
+      session.visit("/lightpanda/simple")
+      expect { browser.find("css", "..[invalid") }
+        .to raise_error(Capybara::Lightpanda::InvalidSelector)
+    end
+
+    it "raises InvalidSelector for malformed CSS scoped to a node" do
+      session.visit("/lightpanda/simple")
+      body_id = browser.evaluate_with_ref("document.body")["objectId"]
+      expect { browser.find_within(body_id, "css", "..[invalid") }
+        .to raise_error(Capybara::Lightpanda::InvalidSelector)
+    end
+  end
+
+  # ───────────────────────────────────────────────
   # Network tracking
   # ───────────────────────────────────────────────
 

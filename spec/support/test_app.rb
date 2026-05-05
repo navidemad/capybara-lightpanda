@@ -37,6 +37,39 @@ class TestApp
     HTML
   end
 
+  # -- Event trigger test page --
+  # Attaches focus / blur / change / submit / custom listeners that mark the
+  # DOM so Node#trigger dispatch can be observed.
+
+  get "/lightpanda/trigger_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Trigger Test</title></head>
+        <body>
+          <input id="focusable" type="text">
+          <form id="submittable" action="javascript:void(0)"><button type="submit">go</button></form>
+          <div id="custom-target"></div>
+          <div id="result"></div>
+          <script>
+            document.getElementById('focusable').addEventListener('focus', function() {
+              document.getElementById('result').textContent = 'focus-fired';
+            });
+            document.getElementById('submittable').addEventListener('submit', function(e) {
+              var marker = (typeof SubmitEvent !== 'undefined' && e instanceof SubmitEvent)
+                ? 'submit-fired:SubmitEvent'
+                : 'submit-fired:Event';
+              document.getElementById('result').textContent = marker;
+            });
+            document.getElementById('custom-target').addEventListener('lp:custom', function() {
+              document.getElementById('result').textContent = 'custom-fired';
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   # -- JavaScript test page --
 
   get "/lightpanda/js_test" do

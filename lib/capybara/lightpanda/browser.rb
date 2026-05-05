@@ -109,7 +109,11 @@ module Capybara
         @modal_handler_installed = false
         @modal_messages.clear
         @frame_stack.clear
-        @network&.clear
+        # Network#reset, not #clear: disposing the BrowserContext also
+        # destroyed the Network domain and its subscriptions, so we must
+        # flip @enabled back to false — otherwise the next #enable
+        # short-circuits and traffic tracking is silently dead.
+        @network&.reset
         create_browser_context
         create_page
       end
@@ -364,6 +368,8 @@ module Capybara
       def find_within(remote_object_id, method, selector)
         result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
         extract_node_object_ids(result)
+      rescue JavaScriptError => e
+        raise_invalid_selector(e, method, selector)
       end
 
       # objectId of document.activeElement, or nil if none/document detached.
@@ -588,20 +594,32 @@ module Capybara
         raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
       end
 
+      # Sentinel string thrown from FIND_*_JS when querySelectorAll rejects a
+      # malformed selector, so the Ruby side can convert JavaScriptError into
+      # Capybara::Lightpanda::InvalidSelector. Cuprite uses a JS subclass for
+      # the same purpose; a plain prefixed string keeps our inline JS simple.
+      INVALID_SELECTOR_MARKER = "LIGHTPANDA_INVALID_SELECTOR:"
+
       # JS function for finding elements within a node.
-      # Works in any execution context (top frame or iframe).
-      FIND_WITHIN_JS = <<~JS
+      # Works in any execution context (top frame or iframe). Any throw from
+      # querySelectorAll means the selector is malformed (the spec only allows
+      # SYNTAX_ERR DOMException; Lightpanda's V8 currently throws a generic
+      # Error with messages like "InvalidClassSelector"). Re-throw with the
+      # marker prefix so Ruby converts to InvalidSelector regardless.
+      FIND_WITHIN_JS = <<~JS.freeze
         function(method, selector) {
           if (method === 'xpath') {
             if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, this);
             return [];
           }
-          try { return Array.from(this.querySelectorAll(selector)); } catch(e) { return []; }
+          try { return Array.from(this.querySelectorAll(selector)); }
+          catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
         }
       JS
+      private_constant :FIND_WITHIN_JS
 
       # JS function for finding elements in an iframe's contentDocument.
-      FIND_IN_FRAME_JS = <<~JS
+      FIND_IN_FRAME_JS = <<~JS.freeze
         function(method, selector) {
           var doc;
           try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
@@ -610,9 +628,11 @@ module Capybara
             if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, doc);
             return [];
           }
-          try { return Array.from(doc.querySelectorAll(selector)); } catch(e) { return []; }
+          try { return Array.from(doc.querySelectorAll(selector)); }
+          catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
         }
       JS
+      private_constant :FIND_IN_FRAME_JS
 
       def find_in_document(method, selector)
         with_default_context_wait do
@@ -623,12 +643,18 @@ module Capybara
           js = if method == "xpath"
                  "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector_literal}, document) : []"
                else
-                 "(function() { try { return Array.from(document.querySelectorAll(#{selector_literal})); } " \
-                   "catch(e) { return []; } })()"
+                 <<~CSS_FIND
+                   (function() {
+                     try { return Array.from(document.querySelectorAll(#{selector_literal})); }
+                     catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + #{selector_literal}); }
+                   })()
+                 CSS_FIND
                end
           result = evaluate_with_ref(js)
           extract_node_object_ids(result)
         end
+      rescue JavaScriptError => e
+        raise_invalid_selector(e, method, selector)
       end
 
       def find_in_frame(method, selector)
@@ -636,6 +662,16 @@ module Capybara
         result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
                                   return_by_value: false)
         extract_node_object_ids(result)
+      rescue JavaScriptError => e
+        raise_invalid_selector(e, method, selector)
+      end
+
+      def raise_invalid_selector(js_error, method, selector)
+        if js_error.message.include?(INVALID_SELECTOR_MARKER)
+          raise InvalidSelector.new("Invalid #{method} selector: #{selector.inspect}", method, selector)
+        end
+
+        raise js_error
       end
 
       # Extract individual node objectIds from a remote array reference.

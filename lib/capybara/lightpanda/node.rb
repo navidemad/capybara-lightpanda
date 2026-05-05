@@ -116,6 +116,14 @@ module Capybara
         call("function() { this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true})) }")
       end
 
+      # Dispatch an arbitrary DOM event by name. Mirrors Cuprite's Node#trigger
+      # — picks the right Event constructor for known mouse/focus/form names
+      # and falls back to a generic Event for everything else (so callers can
+      # fire custom events like `node.trigger('lp:custom')`).
+      def trigger(event)
+        call(TRIGGER_JS, event.to_s)
+      end
+
       def set(value, **_options)
         case tag_name
         when "input"
@@ -381,6 +389,33 @@ module Capybara
           } else if (this.tagName === 'A' && this.href && this.target !== '_blank') {
             window.location.href = this.href;
           }
+        }
+      JS
+
+      # Mirrors Cuprite's trigger map. Picks the right Event constructor based
+      # on the event name so listeners that key on `event instanceof MouseEvent`
+      # / `instanceof SubmitEvent` see what they expect; everything else goes
+      # through a generic Event so custom names ("turbo:load", "lp:custom")
+      # still dispatch. Each constructor is feature-detected (`typeof X !==
+      # 'undefined'`) before use so a missing IDL on Lightpanda falls back
+      # to plain Event rather than throwing.
+      TRIGGER_JS = <<~JS
+        function(name) {
+          var MOUSE = ['click','dblclick','mousedown','mouseenter','mouseleave',
+                       'mousemove','mouseover','mouseout','mouseup','contextmenu'];
+          var FOCUS = ['blur','focus','focusin','focusout'];
+          var init = { bubbles: true, cancelable: true };
+          var event;
+          if (MOUSE.indexOf(name) !== -1 && typeof MouseEvent !== 'undefined') {
+            event = new MouseEvent(name, init);
+          } else if (FOCUS.indexOf(name) !== -1 && typeof FocusEvent !== 'undefined') {
+            event = new FocusEvent(name, init);
+          } else if (name === 'submit' && typeof SubmitEvent !== 'undefined') {
+            event = new SubmitEvent(name, init);
+          } else {
+            event = new Event(name, init);
+          }
+          this.dispatchEvent(event);
         }
       JS
 

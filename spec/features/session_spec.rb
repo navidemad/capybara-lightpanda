@@ -21,7 +21,6 @@ Capybara::SpecHelper.run_specs(
   #   :spatial           — `find(above:|below:|near:)` needs real geometry.
   #   :status_code       — CDP doesn't expose response status.
   #   :response_headers  — CDP doesn't expose response headers.
-  #   :trigger           — driver doesn't implement Node#trigger.
   #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
   #   :download          — no file download support.
   #   :active_element    — Tab-key focus traversal isn't implemented, and
@@ -36,7 +35,6 @@ Capybara::SpecHelper.run_specs(
     spatial
     status_code
     response_headers
-    trigger
     shadow_dom
     download
     active_element

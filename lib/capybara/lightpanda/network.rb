@@ -9,6 +9,8 @@ module Capybara
         @browser = browser
         @traffic = []
         @enabled = false
+        @request_handler = nil
+        @response_handler = nil
       end
 
       def enable
@@ -22,7 +24,13 @@ module Capybara
       def disable
         return unless @enabled
 
+        # Tell the browser to stop emitting BEFORE unsubscribing locally:
+        # otherwise an in-flight Network.responseReceived can race past the
+        # already-removed handler and leave a `response: nil` entry in
+        # @traffic for the matching request — which then trips
+        # wait_for_idle's pending count on a future call.
         browser.command("Network.disable")
+        unsubscribe
         @enabled = false
       end
 
@@ -32,6 +40,18 @@ module Capybara
 
       def clear
         @traffic.clear
+      end
+
+      # Wipe local state without sending Network.disable. Called by
+      # Browser#reset after Target.disposeBrowserContext, which destroys
+      # the subscriptions and the Network domain along with the context —
+      # leaving @enabled true would silently no-op the next #enable.
+      # Also unsubscribes locally so we don't rely on the caller having
+      # cleared the Subscriber first.
+      def reset
+        unsubscribe
+        @traffic.clear
+        @enabled = false
       end
 
       def headers=(headers)
@@ -65,7 +85,7 @@ module Capybara
       private
 
       def subscribe
-        browser.on("Network.requestWillBeSent") do |params|
+        @request_handler = lambda do |params|
           @traffic << {
             request_id: params["requestId"],
             url: params.dig("request", "url"),
@@ -75,7 +95,7 @@ module Capybara
           }
         end
 
-        browser.on("Network.responseReceived") do |params|
+        @response_handler = lambda do |params|
           request = @traffic.find { |t| t[:request_id] == params["requestId"] }
 
           next unless request
@@ -86,6 +106,16 @@ module Capybara
             mime_type: params.dig("response", "mimeType"),
           }
         end
+
+        browser.on("Network.requestWillBeSent", &@request_handler)
+        browser.on("Network.responseReceived", &@response_handler)
+      end
+
+      def unsubscribe
+        browser.off("Network.requestWillBeSent", @request_handler) if @request_handler
+        browser.off("Network.responseReceived", @response_handler) if @response_handler
+        @request_handler = nil
+        @response_handler = nil
       end
     end
   end

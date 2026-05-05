@@ -30,26 +30,25 @@ bundle exec rubocop -a                # Lint with auto-fix
 - All CDP classes live under `Capybara::Lightpanda` namespace (Browser, Client, Cookies, etc.)
 - `Browser#go_to` includes a `readyState` polling fallback — do not remove it. Lightpanda's `Page.loadEventFired` is unreliable.
 - `Browser#back`/`#forward` use JS `history.back()`/`history.forward()` because `Page.getNavigationHistory` and `Page.navigateToHistoryEntry` don't exist in Lightpanda. `Browser#refresh` uses `Page.reload` (implemented upstream in PR #1992).
-- `Cookies#clear` always sweeps via per-origin `Network.getCookies(urls:)` + `Network.deleteCookies(url:)` because (a) `Network.clearBrowserCookies` raises `InvalidParams` on current Lightpanda nightly (regressed from the >= v0.2.6 fix) and (b) `Network.getCookies` (no `urls`) is scoped to the current page's origin only, so cookies set on previously-visited domains are otherwise invisible. `Browser#visited_origins` tracks `scheme://host:port` strings across `go_to` calls so the sweep can enumerate cross-domain cookies.
-- `Cookies#all` uses `Network.getCookies` (NOT `getAllCookies` — that method doesn't exist in Lightpanda). Result is scoped to the current page's origin only; pass `urls:` explicitly via `Browser#command("Network.getCookies", urls: [...])` for cross-origin enumeration.
+- `Cookies#clear` calls `Network.clearBrowserCookies` directly (single CDP round-trip, browser-wide). Pre-PR-#2255 we swept per-origin via `Network.deleteCookies` because the bulk method crashed; once the upstream fix landed (`MINIMUM_NIGHTLY_BUILD = 5817`), the sweep was retired and `Browser#visited_origins` removed.
+- `Cookies#all` calls `Network.getAllCookies` (PR #2255, merged 2026-04-27) to return cookies across every origin in the current `BrowserContext`. Per-origin scoping is still available via `Browser#command("Network.getCookies", urls: [...])` for callers that explicitly want it.
 - `javascripts/index.js` contains the XPath polyfill (`xpathFind` + `document.evaluate` shim), Turbo activity tracking, and the `requestSubmit` polyfill. `Browser#create_page` registers it via `Page.addScriptToEvaluateOnNewDocument` so Lightpanda auto-injects it on every navigation. No manual re-injection needed.
 - Node identity uses CDP remote object IDs (`Runtime.callFunctionOn` with `this` binding). All node operations route through a single `call` method for centralized error handling. JS function declarations are self-contained constants (no `_lightpanda` dependency) so they work in any execution context including iframes.
 - `Node#[]` returns resolved URLs for `src`/`href`/`action` attributes via `PROPERTY_OR_ATTRIBUTE_JS` (matching Capybara's expected semantics).
 - Frame switching stores Node objects in `Browser#frame_stack`. Finding within frames uses `callFunctionOn` on the iframe element to scope to its `contentDocument`. XPath finding in iframes requires the polyfill (only available in top frame).
-- Modal handling captures dialog messages via the `Page.javascriptDialogOpening` event (emitted upstream since 2026-04-03). Dialogs auto-dismiss in headless Lightpanda — alert→OK, confirm→false, prompt→null. The handler does NOT call `Page.handleJavaScriptDialog` (it errors with "No dialog is showing", and calling it from the dispatch thread deadlocks). `accept_modal(:alert)` and `dismiss_modal(:confirm|:prompt)` work correctly; `accept_modal(:confirm|:prompt)` cannot influence the JS return value (auto-dismiss has already returned the dismiss outcome).
+- Modal handling uses Lightpanda's pre-arm model (`LP.handleJavaScriptDialog`, PR #2261). `Browser#accept_modal`/`#dismiss_modal` send the LP command BEFORE the action that triggers the dialog; Lightpanda stashes the response and consumes it when the dialog opens. `Page.javascriptDialogOpening` is still subscribed to capture the message text for `find_modal`. We do NOT call `Page.handleJavaScriptDialog` — it deliberately errors with "No dialog is showing" and points clients at the LP method.
 
 ## Lightpanda Browser Limitations
 
 These are browser-level limitations, not fixable in this gem:
 
-- No rendering engine → no screenshots, no `getComputedStyle`, no scroll/resize
-- `Page.loadEventFired` may never fire on complex JS pages
-- `Page.getNavigationHistory`, `Page.navigateToHistoryEntry` not implemented (worked around with JS)
-- `Page.handleJavaScriptDialog` not implemented (no modal/dialog support)
-- `Page.addScriptToEvaluateOnNewDocument` now working (PR #1993 merged 2026-03-30) — can register scripts once at session creation instead of re-injecting after every navigation
-- `Network.getAllCookies` not implemented (use `Network.getCookies`)
-- `XPathResult` not implemented (polyfilled by this gem)
-- `Network.clearBrowserCookies` crashes on pre-v0.2.6 (safe on current nightly)
+- No rendering engine → no screenshots, no real scroll/resize, hardcoded 1920×1080 layout metrics. `getComputedStyle` is partial: CSSOM merged (PR #1797) so `checkVisibility`/inline styles work, but cascade-resolved property lookups don't.
+- `Page.loadEventFired` may never fire on complex JS pages — `Browser#go_to` keeps a `readyState` polling fallback.
+- `Page.getNavigationHistory`, `Page.navigateToHistoryEntry` not implemented (worked around with `history.back()`/`history.forward()` JS; our PR #2289 OPEN to add native CDP).
+- `Page.handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog` pre-arm (PR #2261, in nightly ≥5900). Already wired through `Browser#accept_modal`/`#dismiss_modal`.
+- `Page.addScriptToEvaluateOnNewDocument` works (PR #1993, merged 2026-03-30) — `Browser#create_page` registers `javascripts/index.js` once per session.
+- `XPathResult`/`document.evaluate` not implemented natively (polyfilled by this gem; native upstream PR #2305 OPEN).
+- File uploads not supported — `Page.setFileInputFiles` missing (#2175); `Node#set` raises `NotImplementedError` for `<input type=file>`.
 
 ## Testing
 

@@ -76,4 +76,47 @@ RSpec.describe Capybara::Lightpanda::Client::Subscriber do
       expect(subscriber.subscribed?("b")).to be false
     end
   end
+
+  describe "#dispatch error isolation" do
+    let(:silent) { described_class.new(on_error: ->(_event, _error) {}) }
+
+    it "does not propagate a callback exception to the caller" do
+      silent.subscribe("test") { raise "boom" }
+      expect { silent.dispatch("test", {}) }.not_to raise_error
+    end
+
+    it "still invokes later callbacks after an earlier one raises" do
+      results = []
+      silent.subscribe("test") { raise "boom" }
+      silent.subscribe("test") { results << :reached }
+      silent.dispatch("test", {})
+      expect(results).to eq([:reached])
+    end
+
+    it "logs the failing event name and exception via the configured logger" do
+      logged = []
+      logger = ->(event, error) { logged << [event, error.message] }
+      isolated = described_class.new(on_error: logger)
+      isolated.subscribe("test") { raise "boom" }
+      isolated.dispatch("test", {})
+      expect(logged).to eq([%w[test boom]])
+    end
+
+    it "does not propagate when the on_error sink itself raises" do
+      raising_sink = ->(_event, _error) { raise "sink fail" }
+      isolated = described_class.new(on_error: raising_sink)
+      isolated.subscribe("test") { raise "boom" }
+      expect { isolated.dispatch("test", {}) }.not_to raise_error
+    end
+
+    it "still invokes later callbacks after the sink raises" do
+      raising_sink = ->(_event, _error) { raise "sink fail" }
+      isolated = described_class.new(on_error: raising_sink)
+      results = []
+      isolated.subscribe("test") { raise "boom" }
+      isolated.subscribe("test") { results << :reached }
+      isolated.dispatch("test", {})
+      expect(results).to eq([:reached])
+    end
+  end
 end
