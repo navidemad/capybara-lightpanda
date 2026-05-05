@@ -30,6 +30,16 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - name: Determine Lightpanda cache key
+        id: lightpanda-cache-key
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Cache Lightpanda nightly binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/lightpanda
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          restore-keys: |
+            lightpanda-${{ runner.os }}-
       - name: Lint
         run: bundle exec rubocop
       - name: Unit tests
@@ -51,5 +61,15 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - name: Determine Lightpanda cache key
+        id: lightpanda-cache-key
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Cache Lightpanda nightly binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/lightpanda
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          restore-keys: |
+            lightpanda-${{ runner.os }}-
       - name: Capybara shared specs
         run: bundle exec rake spec:shared
