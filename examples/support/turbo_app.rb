@@ -133,7 +133,7 @@ class PostsController < ActionController::Base
     render inline: <<~HTML
       <turbo-frame id="new-post-frame">
         <h2>New Post</h2>
-        <form action="#{posts_path}" method="post" id="new-post-form">
+        <form action="#{posts_path}" method="post" id="new-post-form" data-turbo-frame="_top">
           <input type="text" name="title" id="post-title" placeholder="Title">
           <textarea name="body" id="post-body-input" placeholder="Write..."></textarea>
           <input type="submit" value="Publish">
@@ -156,7 +156,7 @@ class PostsController < ActionController::Base
   def edit
     render inline: <<~HTML
       <turbo-frame id="post-edit-frame">
-        <form action="#{post_path(params[:id])}" method="post" id="edit-post-form">
+        <form action="#{post_path(params[:id])}" method="post" id="edit-post-form" data-turbo-frame="_top">
           <input type="hidden" name="_method" value="patch">
           <input type="text" name="title" id="edit-title" value="Post ##{params[:id]}">
           <input type="submit" value="Save">

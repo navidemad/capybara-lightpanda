@@ -370,23 +370,39 @@ module Capybara
       # IIFE, which catches the throw and re-walks parents manually so document-
       # level delegated handlers still see the event.
       #
-      # For `<button type=submit>`: route through `form.requestSubmit(this)` so
-      # the browser dispatches a real `SubmitEvent` with submitter set, honors
-      # the submitter's `formaction` / `formmethod` / `formenctype`, and includes
+      # We dispatch a `MouseEvent` (not a generic `Event`) because Turbo's link
+      # and form interceptors guard with `event instanceof MouseEvent` before
+      # they consider intercepting — a synthetic `Event('click')` is silently
+      # ignored by Turbo Frame / Drive, and CLICK_JS would then fall through to
+      # the manual default action below, which does a full-page navigation
+      # instead of a frame swap.
+      #
+      # For submit buttons (`<button type=submit>`, `<input type=submit>`,
+      # `<input type=image>`): route through `form.requestSubmit(this)` so the
+      # browser dispatches a real `SubmitEvent` with submitter set, honors the
+      # submitter's `formaction` / `formmethod` / `formenctype`, and includes
       # the submitter's name/value in the form data. A manual
       # `dispatchEvent(new Event('submit'))` + `form.submit()` would lose all of
-      # that and break Turbo Drive / Hotwire form handling.
+      # that and break Turbo Drive / Hotwire form handling. We can't rely on
+      # the synthetic click's default action because synthetic events don't
+      # trigger the implicit form-submission default action per DOM spec.
       CLICK_JS = <<~JS
         function() {
-          var clickEvt = new Event('click', { bubbles: true, cancelable: true });
+          var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
+          var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
           var notCancelled = true;
           try {
             notCancelled = this.dispatchEvent(clickEvt);
           } catch (e) { /* patchDispatch in polyfills.js rescues bubble phase */ }
           if (!notCancelled || clickEvt.defaultPrevented) return;
-          if (this.tagName === 'BUTTON' && this.type === 'submit' && this.form) {
+          var tag = this.tagName;
+          var type = (this.type || '').toLowerCase();
+          var isSubmitButton =
+            (tag === 'BUTTON' && (type === 'submit' || type === '')) ||
+            (tag === 'INPUT' && (type === 'submit' || type === 'image'));
+          if (isSubmitButton && this.form) {
             this.form.requestSubmit(this);
-          } else if (this.tagName === 'A' && this.href && this.target !== '_blank') {
+          } else if (tag === 'A' && this.href && this.target !== '_blank') {
             window.location.href = this.href;
           }
         }
