@@ -55,6 +55,11 @@ namespace :test do
 
     progress = File.exist?(progress_path) ? JSON.parse(File.read(progress_path)) : {}
 
+    lib_files = Dir["lib/**/*"].select { |p| File.file?(p) }.sort
+    lib_sha = Digest::SHA1.hexdigest(
+      lib_files.map { |p| "#{p}:#{Digest::SHA1.file(p).hexdigest}" }.join("\n")
+    )
+
     save = lambda do
       FileUtils.mkdir_p(File.dirname(progress_path))
       File.write(progress_path, "#{JSON.pretty_generate(progress)}\n")
@@ -75,7 +80,7 @@ namespace :test do
 
     files.each_with_index do |file, idx|
       pos = "[#{idx + 1}/#{total}]"
-      sha = Digest::SHA1.file(file).hexdigest
+      sha = Digest::SHA1.hexdigest("#{Digest::SHA1.file(file).hexdigest}:#{lib_sha}")
       entry = progress[file]
       if entry && entry["status"] == "passed" && entry["sha"] == sha
         skipped << file

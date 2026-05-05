@@ -688,7 +688,7 @@ module Capybara
 
         release_object(result["objectId"])
         ids
-      rescue StandardError
+      rescue Error
         []
       end
 
@@ -1045,7 +1045,7 @@ module Capybara
 
         url_changed = starting_url.nil? || state["u"] != starting_url
         url_changed && %w[complete interactive].include?(state["r"])
-      rescue StandardError
+      rescue Error
         false
       end
 
