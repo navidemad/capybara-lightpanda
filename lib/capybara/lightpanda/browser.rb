@@ -258,14 +258,17 @@ module Capybara
       # with fresh lexical scope per spec), so a second `const sel = ...`
       # raises `SyntaxError: Identifier 'sel' has already been declared`.
       # Wrapping pushes the declarations into a function scope that gets
-      # discarded when the IIFE returns. Matches Cuprite's `function() {
-      # return EXPR }` pattern used in `call_with_args`.
+      # discarded when the IIFE returns.
+      #
+      # Use direct `eval` inside the IIFE so the user's text can be a bare
+      # expression (`'foo'`), a `throw` statement, OR a multi-statement
+      # script with `const`/`let`. `eval`'s completion-value semantics
+      # return the last expression's value in all cases. A naive
+      # `return EXPR;` wrap would syntax-error on `throw …` and on
+      # multi-statement scripts.
       def evaluate(expression, *args)
         if args.empty?
-          # No extra parens around the expression: `return (EXPR;)` is a
-          # syntax error when EXPR ends with `;`, but `return EXPR;` parses
-          # fine for both bare expressions and IIFE-wrapped user code.
-          wrapped = "(function(){return #{expression}})()"
+          wrapped = "(function(){return eval(#{expression.to_json})})()"
           response = page_command("Runtime.evaluate", expression: wrapped, returnByValue: false, awaitPromise: true)
           if response["exceptionDetails"]
             debug_js_failure("evaluate", expression, response)

@@ -406,10 +406,15 @@ module Capybara
             // Lightpanda raises a JsException from requestSubmit when a
             // bubble-phase listener (e.g. Turbo's submitBubbled) calls
             // preventDefault + stopImmediatePropagation on the SubmitEvent.
-            // Per HTML spec a cancelled submission should be a silent no-op,
-            // so swallow the error — the listener that cancelled has already
-            // taken over (Turbo Drive will dispatch its own fetch).
-            try { this.form.requestSubmit(this); } catch (e) {}
+            // Per HTML spec a cancelled submission should be a silent no-op.
+            // Log unexpected errors via console.warn so they remain
+            // diagnosable (LIGHTPANDA_DEBUG surfaces console output) instead
+            // of silently swallowing future regressions.
+            try {
+              this.form.requestSubmit(this);
+            } catch (e) {
+              try { console.warn('[capybara-lightpanda] requestSubmit threw:', e && e.message ? e.message : e); } catch (_) {}
+            }
           } else if (tag === 'A' && this.href && this.target !== '_blank') {
             // Same-document fragment-only navigation: just update hash (or do
             // nothing if identical). Mirrors Chrome — assigning location.href
