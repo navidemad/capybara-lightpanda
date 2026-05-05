@@ -8,7 +8,7 @@ module Capybara
     class Browser
       extend Forwardable
 
-      attr_reader :options, :process, :client, :target_id, :session_id, :frame_stack
+      attr_reader :options, :process, :client, :target_id, :session_id, :browser_context_id, :frame_stack
 
       delegate %i[on off] => :client
 
@@ -29,6 +29,7 @@ module Capybara
         @client = nil
         @target_id = nil
         @session_id = nil
+        @browser_context_id = nil
         @started = false
         @page_events_enabled = false
         @modal_messages = []
@@ -52,13 +53,25 @@ module Capybara
           @client = Client.new(@process.ws_url, @options)
         end
 
+        create_browser_context
         create_page
 
         @started = true
       end
 
+      # Per-session BrowserContext (Chrome's incognito-profile primitive).
+      # Cookies, storage, and targets created within the context are wiped
+      # when it's disposed — so `reset` is one CDP call instead of an
+      # explicit cookies.clear / storage.clear / close-target dance.
+      # Mirrors ferrum's Contexts model.
+      def create_browser_context
+        result = @client.command("Target.createBrowserContext")
+        @browser_context_id = result["browserContextId"]
+      end
+
       def create_page
-        result = @client.command("Target.createTarget", { url: "about:blank" })
+        result = @client.command("Target.createTarget",
+                                 { url: "about:blank", browserContextId: @browser_context_id }.compact)
         @target_id = result["targetId"]
 
         attach_result = @client.command("Target.attachToTarget", { targetId: @target_id, flatten: true })
@@ -78,6 +91,29 @@ module Capybara
         start
       end
 
+      # Wipe per-session state — cookies, storage, all targets — and start
+      # over with a fresh BrowserContext. Mirrors ferrum's Browser#reset:
+      # one CDP call (`Target.disposeBrowserContext`) does the work that
+      # would otherwise require explicit cookies.clear / storage.clear /
+      # close-target dance, and the browser auto-isolates state for the
+      # new context. Driver#reset! delegates here.
+      #
+      # Side benefit: avoids `Page.navigate("about:blank")` against a
+      # non-blank tab, which doesn't actually replace the document on
+      # current Lightpanda nightly (lightpanda-io/browser#2363). The
+      # context-disposal path sidesteps that bug entirely.
+      def reset
+        dispose_browser_context
+        @client.clear_subscriptions
+        @page_events_enabled = false
+        @modal_handler_installed = false
+        @modal_messages.clear
+        @frame_stack.clear
+        @network&.clear
+        create_browser_context
+        create_page
+      end
+
       # Recover after a WebSocket disconnect or process crash during navigation.
       # Restarts the process if it died, then creates a fresh client and page.
       def reconnect
@@ -88,6 +124,9 @@ module Capybara
         raise DeadBrowserError, "Cannot reconnect: no WebSocket URL" unless ws_url
 
         @client = Client.new(ws_url, @options)
+        # Process may have died; the old browserContextId is gone with it.
+        @browser_context_id = nil
+        create_browser_context
         create_page
         @page_events_enabled = false
       end
@@ -106,6 +145,9 @@ module Capybara
         @client = nil
         @process = nil
         @started = false
+        @browser_context_id = nil
+        @target_id = nil
+        @session_id = nil
         @modal_handler_installed = false
         @frame_stack.clear
       end
@@ -862,6 +904,21 @@ module Capybara
         @client&.close
       rescue StandardError
         nil
+      end
+
+      def dispose_browser_context
+        return unless @browser_context_id
+
+        begin
+          @client.command("Target.disposeBrowserContext", { browserContextId: @browser_context_id })
+        rescue StandardError
+          # Context may already be disposed or the WS may be down; we
+          # recreate either way.
+        ensure
+          @browser_context_id = nil
+          @target_id = nil
+          @session_id = nil
+        end
       end
 
       def restart_process_if_dead

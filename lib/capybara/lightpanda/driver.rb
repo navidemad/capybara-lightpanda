@@ -196,12 +196,12 @@ module Capybara
 
       # -- Lifecycle --
 
+      # Thin Cuprite-style wrapper. The interesting work — disposing the
+      # BrowserContext (cookies, storage, all targets) and starting a fresh
+      # one — happens in Browser#reset.
       def reset!
-        browser.clear_frames
-        browser.reset_modals
-        browser.cookies.clear
-        browser.network.clear
-        browser.go_to("about:blank")
+        browser.reset
+        @started = false
       rescue StandardError
         @browser&.quit
         @browser = nil

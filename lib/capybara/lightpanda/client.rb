@@ -60,6 +60,13 @@ module Capybara
         @subscriber.unsubscribe(event, block)
       end
 
+      # Drop all event subscriptions without closing the WebSocket. Used by
+      # Browser#recreate_page so a fresh target's event handlers don't pile
+      # up on top of the previous target's subscriptions.
+      def clear_subscriptions
+        @subscriber.clear
+      end
+
       def close
         @ws&.close
         @message_thread&.join(1) || @message_thread&.kill
