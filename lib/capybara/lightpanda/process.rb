@@ -22,10 +22,11 @@ module Capybara
       # promptText is null), PR #2324 (<label> click runs activation behavior
       # on labeled control), PR #2286 (HTML constraint validation API:
       # el.validity, validationMessage, checkValidity, reportValidity),
-      # PR #2342 (<summary> click toggles parent <details>.open). Build
-      # 6005 = main HEAD 0420802f (2026-05-04); ships in nightly published
-      # 2026-05-04 03:44 UTC for all four platforms.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6005")
+      # PR #2342 (<summary> click toggles parent <details>.open),
+      # PR #2352 (HTMLInputElement.pattern + patternMismatch via V8 RegExp).
+      # Build 6051 = main HEAD d360fcc0 (2026-05-04); ships in nightly
+      # published 2026-05-05 ~03:30 UTC for all four platforms.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6051")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

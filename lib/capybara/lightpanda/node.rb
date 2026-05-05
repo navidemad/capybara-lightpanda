@@ -360,8 +360,14 @@ module Capybara
       # instead of reporting the exception per DOM §2.9 step 4 (see UPSTREAM_BUGS.md
       # Bug #3). Dispatching via JS routes through `polyfills.js`'s patchDispatch
       # IIFE, which catches the throw and re-walks parents manually so document-
-      # level delegated handlers still see the event. Manual default action then
-      # stands in for the activation behavior native click() would run.
+      # level delegated handlers still see the event.
+      #
+      # For `<button type=submit>`: route through `form.requestSubmit(this)` so
+      # the browser dispatches a real `SubmitEvent` with submitter set, honors
+      # the submitter's `formaction` / `formmethod` / `formenctype`, and includes
+      # the submitter's name/value in the form data. A manual
+      # `dispatchEvent(new Event('submit'))` + `form.submit()` would lose all of
+      # that and break Turbo Drive / Hotwire form handling.
       CLICK_JS = <<~JS
         function() {
           var clickEvt = new Event('click', { bubbles: true, cancelable: true });
@@ -371,9 +377,7 @@ module Capybara
           } catch (e) { /* patchDispatch in polyfills.js rescues bubble phase */ }
           if (!notCancelled || clickEvt.defaultPrevented) return;
           if (this.tagName === 'BUTTON' && this.type === 'submit' && this.form) {
-            var submitEvt = new Event('submit', { bubbles: true, cancelable: true });
-            var submitOk = this.form.dispatchEvent(submitEvt);
-            if (submitOk && !submitEvt.defaultPrevented) this.form.submit();
+            this.form.requestSubmit(this);
           } else if (this.tagName === 'A' && this.href && this.target !== '_blank') {
             window.location.href = this.href;
           }
@@ -405,7 +409,14 @@ module Capybara
                             autofocus: 'autofocus', required: 'required' };
           var prop = BOOL_PROP[name.toLowerCase()];
           if (prop && this[prop] !== undefined) return this[prop];
-          return this.getAttribute(name);
+          if (this.hasAttribute(name)) return this.getAttribute(name);
+          // Property-only fallback: things like `validationMessage` have no
+          // backing HTML attribute. Return primitives only — DOM-node properties
+          // (form, options, etc.) shouldn't leak through.
+          var live = this[name];
+          if (live === null || live === undefined) return null;
+          var t = typeof live;
+          return (t === 'string' || t === 'number' || t === 'boolean') ? live : null;
         }
       JS
 
