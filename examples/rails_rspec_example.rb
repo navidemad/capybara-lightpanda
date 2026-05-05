@@ -250,7 +250,7 @@ RSpec.describe "capybara-lightpanda system tests", type: :feature do
       page.driver.browser.cookies.set(name: "test_cookie", value: "hello", domain: host)
 
       cookie = page.driver.browser.cookies.get("test_cookie")
-      expect(cookie["value"]).to eq("hello")
+      expect(cookie.value).to eq("hello")
     end
 
     it "clears cookies" do
