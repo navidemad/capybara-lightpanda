@@ -11,17 +11,6 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
-  workflow_dispatch:
-    inputs:
-      suite:
-        description: "Which examples to run"
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - all
-          - plain
-          - turbo
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,7 +46,7 @@ jobs:
       - run: bundle exec rake test:unit
 
   examples:
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -76,4 +65,4 @@ jobs:
           sudo mv lightpanda /usr/local/bin/
           lightpanda version
       - name: Run examples
-        run: bundle exec rake examples:${{ inputs.suite }}
+        run: bundle exec rake examples:all
