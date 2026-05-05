@@ -73,7 +73,7 @@ module Capybara
         end
 
         def find
-          env_path = ENV.fetch("LIGHTPANDA_PATH", nil)
+          env_path = ENV.fetch("LIGHTPANDA_BIN", nil)
           return env_path if env_path && File.executable?(env_path)
 
           path_binary = find_in_path
