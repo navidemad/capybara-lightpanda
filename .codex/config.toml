@@ -1,0 +1,7 @@
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+
+[mcp_servers.codegraph]
+command = "codegraph"
+args = ["serve", "--mcp", "--path", "."]
+

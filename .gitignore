@@ -13,3 +13,4 @@
 !docs/static/img/*.png
 .playwright-mcp/
 .zig-cache/
+node_modules/
