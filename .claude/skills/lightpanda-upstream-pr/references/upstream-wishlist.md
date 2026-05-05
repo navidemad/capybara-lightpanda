@@ -274,7 +274,7 @@ Use this file when:
 
 - **Want**: per [Fetch §6.5 "extract a body"](https://fetch.spec.whatwg.org/#concept-bodyinit-extract) step 8, when the body is a `FormData` instance, generate a random boundary, multipart-encode the entries (`Content-Disposition: form-data; name="<key>"` per part), and set `Content-Type: multipart/form-data; boundary=<boundary>`. Per [XHR §4.7.6 "send()"](https://xhr.spec.whatwg.org/#dom-xmlhttprequest-send), same algorithm.
 
-- **Upstream issue/PR**: not filed. **Pinpoint of the fix** (verified by reading `/Users/navid/code/browser` source):
+- **Upstream issue**: #2357, **Upstream PR**: #2358 (open as of 2026-05-04, by us). **Pinpoint of the fix** (verified by reading `/Users/navid/code/browser` source):
   - **Site to patch**: `src/browser/webapi/net/Request.zig:48-55`. The `InitOpts.body` field is typed `?[]const u8` — a flat string. The JS→Zig bridge thus coerces every JSValue body argument via `toString()` before it ever reaches Zig logic. Need to widen the type to a tagged union, e.g.:
     ```zig
     pub const BodyInit = union(enum) {
