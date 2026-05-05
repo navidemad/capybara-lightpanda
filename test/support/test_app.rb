@@ -533,6 +533,47 @@ class TestApp
     "<!DOCTYPE html><html><body><h1 id='ok'>Got payload=#{Rack::Utils.escape_html(params['payload'].to_s)}</h1></body></html>"
   end
 
+  # ─────────────────────────────────────────────────────────────────────
+  # Hotwire-zone probe fixtures (separate from upstream/* — these check
+  # whole-API surfaces required by Turbo Drive / Stimulus, not specific bugs).
+  # ─────────────────────────────────────────────────────────────────────
+
+  get "/lightpanda/probe/page" do
+    "<!DOCTYPE html><html><head><title>Probe</title></head><body><h1 id='hello'>hi</h1></body></html>"
+  end
+
+  # Echoes back the request so the probe can verify fetch + FormData round-trip.
+  post "/lightpanda/probe/echo" do
+    content_type :json
+    {
+      method: request.request_method,
+      content_type: request.content_type,
+      params: params.to_h,
+      raw_body_len: request.body.tap(&:rewind).read.bytesize,
+    }.to_json
+  end
+
+  # Pure side-channel : every POST here increments a settings-stored counter.
+  # Lets the probe distinguish "fetch never sent the HTTP request" vs
+  # "request landed but Promise.then() never fired".
+  set :hit_count, 0
+
+  post "/lightpanda/probe/hit" do
+    settings.hit_count += 1
+    content_type :json
+    { hits: settings.hit_count }.to_json
+  end
+
+  get "/lightpanda/probe/hit_count" do
+    content_type :json
+    { hits: settings.hit_count }.to_json
+  end
+
+  post "/lightpanda/probe/reset_hits" do
+    settings.hit_count = 0
+    "ok"
+  end
+
   get "/lightpanda/elements" do
     <<~HTML
       <!DOCTYPE html>
