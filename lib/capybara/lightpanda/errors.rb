@@ -50,19 +50,32 @@ module Capybara
         exception = details["exception"] || {}
         @class_name = exception["className"]
         @stack_trace = details["stackTrace"]
+        super(build_message(details, exception))
+      end
+
+      private
+
+      def build_message(details, exception)
         base = exception["description"] || details["text"] || "JsException"
         parts = [base]
         parts << "(#{@class_name})" if @class_name && !base.include?(@class_name)
         if (val = exception["value"])
           parts << "value=#{val.inspect}"
         end
-        if (frames = @stack_trace && @stack_trace["callFrames"])
-          formatted = frames.first(5).map do |f|
-            "#{f['functionName'].to_s.empty? ? '<anon>' : f['functionName']} @ #{f['url']}:#{f['lineNumber']}:#{f['columnNumber']}"
-          end
-          parts << "stack:\n  #{formatted.join("\n  ")}"
+        if @stack_trace && (frames = @stack_trace["callFrames"])
+          parts << format_stack(frames)
         end
-        super(parts.join(" | "))
+        parts.join(" | ")
+      end
+
+      def format_stack(frames)
+        formatted = frames.first(5).map { |f| format_frame(f) }
+        "stack:\n  #{formatted.join("\n  ")}"
+      end
+
+      def format_frame(frame)
+        name = frame["functionName"].to_s.empty? ? "<anon>" : frame["functionName"]
+        "#{name} @ #{frame['url']}:#{frame['lineNumber']}:#{frame['columnNumber']}"
       end
     end
 
