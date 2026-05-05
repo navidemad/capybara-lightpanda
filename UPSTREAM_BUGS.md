@@ -170,6 +170,120 @@ Modèle : `URLSearchParams` est déjà géré correctement, l'API de discriminat
 
 ---
 
+## Bug #7 — IDL `enctype` / `method` / `action` / `formMethod` / `formEnctype` / `formAction` retournent `undefined`
+
+Sur `HTMLFormElement` ainsi que sur les soumetteurs (`HTMLButtonElement`, `HTMLInputElement`), les attributs IDL censés refléter `enctype`, `method`, `action`, `target` (et leurs variantes `formEnctype`, `formMethod`, `formAction`, `formTarget`, `formNoValidate` côté soumetteur) renvoient `undefined` quand l'attribut HTML correspondant est absent. Per WHATWG HTML §4.10, ces propriétés doivent toujours retourner une string : missing-value default `"application/x-www-form-urlencoded"` pour `enctype`, `"get"` pour `method`, l'URL du document pour `action` quand l'attribut est vide, et `""` pour les overrides côté soumetteur. Reproductible sur build `1.0.0-nightly.6051+d360fcc0` (vérifié 2026-05-05).
+
+### Repro minimal
+
+```html
+<form id="f" method="post" action="/x">
+  <button id="b" type="submit">Send</button>
+</form>
+```
+
+```js
+var f = document.getElementById('f');
+var b = document.getElementById('b');
+console.log(typeof f.enctype);          // "undefined"   — devrait être "string" ("application/x-www-form-urlencoded")
+console.log(typeof b.formMethod);       // "undefined"   — devrait être "string" ("")
+console.log(typeof b.formEnctype);      // "undefined"   — devrait être "string" ("")
+console.log(typeof b.formAction);       // "undefined"   — devrait être "string" ("")
+```
+
+### Impact
+
+Bloquant pour Turbo Drive : `FormSubmission` constructor appelle `getEnctype(form, submitter)` qui fait `(submitter?.formEnctype || form.enctype).toLowerCase()`. Les deux retournant `undefined`, on crash avec `TypeError: Cannot read properties of undefined (reading 'toLowerCase')` sur le premier form submit Turbo-géré. Stack trace observée :
+
+```
+at fetchEnctypeFromString (turbo.es2017-esm.min.js:11:9314)
+at getEnctype (turbo.es2017-esm.min.js:11:19474)
+at new FormSubmission (turbo.es2017-esm.min.js:11:15114)
+at Navigator.submitForm (turbo.es2017-esm.min.js:25:21488)
+at Session.formSubmitted (turbo.es2017-esm.min.js:25:40196)
+at HTMLDocument.submitBubbled (turbo.es2017-esm.min.js:11:21226)
+```
+
+### Workaround côté gem
+
+`polyfills.js` → IIFE `patchFormIDL` qui définit chaque getter manquant via `Object.defineProperty` sur `HTMLFormElement.prototype`, `HTMLButtonElement.prototype` et `HTMLInputElement.prototype`. Chaque getter lit l'attribut HTML correspondant et applique le default spec (`normEnctype` / `normMethod`) ou retourne `""` côté soumetteur pour préserver l'idiome `submitter.formX || form.X` qu'utilisent Turbo et Hotwire. Garde `name in proto` → no-op dès qu'une nightly Lightpanda implémente nativement.
+
+---
+
+## Bug #8 — `addEventListener` pendant capture-phase invisible à la bubble-phase en cours
+
+WHATWG DOM §2.9 step 5.4 spécifie que le listener-set d'un `EventTarget` est cloné **à chaque phase** du dispatch (capture puis bubble). Une mutation pendant la capture-phase (remove + re-add du *même* listener) est donc visible quand la bubble-phase prend son snapshot. Chrome et Cuprite respectent. Lightpanda prend le snapshot une seule fois au début du dispatch → un `removeEventListener(L) ; addEventListener(L)` séquentiel pendant la capture fait disparaître `L` pour la bubble-phase en cours.
+
+C'est exactement le pattern qu'utilise `Turbo.session.formSubmitObserver.submitCaptured` : sur chaque submit en capture, il fait `remove + add` de son propre `submitBubbled` pour garantir que ce dernier tourne **en dernier** parmi les listeners bubble (afin que des `event.preventDefault()` du code utilisateur soient honorés avant la décision Turbo). Sous Lightpanda, `submitBubbled` ne fire jamais → Turbo n'intercepte aucun form submit → toutes les soumissions Hotwire deviennent des navigations full-page.
+
+### Repro minimal
+
+```js
+var calls = [];
+var bubbleHandler = function() { calls.push('bubble'); };
+document.addEventListener('submit', bubbleHandler, false);
+
+document.addEventListener('submit', function() {
+  calls.push('capture-pre');
+  document.removeEventListener('submit', bubbleHandler, false);
+  document.addEventListener('submit', bubbleHandler, false);
+  calls.push('capture-post');
+}, true);
+
+var f = document.createElement('form');
+f.action = 'javascript:void(0)';
+document.body.appendChild(f);
+var b = document.createElement('button');
+b.type = 'submit';
+f.appendChild(b);
+f.requestSubmit(b);
+
+// Chrome / Cuprite : ["capture-pre", "capture-post", "bubble"]
+// Lightpanda      : ["capture-pre", "capture-post"]   ← bubble manque
+```
+
+### Workaround côté gem
+
+`polyfills.js` → IIFE `patchListenerLifecycle` qui défère chaque `removeEventListener` à un microtask (`Promise.resolve().then(...)`). Si un `addEventListener` du même tuple `(target, type, fn, capture)` arrive avant le flush, le remove en attente est marqué `cancelled` — le listener n'est jamais réellement décroché côté natif, donc la bubble-phase de tout dispatch en cours le voit. Les `removeEventListener` sans `addEventListener` matching se flushent normalement. Les addEventListener sont toujours appelés natif (idempotent per spec, vérifié sur Lightpanda) pour rester safe si le `cancel` mis-fire.
+
+Trade-off : un appelant qui inspecterait l'état du listener-set avant la fin du tick verra le listener encore attaché. Aucun framework connu ne fait ça.
+
+---
+
+## Bug #9 — `requestSubmit()` jette quand un listener cancel le SubmitEvent
+
+Per HTML §4.10.21.5 step 5, si la soumission est cancellée (un listener du `submit` event a appelé `event.preventDefault()`), `requestSubmit()` doit retourner silencieusement. Lightpanda jette `JsException` à la place. Reproductible quand Turbo's `submitBubbled` cancel proprement le SubmitEvent et que le code appelant (`CLICK_JS` du gem ou code utilisateur) n'attrape pas l'exception → toute la chaîne click → form submit foire.
+
+### Workaround côté gem
+
+`node.rb` → `try { this.form.requestSubmit(this); } catch (e) {}` autour de l'appel dans `CLICK_JS`. Le listener qui a cancellé est responsable de la suite (par ex. Turbo Drive lance son propre `fetch` via le path `formSubmitted` → `Navigator.submitForm`).
+
+---
+
+## Bug #10 — `Runtime.evaluate` retient les bindings `const` / `let` top-level entre appels CDP
+
+V8 spec : chaque `Runtime.evaluate` exécute son source dans un nouveau script, donc `const x = 1` au top-level n'a pas de scope partagé entre deux appels successifs. Lightpanda partage le scope → un second appel avec `const sel = ...` lève `SyntaxError: Identifier 'sel' has already been declared`.
+
+### Repro minimal (CDP brut)
+
+```bash
+# Connecté à une session Lightpanda via WebSocket :
+{"id":1,"method":"Runtime.evaluate","params":{"expression":"const sel = document.body"}}
+# → OK
+{"id":2,"method":"Runtime.evaluate","params":{"expression":"const sel = document.body"}}
+# → exceptionDetails: SyntaxError: Identifier 'sel' has already been declared
+```
+
+### Impact
+
+Tout test Capybara qui exécute deux `page.execute_script` ou `evaluate_script` partageant un nom de variable au top-level échoue silencieusement (le gem n'inspectait pas `exceptionDetails` sur la fast-path no-args de `execute`). Bloquant pour les helpers Capybara qui utilisent `const` (idiomatique en JS moderne) — masquait Bug #8 et Bug #9 dans nos investigations en faisant croire que des `addEventListener` dispatchés depuis un `execute_script` ne fonctionnaient pas.
+
+### Workaround côté gem
+
+`browser.rb` → wrap chaque expression de `evaluate(expression)` et `execute(expression)` no-args path dans une IIFE `(function(){return EXPR})()` / `(function(){EXPR})()`. La déclaration `const`/`let` se retrouve dans un function scope qui est jeté à la sortie de l'IIFE. Aligné avec ce que fait déjà la branche args via `Runtime.callFunctionOn`. **Aussi** : raise `JavaScriptError` quand `exceptionDetails` est présent dans la réponse de `execute`, sinon les exceptions JS étaient avalées silencieusement.
+
+---
+
 ## Méthode de découverte
 
 Tous les bugs upstream sont isolés en deux étapes :

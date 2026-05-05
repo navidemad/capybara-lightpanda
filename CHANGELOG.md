@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Turbo Drive `<form>` submissions now intercept correctly under Lightpanda. Four upstream gaps were polyfilled / worked around (see `UPSTREAM_BUGS.md` Bugs #7–#10):
+  - **Bug #7** — Polyfill `HTMLFormElement.{enctype, method, action, target}` and `HTMLButtonElement` / `HTMLInputElement` `{formEnctype, formMethod, formAction, formTarget, formNoValidate}` IDL getters. Lightpanda returned `undefined` instead of the spec's missing-value defaults, crashing Turbo's `FormSubmission` constructor with `Cannot read properties of undefined (reading 'toLowerCase')`.
+  - **Bug #8** — Polyfill `addEventListener` / `removeEventListener` lifecycle so a sync remove + re-add of the same listener during a dispatch's capture phase no longer disappears for the in-flight bubble phase. Restores Turbo's `FormSubmitObserver.submitCaptured` ordering trick (the reason its `submitBubbled` never fired before).
+  - **Bug #9** — Swallow `JsException` from `requestSubmit()` in `CLICK_JS` when a listener cancels the SubmitEvent. Per HTML spec a cancelled submission must be a silent no-op; Lightpanda raises.
+  - **Bug #10** — Wrap user expressions in `evaluate` / `execute` no-args fast paths in an IIFE `(function(){return EXPR})()` so top-level `const` / `let` declarations don't collide across consecutive `Runtime.evaluate` calls. Also raises `JavaScriptError` on `execute` JS exceptions (previously swallowed because `awaitPromise: false` skipped the `exceptionDetails` check).
+- `body` getter now guards against the `document.documentElement === null` window after a fresh BrowserContext / target is created, returning `''` instead of crashing the `reset_session! resets page body` shared spec.
+- `Node#backend_node_id` returns `nil` instead of propagating `BrowserError` when the underlying remote object has been disposed (typical during cross-document navigation races).
+- Same-document fragment-only `<a href="#…">` clicks update `location.hash` instead of assigning `location.href`. The latter triggered a real navigation tick on Lightpanda that cancelled pending `setTimeout` callbacks and cleared form values, breaking any test that drove DOM updates from an in-page anchor click.
+
 ## [0.2.1] - 2026-05-05
 
 ### Fixed
