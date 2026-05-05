@@ -237,6 +237,8 @@ module Capybara
 
       def backend_node_id
         @backend_node_id ||= driver.browser.backend_node_id(@remote_object_id)
+      rescue BrowserError
+        nil
       end
 
       private
@@ -401,9 +403,30 @@ module Capybara
             (tag === 'BUTTON' && (type === 'submit' || type === '')) ||
             (tag === 'INPUT' && (type === 'submit' || type === 'image'));
           if (isSubmitButton && this.form) {
-            this.form.requestSubmit(this);
+            // Lightpanda raises a JsException from requestSubmit when a
+            // bubble-phase listener (e.g. Turbo's submitBubbled) calls
+            // preventDefault + stopImmediatePropagation on the SubmitEvent.
+            // Per HTML spec a cancelled submission should be a silent no-op,
+            // so swallow the error — the listener that cancelled has already
+            // taken over (Turbo Drive will dispatch its own fetch).
+            try { this.form.requestSubmit(this); } catch (e) {}
           } else if (tag === 'A' && this.href && this.target !== '_blank') {
-            window.location.href = this.href;
+            // Same-document fragment-only navigation: just update hash (or do
+            // nothing if identical). Mirrors Chrome — assigning location.href
+            // to a same-document URL on Lightpanda triggers a real navigation
+            // tick that cancels pending setTimeout callbacks and clears form
+            // values, which breaks any test driving DOM updates from a click
+            // handler on `<a href="#...">`.
+            var dest = new URL(this.href, document.baseURI);
+            var here = new URL(window.location.href);
+            if (dest.origin === here.origin && dest.pathname === here.pathname &&
+                dest.search === here.search) {
+              if (dest.hash !== here.hash) {
+                window.location.hash = dest.hash;
+              }
+            } else {
+              window.location.href = this.href;
+            }
           }
         }
       JS

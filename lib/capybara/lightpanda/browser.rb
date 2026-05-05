@@ -238,7 +238,11 @@ module Capybara
       end
 
       def body
-        evaluate("document.documentElement.outerHTML")
+        # Guard against the brief window after a fresh BrowserContext / target
+        # is created where the V8 context exists but `document.documentElement`
+        # is still null. Hit by Capybara's `#reset_session! resets page body`
+        # spec since the 0.2.0 Ferrum-style reset rewrite.
+        evaluate("(document.documentElement && document.documentElement.outerHTML) || ''")
       end
       alias html body
 
@@ -247,9 +251,22 @@ module Capybara
       # and dispatch via Runtime.callFunctionOn so `arguments[i]` is bound.
       # Both paths use `returnByValue: false` and unwrap so DOM-node returns
       # come back as `{ "__lightpanda_node__" => ... }` for the Driver to wrap.
+      #
+      # Even the no-args path wraps the expression in an IIFE to isolate
+      # top-level `const`/`let` declarations. Upstream Lightpanda retains
+      # those bindings across `Runtime.evaluate` calls (V8 starts each call
+      # with fresh lexical scope per spec), so a second `const sel = ...`
+      # raises `SyntaxError: Identifier 'sel' has already been declared`.
+      # Wrapping pushes the declarations into a function scope that gets
+      # discarded when the IIFE returns. Matches Cuprite's `function() {
+      # return EXPR }` pattern used in `call_with_args`.
       def evaluate(expression, *args)
         if args.empty?
-          response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
+          # No extra parens around the expression: `return (EXPR;)` is a
+          # syntax error when EXPR ends with `;`, but `return EXPR;` parses
+          # fine for both bare expressions and IIFE-wrapped user code.
+          wrapped = "(function(){return #{expression}})()"
+          response = page_command("Runtime.evaluate", expression: wrapped, returnByValue: false, awaitPromise: true)
           if response["exceptionDetails"]
             debug_js_failure("evaluate", expression, response)
             raise JavaScriptError, response
@@ -263,9 +280,20 @@ module Capybara
       end
 
       # Execute JS without returning a value.
+      #
+      # Like `evaluate`, the no-args path wraps in an IIFE — same upstream
+      # `const`/`let` leak. Also raises on JS exceptions so silent
+      # failures don't mask test bugs (the previous fast path swallowed them
+      # because `awaitPromise: false` was checked but `exceptionDetails` was
+      # not).
       def execute(expression, *args)
         if args.empty?
-          page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: false)
+          wrapped = "(function(){#{expression}})()"
+          response = page_command("Runtime.evaluate", expression: wrapped, returnByValue: false, awaitPromise: false)
+          if response["exceptionDetails"]
+            debug_js_failure("execute", expression, response)
+            raise JavaScriptError, response
+          end
           return nil
         end
 
