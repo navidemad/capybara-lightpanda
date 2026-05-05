@@ -72,7 +72,7 @@ body:
     attributes:
       label: capybara-lightpanda version
       # version-bearing — keep in sync with lib/capybara/lightpanda/version.rb
-      placeholder: "0.2.0"
+      placeholder: "0.2.1"
     validations:
       required: true
 

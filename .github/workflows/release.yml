@@ -40,7 +40,7 @@ jobs:
           fi
 
       - run: bundle exec rubocop
-      - run: bundle exec rake spec:unit
+      - run: bundle exec rake test:unit
 
       - uses: rubygems/release-gem@v1
 
