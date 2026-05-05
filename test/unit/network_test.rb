@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "bundler/setup"
+require_relative "../test_helper"
 require "capybara/lightpanda/network"
 
 # Minimal stand-in for Capybara::Lightpanda::Browser. We only need command
@@ -49,26 +49,26 @@ class FakeBrowser
   end
 end
 
-RSpec.describe Capybara::Lightpanda::Network do
+describe Capybara::Lightpanda::Network do
   let(:browser) { FakeBrowser.new }
-  subject(:network) { described_class.new(browser) }
+  let(:network) { Capybara::Lightpanda::Network.new(browser) }
 
   describe "#enable / #disable" do
     it "is idempotent" do
       network.enable
       network.enable
       enable_calls = browser.commands.count { |m, _| m == "Network.enable" }
-      expect(enable_calls).to eq(1)
+      assert_equal 1, enable_calls
     end
 
     it "removes its event subscriptions on disable" do
       network.enable
-      expect(browser.subscriber_count("Network.requestWillBeSent")).to eq(1)
-      expect(browser.subscriber_count("Network.responseReceived")).to eq(1)
+      assert_equal 1, browser.subscriber_count("Network.requestWillBeSent")
+      assert_equal 1, browser.subscriber_count("Network.responseReceived")
 
       network.disable
-      expect(browser.subscriber_count("Network.requestWillBeSent")).to eq(0)
-      expect(browser.subscriber_count("Network.responseReceived")).to eq(0)
+      assert_equal 0, browser.subscriber_count("Network.requestWillBeSent")
+      assert_equal 0, browser.subscriber_count("Network.responseReceived")
     end
 
     it "sends Network.disable to the browser BEFORE unsubscribing locally" do
@@ -79,11 +79,11 @@ RSpec.describe Capybara::Lightpanda::Network do
       disable_idx = browser.ops.index { |kind, m| kind == :command && m == "Network.disable" }
       first_off_idx = browser.ops.index { |kind, _| kind == :off }
 
-      expect(disable_idx).not_to be_nil
-      expect(first_off_idx).not_to be_nil
+      refute_nil disable_idx
+      refute_nil first_off_idx
       # Browser stops emitting first; in-flight responseReceived events still
       # have a chance to land on the live handlers.
-      expect(disable_idx).to be < first_off_idx
+      assert_operator disable_idx, :<, first_off_idx
     end
 
     it "does not duplicate handlers across enable→disable→enable cycles" do
@@ -91,8 +91,8 @@ RSpec.describe Capybara::Lightpanda::Network do
       network.disable
       network.enable
 
-      expect(browser.subscriber_count("Network.requestWillBeSent")).to eq(1)
-      expect(browser.subscriber_count("Network.responseReceived")).to eq(1)
+      assert_equal 1, browser.subscriber_count("Network.requestWillBeSent")
+      assert_equal 1, browser.subscriber_count("Network.responseReceived")
     end
 
     it "records each request exactly once after enable→disable→enable" do
@@ -105,7 +105,7 @@ RSpec.describe Capybara::Lightpanda::Network do
                      "request" => { "url" => "https://example.test/x", "method" => "GET" },
                      "timestamp" => 1.0,
                    })
-      expect(network.traffic.size).to eq(1)
+      assert_equal 1, network.traffic.size
     end
   end
 
@@ -117,20 +117,20 @@ RSpec.describe Capybara::Lightpanda::Network do
                      "request" => { "url" => "https://example.test/x", "method" => "GET" },
                      "timestamp" => 1.0,
                    })
-      expect(network.traffic).not_to be_empty
+      refute_empty network.traffic
 
       # Browser#reset disposes the BrowserContext, which destroys the
       # subscriptions and the Network domain. Network#reset mirrors that
       # by dropping local state without sending Network.disable.
       network.reset
-      expect(network.traffic).to be_empty
+      assert_empty network.traffic
 
       # After reset, a fresh enable must re-issue Network.enable AND
       # re-install handlers, otherwise traffic tracking is silently dead.
       browser.commands.clear
       network.enable
-      expect(browser.commands).to include(["Network.enable", {}])
-      expect(browser.subscriber_count("Network.requestWillBeSent")).to eq(1)
+      assert_includes browser.commands, ["Network.enable", {}]
+      assert_equal 1, browser.subscriber_count("Network.requestWillBeSent")
     end
   end
 end

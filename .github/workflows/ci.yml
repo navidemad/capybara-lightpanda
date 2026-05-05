@@ -17,10 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
+  check:
     if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ruby: ["3.3", "4.0"]
     steps:
@@ -29,12 +30,29 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec rubocop
+      - name: Determine Lightpanda cache key
+        id: lightpanda-cache-key
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Cache Lightpanda nightly binary
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/lightpanda
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          restore-keys: |
+            lightpanda-${{ runner.os }}-
+      - name: Lint
+        run: bundle exec rubocop
+      - name: Unit tests
+        run: bundle exec rake test:unit
+      - name: Examples
+        run: bundle exec rake examples:all
 
-  test:
-    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
+  capybara-specs:
+    if: github.event_name == 'push'
+    needs: check
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ruby: ["3.3", "4.0"]
     steps:
@@ -43,4 +61,15 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-      - run: bundle exec rake spec:unit
+      - name: Determine Lightpanda cache key
+        id: lightpanda-cache-key
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Cache Lightpanda nightly binary
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/lightpanda
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          restore-keys: |
+            lightpanda-${{ runner.os }}-
+      - name: Capybara shared specs
+        run: bundle exec rake spec:shared

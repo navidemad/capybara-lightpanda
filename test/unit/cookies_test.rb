@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
-require "bundler/setup"
+require_relative "../test_helper"
 require "fileutils"
 require "tmpdir"
+require "yaml"
 require "capybara/lightpanda/errors"
 require "capybara/lightpanda/cookies"
 
-RSpec.describe Capybara::Lightpanda::Cookies::Cookie do
+describe Capybara::Lightpanda::Cookies::Cookie do
   let(:attributes) do
     {
       "name" => "session",
@@ -22,74 +23,74 @@ RSpec.describe Capybara::Lightpanda::Cookies::Cookie do
     }
   end
 
-  subject(:cookie) { described_class.new(attributes) }
+  let(:cookie) { Capybara::Lightpanda::Cookies::Cookie.new(attributes) }
 
   it "exposes typed accessors" do
-    expect(cookie.name).to eq("session")
-    expect(cookie.value).to eq("abc123")
-    expect(cookie.domain).to eq(".example.com")
-    expect(cookie.path).to eq("/")
-    expect(cookie.size).to eq(12)
-    expect(cookie.samesite).to eq("Lax")
-    expect(cookie.same_site).to eq("Lax")
+    assert_equal "session", cookie.name
+    assert_equal "abc123", cookie.value
+    assert_equal ".example.com", cookie.domain
+    assert_equal "/", cookie.path
+    assert_equal 12, cookie.size
+    assert_equal "Lax", cookie.samesite
+    assert_equal "Lax", cookie.same_site
   end
 
   it "exposes booleans with predicate methods" do
-    expect(cookie.secure?).to be true
-    expect(cookie.httponly?).to be true
-    expect(cookie.http_only?).to be true
-    expect(cookie.session?).to be false
+    assert_equal true, cookie.secure?
+    assert_equal true, cookie.httponly?
+    assert_equal true, cookie.http_only?
+    assert_equal false, cookie.session?
   end
 
   describe "#expires" do
     it "returns a Time when the cookie has a positive expires value" do
-      expect(cookie.expires).to be_a(Time)
-      expect(cookie.expires.to_i).to eq(1_700_000_000)
+      assert_kind_of Time, cookie.expires
+      assert_equal 1_700_000_000, cookie.expires.to_i
     end
 
     it "returns nil for session cookies (negative expires)" do
-      session_cookie = described_class.new(attributes.merge("expires" => -1))
-      expect(session_cookie.expires).to be_nil
+      session_cookie = Capybara::Lightpanda::Cookies::Cookie.new(attributes.merge("expires" => -1))
+      assert_nil session_cookie.expires
     end
 
     it "returns nil when expires is zero" do
-      zero_cookie = described_class.new(attributes.merge("expires" => 0))
-      expect(zero_cookie.expires).to be_nil
+      zero_cookie = Capybara::Lightpanda::Cookies::Cookie.new(attributes.merge("expires" => 0))
+      assert_nil zero_cookie.expires
     end
 
     it "returns nil when expires is missing" do
-      no_expires = described_class.new(attributes.except("expires"))
-      expect(no_expires.expires).to be_nil
+      no_expires = Capybara::Lightpanda::Cookies::Cookie.new(attributes.except("expires"))
+      assert_nil no_expires.expires
     end
   end
 
   describe "#==" do
     it "compares attribute hashes" do
-      twin = described_class.new(attributes.dup)
-      expect(cookie).to eq(twin)
+      twin = Capybara::Lightpanda::Cookies::Cookie.new(attributes.dup)
+      assert_equal cookie, twin
     end
 
     it "is not equal to a different attribute set" do
-      other = described_class.new(attributes.merge("value" => "different"))
-      expect(cookie).not_to eq(other)
+      other = Capybara::Lightpanda::Cookies::Cookie.new(attributes.merge("value" => "different"))
+      refute_equal cookie, other
     end
 
     it "is not equal to a non-Cookie object" do
-      expect(cookie).not_to eq(attributes)
+      refute_equal cookie, attributes
     end
   end
 
   describe "#to_h" do
     it "returns the underlying attributes hash" do
-      expect(cookie.to_h).to eq(attributes)
+      assert_equal attributes, cookie.to_h
     end
   end
 end
 
-RSpec.describe Capybara::Lightpanda::Cookies do
+describe Capybara::Lightpanda::Cookies do
   describe "#store and #load" do
-    let(:browser) { instance_double("Browser") }
-    let(:cookies) { described_class.new(browser) }
+    let(:browser) { mock("Browser") }
+    let(:cookies) { Capybara::Lightpanda::Cookies.new(browser) }
     let(:tmp_path) { File.join(Dir.tmpdir, "lightpanda_cookies_test_#{$PID}.yml") }
 
     let(:cookie_attrs) do
@@ -107,16 +108,16 @@ RSpec.describe Capybara::Lightpanda::Cookies do
     after { FileUtils.rm_f(tmp_path) }
 
     it "round-trips cookies through a YAML file" do
-      allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => [cookie_attrs])
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [cookie_attrs])
 
       cookies.store(tmp_path)
 
-      expect(File.exist?(tmp_path)).to be true
-      expect(YAML.load_file(tmp_path)).to eq([cookie_attrs])
+      assert File.exist?(tmp_path), "expected #{tmp_path} to exist"
+      assert_equal [cookie_attrs], YAML.load_file(tmp_path)
 
-      expect(browser).to receive(:command).with(
+      browser.expects(:command).with(
         "Network.setCookie",
-        hash_including(
+        has_entries(
           name: "session",
           value: "abc",
           domain: ".example.com",
@@ -132,17 +133,17 @@ RSpec.describe Capybara::Lightpanda::Cookies do
     it "defaults to cookies.yml when no path is given" do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir) do
-          allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => [])
+          browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [])
           cookies.store
-          expect(File.exist?("cookies.yml")).to be true
+          assert File.exist?("cookies.yml"), "expected cookies.yml in tmpdir"
         end
       end
     end
   end
 
   describe "Enumerable" do
-    let(:browser) { instance_double("Browser") }
-    let(:cookies) { described_class.new(browser) }
+    let(:browser) { mock("Browser") }
+    let(:cookies) { Capybara::Lightpanda::Cookies.new(browser) }
 
     let(:raw_cookies) do
       [
@@ -152,21 +153,21 @@ RSpec.describe Capybara::Lightpanda::Cookies do
     end
 
     before do
-      allow(browser).to receive(:command).with("Network.getAllCookies").and_return("cookies" => raw_cookies)
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => raw_cookies)
     end
 
     it "yields each cookie" do
       yielded = cookies.map(&:name)
-      expect(yielded).to eq(%w[a b])
+      assert_equal %w[a b], yielded
     end
 
     it "supports Enumerable methods like find/select/map" do
-      expect(cookies.find { |c| c.name == "b" }.value).to eq("2")
-      expect(cookies.select { |c| c.domain.include?("example") }.map(&:name)).to eq(["a"])
+      assert_equal "2", cookies.find { |c| c.name == "b" }.value
+      assert_equal ["a"], cookies.select { |c| c.domain.include?("example") }.map(&:name)
     end
 
     it "returns an Enumerator when called without a block" do
-      expect(cookies.each).to be_a(Enumerator)
+      assert_kind_of Enumerator, cookies.each
     end
   end
 end

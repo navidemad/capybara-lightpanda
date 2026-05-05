@@ -125,7 +125,7 @@ After workaround removal, also audit `spec/spec_helper.rb`'s skip patterns — L
 The gem has a built-in audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* the previously-skipped specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
 
 ```bash
-AUDIT_SKIPS=1 LIGHTPANDA_PATH=/Users/navid/code/browser/zig-out/bin/lightpanda \
+AUDIT_SKIPS=1 LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda \
   bundle exec rspec spec/features/session_spec.rb \
   --format json --out /tmp/audit.json
 ```

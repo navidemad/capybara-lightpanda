@@ -4,8 +4,8 @@ require "bundler/setup"
 require "rspec"
 require "socket"
 require "capybara/spec/spec_helper"
+require "capybara/spec/test_app"
 require "capybara-lightpanda"
-require_relative "support/test_app"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 
@@ -23,7 +23,7 @@ Capybara.register_driver(:lightpanda) do |app|
   options = {
     timeout: 10,
     port: find_available_port,
-    browser_path: ENV["LIGHTPANDA_PATH"] || Capybara::Lightpanda::Binary.ensure_nightly,
+    browser_path: ENV["LIGHTPANDA_BIN"] || Capybara::Lightpanda::Binary.ensure_nightly,
   }
   Capybara::Lightpanda::Driver.new(app, options)
 end

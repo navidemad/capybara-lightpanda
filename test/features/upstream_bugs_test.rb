@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "spec_helper"
+require_relative "../test_helper"
 
 # Tests d'intégration ciblés sur les bugs upstream du binaire Lightpanda
 # documentés dans UPSTREAM_BUGS.md. Chaque exemple exerce le scénario qui
@@ -10,7 +10,7 @@ require "spec_helper"
 # Si une PR upstream supprime un workaround, ces tests doivent rester verts
 # sur le binaire patché — ils décrivent le contrat fonctionnel attendu, pas
 # l'implémentation du contournement.
-RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
+describe "Upstream Lightpanda bug repros & workarounds" do
   let(:session) { TestSessions::Lightpanda }
   let(:driver) { session.driver }
   let(:browser) { driver.browser }
@@ -30,7 +30,9 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
 
       hits = session.evaluate_script("window.__hits")
       phases = hits.map { |h| h["phase"] }
-      expect(phases).to include("body", "doc"), "expected click to bubble through body+document, got: #{hits.inspect}"
+      msg = "expected click to bubble through body+document, got: #{hits.inspect}"
+      assert_includes phases, "body", msg
+      assert_includes phases, "doc", msg
     end
 
     it "preserves event.target as the original element on each ancestor" do
@@ -39,7 +41,7 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
 
       hits = session.evaluate_script("window.__hits")
       targets = hits.map { |h| h["target"] }.uniq
-      expect(targets).to eq(["leaf-btn"]), "delegated handlers must receive the original target"
+      assert_equal ["leaf-btn"], targets, "delegated handlers must receive the original target"
     end
 
     it "invokes the document handler even when the local handler throws" do
@@ -52,7 +54,7 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
 
       session.find(:css, "#leaf-btn").click
       hits = session.evaluate_script("window.__hits")
-      expect(hits.map { |h| h["phase"] }).to include("doc")
+      assert_includes hits.map { |h| h["phase"] }, "doc"
     end
   end
 
@@ -66,15 +68,15 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
     it "opens the dialog via showModal() and exposes the [open] attribute" do
       session.visit("/lightpanda/upstream/dialog")
 
-      expect(session).to have_no_css("dialog#d[open]")
+      session.assert_no_selector(:css, "dialog#d[open]")
       session.find(:css, "#open-modal").click
-      expect(session).to have_css("dialog#d[open]")
+      session.assert_selector(:css, "dialog#d[open]")
     end
 
     it "opens the dialog via show() (non-modal)" do
       session.visit("/lightpanda/upstream/dialog")
       session.find(:css, "#open-show").click
-      expect(session).to have_css("dialog#d[open]")
+      session.assert_selector(:css, "dialog#d[open]")
     end
 
     it "close() removes [open] and dispatches a 'close' event with returnValue" do
@@ -82,9 +84,9 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
       session.find(:css, "#open-modal").click
       session.find(:css, "#dialog-close").click
 
-      expect(session).to have_no_css("dialog#d[open]")
+      session.assert_no_selector(:css, "dialog#d[open]")
       events = session.evaluate_script("window.__closeEvents")
-      expect(events).to eq(["done"]), "expected the polyfilled close() to dispatch a 'close' event"
+      assert_equal ["done"], events, "expected the polyfilled close() to dispatch a 'close' event"
     end
 
     it "showModal on an already-open dialog throws InvalidStateError per spec" do
@@ -96,7 +98,7 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
           catch (e) { return String(e); }
         })();
       JS
-      expect(threw).to match(/InvalidStateError|already.+open/i)
+      assert_match(/InvalidStateError|already.+open/i, threw)
     end
   end
 
@@ -114,21 +116,21 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
       session.find(:css, "#counter-btn").click
       session.find(:css, "#counter-btn").click
 
-      expect(session.find(:css, "#counter").text).to eq("3")
+      assert_equal "3", session.find(:css, "#counter").text
     end
 
     it "submits the form when clicking a <button type=submit>" do
       session.visit("/lightpanda/upstream/click_target")
       session.find(:css, "#submit-btn").click
 
-      expect(session).to have_css("h1#ok", text: "Got payload=from-button")
+      session.assert_selector(:css, "h1#ok", text: "Got payload=from-button")
     end
 
     it "navigates when clicking an <a href> link" do
       session.visit("/lightpanda/upstream/click_target")
       session.find(:css, "#nav-link").click
 
-      expect(session).to have_css("h1", text: "Other Page")
+      session.assert_selector(:css, "h1", text: "Other Page")
     end
 
     it "respects defaultPrevented — does NOT double-submit when a handler intercepts" do
@@ -142,9 +144,9 @@ RSpec.describe "Upstream Lightpanda bug repros & workarounds" do
 
       session.find(:css, "#submit-btn").click
 
-      expect(session.evaluate_script("document.body.getAttribute('data-intercepted')")).to eq("yes")
-      expect(session.current_path).to eq("/lightpanda/upstream/click_target"),
-                                      "form.submit() should NOT run when defaultPrevented was called"
+      assert_equal "yes", session.evaluate_script("document.body.getAttribute('data-intercepted')")
+      assert_equal "/lightpanda/upstream/click_target", session.current_path,
+                   "form.submit() should NOT run when defaultPrevented was called"
     end
   end
 end

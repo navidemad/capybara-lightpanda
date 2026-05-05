@@ -10,17 +10,20 @@ Capybara → capybara-lightpanda (driver + CDP client) → Lightpanda browser (Z
 
 ## Commands
 
+The local suite is Minitest (`test/`). RSpec is retained only for the Capybara
+shared-spec battery distributed by the `capybara` gem (`spec/features/session_spec.rb`).
+
 ```bash
 bundle install                        # Install dependencies
-bundle exec rake spec:incremental     # PREFERRED: run specs file-by-file, skipping ones already passing.
-                                      #   Records pass/fail in tmp/spec_progress.json. Failed files re-run with
-                                      #   --only-failures so iteration stays fast. Env: CLEAR=1 resets progress,
-                                      #   FAIL_FAST=1 stops on first failure, ONLY=<glob> restricts the file set.
-                                      #   Use this instead of `rake spec:all` (which runs everything from scratch
-                                      #   and can take 10+ minutes per run).
-bundle exec rake spec                 # Run only spec/features/driver_spec.rb (~2 min)
-bundle exec rake spec:shared          # Run only spec/features/session_spec.rb (~10 min, full Capybara shared specs)
-bundle exec rake spec:unit            # Run unit specs
+bundle exec rake test:incremental     # PREFERRED: run test files one at a time, skipping ones already passing.
+                                      #   Records pass/fail in tmp/test_progress.json. Failed files re-run from scratch.
+                                      #   Env: CLEAR=1 resets progress, FAIL_FAST=1 stops on first failure,
+                                      #   ONLY=<glob> restricts the file set.
+bundle exec rake test                 # Run only test/features/driver_test.rb (~2 min)
+bundle exec rake test:unit            # Run test/unit/*_test.rb (~1s)
+bundle exec rake test:all             # Run every Minitest file under test/
+bundle exec rake spec:shared          # Run spec/features/session_spec.rb (~10 min, RSpec — full Capybara shared specs)
+bundle exec rake suite                # Full suite: test:all + spec:shared
 bundle exec rubocop                   # Lint
 bundle exec rubocop -a                # Lint with auto-fix
 ```

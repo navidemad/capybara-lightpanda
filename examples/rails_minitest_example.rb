@@ -264,7 +264,7 @@ class CookieTest < SystemTest
     page.driver.browser.cookies.set(name: "test_cookie", value: "hello", domain: host)
 
     cookie = page.driver.browser.cookies.get("test_cookie")
-    assert_equal "hello", cookie["value"]
+    assert_equal "hello", cookie.value
   end
 
   def test_clear_cookies
