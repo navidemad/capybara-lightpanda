@@ -8,7 +8,7 @@ module Capybara
       READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms
+      # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch
       # fixes the gem now relies on: PR #2255 (Network.clearBrowserCookies
       # empty params + Network.getAllCookies), PR #2257
       # (window.location.pathname/.search assignment triggers navigation),
@@ -23,10 +23,12 @@ module Capybara
       # on labeled control), PR #2286 (HTML constraint validation API:
       # el.validity, validationMessage, checkValidity, reportValidity),
       # PR #2342 (<summary> click toggles parent <details>.open),
-      # PR #2352 (HTMLInputElement.pattern + patternMismatch via V8 RegExp).
-      # Build 6051 = main HEAD d360fcc0 (2026-05-04); ships in nightly
-      # published 2026-05-05 ~03:30 UTC for all four platforms.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6051")
+      # PR #2352 (HTMLInputElement.pattern + patternMismatch via V8 RegExp),
+      # PR #2368 (events: report listener exceptions instead of halting
+      # dispatch — lets us drop the polyfills.js patchDispatch IIFE).
+      # Build 6065 = main HEAD 61364437 (2026-05-06, PR #2368 merge);
+      # ships in nightly published 2026-05-06 ~03:30 UTC for all four platforms.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6065")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

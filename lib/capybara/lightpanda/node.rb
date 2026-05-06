@@ -365,13 +365,6 @@ module Capybara
         end
       end
 
-      # Native `this.click()` reaches all ancestors on the happy path, but if any
-      # listener throws (Stimulus / Turbo edge cases) Lightpanda halts dispatch
-      # instead of reporting the exception per DOM §2.9 step 4 (see UPSTREAM_BUGS.md
-      # Bug #3). Dispatching via JS routes through `polyfills.js`'s patchDispatch
-      # IIFE, which catches the throw and re-walks parents manually so document-
-      # level delegated handlers still see the event.
-      #
       # We dispatch a `MouseEvent` (not a generic `Event`) because Turbo's link
       # and form interceptors guard with `event instanceof MouseEvent` before
       # they consider intercepting — a synthetic `Event('click')` is silently
@@ -392,10 +385,7 @@ module Capybara
         function() {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
-          var notCancelled = true;
-          try {
-            notCancelled = this.dispatchEvent(clickEvt);
-          } catch (e) { /* patchDispatch in polyfills.js rescues bubble phase */ }
+          var notCancelled = this.dispatchEvent(clickEvt);
           if (!notCancelled || clickEvt.defaultPrevented) return;
           var tag = this.tagName;
           var type = (this.type || '').toLowerCase();
