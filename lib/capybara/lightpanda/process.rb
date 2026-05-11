@@ -8,8 +8,8 @@ module Capybara
       READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
-      # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch
-      # fixes the gem now relies on: PR #2255 (Network.clearBrowserCookies
+      # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch/
+      # xpath/history fixes the gem now relies on: PR #2255 (Network.clearBrowserCookies
       # empty params + Network.getAllCookies), PR #2257
       # (window.location.pathname/.search assignment triggers navigation),
       # PR #2265 (URL fragment inherited across fragment-less redirect),
@@ -25,10 +25,15 @@ module Capybara
       # PR #2342 (<summary> click toggles parent <details>.open),
       # PR #2352 (HTMLInputElement.pattern + patternMismatch via V8 RegExp),
       # PR #2368 (events: report listener exceptions instead of halting
-      # dispatch — lets us drop the polyfills.js patchDispatch IIFE).
-      # Build 6065 = main HEAD 61364437 (2026-05-06, PR #2368 merge);
-      # ships in nightly published 2026-05-06 ~03:30 UTC for all four platforms.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6065")
+      # dispatch — lets us drop the polyfills.js patchDispatch IIFE),
+      # PR #2289 (Page.getNavigationHistory + Page.navigateToHistoryEntry —
+      # lets us drop the history.back()/history.forward() JS workaround in
+      # Browser#back / #forward), PR #2305 (XPath 1.0: Document.evaluate,
+      # XPathResult, XPathEvaluator, XPathExpression — lets us drop the
+      # ~700 LOC XPath polyfill in javascripts/index.js).
+      # Build 6109 = main HEAD cfcfe4ee (2026-05-11, after PR #2289 and
+      # PR #2305 merges); will ship in nightly published 2026-05-12 ~03:30 UTC.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6109")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

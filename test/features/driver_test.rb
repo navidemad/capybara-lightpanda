@@ -289,17 +289,17 @@ describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
-  # XPath polyfill re-injection
+  # XPath finding across page lifecycle
   # ───────────────────────────────────────────────
 
-  describe "XPath polyfill" do
+  describe "XPath finding" do
     it "is available after visit" do
       session.visit("/lightpanda/simple")
       results = session.all(:xpath, "//p")
       assert_operator results.length, :>=, 1
     end
 
-    it "is re-injected after back" do
+    it "works after back" do
       session.visit("/lightpanda/simple")
       session.visit("/lightpanda/other")
       session.go_back
@@ -307,7 +307,7 @@ describe Capybara::Lightpanda::Driver do
       assert_operator results.length, :>=, 1
     end
 
-    it "is re-injected after forward" do
+    it "works after forward" do
       session.visit("/lightpanda/simple")
       session.visit("/lightpanda/other")
       session.go_back
@@ -316,7 +316,7 @@ describe Capybara::Lightpanda::Driver do
       assert_operator results.length, :>=, 1
     end
 
-    it "is re-injected after refresh" do
+    it "works after refresh" do
       session.visit("/lightpanda/simple")
       driver.refresh
       results = session.all(:xpath, "//p")
@@ -846,224 +846,10 @@ describe Capybara::Lightpanda::Driver do
     end
   end
 
-  # ───────────────────────────────────────────────
-  # XPath polyfill — XPath 1.0 conformance
-  #
-  # Hits window._lightpanda.xpathFind directly with a rich body fixture
-  # and a battery covering every axis, function, operator, and edge case
-  # relevant to Capybara users. Bypasses Capybara wrapping so failures
-  # localize to the polyfill engine. Element counts in the expected
-  # column are derived from the fixture below — keep in sync if the
-  # fixture changes.
-  # ───────────────────────────────────────────────
-
-  describe "XPath polyfill — XPath 1.0 conformance" do
-    fixture_body = <<~HTML
-      <h1 id="heading" class="primary">Hello World</h1>
-      <p id="p1" lang="en" data-x="1">First paragraph with <em>emphasis</em>.</p>
-      <p id="p2" class="note">Second paragraph.</p>
-      <ul id="list">
-        <li class="item odd">Item 1</li>
-        <li class="item even">Item 2</li>
-        <li class="item odd">Item 3</li>
-        <li class="item even">Item 4</li>
-        <li class="item odd">Item 5</li>
-      </ul>
-      <table id="t">
-        <thead><tr><th>Name</th><th>Age</th></tr></thead>
-        <tbody>
-          <tr class="r"><td>Alice</td><td>30</td></tr>
-          <tr class="r"><td>Bob</td><td>25</td></tr>
-          <tr class="r"><td>Carol</td><td>40</td></tr>
-        </tbody>
-      </table>
-      <div id="container">
-        <section id="s1"><span>A</span><span>B</span></section>
-        <section id="s2"><a href="/foo" id="link1">Click me</a></section>
-        <section id="s3"><a href="/bar" id="link2">Other link</a></section>
-      </div>
-      <form id="form">
-        <label for="name">Name</label>
-        <input id="name" type="text" name="name" value="">
-        <input id="email" type="email" name="email" value="">
-        <input id="hidden" type="hidden" name="csrf" value="x">
-        <input id="checkbox" type="checkbox" name="agree">
-        <button id="btn" type="submit">Submit</button>
-      </form>
-      <!-- a comment node -->
-      <div id="multi-class" class="alpha beta gamma"></div>
-      <article id="art">
-        <p>One</p>
-        <p>Two</p>
-        <p>Three</p>
-      </article>
-    HTML
-
-    cases = [
-      # Absolute paths
-      ["/html",                                                 1, "absolute root child"],
-      ["/html/body",                                            1, "/html/body absolute"],
-      ["/",                                                     1, "root only"],
-
-      # Descendant abbreviations
-      ["//h1",                                                  1, "// descendant"],
-      ["//ul/li",                                               5, "/ child"],
-      ["//ul//li",                                              5, "// nested descendant"],
-      [".",                                                     1, "self ."],
-      [".//li",                                                 5, "context-rel descendant"],
-
-      # Wildcards
-      ["//section/*",                                           4, "//section/* (2 spans + 2 anchors)"],
-      ["//*[@id='heading']",                                    1, "//*[@id]"],
-
-      # Axes
-      ["//li[1]/following-sibling::li",                         4, "following-sibling"],
-      ["//li[5]/preceding-sibling::li",                         4, "preceding-sibling"],
-      ["//li/parent::ul",                                       1, "parent::"],
-      ["//li/ancestor::body",                                   1, "ancestor::body"],
-      ["//li/ancestor-or-self::body",                           1, "ancestor-or-self::"],
-      ["//li[3]/preceding::li",                                 2, "preceding axis"],
-      ["//li[1]/following::li",                                 4, "following axis"],
-      ["//ul/descendant::li",                                   5, "descendant axis"],
-      ["//ul/descendant-or-self::li",                           5, "descendant-or-self::li"],
-      ["//section[1]/child::span",                              2, "child:: explicit"],
-      ["//*[@id='heading']/self::h1",                           1, "self:: type guard"],
-
-      # Attribute axis (a[1] picks the first <a> child per parent;
-      # 2 sections contain anchors, each with 2 attributes)
-      ["//a[1]/attribute::href",                                2, "attribute::href"],
-      ["//a[1]/@*",                                             4, "@* (2 anchors x 2 attrs)"],
-
-      # Position predicates
-      ["//li[1]",                                               1, "[1]"],
-      ["//li[last()]",                                          1, "[last()]"],
-      ["//li[last() - 1]",                                      1, "[last() - 1]"],
-      ["//li[position() = 1]",                                  1, "explicit position()"],
-      ["//li[position() > 2]",                                  3, "position > 2"],
-      ["//li[position() mod 2 = 1]",                            3, "position mod 2 = 1 (odd)"],
-      ["(//li)[1]",                                             1, "(//li)[1] filter on group"],
-      ["(//section)[2]",                                        1, "(//section)[2] grouped"],
-
-      # Reverse-axis proximity-order predicates
-      ["//li[3]/preceding-sibling::li[1]",                      1, "reverse axis [1] = nearest"],
-      ["//li[5]/ancestor::*[1]",                                1, "ancestor::*[1] = parent ul"],
-
-      # Multi-predicate / chained
-      ["//li[contains(concat(' ', @class, ' '), ' even ')][2]", 1, "filter then position [2]"],
-      ["//*[@id='heading' and @class='primary']",               1, "and"],
-      ["//*[@id='heading' or @id='p1']",                        2, "or"],
-
-      # Sub-path predicates
-      ["//section[a]",                                          2, "section with a child"],
-      ["//section[count(span) = 2]",                            1, "count() in predicate"],
-      ["//ul[count(li) = 5]",                                   1, "count() = 5"],
-      ["//tr[td[1]]",                                           3, "tr with first td (sub-step)"],
-      ["//tr[td/text() = 'Bob']",                               1, "deep sub-path equality"],
-
-      # String functions
-      ["//*[starts-with(@id, 'link')]",                         2, "starts-with"],
-      ["//*[normalize-space() = 'Hello World']",                1, "normalize-space() default arg"],
-      ["//*[normalize-space(.) = 'Item 1']",                    1, "normalize-space(arg)"],
-      ["//*[concat(@id, '-x') = 'heading-x']",                  1, "concat"],
-      ["//*[substring(@id, 1, 1) = 'p']",                       2, "substring (3 args)"],
-      ["//*[substring(@id, 2, 1) = '1' and starts-with(@id, 'p')]", 1, "substring constrained"],
-      ["//p[translate(@id, 'p', 'q') = 'q1']",                  1, "translate"],
-      ["//*[substring-before(@id, '1') = 'p']",                 1, "substring-before"],
-      ["//*[substring-after(@id, 'lin') = 'k1']",               1, "substring-after"],
-
-      # Number functions
-      ["//tr[number(td[2]) > 28]",                              2, "number() conversion in compare"],
-      ["//tr[floor(number(td[2]) div 10) = 3]",                 1, "floor + div"],
-      ["//tr[ceiling(number(td[2]) div 10) = 3]",               2, "ceiling + div"],
-      ["//tr[round(number(td[2]) div 10) = 3]",                 2, "round half-up"],
-      ["//ul[sum(li/@data-len) = 0]",                           1, "sum() over empty path -> 0"],
-
-      # Boolean functions
-      ["//p[boolean(@lang)]",                                   1, "boolean()"],
-      ["//*[false()]",                                          0, "false() always-false"],
-
-      # name() / local-name()
-      ["//*[name() = 'h1']",                                    1, "name() of context"],
-      ["//*[local-name() = 'h1']",                              1, "local-name() of context"],
-
-      # id()
-      ["id('heading')",                                         1, "id()"],
-      ["id('heading p1')",                                      2, "id() multi-token"],
-      ["id(//em/parent::p/@id)",                                1, "id() on attribute string-value"],
-
-      # Union
-      ["//h1 | //title",                                        2, "union (h1 + host page <title>)"],
-      ["//h1 | //*[@id='p1']",                                  2, "union of 2 different selectors"],
-      ["//*[@id='heading'] | //*[@id='heading']",               1, "self-union dedups"],
-
-      # Arithmetic
-      ["//li[position() + 1 = 3]",                              1, "+"],
-      ["//li[position() - 1 = 0]",                              1, "-"],
-      ["//li[position() * 2 = 4]",                              1, "* multiply"],
-      ["//li[position() div 2 = 1]",                            1, "div"],
-      ["//li[(position() mod 2) = 0]",                          2, "mod"],
-
-      # Comparison
-      ["//tr[number(td[2]) = 30]",                              1, "= numeric"],
-      # NaN != 30 is TRUE per IEEE 754 (NaN equals nothing). The header tr's
-      # td[2] = 'Age' → NaN, so it also matches the != comparison.
-      ["//tr[number(td[2]) != 30]",                             3, "!= numeric (header NaN passes)"],
-      ["//tr[number(td[2]) < 30]",                              1, "< numeric"],
-      ["//tr[number(td[2]) <= 30]",                             2, "<= numeric"],
-      ["//tr[number(td[2]) > 30]",                              1, "> numeric"],
-      ["//tr[number(td[2]) >= 30]",                             2, ">= numeric"],
-      ["//tr[td[2] = 30]",                                      1, "string-vs-number coercion"],
-      ["//tr[td[2] = '30']",                                    1, "string-vs-string equality"],
-
-      # Node tests
-      ["//comment()",                                           1, "comment() node test"],
-
-      # Capybara-style real-world expressions
-      [".//a[contains(normalize-space(string(.)), 'Click me')]", 1, "Capybara link locator"],
-      [".//input[(./@type = 'text')]",                          1, "Capybara text-field"],
-      [".//*[@id='heading']",                                   1, "find-by-id"],
-      [".//li[contains(concat(' ', @class, ' '), ' even ')]",   2, "class contains pattern"],
-
-      # Tricky / edge
-      ["//*[@id='heading']/text()",                             1, "text() child of element"],
-      ["//em/parent::p",                                        1, "parent of inline"],
-      ["//p[em]",                                               1, "p with em descendant"],
-      ["//p[not(em)]",                                          4, "p without em"],
-      ["//section[a/@href = '/foo']",                           1, "deep attribute eq"],
-      ["//ul/li[last()][position() = last()]",                  1, "double last()"],
-      ["//ul[string(count(li)) = '5']",                         1, "string() of number"],
-      ["//body[count(//*[contains(@class, 'item')]) = 5]",      1, "nested count of contains()"],
-    ].freeze
-
-    before do
-      session.visit("/lightpanda/simple")
-      session.execute_script("document.body.innerHTML = #{fixture_body.dump}")
-    end
-
-    it "evaluates a battery of XPath 1.0 expressions" do
-      failures = []
-      cases.each do |xp, expected, desc|
-        result = session.evaluate_script(<<~JS)
-          (function() {
-            try {
-              var r = window._lightpanda.xpathFind(#{xp.dump}, document);
-              return { ok: true, n: (r && r.length) || 0 };
-            } catch (e) {
-              return { ok: false, err: String((e && e.message) || e) };
-            }
-          })()
-        JS
-
-        if result.is_a?(Hash) && result["ok"]
-          failures << "[#{desc}] #{xp} → got #{result['n']}, expected #{expected}" unless result["n"] == expected
-        else
-          err = result.is_a?(Hash) ? result["err"] : result.inspect
-          failures << "[#{desc}] #{xp} → error: #{err}"
-        end
-      end
-      assert_empty failures, "XPath 1.0 conformance failures:\n#{failures.join("\n")}"
-    end
-  end
+  # XPath conformance is now covered by upstream's 91-case Zig battery in
+  # PR #2305 (native Document.evaluate). The gem's only XPath-shaped surface
+  # is the FIND_WITHIN_JS / FIND_IN_FRAME_JS / find_in_document branches,
+  # which are exercised end-to-end by Capybara's shared specs.
 
   # ───────────────────────────────────────────────
   # Capybara DSL (relies on XPath evaluator)

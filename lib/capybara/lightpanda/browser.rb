@@ -217,11 +217,11 @@ module Capybara
       end
 
       def back
-        wait_for_navigation { execute("history.back()") }
+        wait_for_navigation { navigate_history(-1) }
       end
 
       def forward
-        wait_for_navigation { execute("history.forward()") }
+        wait_for_navigation { navigate_history(+1) }
       end
 
       def refresh
@@ -632,16 +632,26 @@ module Capybara
       INVALID_SELECTOR_MARKER = "LIGHTPANDA_INVALID_SELECTOR:"
 
       # JS function for finding elements within a node.
-      # Works in any execution context (top frame or iframe). Any throw from
-      # querySelectorAll means the selector is malformed (the spec only allows
-      # SYNTAX_ERR DOMException; Lightpanda's V8 currently throws a generic
-      # Error with messages like "InvalidClassSelector"). Re-throw with the
-      # marker prefix so Ruby converts to InvalidSelector regardless.
+      # Works in any execution context (top frame or iframe). For CSS, any
+      # throw from querySelectorAll means the selector is malformed
+      # (re-throw with the marker prefix so Ruby converts to InvalidSelector).
+      # XPath routes through native `Document.evaluate` + `XPathResult`
+      # (Lightpanda PR #2305, in nightly >=6109); on parse error we return
+      # [] silently to match Capybara's internal XPath generator, which
+      # sometimes produces selectors with empty trailing predicates like
+      # `(...)[]` that native rejects but `has_element?` expects to behave
+      # as "not found" rather than raise InvalidSelector.
+      # `XPathResult.ORDERED_NODE_SNAPSHOT_TYPE` is `7` in the spec — inlined
+      # so the JS doesn't depend on the enum being defined as a constant.
       FIND_WITHIN_JS = <<~JS.freeze
         function(method, selector) {
           if (method === 'xpath') {
-            if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, this);
-            return [];
+            try {
+              var r = this.ownerDocument.evaluate(selector, this, null, 7, null);
+              var nodes = [];
+              for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
+              return nodes;
+            } catch(e) { return []; }
           }
           try { return Array.from(this.querySelectorAll(selector)); }
           catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
@@ -656,8 +666,12 @@ module Capybara
           try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
           if (!doc) return [];
           if (method === 'xpath') {
-            if (typeof _lightpanda !== 'undefined') return _lightpanda.xpathFind(selector, doc);
-            return [];
+            try {
+              var r = doc.evaluate(selector, doc, null, 7, null);
+              var nodes = [];
+              for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
+              return nodes;
+            } catch(e) { return []; }
           }
           try { return Array.from(doc.querySelectorAll(selector)); }
           catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
@@ -671,8 +685,19 @@ module Capybara
           # through) to a string before quoting. Symbol#inspect returns `:p`,
           # which would inject a bare token into the JS source.
           selector_literal = selector.to_s.inspect
+          # XPath parse errors return [] silently to match Capybara's expected
+          # "not found" behavior (see FIND_WITHIN_JS comment above for why).
           js = if method == "xpath"
-                 "(typeof _lightpanda !== 'undefined') ? _lightpanda.xpathFind(#{selector_literal}, document) : []"
+                 <<~XPATH_FIND
+                   (function() {
+                     try {
+                       var r = document.evaluate(#{selector_literal}, document, null, 7, null);
+                       var nodes = [];
+                       for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
+                       return nodes;
+                     } catch(e) { return []; }
+                   })()
+                 XPATH_FIND
                else
                  <<~CSS_FIND
                    (function() {
@@ -1010,6 +1035,21 @@ module Capybara
       def wait_for_navigation(&)
         enable_page_events
         await_navigation(&)
+      end
+
+      # Step the session history by `offset` (-1 = back, +1 = forward) using
+      # native CDP. `Page.getNavigationHistory` returns the entry list and
+      # `currentIndex`; `Page.navigateToHistoryEntry` jumps to the chosen
+      # entry's `id`. No-op when the offset would step past either end so
+      # the behavior matches `history.back()` / `history.forward()` on a
+      # bounded session history.
+      def navigate_history(offset)
+        history = page_command("Page.getNavigationHistory")
+        target_index = history["currentIndex"] + offset
+        entries = history["entries"]
+        return if target_index.negative? || target_index >= entries.length
+
+        page_command("Page.navigateToHistoryEntry", entryId: entries[target_index]["id"])
       end
 
       # Common navigation lifecycle shared by `wait_for_page_load` (fresh
