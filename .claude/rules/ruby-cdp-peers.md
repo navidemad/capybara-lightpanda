@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-05-10 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `25367b52` (2026-04-22). Still no new commits on `main` since prior review (Ferrum quiet for 18 days). No gem-relevant changes — Outstanding adoption candidates and Diverged-on-purpose entries below stay valid.
+**Last reviewed**: 2026-05-11 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `25367b52` (2026-04-22). Still no new commits on `main` since prior review (Ferrum quiet for 19 days). No gem-relevant changes — Outstanding adoption candidates and Diverged-on-purpose entries below stay valid.
 
 ### Adopted
 
@@ -48,7 +48,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-05-10 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, "Extend Node#set with additional input types (#295)"). No new commits since prior review. PR #295 adds `datetime-local` to Cuprite's `Node#set`; we already have date / time / datetime-local (see Adopted "Time-input support in `Node#set`"), so no impact on the adoption picture. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?) all remain adopted; outstanding `month`/`week` adoption candidate still outstanding (Cuprite hasn't added them either).
+**Last reviewed**: 2026-05-11 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, "Extend Node#set with additional input types (#295)"). No new commits since prior review. PR #295 adds `datetime-local` to Cuprite's `Node#set`; we already have date / time / datetime-local (see Adopted "Time-input support in `Node#set`"), so no impact on the adoption picture. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?) all remain adopted; outstanding `month`/`week` adoption candidate still outstanding (Cuprite hasn't added them either).
 
 ### Adopted
 
