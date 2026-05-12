@@ -372,15 +372,14 @@ module Capybara
       # the manual default action below, which does a full-page navigation
       # instead of a frame swap.
       #
-      # For submit buttons (`<button type=submit>`, `<input type=submit>`,
-      # `<input type=image>`): route through `form.requestSubmit(this)` so the
-      # browser dispatches a real `SubmitEvent` with submitter set, honors the
-      # submitter's `formaction` / `formmethod` / `formenctype`, and includes
-      # the submitter's name/value in the form data. A manual
-      # `dispatchEvent(new Event('submit'))` + `form.submit()` would lose all of
-      # that and break Turbo Drive / Hotwire form handling. We can't rely on
-      # the synthetic click's default action because synthetic events don't
-      # trigger the implicit form-submission default action per DOM spec.
+      # Submit buttons (`<input type=submit>`, `<input type=image>`,
+      # `<button type=submit>`): native click on the dispatched MouseEvent
+      # already runs the form-submission default action via Frame.submitForm
+      # in Lightpanda (extension of PR #2312 for image to all submit
+      # variants). A manual `form.requestSubmit(this)` here would fire a
+      # second SubmitEvent and double-submit the form — observed on nightly
+      # 6167 as duplicate `turbo:submit-start` events; the first request
+      # gets aborted by the second and Turbo never renders the response.
       CLICK_JS = <<~JS
         function() {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
@@ -388,24 +387,7 @@ module Capybara
           var notCancelled = this.dispatchEvent(clickEvt);
           if (!notCancelled || clickEvt.defaultPrevented) return;
           var tag = this.tagName;
-          var type = (this.type || '').toLowerCase();
-          var isSubmitButton =
-            (tag === 'BUTTON' && (type === 'submit' || type === '')) ||
-            (tag === 'INPUT' && (type === 'submit' || type === 'image'));
-          if (isSubmitButton && this.form) {
-            // Lightpanda raises a JsException from requestSubmit when a
-            // bubble-phase listener (e.g. Turbo's submitBubbled) calls
-            // preventDefault + stopImmediatePropagation on the SubmitEvent.
-            // Per HTML spec a cancelled submission should be a silent no-op.
-            // Log unexpected errors via console.warn so they remain
-            // diagnosable (LIGHTPANDA_DEBUG surfaces console output) instead
-            // of silently swallowing future regressions.
-            try {
-              this.form.requestSubmit(this);
-            } catch (e) {
-              try { console.warn('[capybara-lightpanda] requestSubmit threw:', e && e.message ? e.message : e); } catch (_) {}
-            }
-          } else if (tag === 'A' && this.href && this.target !== '_blank') {
+          if (tag === 'A' && this.href && this.target !== '_blank') {
             // Same-document fragment-only navigation: just update hash (or do
             // nothing if identical). Mirrors Chrome — assigning location.href
             // to a same-document URL on Lightpanda triggers a real navigation
