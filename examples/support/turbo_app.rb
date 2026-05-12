@@ -53,7 +53,10 @@ end
 Rails.application.routes.draw do
   root to: "pages#home"
   get "about", to: "pages#about"
-  resources :posts, only: %i[index show new create edit update]
+  resources :posts, only: %i[index show new create edit update] do
+    collection { get :created }
+    member { get :updated }
+  end
   get "notifications", to: "notifications#card"
 end
 
@@ -143,14 +146,29 @@ class PostsController < ActionController::Base
     HTML
   end
 
+  # Hotwire convention: respond with 303 See Other after a successful POST
+  # so Turbo Drive follows the redirect via GET and renders the result page.
+  # Returning 200 HTML directly here would (a) let Rails set the response
+  # Content-Type from the request's preferred Accept format (turbo-stream
+  # when Turbo's fetch wrapper is in play) and (b) leave Turbo treating the
+  # body as a Stream message — no <turbo-stream> elements means no render.
+  # The redirect-then-render-on-GET path is what real Rails+Turbo apps do.
   def create
+    redirect_to created_posts_path(title: params[:title], body: params[:body]), status: :see_other
+  end
+
+  def created
     title = ERB::Util.html_escape(params[:title])
     body = ERB::Util.html_escape(params[:body])
-    render_with_layout <<~HTML
-      <h1 id="page-title">Post Created</h1>
-      <p id="post-title-result">#{title}</p>
-      <p id="post-body-result">#{body}</p>
-    HTML
+    respond_to do |format|
+      format.html do
+        render_with_layout <<~HTML
+          <h1 id="page-title">Post Created</h1>
+          <p id="post-title-result">#{title}</p>
+          <p id="post-body-result">#{body}</p>
+        HTML
+      end
+    end
   end
 
   def edit
@@ -165,12 +183,23 @@ class PostsController < ActionController::Base
     HTML
   end
 
+  # Same Hotwire 303-redirect pattern as `create`. The `updated` action then
+  # renders the success page with the same Accept-aware respond_to so Rails
+  # serves text/html instead of auto-promoting to turbo-stream.
   def update
+    redirect_to updated_post_path(params[:id], title: params[:title]), status: :see_other
+  end
+
+  def updated
     title = ERB::Util.html_escape(params[:title])
-    render_with_layout <<~HTML
-      <h1 id="page-title">Post Updated</h1>
-      <p id="edit-result">Saved: #{title}</p>
-    HTML
+    respond_to do |format|
+      format.html do
+        render_with_layout <<~HTML
+          <h1 id="page-title">Post Updated</h1>
+          <p id="edit-result">Saved: #{title}</p>
+        HTML
+      end
+    end
   end
 end
 
