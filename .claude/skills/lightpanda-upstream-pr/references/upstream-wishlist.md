@@ -27,39 +27,40 @@ Use this file when:
 
 ## A. Bugs to fix upstream
 
-> Items A1–A9, A13–A21, A24–A33 have all been resolved (or retracted as gem misdiagnoses) — see section D for the historical record. Numbering preserved to keep cross-references stable.
+> Items A1–A9, A13–A21, A24–A33 have all been resolved (or retracted as gem misdiagnoses) — see section D for the historical record. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design). Numbering preserved to keep cross-references stable.
 
-### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801, #1832)
+### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801 OPEN; #1832 CLOSED 2026-04-09)
 
-- **Today**: may never fire on Wikipedia, certain SPAs, French real estate sites. Even after PR #2032 reordered events.
+- **Today (re-verified 2026-05-12)**: #1801 still OPEN. May never fire on Wikipedia, certain SPAs, French real estate sites. Even after PR #2032 reordered events.
 - **Want**: fire reliably at end of navigation.
 - **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `wait_for_page_load` / `wait_for_navigation` use a 2-second `Page.loadEventFired` window then fall back to `document.readyState` polling. Critical for Wikipedia-style sites.
 - **Drop-on-fix**: keep readyState fallback as a safety net (cheap), but remove the 2-second cap and trust `loadEventFired` as primary.
 
-### A11. `Runtime.evaluate` after click-driven navigation: "Cannot find default execution context" (#2187)
+### A11. `Runtime.evaluate` after click-driven navigation: "Cannot find default execution context" (#2187 CLOSED — gem keeps the helper)
 
 - **Today**: race window after navigation where the V8 default context is destroyed but not yet recreated. Calls fail with `-32000 Cannot find default execution context`.
-- **Want**: queue the evaluate until the new context is ready, or block until ready.
-- **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `with_default_context_wait` retries once after waiting for `Runtime.executionContextCreated`. `Node#call`, `find_in_document`, `Node#shadow_root` all wrap in this pattern.
-- **Drop-on-fix**: remove `with_default_context_wait` and unwrap the retry calls. ~15 LOC + 4 call-site simplifications.
+- **Upstream status (verified 2026-05-12)**: issue #2187 CLOSED 2026-05-04 as "completed". Maintainer confirmed Lightpanda's nav model discards the current context and emits `Runtime.executionContextsCleared` + `executionContextCreated` events around it (page.zig:518 / :540) — the race window is **inherent**, not a bug. The events ARE reliable; clients are expected to gate on them. So no further upstream filing is possible.
+- **Want**: nothing further from upstream. The events are sufficient.
+- **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `with_default_context_wait` retries on `NoExecutionContextError` after waiting for `Runtime.executionContextCreated`. `Node#call`, `find_in_document`, `find_in_frame`, `Node#shadow_root` all wrap in this pattern. **Load-bearing** — required because the race window is real.
+- **Drop-on-fix**: NOT a drop-on-fix anymore — the helper is the correct design and stays. Cross-reference: also handles the iframe contextId churn from #2400 (see B9 / `lightpanda-io.md`).
 
-### A12. WebSocket dies on complex page navigation (#1849)
+### A12. WebSocket dies on complex page navigation (#1849 CLOSED — gem keeps defensive recovery)
 
-- **Today**: PR #1850 (2026-03-16) was supposed to fix this; still happens occasionally on certain sites.
-- **Want**: stable WebSocket through any navigation lifecycle.
-- **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `handle_navigation_crash` reconnects on `@client.closed?` and retries the navigation once. Without this, full-app crashes ripple as `DeadBrowserError` on the next CDP call.
-- **Drop-on-fix**: remove `handle_navigation_crash` and the reconnect/retry logic. ~30 LOC.
+- **Today**: #1849 CLOSED 2026-03-16 by PR #1850. Remaining surface: any rare crash path that drops the WS (e.g. V8 GC fatal #2407, fetch double-free #2404, http_client request failure #2381) still surfaces to the gem as a closed CDP socket.
+- **Want**: nothing further upstream specific to #1849. Individual crash fixes land as they're filed (e.g. #2404 merged 2026-05-10).
+- **Gem workaround**: `lib/capybara/lightpanda/browser.rb` — `handle_navigation_crash` reconnects on `@client.closed?` and retries the navigation once. Without this, any browser crash mid-navigation ripples as `DeadBrowserError` on the next CDP call.
+- **Drop-on-fix**: NOT a single-fix drop-on-fix anymore. The helper guards against the entire "browser died mid-navigation" failure class, not just #1849. Keep until Lightpanda has zero crash-during-navigation paths — i.e. probably forever for a defensive driver. ~30 LOC retained as defense-in-depth.
 
 ### A22. `Element.isContentEditable` — IDL attribute landed but always returns false (cannot drop polyfill)
 
-- **Today (verified 2026-05-01 against `main` HEAD `9a9e79eb`, build 5948)**: `HTMLElement.isContentEditable` IDL accessor exists (`src/browser/webapi/element/Html.zig:398-407`), but the implementation always returns `false`. PR #2310 (by us) originally implemented the spec-correct walk, but the maintainer added commit `2af95af6` immediately before merge that strips the return path: it walks ancestors per HTML §7.7.5.2, but only to emit `log.info(.not_implemented, "IsContentEditable", ...)` when the spec answer would be `true` — the function unconditionally returns `false`. Rationale (from the commit body): Lightpanda has no caret/keyboard editing pipeline, so a spec-correct `true` would route Puppeteer's `dispatchKeyEvent` into a silently-noop input pipeline; routing to `false` and logging the unsupported case surfaces the gap in telemetry rather than masquerading as a working state.
+- **Today (re-verified 2026-05-12 against `main` HEAD `8cad175c`, nightly ≥6167)**: `HTMLElement.isContentEditable` IDL accessor exists, but `getIsContentEditable` at `src/browser/webapi/element/Html.zig:398-409` unconditionally `return false;`. PR #2310 (by us) originally implemented the spec-correct walk, but the maintainer added commit `2af95af6` immediately before merge that strips the return path: it walks ancestors per HTML §7.7.5.2, but only to emit `log.info(.not_implemented, "IsContentEditable", ...)` when the spec answer would be `true` — the function unconditionally returns `false`. Rationale (from the commit body): Lightpanda has no caret/keyboard editing pipeline, so a spec-correct `true` would route Puppeteer's `dispatchKeyEvent` into a silently-noop input pipeline; routing to `false` and logging the unsupported case surfaces the gap in telemetry rather than masquerading as a working state.
 - **Upstream issue/PR**: #2309 CLOSED 2026-04-30, PR #2310 MERGED 2026-04-30 (with the maintainer override).
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js:910-921` — `_lightpanda.isContentEditable` falls back to walking the ancestor chain looking for a non-`false` `contenteditable` attribute when `el.isContentEditable` is falsy/missing (~12 LOC). Called from `EDITABLE_HOST_JS` in `lib/capybara/lightpanda/node.rb:503`, which backs `Node#content_editable?`. **Polyfill MUST stay** — replacing it with the native read would force every `Node#content_editable?` call to return false.
 - **Drop-on-fix**: blocked indefinitely, contingent on Lightpanda implementing a real keyboard-editing pipeline. Until then, the gem polyfill is load-bearing.
 
 ### A23. `Element.innerText` doesn't insert block-level line breaks
 
-- **Today**: `_getInnerText` at `src/browser/webapi/element/Html.zig:226-268` recurses through children and emits `\n` only for `<br>`. No display:block / display:list-item line breaks; no hidden-descendant filtering (source even has a `// TODO check if elt is hidden` comment at line 241); no line-collapsing pass. Empirically, nested-block fixtures return `"Ancestor Ancestor Ancestor Child  ASibling  "` (no newlines) where Chrome returns the same content with `\n` inserted around block boundaries.
+- **Today (re-verified 2026-05-12 against `main` HEAD `8cad175c`)**: `_getInnerText` at `src/browser/webapi/element/Html.zig:228-268` recurses through children and emits `\n` only for `<br>`. No display:block / display:list-item line breaks; no hidden-descendant filtering (source still has the `// TODO check if elt is hidden` comment at line 243); no line-collapsing pass. Empirically, nested-block fixtures return `"Ancestor Ancestor Ancestor Child  ASibling  "` (no newlines) where Chrome returns the same content with `\n` inserted around block boundaries.
 - **Want**: implement [the HTML innerText algorithm](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute) — required line breaks around block-level boxes, hidden-descendant filtering via `getComputedStyle().display`, the line-collapsing pass that drops required line breaks adjacent to empty blocks. Multi-day Zig project; needs `getComputedStyle` access from inside the writer-driven walker.
 - **Upstream issue/PR**: not filed.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
@@ -115,13 +116,13 @@ Three independent issues:
 
 ### B12. `HTMLDialogElement.prototype.{showModal, show, close}` not implemented
 
-- **Today (observed 2026-05-04 against public nightly `1.0.0-nightly.6005+b8144d3e`; full repro in `spec/features/upstream_bugs_spec.rb` "Bug #4 — HTMLDialogElement polyfill" + `UPSTREAM_BUGS.md` Bug #4)**: the `HTMLDialogElement` constructor exists (`typeof HTMLDialogElement === 'function'`) but `prototype.showModal`, `prototype.show`, `prototype.close`, and `prototype.returnValue` are all `undefined`. Calling any of them throws `TypeError: d.showModal is not a function`. Blocks any UI built on the native `<dialog>` element (very common in Rails 8 + DaisyUI / Tailwind UI / shadcn).
+- **Today (re-verified 2026-05-12 against `main` HEAD `8cad175c` / nightly ≥6167; full repro in `spec/features/upstream_bugs_spec.rb` "Bug #4 — HTMLDialogElement polyfill" + `UPSTREAM_BUGS.md` Bug #4)**: the `HTMLDialogElement` constructor exists, plus `getOpen`/`setOpen` and `getReturnValue`/`setReturnValue` accessors at `src/browser/webapi/element/html/Dialog.zig:22-44`, but `prototype.showModal`, `prototype.show`, `prototype.close` are still `undefined`. Calling any of them throws `TypeError: d.showModal is not a function`. Blocks any UI built on the native `<dialog>` element (very common in Rails 8 + DaisyUI / Tailwind UI / shadcn). **Good news**: the file already exists with the right structure — just need to add the three methods + the `'close'` event dispatch.
 - **Want**: per [HTML §4.11.4 "The dialog element"](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element), implement on `HTMLDialogElement.prototype`:
   - `show()` — adds the `open` content attribute if not already set; non-modal display.
   - `showModal()` — throws `InvalidStateError` if `[open]` is already present; otherwise sets `[open]` and (in Chrome) adds the dialog to the top layer + sets a backdrop. Lightpanda has no rendering so the focus-trap / backdrop / top-layer can be no-ops, but `[open]` MUST flip and the dialog MUST become visible to selectors.
   - `close([returnValue])` — removes `[open]`, sets `returnValue` if argument given, queues a `close` event.
   - `returnValue` getter/setter, `cancel` event on Esc (Esc handling is out of scope without input events).
-- **Upstream issue/PR**: not filed. Mirrors the shape of `HTMLFormElement.prototype.requestSubmit` (PR #2253, merged 2026-04-27) — single Zig file under `src/browser/webapi/element/html/`, ~3 prototype methods, no V8/CDP-runtime entanglement. Probably the smallest discrete missing-API gap in the gem.
+- **Upstream issue**: #2434 (open as of 2026-05-12). **Upstream PR**: #2435 (open as of 2026-05-12). Mirrors the shape of `HTMLFormElement.prototype.requestSubmit` (PR #2253, merged 2026-04-27) — single Zig file under `src/browser/webapi/element/html/`, ~3 prototype methods, no V8/CDP-runtime entanglement. Probably the smallest discrete missing-API gap in the gem.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/polyfills.js:8-36` (~30 LOC) — adds `showModal` (with `InvalidStateError` parity), `show`, `close([returnValue])` on the prototype. Toggles `[open]` and dispatches a `'close'` event. No focus trap, no backdrop, no top-layer (Lightpanda has no layout anyway).
 - **Drop-on-fix**: remove the dialog block from `polyfills.js`. ~30 LOC. The spec test in `spec/features/upstream_bugs_spec.rb` becomes a regression check for the upstream implementation.
 
@@ -178,12 +179,16 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 |---|---|---|
 | **A23 — `Element.innerText` block-level newlines** | ~50 | `_lightpanda.visibleText` polyfill |
 | **B12 — `HTMLDialogElement` methods** | ~30 | Dialog block in `polyfills.js` |
-| **A12 — WebSocket nav crash** | ~30 | `handle_navigation_crash` reconnect |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
-| **A11 — NoExecutionContextError race** | ~15 + 4 call-sites | `with_default_context_wait` |
-| **B4 — file uploads** | adds ~30, removes 26 skips | Net positive: enables a feature |
+| **Bug #7 residual — `enctype` + 5 submitter IDL overrides** | ~40 | `patchFormIDL` IIFE can be removed once `enctype` getter + submitter overrides land |
+| **B4 — file uploads** | adds ~30, removes 17 skips | Net positive: enables a feature |
 | **B5#1, B5#2 — keyCode/charCode + caret keys** | 2 skip patterns | Synthetic CDP keyboard events need keyCode populated; ArrowLeft/Home/End need to move the input caret |
 | **B8, B9, B10 — datalist + frame-closed + getComputedStyle cascade** | ~10 skip patterns | Removes spec_helper entries |
+| **Bug #8 — listener lifecycle during dispatch** | ~50 | `patchListenerLifecycle` IIFE |
+| **Bug #9 — `requestSubmit()` cancel throws** | ~5 | `try { … } catch` wrap in CLICK_JS |
+| **Bug #10 — `Runtime.evaluate` scope leak** | ~10 | IIFE wrap + `exceptionDetails` surfacing in `Browser#evaluate`/`#execute` no-args paths |
+
+A11 (`with_default_context_wait`) and A12 (`handle_navigation_crash`) are **NOT in this table** — both are defense-in-depth guards against inherent design constraints (V8 context churn around navigation; any browser crash mid-CDP) and stay regardless of upstream state. See their A-entries above.
 
 **Resolved since prior tally** (no longer counts toward future drop-on-fix):
 
@@ -207,8 +212,10 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **B1 — XPath evaluator** | ~700 | DONE 2026-05-11 (PR #2305 + `XPathEval` IIFE removed; `MINIMUM_NIGHTLY_BUILD` bumped to 6109) |
 | **B2 — Page.getNavigationHistory** | ~5 + CLAUDE.md note | DONE 2026-05-11 (PR #2289 + `Browser#back`/`#forward` switched to native CDP) |
 | **A22 — `Element.isContentEditable`** | NOT a drop-on-fix anymore | PR #2310 MERGED 2026-04-30 but the maintainer rewrote the implementation to always return `false` (commit `2af95af6`). Polyfill remains load-bearing — see A22 above. |
+| **Bug #6 — `fetch`/`XHR` FormData multipart encoding** | 0 (no gem-side polyfill existed) | DONE 2026-05-06 (PR #2358). Turbo Drive form submits started working as soon as the nightly carrying the fix was installed. |
+| **A11 + A12 — defensive helpers** | NOT drop-on-fix | Issues closed (#2187 2026-05-04, #1849 2026-03-16) but helpers stay as defense-in-depth — see A-entries above. |
 
-**Total remaining drop-on-fix surface**: roughly **~145 LOC of gem-side code** plus ~14 spec_helper skip patterns. Down from ~1,030 LOC pre-2026-05-11. Of what remains, A23 (`innerText` block-level newlines, ~50 LOC) is the single largest item. **Pending wishlist additions** (Bug #6 / #7 / #8 / #9 / #10 in `UPSTREAM_BUGS.md` — Turbo-driven discoveries from 2026-05-04 → 2026-05-06) are not yet folded into this tally; their gem-side polyfills add another ~120 LOC in `polyfills.js` waiting on upstream fixes.
+**Total remaining drop-on-fix surface (2026-05-12 re-tally)**: roughly **~205 LOC of gem-side code** plus ~14 spec_helper skip patterns. Of what remains, A23 (`innerText` block-level newlines, ~50 LOC) and Bug #8 (`patchListenerLifecycle`, ~50 LOC) are tied for the largest single items; Bug #7's residual `enctype` + submitter overrides (~40 LOC) and B12 (`HTMLDialogElement` methods, ~30 LOC) round out the actionable top-4.
 
 ---
 
@@ -220,23 +227,24 @@ None — the 10 PRs that were open at the time of the prior tally (A18 #2283, A2
 
 ### Unfiled items most worth claiming (need authors)
 
-Listed by drop-on-fix impact / spec-compliance importance:
+Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (closed-issue defensive helpers) and B11 (re-classified gem-side) are intentionally excluded.
 
-1. **B12 — `HTMLDialogElement.{showModal, show, close}`** — ~30 LOC drop-on-fix; smallest, cleanest scope. Pure missing-API addition; mirrors `HTMLFormElement.prototype.requestSubmit` shape exactly (PR #2253). Good first-PR candidate.
-2. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest single-item LOC saving among open items.
-3. **A12 — WebSocket dies on complex page navigation (#1849)** — ~30 LOC drop-on-fix; partial fix from PR #1850 in 2026-03 didn't fully close the issue.
-4. **A11 — `Runtime.evaluate` "Cannot find default execution context" race (#2187)** — ~15 LOC + 4 call-sites; needs queue-or-await around `executionContextCreated`. Note: the gem now also wraps `find_in_frame` in `with_default_context_wait` (commit `ac95ad5`, 2026-05) to handle iframe context churn from upstream #2400; landing #2187 wouldn't fully retire the helper.
-5. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing.
-6. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 26 skip patterns. Net positive: enables a feature.
-7. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on trusted events. Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
-8. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+1. **B12 — `HTMLDialogElement.{showModal, show, close}`** — ~30 LOC drop-on-fix. **TOP PICK.** The constructor + `open`/`returnValue` accessors already exist in `src/browser/webapi/element/html/Dialog.zig` (verified 2026-05-12). Just need to add the three prototype methods + `close` event dispatch. Mirrors `HTMLFormElement.prototype.requestSubmit` shape exactly (PR #2253). No layout/compositor entanglement — focus-trap and backdrop are no-ops in a headless engine.
+2. **Bug #7 (residual) — `HTMLFormElement.enctype` IDL + 5 submitter overrides** — ~40 LOC drop-on-fix when bundled with the gem-side polyfill removal. Tiny upstream PR: same pattern as the existing `getMethod`/`getAction`/`getTarget` accessors at Form.zig:58-111. Submitter side (`formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate`) lives in HTMLButton.zig + HTMLInput.zig and reflects the corresponding HTML attributes. Bundling all six in one PR is the right shape — Turbo's `FormSubmission` constructor reads them all together.
+3. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest single-item LOC saving among open items, but the most expensive to implement.
+4. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing, still open. Keep the gem's readyState fallback as a safety net even after a fix lands (cheap), but the 2-second cap could be retired.
+5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 17 `#attach_file` skip patterns. Net positive: enables a feature.
+6. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
+7. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+
+Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#8, #9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet.
 
 ### New bugs not yet folded into this wishlist (discovered 2026-05-04 → 2026-05-06 via Turbo Drive probes)
 
 Tracked in `UPSTREAM_BUGS.md` at gem root. Each has a gem-side polyfill in `polyfills.js` waiting on upstream fix. Need wishlist entries (suggest A34–A38):
 
-- **Bug #6 — `fetch(url, { body: new FormData(...) })` doesn't encode multipart** — bloquant for all Turbo Drive form submits (422 systematic on server). Lightpanda coerces `FormData` to `"[object FormData]"` via `String()` instead of running Fetch §6.5 "extract a body". Same bug also affects `XMLHttpRequest.send(formData)`. **No gem-side workaround possible** — encoding lives in Lightpanda's Zig fetch layer.
-- **Bug #7 — Form IDL accessors return `undefined` (`enctype`/`method`/`action`/`target` on `HTMLFormElement`; `formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate` on submitters)** — blocks Turbo Drive's `FormSubmission` constructor with `TypeError: Cannot read properties of undefined (reading 'toLowerCase')`. Gem polyfills via `patchFormIDL` IIFE (~70 LOC) in `polyfills.js`.
+- **~~Bug #6~~ — FormData multipart encoding — FIXED upstream 2026-05-06** by PR #2358 ("net: multipart-encode FormData bodies in fetch and XMLHttpRequest"). No gem-side polyfill existed (encoding lives in Zig), so nothing to drop on the gem side — Turbo Drive form submits started working as soon as the nightly carrying #2358 was installed. Build floor for the fix: nightly ≥ ~6090.
+- **Bug #7 — Form IDL accessors — PARTIALLY FIXED upstream**. `HTMLFormElement.{method, action, target, name, acceptCharset}` accessors landed 2026-03-15 (`src/browser/webapi/element/html/Form.zig:208-211`) — predating when we filed this bug from the gem side; the polyfill's `name in proto` guard means those branches were already auto-no-op. **Still missing upstream**: `HTMLFormElement.enctype` getter (the property Turbo's `FormSubmission` constructor actually fetches first); the entire submitter side — `formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate` on `HTMLButtonElement` and `HTMLInputElement`. These are what keep `patchFormIDL` IIFE (~70 LOC) load-bearing in `polyfills.js`. **Filing opportunity**: split into a tiny issue for just `enctype` + the five submitter overrides — the patterns to mirror are right there in the same file.
 - **Bug #8 — `addEventListener` during capture-phase invisible to in-flight bubble-phase** — WHATWG DOM §2.9 step 5.4 violation. Breaks Turbo's `submitBubbled` interception; form submits become full-page navigations instead of Turbo fetches. Gem polyfills via `patchListenerLifecycle` IIFE (~50 LOC) which defers `removeEventListener` to a microtask.
 - **Bug #9 — `requestSubmit()` throws when a listener cancels the SubmitEvent** — HTML §4.10.21.5 step 5 says it must return silently when cancelled. Lightpanda throws `JsException`. Gem workaround: `try { this.form.requestSubmit(this); } catch (e) {}` around `CLICK_JS`'s submit path.
 - **Bug #10 — `Runtime.evaluate` retains `const`/`let` top-level bindings between CDP calls** — V8 spec says each `Runtime.evaluate` runs in a fresh script; Lightpanda shares the scope so a second `const x = ...` throws `SyntaxError: Identifier 'x' has already been declared`. Gem workaround: wrap every no-args `evaluate(expr)` / `execute(expr)` in an IIFE on the Ruby side + surface `exceptionDetails`.
