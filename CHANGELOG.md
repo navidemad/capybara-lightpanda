@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0] - 2026-05-12
+
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6109 (published 2026-05-12). The driver refuses to start against older binaries.
+
+### Fixed
+
+- Iframe tests no longer crash with `NoExecutionContextError` when the page inside the iframe navigates. `switch_to_frame` and `within_frame` now re-resolve the iframe element on a stale-handle error and retry once, so multi-step flows inside an `<iframe>` (logins, embedded checkouts, OAuth dialogs) stay stable across child-frame navigations.
+- Clicking a submit button no longer fires `submit` twice. On Turbo Drive pages this previously produced duplicate `turbo:submit-start` events and could abort the real fetch mid-flight.
+
+### Removed
+
+- The gem no longer ships its own XPath engine — Lightpanda evaluates XPath natively now, including the full XPath 1.0 selector surface. `find(:xpath, …)`, Capybara's automatic XPath fallback, and any custom XPath finders all keep working unchanged; the same behavior, with ~750 fewer lines injected per test process.
+- The gem's JavaScript shim for `back` / `forward` is gone. Navigation history now routes through Lightpanda directly, which is more reliable across navigation crashes.
+
 ## [0.2.2] - 2026-05-06
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6065 (published 2026-05-06). The driver refuses to start against older binaries.

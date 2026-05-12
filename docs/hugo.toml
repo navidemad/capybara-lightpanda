@@ -9,7 +9,7 @@ description = "A self-contained Capybara driver for the Lightpanda headless brow
 github_url = "https://github.com/navidemad/capybara-lightpanda"
 rubygems_url = "https://rubygems.org/gems/capybara-lightpanda"
 # version-bearing — keep in sync with lib/capybara/lightpanda/version.rb
-version = "0.2.2"
+version = "0.3.0"
 
 [markup.goldmark.renderer]
 unsafe = true
