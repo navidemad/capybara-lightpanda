@@ -1,6 +1,6 @@
 ---
 name: release-rubygems
-description: Cut a new release of the capybara-lightpanda gem end-to-end — bump version.rb, prepend a CHANGELOG section drafted from commits since the last tag, run the same pre-flight as CI (rubocop + spec:unit), commit, push, tag, and surface the GitHub Actions URL so the user can approve the rubygems environment. Use this skill whenever the user says "cut a release", "release the gem", "ship the gem", "ship 0.2.0" / any specific version, "bump and release", "tag a new version of capybara-lightpanda", "publish to rubygems", or otherwise signals they want to push a new version of capybara-lightpanda to RubyGems via the Trusted Publishing workflow. Do NOT use for: editing CHANGELOG.md outside a release flow, bumping VERSION without releasing, releases of any other gem (this skill is hardcoded to capybara-lightpanda and refuses to run elsewhere), or fixing a release that already failed mid-flight (handle that manually — the steps here are not idempotent past the tag push).
+description: Cut a new release of the capybara-lightpanda gem end-to-end — bump version.rb, prepend a CHANGELOG section drafted from commits since the last tag, run the same pre-flight as CI (rubocop + test:unit), commit the bump on a release branch, merge a release PR, tag the squash-merge SHA, push the tag, and surface the GitHub Actions URL so the user can approve the rubygems environment. Use this skill whenever the user says "cut a release", "release the gem", "ship the gem", "ship 0.2.0" / any specific version, "bump and release", "tag a new version of capybara-lightpanda", "publish to rubygems", or otherwise signals they want to push a new version of capybara-lightpanda to RubyGems via the Trusted Publishing workflow. Do NOT use for: editing CHANGELOG.md outside a release flow, bumping VERSION without releasing, releases of any other gem (this skill is hardcoded to capybara-lightpanda and refuses to run elsewhere), or fixing a release that already failed mid-flight (handle that manually — the steps here are not idempotent past the tag push).
 user_invocable: true
 model: opus
 effort: max
@@ -95,31 +95,55 @@ Show a `git diff` of all touched files for the user to skim before any commit ha
 
 The `.github/workflows/release.yml` will run these on the runner; running them locally first means a failure here is recoverable (just abort), but a failure on the runner after the tag is pushed is not.
 
+The exact commands that the workflow runs (and that we mirror locally):
+
 ```bash
+bundle install            # if gems aren't already installed
 bundle exec rubocop
-bundle exec rake spec:unit
+bundle exec rake test:unit
 ```
+
+Note: it's `rake test:unit`, NOT `rake spec:unit` — the local Minitest suite. RSpec (`rake spec:shared`) is only the Capybara shared-spec battery and is not part of the release pre-flight.
+
+`bundle install` will also rewrite `Gemfile.lock` to update the path-gem self-reference (`capybara-lightpanda (X.Y.Z)`) to the new version — that line MUST be included in the release commit; see Step 5.
 
 Optional but cheap: `gem build capybara-lightpanda.gemspec && rm capybara-lightpanda-*.gem`. Catches gemspec errors (missing files, validation warnings) that the workflow doesn't explicitly check but RubyGems will reject at push time. Skip only if the user is in a hurry.
 
-If anything fails: stop, surface the error, do not commit. The repo is still clean (only version.rb + CHANGELOG.md edited, both reversible with `git checkout --`).
+If anything fails: stop, surface the error, do not commit. The repo is still clean (only version.rb + CHANGELOG.md + version-bearing files + Gemfile.lock edited, all reversible with `git checkout --`).
 
-## Step 5 — Commit, push, tag, push tag
+## Step 5 — Commit on a release branch, merge PR, tag, push tag
 
-This is the point of no return for the **tag push** specifically. Stage and commit first (recoverable), push the bump commit (mostly recoverable via revert), then tag and push the tag (the workflow runs immediately).
+This is the point of no return for the **tag push** specifically. The bump lands on `main` via a release branch + PR (the global `~/.claude/hooks/block-git-danger.sh` refuses direct `git commit`/`push` on `main`/`master`). Then we tag the squash-merge SHA from the still-checked-out release branch — staying off `main` is what lets the tag push through.
 
 ```bash
-git add -u            # stages version.rb, CHANGELOG.md, and every version-bearing file edited in step 3
-git status            # sanity-check that no untracked files are being missed
+# Stage the bump
+git add -u                                  # version.rb, CHANGELOG.md, version-bearing files, Gemfile.lock
+git status                                  # sanity-check nothing untracked is being missed
+
+# Land the bump on main via PR
+git checkout -b release/vX.Y.Z
 git commit -m "Release X.Y.Z"
-git push origin main
-git tag vX.Y.Z
+git push -u origin release/vX.Y.Z
+gh pr create --title "Release X.Y.Z" --body "$(cat <<'EOF'
+Version bump for X.Y.Z. After merge, the `vX.Y.Z` tag will be pushed to trigger the trusted-publishing workflow.
+
+See `CHANGELOG.md` for the user-facing summary.
+EOF
+)"
+gh pr merge <pr-number> --squash --delete-branch=false   # keep the local branch — needed for the tag push below
+
+# Tag the squash-merge SHA on main (NOT the local release-branch SHA — squash creates a different commit)
+git fetch origin
+git tag vX.Y.Z origin/main
 git push origin vX.Y.Z
 ```
 
-`git add -u` only stages tracked files that you've modified — safer than `git add .` (which would also pick up untracked junk) but it does require every version-bearing file to already be tracked. If the bump touched a brand-new file (rare), add it explicitly.
+A few non-obvious notes:
 
-Don't squash these into one compound command — if `git push origin main` fails because someone else pushed in the meantime, you want to stop before tagging.
+- **`git add -u`** only stages tracked files that you've modified — safer than `git add .` (which would also pick up untracked junk) but it does require every version-bearing file to already be tracked. If the bump touched a brand-new file (rare), add it explicitly.
+- **`gh pr merge --delete-branch=false`** is deliberate. The deletion would auto-switch your working copy back to `main`, and the next `git push origin vX.Y.Z` would then be blocked by the hook. Keep the release branch checked out until the tag is pushed; clean it up in Step 6.
+- **Tag `origin/main`, not `HEAD`.** A squash merge creates a new commit on `main` with a different SHA than your local release-branch commit; the workflow runs against the tagged commit, so you want the tag pointing at the canonical `main` SHA, not your unmerged feature commit.
+- **Don't squash these into one compound command.** If `git push -u origin release/vX.Y.Z` is rejected because the branch already exists, or if `gh pr merge` fails because CI hasn't passed, you want to stop before tagging.
 
 ## Step 6 — Surface the workflow URL and what to do next
 
@@ -140,7 +164,10 @@ Next steps:
 If pre-flight fails on the runner (shouldn't — we ran it locally), the tag is
 still on origin. Delete it with:
   git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z
-Fix the issue, recommit, and re-tag.
+Fix the issue, recommit (on a new release branch — the original PR is already merged), and re-tag.
+
+Once the workflow is green, clean up the release branch:
+  git checkout main && git pull --ff-only && git branch -D release/vX.Y.Z && git push origin :release/vX.Y.Z
 ```
 
 Resolve `<owner>` from `git config --get remote.origin.url` (extract the github.com path). Don't hardcode it — the user might fork.
@@ -148,7 +175,7 @@ Resolve `<owner>` from `git config --get remote.origin.url` (extract the github.
 ## Things this skill does NOT do
 
 - **It does not edit the gemspec.** Dependencies, metadata, descriptions stay where they are. If those need to change, that's a separate PR before the release.
-- **It does not bump dev dependencies** in `Gemfile.lock`. Lockfile churn during a release is noise.
+- **It does not bump dev dependencies** in `Gemfile.lock`. Lockfile churn during a release is noise. The one exception is the path-gem self-reference (`capybara-lightpanda (X.Y.Z)`), which bundler rewrites automatically and which MUST be included in the release commit for the lockfile to stay valid.
 - **It does not write release notes anywhere except CHANGELOG.md.** The GitHub Release body is auto-generated by `rubygems/release-gem@v1` from the commit list — duplicating that here is busywork.
 - **It does not handle yanking, hotfix branches, or release-from-non-main.** Out of scope; do those by hand if needed.
 - **It does not poll the workflow run.** Watching the Actions tab is a human's job; polling burns tokens for no benefit.
@@ -156,6 +183,7 @@ Resolve `<owner>` from `git config --get remote.origin.url` (extract the github.
 ## When something goes sideways
 
 - **Pre-flight fails locally** — abort, fix, retry. Nothing was committed.
-- **`git push origin main` rejected** — someone pushed while you were preparing. `git pull --rebase origin main`, re-run the pre-flight (the rebase may have introduced conflicts), continue.
-- **Tag pushed but workflow fails before publish** — delete the tag locally and on origin (commands above), fix the issue, recommit, re-tag with the same version (you haven't burned the version because the gem wasn't pushed to rubygems.org yet).
+- **`gh pr create` or `gh pr merge` fails** — likely because CI required by branch protection hasn't run yet, or someone else merged in the meantime. Resolve via the PR UI (wait for checks, rebase the release branch via `git fetch origin && git rebase origin/main` + force-push the release branch, etc.) and retry the merge. Do NOT tag until the PR is actually merged into `origin/main`.
+- **You accidentally checked out `main` before pushing the tag** — `git push origin vX.Y.Z` will be blocked by the global hook. Either `git checkout release/vX.Y.Z` (still exists because we passed `--delete-branch=false`) and retry, or `git checkout -b tag-helper origin/main` from any name and push from there.
+- **Tag pushed but workflow fails before publish** — delete the tag locally and on origin (commands above), fix the issue, open a NEW release PR with the fix (the original release PR is already merged — do not try to amend it), and re-tag with the same version (you haven't burned the version because the gem wasn't pushed to rubygems.org yet).
 - **Gem pushed to rubygems.org but you regret it** — that version is permanent. Yank it from rubygems.org if it's actively harmful, otherwise just bump and release the next version with a fix. Trusted Publishing doesn't change this.
