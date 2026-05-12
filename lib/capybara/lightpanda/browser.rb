@@ -714,10 +714,12 @@ module Capybara
       end
 
       def find_in_frame(method, selector)
-        frame_node = @frame_stack.last
-        result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
-                                  return_by_value: false)
-        extract_node_object_ids(result)
+        with_default_context_wait do
+          frame_node = @frame_stack.last
+          result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
+                                    return_by_value: false)
+          extract_node_object_ids(result)
+        end
       rescue JavaScriptError => e
         raise_invalid_selector(e, method, selector)
       end
