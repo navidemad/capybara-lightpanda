@@ -43,7 +43,7 @@ module Capybara
         end
 
         def closed?
-          @status == :closed
+          @status == :closed || @status == :error
         end
 
         def open?
@@ -102,10 +102,15 @@ module Capybara
           end
 
           @driver.on(:error) do |event|
+            # Do NOT raise here. This callback fires synchronously from
+            # @driver.parse(data) inside the reader thread, which sets
+            # abort_on_exception = true. Raising DeadBrowserError escapes
+            # the reader's narrow IO rescue and aborts the entire Ruby
+            # process. Mark the connection dead and let Client#command
+            # surface DeadBrowserError on its next dispatch via closed?.
+            @logger&.puts("✗ WebSocket error: #{event.message}")
             @status = :error
             @messages.close
-
-            raise DeadBrowserError, "WebSocket error: #{event.message}"
           end
         end
 
