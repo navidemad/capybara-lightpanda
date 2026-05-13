@@ -32,6 +32,7 @@ module Capybara
         @started = false
         @page_events_enabled = false
         @modal_messages = []
+        @modal_messages_mutex = Mutex.new
         @modal_handler_installed = false
         @frame_stack = []
         @turbo_event = Utils::Event.new
@@ -128,7 +129,7 @@ module Capybara
       def clear_session_state
         @page_events_enabled = false
         @modal_handler_installed = false
-        @modal_messages.clear
+        @modal_messages_mutex.synchronize { @modal_messages.clear }
         clear_frames
         # Network#reset, not #clear: disposing the BrowserContext also
         # destroyed the Network domain and its subscriptions, so we must
@@ -537,7 +538,8 @@ module Capybara
         enable_page_events
 
         on("Page.javascriptDialogOpening") do |params|
-          @modal_messages << { type: params["type"], message: params["message"] }
+          entry = { type: params["type"], message: params["message"] }
+          @modal_messages_mutex.synchronize { @modal_messages << entry }
         end
 
         @modal_handler_installed = true
@@ -558,29 +560,59 @@ module Capybara
       def find_modal(type, text: nil, wait: options.timeout)
         regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
         deadline = monotonic_time + wait
-        last_message = nil
+        last_matching_type_message = nil
+        last_seen_message = nil
         loop do
-          msg = @modal_messages.find { |m| m[:type] == type.to_s }
-          if msg
-            last_message = msg[:message]
-            if regexp.nil? || last_message.match?(regexp)
-              @modal_messages.delete(msg)
-              return last_message
-            end
-          end
+          claimed = pop_modal_message(type.to_s, regexp)
+          return claimed[:message] if claimed
+
+          last = peek_last_modal_message(type.to_s)
+          last_matching_type_message = last[:matching_type] || last_matching_type_message
+          last_seen_message = last[:any] || last_seen_message
+
           break if monotonic_time > deadline
 
           sleep 0.05
         end
-        raise_modal_not_found(text, last_message)
+        raise_modal_not_found(type, text, last_matching_type_message, last_seen_message)
       end
 
       private
 
-      def raise_modal_not_found(text, last_message)
-        if last_message
+      # Pop the first queued dialog whose type matches and (when `regexp` is
+      # non-nil) whose message matches the requested pattern. Returns the
+      # entry or nil. Serialized with the message-thread writer.
+      def pop_modal_message(type, regexp)
+        @modal_messages_mutex.synchronize do
+          match = @modal_messages.find do |m|
+            m[:type] == type && (regexp.nil? || m[:message].to_s.match?(regexp))
+          end
+          @modal_messages.delete(match) if match
+          match
+        end
+      end
+
+      # Inspect the queue for diagnostics. Returns the most recent message
+      # of the requested type (if any) AND the most recent message of any
+      # type so the failure message can hint at a type mismatch.
+      def peek_last_modal_message(type)
+        @modal_messages_mutex.synchronize do
+          {
+            matching_type: @modal_messages.reverse.find { |m| m[:type] == type }&.dig(:message),
+            any: @modal_messages.last&.dig(:message),
+          }
+        end
+      end
+
+      def raise_modal_not_found(type, text, matching_type_message, any_message)
+        if matching_type_message
           raise Capybara::ModalNotFound,
-                "Unable to find modal dialog with #{text} - found '#{last_message}' instead."
+                "Unable to find modal dialog with #{text} - found '#{matching_type_message}' instead."
+        end
+        if any_message
+          raise Capybara::ModalNotFound,
+                "Unable to find #{type} modal#{" with #{text}" if text} - " \
+                "a different dialog fired with message '#{any_message}'."
         end
         raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
       end
