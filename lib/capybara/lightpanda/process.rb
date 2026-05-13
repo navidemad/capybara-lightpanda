@@ -30,9 +30,16 @@ module Capybara
       # lets us drop the history.back()/history.forward() JS workaround in
       # Browser#back / #forward), PR #2305 (XPath 1.0: Document.evaluate,
       # XPathResult, XPathEvaluator, XPathExpression — lets us drop the
-      # ~700 LOC XPath polyfill in javascripts/index.js).
-      # Build 6109 = main HEAD cfcfe4ee (2026-05-11, after PR #2289 and
-      # PR #2305 merges); will ship in nightly published 2026-05-12 ~03:30 UTC.
+      # ~700 LOC XPath polyfill in javascripts/index.js),
+      # PR #2435 (HTMLDialogElement.{show, showModal, close} native — lets
+      # us drop the ~30 LOC "Bug #4" block from polyfills.js).
+      # TODO[release]: the exact build number that first carries PR #2435
+      # is the next nightly published after 2026-05-13 ~03:35 UTC (nightly
+      # 6198 was built before PR #2435 merged at 04:17 UTC). Verify the
+      # number from `gh release view nightly --repo lightpanda-io/browser`
+      # the morning of release, then bump this constant + this comment.
+      # TODO: bump to the first nightly published after 2026-05-13 03:35 UTC
+      # before merging the PR that drops the HTMLDialogElement polyfill.
       MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6109")
 
       attr_reader :pid, :ws_url, :version, :nightly_build

@@ -59,12 +59,15 @@ describe "Upstream Lightpanda bug repros & workarounds" do
   end
 
   # ───────────────────────────────────────────────
-  # Bug #4 — HTMLDialogElement.{showModal, show, close} unimplemented.
-  # Workaround: polyfills.js adds prototype methods that toggle [open]
-  # and dispatch the 'close' event.
+  # Bug #4 — HTMLDialogElement.{showModal, show, close}.
+  # Lightpanda PR #2435 implemented these natively on `main` 2026-05-13.
+  # The polyfill that used to live in polyfills.js has been removed; this
+  # block now serves as a regression check on the upstream implementation:
+  # toggling [open], dispatching the 'close' event, and the per-spec
+  # InvalidStateError when calling showModal on an already-open dialog.
   # ───────────────────────────────────────────────
 
-  describe "Bug #4 — HTMLDialogElement polyfill" do
+  describe "Bug #4 — HTMLDialogElement (upstream native)" do
     it "opens the dialog via showModal() and exposes the [open] attribute" do
       session.visit("/lightpanda/upstream/dialog")
 
