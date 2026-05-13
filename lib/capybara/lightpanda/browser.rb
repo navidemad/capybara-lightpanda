@@ -86,11 +86,6 @@ module Capybara
         register_auto_scripts
       end
 
-      def restart
-        quit
-        start
-      end
-
       # Wipe per-session state — cookies, storage, all targets — and start
       # over with a fresh BrowserContext. Mirrors ferrum's Browser#reset:
       # one CDP call (`Target.disposeBrowserContext`) does the work that
@@ -439,17 +434,6 @@ module Capybara
         page_command("DOM.describeNode", objectId: remote_object_id).dig("node", "backendNodeId")
       end
 
-      def css(selector)
-        node_ids = page_command("DOM.querySelectorAll", nodeId: document_node_id, selector: selector)
-        node_ids["nodeIds"] || []
-      end
-
-      def at_css(selector)
-        result = page_command("DOM.querySelector", nodeId: document_node_id, selector: selector)
-
-        result["nodeId"]
-      end
-
       def screenshot(path: nil, format: :png, quality: nil, full_page: false, encoding: :binary)
         params = { format: format.to_s }
         params[:quality] = quality if quality && format == :jpeg
@@ -482,18 +466,6 @@ module Capybara
             decoded
           end
         end
-      end
-
-      # Wait for any pending Turbo operations to complete. Event-driven: the
-      # injected JS in index.js calls `console.debug('__lightpanda_turbo_busy')`
-      # when the pending-ops counter rises above 0 and `_idle` when it returns
-      # to 0. We toggle @turbo_event accordingly (see subscribe_to_turbo_signals).
-      #
-      # Pages without Turbo never trigger _turboStart, so no sentinels fire and
-      # @turbo_event stays set (initial state) — wait returns immediately. Same
-      # for Turbo-loaded pages that have no pending work.
-      def wait_for_turbo
-        @turbo_event.wait(@options.timeout)
       end
 
       # Wait for the page to settle after an action that may have kicked off
@@ -632,10 +604,6 @@ module Capybara
           sleep 0.05
         end
         raise_modal_not_found(text, last_message)
-      end
-
-      def reset_modals
-        @modal_messages.clear
       end
 
       private
@@ -1157,6 +1125,7 @@ module Capybara
       end
 
       POLL_STATE_JS = "(function(){return{r:document.readyState,u:location.href}})()"
+      private_constant :POLL_STATE_JS
 
       def page_ready?(cmd_timeout, starting_url)
         response = @client.command(
