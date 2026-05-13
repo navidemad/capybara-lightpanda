@@ -71,6 +71,11 @@ module Capybara
         @ws&.close
         @message_thread&.join(1) || @message_thread&.kill
         @subscriber.clear
+        # Wake any in-flight callers blocked on `pending.value!(timeout)` so
+        # they raise DeadBrowserError immediately (via the `@ws.closed?` check
+        # in #command) instead of stalling for the full @options.timeout — a
+        # 30s freeze per pending command on a dying browser.
+        fail_pending_commands
         @pendings.clear
       end
 
@@ -90,6 +95,14 @@ module Capybara
 
       def next_command_id
         @mutex.synchronize { @command_id += 1 }
+      end
+
+      # Resolve every pending IVar with nil so blocked callers fall through
+      # `pending.value!(timeout)` immediately. `try_set` is a no-op if the
+      # IVar already carries a real response (race-safe against an in-flight
+      # handle_message that landed just before close).
+      def fail_pending_commands
+        @pendings.each_value { |ivar| ivar.try_set(nil) }
       end
 
       def start_message_thread
