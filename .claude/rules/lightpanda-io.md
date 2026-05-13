@@ -30,7 +30,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
-| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `setSubframeLoading` |
+| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe/worker loading; was `setSubframeLoading` until PR #2426, also extended in PR #2440 to accept a `worker` flag) |
 | **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride` |
 | **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors (use `LP.handleJavaScriptDialog`). |
 | **Performance** | performance.zig | Performance metrics |
@@ -104,8 +104,10 @@ LP.getStructuredData         LP.waitForSelector
 LP.getMarkdown               LP.getNodeDetails
 LP.detectForms               LP.clickNode
 LP.fillNode                  LP.scrollNode
-LP.setSubframeLoading        (opt-in iframe disable; NOT applicable to this gem —
-                              would break Capybara's switch_to_frame/within_frame)
+LP.configureLoading          (per-session opt-out for iframe AND/OR worker loading,
+                              params {subFrame, worker}; NOT applicable to this gem —
+                              disabling subframes breaks switch_to_frame/within_frame.
+                              Previously named LP.setSubframeLoading until PR #2426.)
 ```
 
 ## Known Bugs and Limitations
@@ -157,7 +159,7 @@ LP.setSubframeLoading        (opt-in iframe disable; NOT applicable to this gem 
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed; SharedWorker still missing and many Worker APIs still unimplemented. |
 | #2363 | Navigation | `Page.navigate("about:blank")` against a non-blank tab fires the full event sequence but does NOT replace the document — `window.location.href`, `document.URL`, and the frame tree all still report the previous URL. **Gem sidesteps it**: `Browser#reset` disposes the BrowserContext via `Target.disposeBrowserContext` (ferrum/cuprite parity) instead of navigating to `about:blank`. |
-| #2400 | Runtime | Child iframe navigation invalidates main frame's `executionContextId` for CDP drivers. Root cause: shared V8 inspector `CONTEXT_GROUP_ID` + single `IsolatedWorld` per BrowserContext, so any `frameNavigated` re-emits `executionContextCreated` for the main frame's V8 context under the child's frameId and churns the id. Opt-in workaround (`LP.setSubframeLoading {enabled: false}`) NOT applicable to this gem — would break `switch_to_frame` / `within_frame`. **Current symptom**: 13 failures on nightly 6167 (5 `#switch_to_frame` + 8 `#within_frame`), all `NoExecutionContextError "Cannot find context with specified id"` raised from `Client#handle_error` via `Browser#find_in_frame`. NOT mitigated by `Browser#with_default_context_wait`: the failure is a stale *iframe* `remote_object_id` whose contextId was churned, not the default context. Real gem-side fix would re-resolve the iframe element on `NoExecutionContextError` (re-find via `<iframe>` in the parent document, push the new Node, retry). |
+| #2400 | Runtime | Child iframe navigation invalidates main frame's `executionContextId` for CDP drivers. Root cause: shared V8 inspector `CONTEXT_GROUP_ID` + single `IsolatedWorld` per BrowserContext, so any `frameNavigated` re-emits `executionContextCreated` for the main frame's V8 context under the child's frameId and churns the id. Opt-in workaround (`LP.configureLoading {subFrame: false}`, formerly `LP.setSubframeLoading` until PR #2426) NOT applicable to this gem — would break `switch_to_frame` / `within_frame`. **In-flight upstream fix**: PR #2431 (OPEN, opened 2026-05-12) removes the duplicate `Page.frameNavigated` emission and reuses the child frame's V8 context for `inspector.contextCreated` during iframe navigations, so the root frame's id stops churning. Worth re-running the frame specs once it merges. **Current symptom on nightly 6198**: 13 failures (5 `#switch_to_frame` + 8 `#within_frame`), all `NoExecutionContextError "Cannot find context with specified id"` raised from `Client#handle_error` via `Browser#find_in_frame`. **Gem-side mitigation** (already in place): `Browser#find_in_frame` rescues `NoExecutionContextError` and re-resolves the iframe stack from locators captured at `push_frame` time via `refresh_frame_stack!` before retrying (`browser.rb:792-816`, helper at 845-861). Doesn't fully cover all cases — keep on watchlist until PR #2431 lands. |
 | #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only). Trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect cycles. Currently not gem-relevant — gem tests don't load Worker-heavy pages. Keep on watchlist. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.

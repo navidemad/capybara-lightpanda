@@ -109,6 +109,62 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  describe "#pending_connections / #idle?" do
+    it "counts requests with no response as pending" do
+      network.enable
+      browser.fire("Network.requestWillBeSent", {
+                     "requestId" => "r1",
+                     "request" => { "url" => "https://example.test/a", "method" => "GET" },
+                     "timestamp" => 1.0,
+                   })
+      assert_equal 1, network.pending_connections
+      refute_predicate network, :idle?
+
+      browser.fire("Network.responseReceived", {
+                     "requestId" => "r1",
+                     "response" => { "status" => 200, "headers" => {}, "mimeType" => "text/html" },
+                   })
+      assert_equal 0, network.pending_connections
+      assert_predicate network, :idle?
+    end
+
+    it "treats up to `connections` pending requests as idle" do
+      network.enable
+      2.times do |i|
+        browser.fire("Network.requestWillBeSent", {
+                       "requestId" => "r#{i}",
+                       "request" => { "url" => "https://example.test/#{i}", "method" => "GET" },
+                       "timestamp" => 1.0,
+                     })
+      end
+      # The whole point of the predicate: callers polling a long-poll
+      # connection can mark "≤1 pending" as effectively idle.
+      assert network.idle?(2), "two pending with allowance of 2 should be idle"
+      refute network.idle?(1), "two pending with allowance of 1 should not be idle"
+    end
+  end
+
+  describe "#wait_for_idle!" do
+    it "raises TimeoutError when traffic never settles" do
+      network.enable
+      browser.fire("Network.requestWillBeSent", {
+                     "requestId" => "stuck",
+                     "request" => { "url" => "https://example.test/stuck", "method" => "GET" },
+                     "timestamp" => 1.0,
+                   })
+      # `wait_for_idle` returns false silently — the raising variant gives
+      # callers a precondition they can rely on without a manual `or raise`.
+      assert_raises(Capybara::Lightpanda::TimeoutError) do
+        network.wait_for_idle!(timeout: 0.05)
+      end
+    end
+
+    it "returns true when traffic is already idle" do
+      network.enable
+      assert_equal true, network.wait_for_idle!(timeout: 0.05)
+    end
+  end
+
   describe "#reset" do
     it "wipes traffic, drops handlers, and clears @enabled so the next enable re-arms" do
       network.enable

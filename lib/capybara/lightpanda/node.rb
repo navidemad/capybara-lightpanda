@@ -199,6 +199,13 @@ module Capybara
         call(GET_PATH_JS)
       end
 
+      # Ancestor chain from `parentNode` up to (but not including) `document`,
+      # returned as Lightpanda::Node wrappers. Mirrors Cuprite's `Node#parents`.
+      def parents
+        oids = driver.browser.parents_of(@remote_object_id)
+        oids.map { |oid| self.class.new(driver, oid) }
+      end
+
       def find_xpath(selector)
         object_ids = driver.browser.find_within(@remote_object_id, "xpath", selector)
         object_ids.map { |oid| self.class.new(driver, oid) }
@@ -277,6 +284,10 @@ module Capybara
           call(SET_VALUE_JS, format_time_value(value))
         when "datetime-local"
           call(SET_VALUE_JS, format_datetime_value(value))
+        when "month"
+          call(SET_VALUE_JS, format_month_value(value))
+        when "week"
+          call(SET_VALUE_JS, format_week_value(value))
         else
           fill_text_input(type, value.to_s)
         end
@@ -314,6 +325,22 @@ module Capybara
         return value.to_s if value.is_a?(String) || !value.respond_to?(:to_time)
 
         value.to_time.strftime("%Y-%m-%dT%H:%M")
+      end
+
+      def format_month_value(value)
+        return value.to_s if value.is_a?(String) || !value.respond_to?(:to_date)
+
+        value.to_date.strftime("%Y-%m")
+      end
+
+      # ISO 8601 week-of-year, "%G" giving the ISO week-numbering year so that
+      # the last days of December that belong to week 1 of the next year are
+      # rendered with the correct year. Matches Cuprite's `Node#set` for week
+      # inputs and what the user would type into a `<input type=week>` field.
+      def format_week_value(value)
+        return value.to_s if value.is_a?(String) || !value.respond_to?(:to_date)
+
+        value.to_date.strftime("%G-W%V")
       end
 
       # `maxlength` only constrains user typing, not direct value assignment, but
