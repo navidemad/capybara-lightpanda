@@ -388,11 +388,15 @@ module Capybara
         page_command("Runtime.getProperties", objectId: remote_object_id, ownProperties: true)
       end
 
-      # Release a remote object reference to free V8 memory.
+      # Release a remote object reference to free V8 memory. Cleanup is
+      # best-effort: callers wrap their work in `ensure release_object(...)`,
+      # so a TimeoutError or transport hiccup here must not propagate out of
+      # the ensure block and bury the original failure.
       def release_object(remote_object_id)
         page_command("Runtime.releaseObject", objectId: remote_object_id)
-      rescue BrowserError
-        # Object may already be released or context destroyed
+      rescue Error
+        # Object may already be released, context destroyed, or the CDP call
+        # itself timed out / failed in transport.
       end
 
       # Find elements in the current context (top frame or active frame).
@@ -768,21 +772,25 @@ module Capybara
       end
 
       # Extract individual node objectIds from a remote array reference.
+      # `ensure release_object` so the outer array handle is freed even when
+      # property walking raises — without this, a transient CDP error during
+      # property enumeration leaks one V8 handle per failed find call.
       def extract_node_object_ids(result)
         return [] unless result && result["objectId"]
 
-        props = get_object_properties(result["objectId"])
-        properties = props["result"] || []
-
-        ids = properties
-              .select { |p| p["name"] =~ /\A\d+\z/ }
-              .sort_by { |p| p["name"].to_i }
-              .filter_map { |p| p.dig("value", "objectId") }
-
-        release_object(result["objectId"])
-        ids
-      rescue Error
-        []
+        outer_id = result["objectId"]
+        begin
+          props = get_object_properties(outer_id)
+          properties = props["result"] || []
+          properties
+            .select { |p| p["name"] =~ /\A\d+\z/ }
+            .sort_by { |p| p["name"].to_i }
+            .filter_map { |p| p.dig("value", "objectId") }
+        rescue Error
+          []
+        ensure
+          release_object(outer_id)
+        end
       end
 
       def register_auto_scripts
@@ -949,6 +957,10 @@ module Capybara
       # DOM nodes as `{ "__lightpanda_node__" => "..." }` so the Driver can wrap
       # them. The sentinel key (rather than a plain "objectId") prevents
       # misclassifying user JS that legitimately returns `{ objectId: "x" }`.
+      #
+      # When the result carries an objectId we can't unwrap (function, regexp,
+      # date, …), release the handle before falling back to `result["value"]`
+      # so V8 doesn't accumulate orphaned references across long sessions.
       def unwrap_call_result(result)
         return nil if result["type"] == "undefined"
         return nil if result["subtype"] == "null"
@@ -958,6 +970,8 @@ module Capybara
           return { "__lightpanda_node__" => object_id } if result["subtype"] == "node"
           return serialize_remote_array(object_id) if result["subtype"] == "array"
           return serialize_remote_object(object_id) if result["type"] == "object"
+
+          release_object(object_id)
         end
 
         result["value"]
