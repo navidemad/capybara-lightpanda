@@ -9,9 +9,9 @@ module Capybara
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
       # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch/
-      # xpath/history fixes the gem now relies on: PR #2255 (Network.clearBrowserCookies
-      # empty params + Network.getAllCookies), PR #2257
-      # (window.location.pathname/.search assignment triggers navigation),
+      # xpath/history/iframe-context/dialog fixes the gem now relies on:
+      # PR #2255 (Network.clearBrowserCookies empty params + Network.getAllCookies),
+      # PR #2257 (window.location.pathname/.search assignment triggers navigation),
       # PR #2265 (URL fragment inherited across fragment-less redirect),
       # PR #2261 (LP.handleJavaScriptDialog pre-arm), PR #2283 (Referer on
       # cross-page nav), PR #2292 (KeyboardEvent.keyCode/charCode), PR #2294
@@ -30,10 +30,18 @@ module Capybara
       # lets us drop the history.back()/history.forward() JS workaround in
       # Browser#back / #forward), PR #2305 (XPath 1.0: Document.evaluate,
       # XPathResult, XPathEvaluator, XPathExpression — lets us drop the
-      # ~700 LOC XPath polyfill in javascripts/index.js).
-      # Build 6109 = main HEAD cfcfe4ee (2026-05-11, after PR #2289 and
-      # PR #2305 merges); will ship in nightly published 2026-05-12 ~03:30 UTC.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6109")
+      # ~700 LOC XPath polyfill in javascripts/index.js),
+      # PR #2431 (cdp: remove duplicate Page.frameNavigated emission + reuse
+      # child frame's V8 context — fixes issue #2400 iframe contextId churn,
+      # lets us drop Browser#find_in_frame's refresh_frame_stack! rescue),
+      # PR #2445 (cdp: reset browser context arena on Target.disposeBrowserContext
+      # — restores per-spec state hygiene during Driver#reset!, cures the
+      # batch-mode pollution that PR #2431 alone exposed),
+      # PR #2435 (dom: implement HTMLDialogElement.{show, showModal, close}
+      # natively — lets us drop the polyfills.js HTMLDialogElement block).
+      # Build 6199 = first nightly carrying all three 2026-05-13 merges
+      # (#2431, #2445, #2435); nightly 6198 was published before the merges.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6199")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

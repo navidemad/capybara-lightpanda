@@ -35,7 +35,6 @@ module Capybara
         @modal_messages = []
         @modal_handler_installed = false
         @frame_stack = []
-        @frame_locators = []
         @frames = Concurrent::Hash.new
         @turbo_event = Utils::Event.new
         @turbo_event.set
@@ -537,16 +536,13 @@ module Capybara
 
       def push_frame(node)
         @frame_stack.push(node)
-        @frame_locators.push(capture_frame_locator(node))
       end
 
       def pop_frame
-        @frame_locators.pop
         @frame_stack.pop
       end
 
       def clear_frames
-        @frame_locators.clear
         @frame_stack.clear
       end
 
@@ -707,78 +703,6 @@ module Capybara
       JS
       private_constant :PARENTS_JS
 
-      # Captures identifying attributes of an iframe element at push_frame
-      # time so we can re-resolve it later if its contextId is churned by
-      # lightpanda-io/browser#2400. id/name/src are tried in order; `index`
-      # (position among iframes in the owning document) is the last-resort
-      # fallback when none of the attributes is present.
-      CAPTURE_FRAME_LOCATOR_JS = <<~JS
-        function() {
-          var siblings = this.ownerDocument.querySelectorAll('iframe');
-          var index = -1;
-          for (var i = 0; i < siblings.length; i++) {
-            if (siblings[i] === this) { index = i; break; }
-          }
-          return {
-            id: this.getAttribute('id'),
-            name: this.getAttribute('name'),
-            src: this.getAttribute('src'),
-            index: index,
-          };
-        }
-      JS
-      private_constant :CAPTURE_FRAME_LOCATOR_JS
-
-      # Picks the iframe inside `this.contentDocument` matching a locator
-      # produced by CAPTURE_FRAME_LOCATOR_JS. Used to re-resolve a nested
-      # iframe element when its parent iframe has just been refreshed.
-      RESOLVE_NESTED_IFRAME_JS = <<~JS
-        function(locator) {
-          var doc;
-          try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
-          if (!doc) return null;
-          var iframes = doc.querySelectorAll('iframe');
-          for (var i = 0; i < iframes.length; i++) {
-            var f = iframes[i];
-            if (locator.id && f.getAttribute('id') === locator.id) return f;
-            if (locator.name && f.getAttribute('name') === locator.name) return f;
-            if (locator.src && f.getAttribute('src') === locator.src) return f;
-          }
-          if (typeof locator.index === 'number' && locator.index >= 0 && locator.index < iframes.length) {
-            return iframes[locator.index];
-          }
-          return null;
-        }
-      JS
-      private_constant :RESOLVE_NESTED_IFRAME_JS
-
-      # Same shape as RESOLVE_NESTED_IFRAME_JS but reads `document` directly
-      # for the top-level case where `this` is unbound (Runtime.evaluate).
-      RESOLVE_ROOT_IFRAME_JS = <<~JS
-        (function(locator) {
-          var iframes = document.querySelectorAll('iframe');
-          for (var i = 0; i < iframes.length; i++) {
-            var f = iframes[i];
-            if (locator.id && f.getAttribute('id') === locator.id) return f;
-            if (locator.name && f.getAttribute('name') === locator.name) return f;
-            if (locator.src && f.getAttribute('src') === locator.src) return f;
-          }
-          if (typeof locator.index === 'number' && locator.index >= 0 && locator.index < iframes.length) {
-            return iframes[locator.index];
-          }
-          return null;
-        })
-      JS
-      private_constant :RESOLVE_ROOT_IFRAME_JS
-
-      # Lightweight stand-in for a Node when refresh_frame_stack! re-resolves
-      # an iframe. The only field anyone reads off frame_stack entries is
-      # remote_object_id (browser.rb find_in_frame, driver.rb frame_url /
-      # frame_title), so a Struct with that one field is sufficient and
-      # avoids constructing real Node instances (which need a Driver ref).
-      FrameRef = Struct.new(:remote_object_id)
-      private_constant :FrameRef
-
       def find_in_document(method, selector)
         with_default_context_wait do
           # Coerce Symbol selectors (e.g. Capybara warning path lets `have_css(:p)`
@@ -814,26 +738,11 @@ module Capybara
       end
 
       def find_in_frame(method, selector)
-        refreshed = false
-        begin
-          with_default_context_wait do
-            frame_node = @frame_stack.last
-            result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
-                                      return_by_value: false)
-            extract_node_object_ids(result)
-          end
-        rescue NoExecutionContextError
-          # Issue #2400: a child iframe navigation re-emits executionContextCreated
-          # for the main-frame V8 context under the child's frameId, churning the
-          # iframe's executionContextId. Our stored remote_object_id is bound to
-          # the old contextId, so callFunctionOn raises "Cannot find context with
-          # specified id". with_default_context_wait can't help — the default
-          # context is fine; only the iframe handle is stale. Re-resolve the
-          # stack from locators captured at push_frame time and retry once.
-          raise if refreshed || !refresh_frame_stack!
-
-          refreshed = true
-          retry
+        with_default_context_wait do
+          frame_node = @frame_stack.last
+          result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
+                                    return_by_value: false)
+          extract_node_object_ids(result)
         end
       rescue JavaScriptError => e
         raise_invalid_selector(e, method, selector)
@@ -845,63 +754,6 @@ module Capybara
         end
 
         raise js_error
-      end
-
-      # Snapshot iframe identifying attributes at push_frame time so we can
-      # re-find the element after lightpanda-io/browser#2400 churns its
-      # contextId. Returns a Hash on success or nil if the call fails — the
-      # latter blocks refresh attempts for this stack entry but leaves the
-      # original behaviour intact (caller falls through to the upstream
-      # error). Best-effort: never raises.
-      def capture_frame_locator(node)
-        call_function_on(node.remote_object_id, CAPTURE_FRAME_LOCATOR_JS)
-      rescue BrowserError
-        nil
-      end
-
-      # Re-resolve every level of @frame_stack from locators captured at
-      # push_frame time. Replaces stack entries in-place with FrameRef
-      # holders whose objectIds are bound to the current contextId.
-      # Returns true on success, false if any level can't be resolved
-      # (missing locator, iframe removed from DOM, fresh CDP error).
-      # Called from find_in_frame on NoExecutionContextError; failure is
-      # not fatal — the caller re-raises the original error.
-      def refresh_frame_stack!
-        return false if @frame_stack.empty?
-        return false if @frame_locators.any?(&:nil?)
-
-        fresh = []
-        @frame_locators.each_with_index do |locator, level|
-          node = level.zero? ? resolve_root_iframe(locator) : resolve_nested_iframe(fresh.last, locator)
-          return false unless node
-
-          fresh << node
-        end
-
-        @frame_stack.replace(fresh)
-        true
-      rescue BrowserError
-        false
-      end
-
-      def resolve_root_iframe(locator)
-        # Runtime.evaluate doesn't accept call arguments, so inline the
-        # locator as a JSON literal into the invocation expression. The
-        # locator was captured from the browser's own getAttribute reads
-        # at push_frame time, so JSON.generate is safe.
-        expression = "(#{RESOLVE_ROOT_IFRAME_JS})(#{locator.to_json})"
-        result = evaluate_with_ref(expression)
-        return nil unless result && result["objectId"]
-
-        FrameRef.new(result["objectId"])
-      end
-
-      def resolve_nested_iframe(parent, locator)
-        result = call_function_on(parent.remote_object_id, RESOLVE_NESTED_IFRAME_JS, locator,
-                                  return_by_value: false)
-        return nil unless result && result["objectId"]
-
-        FrameRef.new(result["objectId"])
       end
 
       # Extract individual node objectIds from a remote array reference.
