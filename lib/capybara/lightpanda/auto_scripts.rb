@@ -2,7 +2,7 @@
 
 module Capybara
   module Lightpanda
-    module XPathPolyfill
+    module AutoScripts
       JS_PATH = File.expand_path("javascripts/index.js", __dir__).freeze
       JS = File.read(JS_PATH).freeze
 

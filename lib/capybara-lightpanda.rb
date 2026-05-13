@@ -16,7 +16,7 @@ require_relative "capybara/lightpanda/cookies"
 require_relative "capybara/lightpanda/keyboard"
 require_relative "capybara/lightpanda/frame"
 require_relative "capybara/lightpanda/browser"
-require_relative "capybara/lightpanda/xpath_polyfill"
+require_relative "capybara/lightpanda/auto_scripts"
 require_relative "capybara/lightpanda/node"
 require_relative "capybara/lightpanda/driver"
 
