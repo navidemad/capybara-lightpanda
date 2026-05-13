@@ -8,6 +8,7 @@ module Capybara
       def initialize(browser)
         @browser = browser
         @traffic = []
+        @traffic_mutex = Mutex.new
         @enabled = false
         @request_handler = nil
         @response_handler = nil
@@ -35,11 +36,11 @@ module Capybara
       end
 
       def traffic
-        @traffic.dup
+        @traffic_mutex.synchronize { @traffic.dup }
       end
 
       def clear
-        @traffic.clear
+        @traffic_mutex.synchronize { @traffic.clear }
       end
 
       # Wipe local state without sending Network.disable. Called by
@@ -50,21 +51,27 @@ module Capybara
       # cleared the Subscriber first.
       def reset
         unsubscribe
-        @traffic.clear
+        @traffic_mutex.synchronize { @traffic.clear }
         @enabled = false
       end
 
+      # Setting extra headers also lazily enables the Network domain. Without
+      # this, headers were silently ignored until the caller separately ran
+      # `network.enable` (or `wait_for_network_idle`). Cuprite/Ferrum parity.
       def headers=(headers)
+        enable
         @extra_headers = headers
         browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
       end
 
       def add_headers(headers)
+        enable
         @extra_headers = (@extra_headers || {}).merge(headers)
         browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
       end
 
       def clear_headers
+        enable
         @extra_headers = {}
         browser.page_command("Network.setExtraHTTPHeaders", headers: {})
       end
@@ -72,7 +79,7 @@ module Capybara
       # Count of in-flight requests (those with no response yet recorded).
       # Cheap predicate-friendly accessor (ferrum parity).
       def pending_connections
-        @traffic.count { |t| t[:response].nil? }
+        @traffic_mutex.synchronize { @traffic.count { |t| t[:response].nil? } }
       end
 
       # True when no more than `connections` requests are in-flight.
@@ -105,26 +112,31 @@ module Capybara
       private
 
       def subscribe
+        # CDP events arrive on the message thread while wait_for_idle /
+        # pending_connections read from the main thread; serialize all
+        # @traffic mutations and reads through @traffic_mutex.
         @request_handler = lambda do |params|
-          @traffic << {
+          entry = {
             request_id: params["requestId"],
             url: params.dig("request", "url"),
             method: params.dig("request", "method"),
             timestamp: params["timestamp"],
             response: nil,
           }
+          @traffic_mutex.synchronize { @traffic << entry }
         end
 
         @response_handler = lambda do |params|
-          request = @traffic.find { |t| t[:request_id] == params["requestId"] }
+          @traffic_mutex.synchronize do
+            request = @traffic.find { |t| t[:request_id] == params["requestId"] }
+            next unless request
 
-          next unless request
-
-          request[:response] = {
-            status: params.dig("response", "status"),
-            headers: params.dig("response", "headers"),
-            mime_type: params.dig("response", "mimeType"),
-          }
+            request[:response] = {
+              status: params.dig("response", "status"),
+              headers: params.dig("response", "headers"),
+              mime_type: params.dig("response", "mimeType"),
+            }
+          end
         end
 
         browser.on("Network.requestWillBeSent", &@request_handler)

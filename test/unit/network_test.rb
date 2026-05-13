@@ -165,6 +165,61 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  describe "header setters" do
+    # Cuprite/Ferrum parity: callers expect `network.headers = {…}` to "just
+    # work" without remembering to flip `enable` on first. Previously the
+    # CDP setExtraHTTPHeaders call landed before Network.enable and could be
+    # silently dropped depending on browser state.
+    it "auto-enables the Network domain on assignment" do
+      network.headers = { "X-Test" => "1" }
+      assert_includes browser.commands, ["Network.enable", {}]
+    end
+
+    it "auto-enables the Network domain on add_headers" do
+      network.add_headers("X-Add" => "1")
+      assert_includes browser.commands, ["Network.enable", {}]
+    end
+
+    it "auto-enables the Network domain on clear_headers" do
+      network.clear_headers
+      assert_includes browser.commands, ["Network.enable", {}]
+    end
+  end
+
+  describe "thread safety" do
+    # CDP events arrive on the message thread; main-thread callers read the
+    # same @traffic array. A plain Array under concurrent push/find can yield
+    # inconsistent counts on MRI and raise ConcurrentModificationError on
+    # JRuby/TruffleRuby. The mutex around mutations and reads keeps the
+    # collection consistent for callers like wait_for_idle.
+    it "survives concurrent pushes and reads without losing entries" do
+      network.enable
+
+      writer = Thread.new do
+        500.times do |i|
+          browser.fire("Network.requestWillBeSent", {
+                         "requestId" => "r#{i}",
+                         "request" => { "url" => "https://example.test/#{i}", "method" => "GET" },
+                         "timestamp" => i.to_f,
+                       })
+        end
+      end
+
+      reader_samples = []
+      reader = Thread.new do
+        100.times do
+          reader_samples << network.pending_connections
+        end
+      end
+
+      [writer, reader].each(&:join)
+
+      assert_equal 500, network.traffic.size
+      assert reader_samples.all? { |n| n.between?(0, 500) },
+             "pending_connections returned out-of-range value: #{reader_samples.inspect}"
+    end
+  end
+
   describe "#reset" do
     it "wipes traffic, drops handlers, and clears @enabled so the next enable re-arms" do
       network.enable
