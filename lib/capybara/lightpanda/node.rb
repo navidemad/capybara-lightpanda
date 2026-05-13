@@ -14,12 +14,10 @@ module Capybara
       end
 
       def text
-        ensure_connected
         call("function() { return this.textContent }")
       end
 
       def all_text
-        ensure_connected
         filter_text(call("function() { return this.textContent }"))
       end
 
@@ -28,7 +26,6 @@ module Capybara
       # that fail VISIBLE_JS, and emit newlines around block-display elements
       # (the part of innerText behavior we still need).
       def visible_text
-        ensure_connected
         call(VISIBLE_TEXT_JS).to_s
                              .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
                              .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
@@ -250,19 +247,6 @@ module Capybara
 
       private
 
-      # Capybara's `automatic_reload` re-runs the original query when an element
-      # access raises one of the driver's `invalid_element_errors`. After a DOM
-      # mutation like `replaceWith`, our cached objectId still resolves to the
-      # detached node, so reads succeed (with stale data) and the auto-reload
-      # never fires. Detect detachment via `isConnected` and raise so the
-      # synchronize-loop notices and triggers a re-find.
-      def ensure_connected
-        connected = call("function() { return this.isConnected }")
-        return if connected
-
-        raise ObsoleteNode.new(self, "Node is no longer attached to the document")
-      end
-
       def implicit_submit
         call(IMPLICIT_SUBMIT_JS)
         driver.browser.wait_for_idle
@@ -372,17 +356,41 @@ module Capybara
       # JS bodies may reference `_lightpanda.*` helpers — they're registered via
       # Page.addScriptToEvaluateOnNewDocument in every document (top frame and
       # iframes alike), so the namespace is available wherever `this` lives.
+      #
+      # The supplied declaration is wrapped with an `isConnected` guard so a
+      # detached node raises ObsoleteNode (in Driver#invalid_element_errors)
+      # instead of returning stale data from V8's still-live reference. After
+      # a DOM mutation like `replaceWith`, the cached objectId still resolves
+      # to the detached node, so reads succeed quietly and Capybara's
+      # automatic_reload never re-runs the original query.
       def call(function_declaration, *args)
+        guarded = wrap_with_attached_guard(function_declaration)
         driver.browser.with_default_context_wait do
-          driver.browser.call_function_on(@remote_object_id, function_declaration, *args)
+          driver.browser.call_function_on(@remote_object_id, guarded, *args)
         end
       rescue JavaScriptError => e
+        if e.message.include?(OBSOLETE_NODE_MARKER)
+          raise ObsoleteNode.new(self, "Node is no longer attached to the document")
+        end
+
         case e.class_name
         when "InvalidSelector"
           raise InvalidSelector.new(e.message, nil, args.first)
         else
           raise
         end
+      end
+
+      OBSOLETE_NODE_MARKER = "LIGHTPANDA_OBSOLETE_NODE"
+      private_constant :OBSOLETE_NODE_MARKER
+
+      def wrap_with_attached_guard(function_declaration)
+        <<~JS
+          function() {
+            if (!this.isConnected) throw new Error(#{OBSOLETE_NODE_MARKER.inspect});
+            return (#{function_declaration}).apply(this, arguments);
+          }
+        JS
       end
 
       # We dispatch a `MouseEvent` (not a generic `Event`) because Turbo's link
