@@ -140,9 +140,6 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
-6. **`Node#shadow_root should get visible text` failing** (gem-side TODO)
-   - `_lightpanda.visibleText` in `javascripts/index.js` wraps every `display:block` element with `\n…\n` even when empty, producing a phantom line break between siblings. Gem-side fix needed in the polyfill.
-
 ### Open Fix PRs (not yet merged)
 
 - **PR #2157**: Feat: add full SVG DOM support — could affect tests that interact with SVG elements (icons, charts).
