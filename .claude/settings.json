@@ -1,8 +1,5 @@
 {
-  "effortLevel": "high",
-  "env": {
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000"
-  },
+  "effortLevel": "xhigh",
   "permissions": {
     "allow": [
       "Edit(.claude/rules/**)",
