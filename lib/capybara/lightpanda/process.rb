@@ -55,6 +55,7 @@ module Capybara
         @stdout_w = nil
         @stderr_r = nil
         @stderr_w = nil
+        @finalizer_registered = false
       end
 
       def start
@@ -265,17 +266,29 @@ module Capybara
       end
 
       # Returns an array of PIDs holding the TCP port, [] if none, or nil if
-      # `lsof` itself isn't available on this system.
+      # `lsof` itself isn't available / usable on this system.
+      #
+      # `lsof -ti` exits 1 with empty stdout/stderr when nothing matches the
+      # filter — that's the common "port not held" case, so we treat
+      # (exit != 0, empty stdout, empty stderr) as []. A non-zero exit with
+      # stderr content is a real lsof failure (broken install, permission
+      # error, etc.); surface that as `nil` so the caller raises a clear
+      # BinaryError instead of silently retrying the start.
       def pids_listening_on(port)
-        stdout, _, status = Open3.capture3("lsof", "-ti", "tcp:#{port}")
-        return [] unless status.success?
+        stdout, stderr, status = Open3.capture3("lsof", "-ti", "tcp:#{port}")
+        return parse_lsof_pids(stdout) if status.success?
+        return [] if stdout.strip.empty? && stderr.strip.empty?
 
+        nil
+      rescue Errno::ENOENT
+        nil
+      end
+
+      def parse_lsof_pids(stdout)
         stdout.split("\n").filter_map do |line|
           pid = line.strip.to_i
           pid.positive? ? pid : nil
         end
-      rescue Errno::ENOENT
-        nil
       end
 
       # Class method so the finalizer proc doesn't capture `self` (which
@@ -293,8 +306,19 @@ module Capybara
         end
       end
 
+      # `start` may be called more than once on the same Process instance
+      # (Browser#restart_process_if_dead runs `stop` then `start` after a
+      # crash). Each `attempt_start` calls `register_finalizer`, and
+      # ObjectSpace allows multiple finalizers per object — so without
+      # this guard the second start would queue a redundant TERM-on-GC
+      # whose first invocation no-ops on ESRCH but is still pure noise.
+      # We register exactly once; the captured `pid` is overwritten by
+      # `undefine_finalizer + define_finalizer` so the finalizer always
+      # references the most recently started process.
       def register_finalizer(pid)
+        ObjectSpace.undefine_finalizer(self) if @finalizer_registered
         ObjectSpace.define_finalizer(self, self.class.send(:weak_kill, pid))
+        @finalizer_registered = true
       end
 
       def cleanup_pipes
