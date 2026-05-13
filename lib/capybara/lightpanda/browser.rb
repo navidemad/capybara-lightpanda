@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "forwardable"
-require "concurrent-ruby"
 
 module Capybara
   module Lightpanda
@@ -35,7 +34,6 @@ module Capybara
         @modal_messages = []
         @modal_handler_installed = false
         @frame_stack = []
-        @frames = Concurrent::Hash.new
         @turbo_event = Utils::Event.new
         @turbo_event.set
 
@@ -77,11 +75,9 @@ module Capybara
         attach_result = @client.command("Target.attachToTarget", { targetId: @target_id, flatten: true })
         @session_id = attach_result["sessionId"]
 
-        @frames.clear
         @turbo_event.set
         subscribe_to_console_logs
         subscribe_to_execution_context
-        subscribe_to_frame_events
         subscribe_to_turbo_signals
         register_auto_scripts
       end
@@ -509,17 +505,9 @@ module Capybara
       end
 
       # -- Frame Support --
-      # Two parallel views of frames:
-      #
-      #   * `frame_stack` (Array<Node>) — the Capybara `switch_to_frame` stack;
-      #     drives where `find` resolves selectors. Stored as Nodes so
-      #     callFunctionOn can scope to the iframe's contentDocument.
-      #
-      #   * `@frames` (Concurrent::Hash<String, Frame>) — metadata view
-      #     populated from Page.frame{Attached,Navigated,Detached,...} events.
-      #     Used for diagnostics / introspection (frames, main_frame, frame_by).
-      #     Lightpanda's frame events are not reliable enough to drive
-      #     navigation waits, so this is read-only metadata.
+      # `frame_stack` (Array<Node>) is the Capybara `switch_to_frame` stack;
+      # it drives where `find` resolves selectors. Stored as Nodes so
+      # callFunctionOn can scope to the iframe's contentDocument.
 
       def push_frame(node)
         @frame_stack.push(node)
@@ -531,25 +519,6 @@ module Capybara
 
       def clear_frames
         @frame_stack.clear
-      end
-
-      # All frames currently attached to the page (main frame + iframes).
-      def frames
-        @frames.values
-      end
-
-      # The top-level frame, or nil if it hasn't been registered yet (events
-      # arrive asynchronously after Page.enable).
-      def main_frame
-        @frames.each_value.find(&:main?)
-      end
-
-      def frame_by(id: nil, name: nil)
-        if id
-          @frames[id]
-        elsif name
-          @frames.each_value.find { |f| f.name == name }
-        end
       end
 
       # -- Modal/Dialog Support --
@@ -806,45 +775,6 @@ module Capybara
         end
 
         on("Runtime.executionContextsCleared") { @turbo_event.set }
-      end
-
-      # Maintain @frames from Page.frame* events. Subscribed once per page
-      # (create_page resets @frames and re-subscribes on a fresh client, so
-      # handlers don't accumulate across reconnects). Loading-state events
-      # are best-effort: Lightpanda's Page.frameStoppedLoading is unreliable
-      # on complex pages (#1801), so we track state for diagnostics only.
-      def subscribe_to_frame_events
-        on("Page.frameAttached") { |params| handle_frame_attached(params) }
-        on("Page.frameNavigated") { |params| handle_frame_navigated(params) }
-        on("Page.frameStartedLoading") { |params| set_frame_state(params["frameId"], :started_loading) }
-        on("Page.frameStoppedLoading") { |params| set_frame_state(params["frameId"], :stopped_loading) }
-        on("Page.frameDetached") { |params| handle_frame_detached(params) }
-      end
-
-      def handle_frame_attached(params)
-        parent_id, frame_id = params.values_at("parentFrameId", "frameId")
-        @frames[frame_id] ||= Frame.new(frame_id, parent_id)
-      end
-
-      def handle_frame_navigated(params)
-        frame_data = params["frame"] || {}
-        frame_id = frame_data["id"]
-        return unless frame_id
-
-        frame = @frames[frame_id] ||= Frame.new(frame_id, frame_data["parentId"])
-        frame.name = frame_data["name"]
-        frame.url = frame_data["url"]
-        frame.state = :navigated
-      end
-
-      def handle_frame_detached(params)
-        frame = @frames.delete(params["frameId"])
-        frame&.state = :detached
-      end
-
-      def set_frame_state(frame_id, state)
-        frame = @frames[frame_id]
-        frame.state = state if frame
       end
 
       # Track default-execution-context availability via Runtime events.
