@@ -445,10 +445,7 @@ describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
-  # Visibility (regression for Lightpanda quirks: checkVisibility doesn't
-  # honor `visibility:hidden` or the `hidden` attribute; native click on
-  # <summary> doesn't toggle <details>; getBoundingClientRect returns a
-  # fake non-zero rect for display:none.)
+  # Visibility detection
   # ───────────────────────────────────────────────
 
   describe "visibility detection" do
