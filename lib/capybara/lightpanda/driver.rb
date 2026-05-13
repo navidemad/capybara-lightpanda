@@ -224,12 +224,15 @@ module Capybara
       end
 
       # Expanded error list for Capybara retry logic (Cuprite pattern).
+      # MouseEventFailed is in Cuprite's list, but Lightpanda has no
+      # rendering engine and the gem dispatches clicks through JS — the
+      # underlying CDP Input.dispatchMouseEvent path doesn't run, so
+      # MouseEventFailed is never raised.
       def invalid_element_errors
         [
           NodeNotFoundError,
           NoExecutionContextError,
           ObsoleteNode,
-          MouseEventFailed,
         ]
       end
 

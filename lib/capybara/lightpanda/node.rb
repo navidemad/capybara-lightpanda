@@ -383,13 +383,6 @@ module Capybara
         else
           raise
         end
-      rescue BrowserError => e
-        case e.message
-        when /MouseEventFailed/i
-          raise MouseEventFailed.new(self, e.response&.dig("message"))
-        else
-          raise
-        end
       end
 
       # We dispatch a `MouseEvent` (not a generic `Event`) because Turbo's link
