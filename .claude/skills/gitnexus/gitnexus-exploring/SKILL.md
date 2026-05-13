@@ -1,6 +1,6 @@
 ---
 name: gitnexus-exploring
-description: "Use when the user asks how code works, wants to understand architecture, trace execution flows, or explore unfamiliar parts of the codebase. Examples: \"How does X work?\", \"What calls this function?\", \"Show me the auth flow\""
+description: 'Use when the user asks how code works, wants to understand architecture, trace execution flows, or explore unfamiliar parts of the codebase. Examples: "How does X work?", "What calls this function?", "Show me the auth flow"'
 ---
 
 # Exploring Codebases with GitNexus
@@ -23,7 +23,7 @@ description: "Use when the user asks how code works, wants to understand archite
 5. READ gitnexus://repo/{name}/process/{name}      → Trace full execution flow
 ```
 
-> If step 2 says "Index is stale" → run `npx gitnexus analyze` in terminal.
+> If step 2 says "Index is stale" → run `gitnexus analyze` in terminal.
 
 ## Checklist
 

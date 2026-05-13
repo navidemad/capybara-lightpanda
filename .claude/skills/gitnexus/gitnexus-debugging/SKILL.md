@@ -1,6 +1,6 @@
 ---
 name: gitnexus-debugging
-description: "Use when the user is debugging a bug, tracing an error, or asking why something fails. Examples: \"Why is X failing?\", \"Where does this error come from?\", \"Trace this bug\""
+description: 'Use when the user is debugging a bug, tracing an error, or asking why something fails. Examples: "Why is X failing?", "Where does this error come from?", "Trace this bug"'
 ---
 
 # Debugging with GitNexus
@@ -22,7 +22,7 @@ description: "Use when the user is debugging a bug, tracing an error, or asking 
 4. gitnexus_cypher({query: "MATCH path..."})                 → Custom traces if needed
 ```
 
-> If "Index is stale" → run `npx gitnexus analyze` in terminal.
+> If "Index is stale" → run `gitnexus analyze` in terminal.
 
 ## Checklist
 
