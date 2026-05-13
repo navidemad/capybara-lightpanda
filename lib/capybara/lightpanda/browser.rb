@@ -923,8 +923,12 @@ module Capybara
       # `unwrap_call_result` so that DOM nodes come back as `{ "__lightpanda_node__" => ... }`
       # hashes the Driver can wrap as Capybara nodes.
       def call_with_args(function_declaration, args, return_by_value: false)
+        # document_object_id returns a fresh RemoteObject handle every call.
+        # Release it on the way out so long-running shared-spec sessions don't
+        # accumulate orphaned V8 handles between resets.
+        doc_oid = document_object_id
         params = {
-          objectId: document_object_id,
+          objectId: doc_oid,
           functionDeclaration: function_declaration,
           returnByValue: return_by_value,
           awaitPromise: true,
@@ -937,6 +941,8 @@ module Capybara
         end
 
         return_by_value ? handle_evaluate_response(response) : unwrap_call_result(response["result"])
+      ensure
+        release_object(doc_oid) if doc_oid
       end
 
       # Translate a non-by-value Runtime result into a plain Ruby value, surfacing
