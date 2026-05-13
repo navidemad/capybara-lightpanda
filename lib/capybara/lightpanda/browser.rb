@@ -105,15 +105,7 @@ module Capybara
       def reset
         dispose_browser_context
         @client.clear_subscriptions
-        @page_events_enabled = false
-        @modal_handler_installed = false
-        @modal_messages.clear
-        clear_frames
-        # Network#reset, not #clear: disposing the BrowserContext also
-        # destroyed the Network domain and its subscriptions, so we must
-        # flip @enabled back to false — otherwise the next #enable
-        # short-circuits and traffic tracking is silently dead.
-        @network&.reset
+        clear_session_state
         create_browser_context
         create_page
       end
@@ -130,9 +122,28 @@ module Capybara
         @client = Client.new(ws_url, @options)
         # Process may have died; the old browserContextId is gone with it.
         @browser_context_id = nil
+        clear_session_state
         create_browser_context
         create_page
+      end
+
+      # Per-session in-memory state that must be wiped whenever the underlying
+      # CDP connection is replaced (#reset disposes the BrowserContext, #reconnect
+      # builds a fresh Client). Without this, a mid-test process crash leaves
+      # stale frame_stack Nodes (whose objectIds belong to the dead V8 context)
+      # and a `@modal_handler_installed = true` flag that makes prepare_modals
+      # short-circuit on the new client, so find_modal silently sees no
+      # javascriptDialogOpening events.
+      def clear_session_state
         @page_events_enabled = false
+        @modal_handler_installed = false
+        @modal_messages.clear
+        clear_frames
+        # Network#reset, not #clear: disposing the BrowserContext also
+        # destroyed the Network domain and its subscriptions, so we must
+        # flip @enabled back to false — otherwise the next #enable
+        # short-circuits and traffic tracking is silently dead.
+        @network&.reset
       end
 
       def quit
