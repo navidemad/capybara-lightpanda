@@ -130,6 +130,39 @@ describe Capybara::Lightpanda::Cookies do
       cookies.load(tmp_path)
     end
 
+    it "round-trips sameSite through the YAML file" do
+      attrs_with_samesite = cookie_attrs.merge("sameSite" => "Lax")
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [attrs_with_samesite])
+
+      cookies.store(tmp_path)
+
+      # restore_cookie must forward sameSite to Network.setCookie as `sameSite:`
+      # (CDP camelCase) — otherwise SameSite-sensitive cookies silently lose
+      # their enforcement on reload.
+      browser.expects(:command).with(
+        "Network.setCookie",
+        has_entries(name: "session", sameSite: "Lax")
+      )
+      cookies.load(tmp_path)
+    end
+
+    it "drops invalid sameSite values rather than passing them to CDP" do
+      browser.stubs(:command).with("Network.getAllCookies").returns(
+        "cookies" => [cookie_attrs.merge("sameSite" => "Bogus")]
+      )
+
+      cookies.store(tmp_path)
+
+      # CDP rejects unknown SameSite values; the gem must filter to canonical
+      # spec strings ("Strict" / "Lax" / "None") so a hand-edited YAML can't
+      # turn a load into a CDP error.
+      browser.expects(:command).with(
+        "Network.setCookie",
+        Not(has_key(:sameSite))
+      )
+      cookies.load(tmp_path)
+    end
+
     it "defaults to cookies.yml when no path is given" do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir) do

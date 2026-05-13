@@ -77,7 +77,8 @@ module Capybara
         find { |cookie| cookie.name == name }
       end
 
-      def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, expires: nil)
+      def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists
+              same_site: nil, expires: nil)
         params = {
           name: name,
           value: value,
@@ -87,6 +88,10 @@ module Capybara
         }
 
         params[:domain] = domain if domain
+        # CDP rejects unknown SameSite values; pass through only the canonical
+        # spec strings ("Strict" / "Lax" / "None") so YAML noise from a hand-
+        # edited file doesn't reach the browser.
+        params[:sameSite] = same_site if %w[Strict Lax None].include?(same_site)
         params[:expires] = expires.to_i if expires
 
         browser.command("Network.setCookie", **params)
@@ -123,7 +128,7 @@ module Capybara
 
       # set() takes keyword args, but YAML round-trips give us a hash with the
       # raw CDP keys (camelCase). Normalize and forward.
-      def restore_cookie(hash)
+      def restore_cookie(hash) # rubocop:disable Metrics/PerceivedComplexity
         attrs = hash.transform_keys(&:to_s)
         params = {
           name: attrs["name"],
@@ -133,6 +138,7 @@ module Capybara
           http_only: attrs["httpOnly"] || false,
         }
         params[:domain] = attrs["domain"] if attrs["domain"]
+        params[:same_site] = attrs["sameSite"] if attrs["sameSite"]
         exp = attrs["expires"]
         params[:expires] = Time.at(exp) if exp.is_a?(Numeric) && exp.positive?
         set(**params)
