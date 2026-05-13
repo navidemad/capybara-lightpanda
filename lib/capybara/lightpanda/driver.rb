@@ -189,8 +189,11 @@ module Capybara
 
       def save_screenshot(path, **_options)
         browser.screenshot(path: path)
-      rescue BinaryError, BinaryNotFoundError
-        # Browser can't start (e.g., version too old) — don't crash teardown
+      rescue BinaryError, BinaryNotFoundError, BrowserError, TimeoutError
+        # Browser can't start (version too old), is already dead (DeadBrowserError),
+        # the CDP call timed out, or returned any other CDP-level error. Teardown
+        # screenshots are best-effort — swallow so the real test failure surfaces
+        # instead of a "browser already gone" stack trace.
         nil
       end
 
