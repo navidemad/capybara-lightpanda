@@ -69,17 +69,37 @@ module Capybara
         browser.page_command("Network.setExtraHTTPHeaders", headers: {})
       end
 
+      # Count of in-flight requests (those with no response yet recorded).
+      # Cheap predicate-friendly accessor (ferrum parity).
+      def pending_connections
+        @traffic.count { |t| t[:response].nil? }
+      end
+
+      # True when no more than `connections` requests are in-flight.
+      def idle?(connections = 0)
+        pending_connections <= connections
+      end
+
       def wait_for_idle(timeout: 5, connections: 0) # rubocop:disable Naming/PredicateMethod
         started_at = Time.now
 
         while Time.now - started_at < timeout
-          pending = @traffic.count { |t| t[:response].nil? }
-          return true if pending <= connections
+          return true if idle?(connections)
 
           sleep 0.1
         end
 
         false
+      end
+
+      # Raising variant of #wait_for_idle (ferrum parity). Returns true on
+      # success, raises TimeoutError on timeout so callers that treat the
+      # idle wait as a precondition don't have to remember to check a bool.
+      def wait_for_idle!(timeout: 5, connections: 0)
+        return true if wait_for_idle(timeout: timeout, connections: connections)
+
+        raise TimeoutError, "Network did not become idle within #{timeout}s " \
+                            "(pending=#{pending_connections}, allowed=#{connections})"
       end
 
       private

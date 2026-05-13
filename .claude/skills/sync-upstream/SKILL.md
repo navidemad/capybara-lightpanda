@@ -37,6 +37,16 @@ Read both rules files unconditionally — the answers to "what changed?" depend 
 - `.claude/rules/lightpanda-io.md` — current understanding of the browser
 - `.claude/rules/ruby-cdp-peers.md` — adopted/outstanding patterns from Ferrum and Cuprite
 
+Also read the **previous run's state** if it exists:
+
+- `.claude/skills/sync-upstream/state/last-sync.md` — open recommendations and watch items carried forward from the prior run.
+
+The state file is how the skill remembers what was outstanding last time. Treat each entry as a question for this run:
+- **Recommendations**: is the underlying state still the same (still pending), or has the user done it / has it been invalidated? Verify by checking the gem source (does the code change still need to happen?) or the upstream issue/PR. Don't trust the state file blindly — it's a snapshot from the prior run.
+- **Watch items**: did the upstream PR/issue move? Check the linked PR/issue state. If merged → promote to a finding in this run's report. If closed without merge → drop it.
+
+The state file is absent on first run; that's fine — just skip the carry-forward.
+
 Then read the gem source surfaces relevant to the targets you picked:
 
 - Lightpanda → `lib/capybara/lightpanda/browser.rb`, `node.rb`, `cookies.rb`, `frame.rb` (workarounds depend on browser quirks)
@@ -82,6 +92,12 @@ Use this exact template. Omit sections with no findings rather than leaving them
 ## Upstream Sync Report — [date]
 
 Targets run: [Lightpanda / Ferrum / Cuprite / subset]
+
+### Carry-forward from previous run
+(Only when state/last-sync.md existed at Step 1.)
+- ✅ Done: [slug] — [one-line: where the gem code now lives, or which upstream PR closed it]
+- ⏳ Still open: [slug] — [reason it's still pending]
+- ❌ Stale: [slug] — [why it's no longer relevant]
 
 ### Lightpanda
 **Broken**
@@ -133,3 +149,34 @@ LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake
 ```
 
 Don't run it yourself — `spec:incremental` is long-running and the user decides when to validate.
+
+## Step 7: Persist state for the next run
+
+After the report, **overwrite** `.claude/skills/sync-upstream/state/last-sync.md` with the report's open items so the next run can pick up where this one left off. Use this exact format:
+
+```markdown
+# Sync Upstream — Last-Run State
+
+Last run: YYYY-MM-DD
+Last run targets: [Lightpanda / Ferrum / Cuprite / subset]
+
+## Open recommendations
+
+Each entry stays here until the gem code change happens, the upstream PR/issue resolves, or the entry becomes stale. Reconcile each one at Step 1 of the next run.
+
+- **[slug]** [PRIORITY] — `path/file.rb:line` — What to do, in one sentence. Why it's outstanding (PR #N merged date, or pattern not yet adopted). Effort (tiny/medium/large).
+
+## Watch items
+
+Upstream PRs / issues to recheck next sync. Promote to findings if they move.
+
+- **lightpanda-io/browser#N** — Title. State as of YYYY-MM-DD: OPEN / MERGED / CLOSED. Why we care.
+```
+
+Rules:
+- **One entry per slug** — slugs are short kebab-case identifiers (e.g. `htmldialog-polyfill-cleanup`, `pr-2431-frame-context-fix`). Stable across runs so reconciliation is trivial.
+- **No duplicates from the rules files.** Anything fully described in `lightpanda-io.md` (open issues table) or `ruby-cdp-peers.md` (outstanding adoption candidates) doesn't need to be in the state file — the rules files are the source of truth for those. State file is specifically for *follow-up actions* (cleanup, validation, gem-side code changes) and *watch items* (upstream PRs we expect to land soon).
+- **Always overwrite the whole file.** Don't append — Step 5's report is the authoritative source for what's still open after this run.
+- **If there's nothing open**, write the headers + an explicit `(none)` under each section so future runs know the file is current, not abandoned.
+
+The directory `state/` is checked into the repo (one tracked file: `last-sync.md`). It's a single Markdown file, not a JSON store — human-editable if the user wants to drop a stale item between runs.

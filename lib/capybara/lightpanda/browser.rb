@@ -404,6 +404,14 @@ module Capybara
         raise_invalid_selector(e, method, selector)
       end
 
+      # Ancestor chain of `remote_object_id` from parentNode up to (but
+      # excluding) `document`, returned as an array of remote object IDs.
+      # Mirrors Cuprite's JS `parents` helper.
+      def parents_of(remote_object_id)
+        result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
+        extract_node_object_ids(result)
+      end
+
       # objectId of document.activeElement, or nil if none/document detached.
       def active_element
         result = evaluate_with_ref("document.activeElement")
@@ -682,6 +690,22 @@ module Capybara
         }
       JS
       private_constant :FIND_IN_FRAME_JS
+
+      # Walks `parentNode` from `this` up to (but excluding) `document`,
+      # returning the chain as a JS array. Each entry is an element node so
+      # `extract_node_object_ids` can wrap them as Lightpanda::Nodes.
+      PARENTS_JS = <<~JS
+        function() {
+          var nodes = [];
+          var p = this.parentNode;
+          while (p && p !== this.ownerDocument) {
+            nodes.push(p);
+            p = p.parentNode;
+          }
+          return nodes;
+        }
+      JS
+      private_constant :PARENTS_JS
 
       # Captures identifying attributes of an iframe element at push_frame
       # time so we can re-resolve it later if its contextId is churned by
