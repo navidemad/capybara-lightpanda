@@ -1004,17 +1004,14 @@ module Capybara
           rescue DeadBrowserError
             raise
           rescue StandardError
-            # reconnect itself failed (process won't restart, port stuck, etc.)
+            # reconnect itself failed (process won't restart, port stuck, etc.).
+            # Fall through to the raise below — a second immediate reconnect
+            # attempt would just duplicate the failure we already swallowed.
           end
         end
 
         return unless @client.closed?
 
-        begin
-          reconnect
-        rescue StandardError
-          nil
-        end
         raise DeadBrowserError, "Lightpanda crashed navigating to #{url}"
       end
 
