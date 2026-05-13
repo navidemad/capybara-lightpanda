@@ -1,22 +1,16 @@
 # Sync Upstream — Last-Run State
 
-Last run: 2026-05-13 (afternoon, post-#2431 merge + batch-mode validation)
-Last run targets: Lightpanda (targeted — upstream PR #2431 merge follow-up)
+Last run: 2026-05-13 (evening, targeted `index.js` impact audit)
+Last run targets: Lightpanda (targeted — recon for `lib/capybara/lightpanda/javascripts/index.js` simplification opportunities)
 
 ## Open recommendations
 
-Each entry stays here until the gem code change happens, the upstream PR/issue resolves, or the entry becomes stale. Reconcile each one at Step 1 of the next run.
-
-- **bump-min-nightly-and-relax-refresh-frame-stack** [HIGH, but BLOCKED on nightly ≥6199 being published] — Two coordinated changes, one release:
-  1. `lib/capybara/lightpanda/process.rb` — bump `MINIMUM_NIGHTLY_BUILD` from 6109 to the first nightly carrying both PR #2431 (`ffc2baa7`) and PR #2445 (`12971a24`). Both merged 2026-05-13 after nightly 6198 was published, so the floor will be ≥6199.
-  2. `lib/capybara/lightpanda/browser.rb:816-840` + helper at 850-861 — relax the `refresh_frame_stack!` rescue. The contextId churn (issue #2400) is fixed upstream and batch-mode frame specs now run clean (24 / 0F / 4P, validated 2026-05-13 across seeds 62467 / 99999 / 11111). Options: drop the rescue entirely, or keep it as a no-op defense-in-depth — judgment call. Don't ship #2 without #1, otherwise end-users on older nightlies break. Effort: tiny.
-
-- **htmldialog-polyfill-cleanup** [LOW] — `lib/capybara/lightpanda/javascripts/polyfills.js:80-105` ("Bug #4" block). Drop the feature-detected `HTMLDialogElement.{show, showModal, close}` polyfill in the same nightly-floor bump above — PR #2435 (`HTMLDialogElement.{show, showModal, close}`) also merged 2026-05-13 and will ship in the same nightly ≥6199. Polyfill auto-degrades to no-op on supporting nightlies, so this is purely dead-code removal. Effort: tiny.
-
-- **gem-pr-20-rebase-or-close** [LOW] — `navidemad/capybara-lightpanda#20` (branch `docs/pr-2431-validation-findings`, OPEN). Its central finding — *"PR #2431 cures contextId churn but introduces batch pollution"* — was based on a build that lacked PR #2445. Today's validation against the post-#2445 main binary disproves the pollution conclusion: same seeds, 0 failures. The PR's doc diffs are also now redundant: the rules file and state file have been updated directly in main with the correct (post-validation) picture. Cleanest path: **close PR #20 as superseded**, optionally referencing this state file from the close comment. Rebase would mean dropping every hunk anyway. Effort: tiny.
+(none — all 2026-05-13 afternoon carry-forwards landed in commits `160d5c6` and `2ed7391`. Today's evening recon against ~120 upstream commits and all open PRs found no new opportunity to simplify `index.js`.)
 
 ## Watch items
 
 Upstream PRs / issues to recheck next sync. Promote to findings if they move.
 
-- **next-nightly-after-2026-05-13-merges** — Next Lightpanda nightly build (≥6199) will be the first to carry today's stack of merges relevant to this gem: PR #2431 (iframe contextId fix), PR #2445 (BrowserContext arena reset on dispose), PR #2435 (HTMLDialogElement native methods), PR #2437 (window.frameElement). When the nightly publishes, both open recommendations above (`bump-min-nightly-and-relax-refresh-frame-stack`, `htmldialog-polyfill-cleanup`) become actionable in a single release. Nightly tag was still at 6198 as of 2026-05-13 afternoon.
+- **lightpanda-io/browser#2309** — `HTMLElement.isContentEditable IDL attribute not implemented`. State as of 2026-05-13: CLOSED 2026-04-30 as won't-fix (browser deliberately returns `false`, no caret/keyboard pipeline). Watch only — if upstream ever reopens with a real ancestor-walking implementation, the gem polyfill at `javascripts/index.js:171-182` could be retired. Currently documented as "Polyfill MUST stay" in `.claude/rules/lightpanda-io.md`.
+- **CSSOM cascade resolution for `getComputedStyle`** — no PR yet, but the `_lightpanda.isVisible` `offsetParent === null` fallback (`javascripts/index.js:116-117`) exists specifically because Lightpanda's CSSOM doesn't resolve every cascade case Chrome does. If a future upstream PR closes that gap, we could drop the fallback. Track in the next sync by re-checking commits touching `getComputedStyle` or cascade resolution.
+- **`innerText` rendering-aware implementation** — same shape as above; `_lightpanda.visibleText` exists because Lightpanda's `innerText` returns `textContent` verbatim (no rendering). Structural limitation tied to "no rendering engine" — unlikely to land, but worth a quick check each sync.
