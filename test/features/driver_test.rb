@@ -36,7 +36,9 @@ describe Capybara::Lightpanda::Driver do
       assert_includes errors, Capybara::Lightpanda::NodeNotFoundError
       assert_includes errors, Capybara::Lightpanda::NoExecutionContextError
       assert_includes errors, Capybara::Lightpanda::ObsoleteNode
-      assert_includes errors, Capybara::Lightpanda::MouseEventFailed
+      refute_includes errors, Capybara::Lightpanda::MouseEventFailed,
+                      "Lightpanda has no rendering engine — coordinate-based mouse events never run, " \
+                      "so MouseEventFailed is unreachable and shouldn't be in the retry list"
     end
 
     it "exposes the browser object" do
