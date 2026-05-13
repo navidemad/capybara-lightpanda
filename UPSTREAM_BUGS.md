@@ -210,43 +210,15 @@ at HTMLDocument.submitBubbled (turbo.es2017-esm.min.js:11:21226)
 
 ---
 
-## Bug #8 — `addEventListener` pendant capture-phase invisible à la bubble-phase en cours
+## ~~Bug #8~~ — `addEventListener` pendant capture-phase invisible à la bubble-phase — FIXED upstream 2026-05-11
 
-WHATWG DOM §2.9 step 5.4 spécifie que le listener-set d'un `EventTarget` est cloné **à chaque phase** du dispatch (capture puis bubble). Une mutation pendant la capture-phase (remove + re-add du *même* listener) est donc visible quand la bubble-phase prend son snapshot. Chrome et Cuprite respectent. Lightpanda prend le snapshot une seule fois au début du dispatch → un `removeEventListener(L) ; addEventListener(L)` séquentiel pendant la capture fait disparaître `L` pour la bubble-phase en cours.
+Fixé par commit `8d5eef44` ("Improve events") qui a fait que la vérification de duplication dans `register` ignore les listeners avec `removed=true` (en attente de flush). Avant le fix, `remove(L) ; add(L)` pendant le dispatch :
+1. `remove(L)` marque l'entrée existante `removed=true` (détachement physique différé).
+2. `add(L)` itérait la liste pour dédupliquer, trouvait `L` (toujours présent, `removed=true`), et rejetait l'add comme duplicate → `L` restait dans l'état `removed=true` jusqu'à la fin du dispatch, donc la bubble-phase le sautait.
 
-C'est exactement le pattern qu'utilise `Turbo.session.formSubmitObserver.submitCaptured` : sur chaque submit en capture, il fait `remove + add` de son propre `submitBubbled` pour garantir que ce dernier tourne **en dernier** parmi les listeners bubble (afin que des `event.preventDefault()` du code utilisateur soient honorés avant la décision Turbo). Sous Lightpanda, `submitBubbled` ne fire jamais → Turbo n'intercepte aucun form submit → toutes les soumissions Hotwire deviennent des navigations full-page.
+Avec le fix (`src/browser/EventManagerBase.zig:130-140`), `add(L)` saute les entrées `removed=true` pendant la dédup, donc le nouvel `add` crée un nouveau nœud à la queue de la liste — visible à la bubble-phase suivante.
 
-### Repro minimal
-
-```js
-var calls = [];
-var bubbleHandler = function() { calls.push('bubble'); };
-document.addEventListener('submit', bubbleHandler, false);
-
-document.addEventListener('submit', function() {
-  calls.push('capture-pre');
-  document.removeEventListener('submit', bubbleHandler, false);
-  document.addEventListener('submit', bubbleHandler, false);
-  calls.push('capture-post');
-}, true);
-
-var f = document.createElement('form');
-f.action = 'javascript:void(0)';
-document.body.appendChild(f);
-var b = document.createElement('button');
-b.type = 'submit';
-f.appendChild(b);
-f.requestSubmit(b);
-
-// Chrome / Cuprite : ["capture-pre", "capture-post", "bubble"]
-// Lightpanda      : ["capture-pre", "capture-post"]   ← bubble manque
-```
-
-### Workaround côté gem
-
-`polyfills.js` → IIFE `patchListenerLifecycle` qui défère chaque `removeEventListener` à un microtask (`Promise.resolve().then(...)`). Si un `addEventListener` du même tuple `(target, type, fn, capture)` arrive avant le flush, le remove en attente est marqué `cancelled` — le listener n'est jamais réellement décroché côté natif, donc la bubble-phase de tout dispatch en cours le voit. Les `removeEventListener` sans `addEventListener` matching se flushent normalement. Les addEventListener sont toujours appelés natif (idempotent per spec, vérifié sur Lightpanda) pour rester safe si le `cancel` mis-fire.
-
-Trade-off : un appelant qui inspecterait l'état du listener-set avant la fin du tick verra le listener encore attaché. Aucun framework connu ne fait ça.
+Vérifié 2026-05-13 sur build local `1.0.0-dev.6200+198c4e5a` (HEAD `198c4e5a`) via probe direct CDP (sans polyfill injecté) : repro retourne `["capture-pre", "capture-post", "bubble"]`, identique à Chrome/Cuprite. Premier nightly portant le fix : ≥6198. `MINIMUM_NIGHTLY_BUILD = 6199` couvre déjà. IIFE `patchListenerLifecycle` retirée de `polyfills.js`.
 
 ---
 
