@@ -69,6 +69,23 @@ module Capybara
         shift: 8,
       }.freeze
 
+      # US-layout shifted variants of the printable ASCII characters that
+      # don't just upcase. Used by dispatch_modified_char so
+      # send_keys([:shift, "1"]) types "!" instead of "1". Letters fall
+      # through to String#upcase via the default branch.
+      SHIFT_MAP = {
+        "1" => "!", "2" => "@", "3" => "#", "4" => "$", "5" => "%",
+        "6" => "^", "7" => "&", "8" => "*", "9" => "(", "0" => ")",
+        "-" => "_", "=" => "+", "[" => "{", "]" => "}", "\\" => "|",
+        ";" => ":", "'" => "\"", "," => "<", "." => ">", "/" => "?",
+        "`" => "~",
+      }.freeze
+      private_constant :SHIFT_MAP
+
+      def self.shifted(char)
+        SHIFT_MAP[char] || char.upcase
+      end
+
       def initialize(browser)
         @browser = browser
       end
@@ -155,7 +172,7 @@ module Capybara
       end
 
       def dispatch_modified_char(char, modifier_value, modifiers)
-        text = modifiers.include?(:shift) ? char.upcase : char
+        text = modifiers.include?(:shift) ? self.class.shifted(char) : char
         send_key_event("keyDown", { key: text, text: text, unmodifiedText: char }, modifiers: modifier_value)
         send_key_event("keyUp", { key: text }, modifiers: modifier_value)
       end
