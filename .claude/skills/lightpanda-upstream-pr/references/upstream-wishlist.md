@@ -184,7 +184,6 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **B4 — file uploads** | adds ~30, removes 17 skips | Net positive: enables a feature |
 | **B5#1, B5#2 — keyCode/charCode + caret keys** | 2 skip patterns | Synthetic CDP keyboard events need keyCode populated; ArrowLeft/Home/End need to move the input caret |
 | **B8, B9, B10 — datalist + frame-closed + getComputedStyle cascade** | ~10 skip patterns | Removes spec_helper entries |
-| **Bug #8 — listener lifecycle during dispatch** | ~50 | `patchListenerLifecycle` IIFE |
 | **Bug #9 — `requestSubmit()` cancel throws** | ~5 | `try { … } catch` wrap in CLICK_JS |
 | **Bug #10 — `Runtime.evaluate` scope leak** | ~10 | IIFE wrap + `exceptionDetails` surfacing in `Browser#evaluate`/`#execute` no-args paths |
 
@@ -213,9 +212,10 @@ A11 (`with_default_context_wait`) and A12 (`handle_navigation_crash`) are **NOT 
 | **B2 — Page.getNavigationHistory** | ~5 + CLAUDE.md note | DONE 2026-05-11 (PR #2289 + `Browser#back`/`#forward` switched to native CDP) |
 | **A22 — `Element.isContentEditable`** | NOT a drop-on-fix anymore | PR #2310 MERGED 2026-04-30 but the maintainer rewrote the implementation to always return `false` (commit `2af95af6`). Polyfill remains load-bearing — see A22 above. |
 | **Bug #6 — `fetch`/`XHR` FormData multipart encoding** | 0 (no gem-side polyfill existed) | DONE 2026-05-06 (PR #2358). Turbo Drive form submits started working as soon as the nightly carrying the fix was installed. |
+| **Bug #8 — listener lifecycle during dispatch** | ~50 | DONE 2026-05-11 (commit `8d5eef44` "Improve events" — dedup check in `register` now skips `removed=true` entries; `patchListenerLifecycle` IIFE removed from `polyfills.js`). First nightly carrying the fix: ≥6198. Verified 2026-05-13 on build `1.0.0-dev.6200+198c4e5a` via direct-CDP probe (no polyfill injected). |
 | **A11 + A12 — defensive helpers** | NOT drop-on-fix | Issues closed (#2187 2026-05-04, #1849 2026-03-16) but helpers stay as defense-in-depth — see A-entries above. |
 
-**Total remaining drop-on-fix surface (2026-05-12 re-tally)**: roughly **~205 LOC of gem-side code** plus ~14 spec_helper skip patterns. Of what remains, A23 (`innerText` block-level newlines, ~50 LOC) and Bug #8 (`patchListenerLifecycle`, ~50 LOC) are tied for the largest single items; Bug #7's residual `enctype` + submitter overrides (~40 LOC) and B12 (`HTMLDialogElement` methods, ~30 LOC) round out the actionable top-4.
+**Total remaining drop-on-fix surface (2026-05-13 re-tally)**: roughly **~155 LOC of gem-side code** plus ~14 spec_helper skip patterns. Of what remains, A23 (`innerText` block-level newlines, ~50 LOC) is the largest single item; Bug #7's residual `enctype` + submitter overrides (~45 LOC) and B12 (`HTMLDialogElement` methods, ~30 LOC) round out the actionable top-3.
 
 ---
 
@@ -237,7 +237,7 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 6. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
 7. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
 
-Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#8, #9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet.
+Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 
 ### New bugs not yet folded into this wishlist (discovered 2026-05-04 → 2026-05-06 via Turbo Drive probes)
 
@@ -245,7 +245,7 @@ Tracked in `UPSTREAM_BUGS.md` at gem root. Each has a gem-side polyfill in `poly
 
 - **~~Bug #6~~ — FormData multipart encoding — FIXED upstream 2026-05-06** by PR #2358 ("net: multipart-encode FormData bodies in fetch and XMLHttpRequest"). No gem-side polyfill existed (encoding lives in Zig), so nothing to drop on the gem side — Turbo Drive form submits started working as soon as the nightly carrying #2358 was installed. Build floor for the fix: nightly ≥ ~6090.
 - **Bug #7 — Form IDL accessors — PARTIALLY FIXED upstream**. `HTMLFormElement.{method, action, target, name, acceptCharset}` accessors landed 2026-03-15 (`src/browser/webapi/element/html/Form.zig:208-211`) — predating when we filed this bug from the gem side; the polyfill's `name in proto` guard means those branches were already auto-no-op. **Still missing upstream**: `HTMLFormElement.enctype` getter (the property Turbo's `FormSubmission` constructor actually fetches first); the entire submitter side — `formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate` on `HTMLButtonElement` and `HTMLInputElement`. These are what keep `patchFormIDL` IIFE (~70 LOC) load-bearing in `polyfills.js`. **Filing opportunity**: split into a tiny issue for just `enctype` + the five submitter overrides — the patterns to mirror are right there in the same file.
-- **Bug #8 — `addEventListener` during capture-phase invisible to in-flight bubble-phase** — WHATWG DOM §2.9 step 5.4 violation. Breaks Turbo's `submitBubbled` interception; form submits become full-page navigations instead of Turbo fetches. Gem polyfills via `patchListenerLifecycle` IIFE (~50 LOC) which defers `removeEventListener` to a microtask.
+- **~~Bug #8~~ — `addEventListener` during capture-phase invisible to in-flight bubble-phase — FIXED upstream 2026-05-11** by commit `8d5eef44` ("Improve events"). The dedup check in `register` now skips `removed=true` entries, so the remove+add-during-capture idiom appends a fresh listener visible to the in-flight bubble phase. Verified 2026-05-13 on build `1.0.0-dev.6200+198c4e5a` via direct-CDP probe; `patchListenerLifecycle` IIFE (~50 LOC) removed from `polyfills.js`. First nightly carrying the fix: ≥6198.
 - **Bug #9 — `requestSubmit()` throws when a listener cancels the SubmitEvent** — HTML §4.10.21.5 step 5 says it must return silently when cancelled. Lightpanda throws `JsException`. Gem workaround: `try { this.form.requestSubmit(this); } catch (e) {}` around `CLICK_JS`'s submit path.
 - **Bug #10 — `Runtime.evaluate` retains `const`/`let` top-level bindings between CDP calls** — V8 spec says each `Runtime.evaluate` runs in a fresh script; Lightpanda shares the scope so a second `const x = ...` throws `SyntaxError: Identifier 'x' has already been declared`. Gem workaround: wrap every no-args `evaluate(expr)` / `execute(expr)` in an IIFE on the Ruby side + surface `exceptionDetails`.
 
