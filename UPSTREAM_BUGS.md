@@ -2,16 +2,17 @@
 
 Inventaire des limitations du binaire Lightpanda découvertes en exécutant des suites Capybara réelles (Rails 8 + Hotwire). Chaque bug est documenté avec un repro minimal et un workaround côté gem.
 
-Quand un bug est résolu upstream, le polyfill correspondant dans `lib/capybara/lightpanda/javascripts/polyfills.js` peut être retiré (les `if (!feature)` font de toute façon des no-ops).
+Quand un bug est résolu upstream, le workaround correspondant côté gem peut être retiré.
 
 ## Bugs résolus / rétractés
 
-Numérotation conservée — référencée depuis `polyfills.js`, `auto_scripts.rb`, les tests, et la wishlist.
+Numérotation conservée — référencée depuis les tests et la wishlist.
 
 - **Bug #1** — `Element.prototype.click()` via `Runtime.callFunctionOn`. Rétracté 2026-05-04 (ne reproduit pas en probe CDP pur). `CLICK_JS` reste en place car load-bearing pour Bug #3.
 - **Bug #2** — `MouseEvent` dispatch via `Runtime.callFunctionOn`. Rétracté 2026-05-04.
 - **Bug #5** — `HTMLFormElement.prototype.requestSubmit()`. Fixé upstream par PR #2253 (mergé 2026-04-27).
 - **Bug #6** — `fetch` / `XHR` n'encodent pas `FormData` en multipart. Fixé upstream 2026-05-06 par PR #2358 ("net: multipart-encode FormData bodies in fetch and XMLHttpRequest"). Build floor ~6090, couvert par `MINIMUM_NIGHTLY_BUILD = 6109`. Aucun polyfill côté gem n'existait (encoding en Zig). Les 4 tests `skip` dans `test/features/hotwire_zones_probe_test.rb` peuvent maintenant tomber.
+- **Bug #7** — IDL `enctype` / `formMethod` / `formEnctype` / `formAction` / `formTarget` / `formNoValidate` retournaient `undefined` quand l'attribut HTML correspondant était absent. Fixé upstream 2026-05-14 par PR #2450 ("forms: add enctype + 5 submitter form-* IDL accessors", commit `143bffdfe`). Le polyfill `patchFormIDL` a été retiré et `lib/capybara/lightpanda/javascripts/polyfills.js` supprimé — c'était le dernier polyfill du fichier. ⚠️ PR #2450 a mergé après le cut du nightly 2026-05-14 : `MINIMUM_NIGHTLY_BUILD` doit être bumpé au premier nightly contenant `143bffdfe` avant que le retrait soit shippable.
 - **Bug #8** — `addEventListener` pendant capture-phase invisible à la bubble-phase. Fixé upstream 2026-05-11 par commit `8d5eef44` ("Improve events"). Premier nightly portant le fix : ≥6198. `MINIMUM_NIGHTLY_BUILD = 6199` couvre déjà.
 
 ---
@@ -76,46 +77,6 @@ Bloque toute UI utilisant `<dialog>` natif (très courant en Rails 8 + DaisyUI /
 ### Suivi
 
 Tracé dans `references/upstream-wishlist.md` comme **B12** — à driver upstream prochainement.
-
----
-
-## Bug #7 — IDL `enctype` / `method` / `action` / `formMethod` / `formEnctype` / `formAction` retournent `undefined`
-
-Sur `HTMLFormElement` ainsi que sur les soumetteurs (`HTMLButtonElement`, `HTMLInputElement`), les attributs IDL censés refléter `enctype`, `method`, `action`, `target` (et leurs variantes `formEnctype`, `formMethod`, `formAction`, `formTarget`, `formNoValidate` côté soumetteur) renvoient `undefined` quand l'attribut HTML correspondant est absent. Per WHATWG HTML §4.10, ces propriétés doivent toujours retourner une string : missing-value default `"application/x-www-form-urlencoded"` pour `enctype`, `"get"` pour `method`, l'URL du document pour `action` quand l'attribut est vide, et `""` pour les overrides côté soumetteur. Reproductible sur build `1.0.0-nightly.6051+d360fcc0` (vérifié 2026-05-05).
-
-### Repro minimal
-
-```html
-<form id="f" method="post" action="/x">
-  <button id="b" type="submit">Send</button>
-</form>
-```
-
-```js
-var f = document.getElementById('f');
-var b = document.getElementById('b');
-console.log(typeof f.enctype);          // "undefined"   — devrait être "string" ("application/x-www-form-urlencoded")
-console.log(typeof b.formMethod);       // "undefined"   — devrait être "string" ("")
-console.log(typeof b.formEnctype);      // "undefined"   — devrait être "string" ("")
-console.log(typeof b.formAction);       // "undefined"   — devrait être "string" ("")
-```
-
-### Impact
-
-Bloquant pour Turbo Drive : `FormSubmission` constructor appelle `getEnctype(form, submitter)` qui fait `(submitter?.formEnctype || form.enctype).toLowerCase()`. Les deux retournant `undefined`, on crash avec `TypeError: Cannot read properties of undefined (reading 'toLowerCase')` sur le premier form submit Turbo-géré. Stack trace observée :
-
-```
-at fetchEnctypeFromString (turbo.es2017-esm.min.js:11:9314)
-at getEnctype (turbo.es2017-esm.min.js:11:19474)
-at new FormSubmission (turbo.es2017-esm.min.js:11:15114)
-at Navigator.submitForm (turbo.es2017-esm.min.js:25:21488)
-at Session.formSubmitted (turbo.es2017-esm.min.js:25:40196)
-at HTMLDocument.submitBubbled (turbo.es2017-esm.min.js:11:21226)
-```
-
-### Workaround côté gem
-
-`polyfills.js` → IIFE `patchFormIDL` qui définit chaque getter manquant via `Object.defineProperty` sur `HTMLFormElement.prototype`, `HTMLButtonElement.prototype` et `HTMLInputElement.prototype`. Chaque getter lit l'attribut HTML correspondant et applique le default spec (`normEnctype` / `normMethod`) ou retourne `""` côté soumetteur pour préserver l'idiome `submitter.formX || form.X` qu'utilisent Turbo et Hotwire. Garde `name in proto` → no-op dès qu'une nightly Lightpanda implémente nativement.
 
 ---
 
