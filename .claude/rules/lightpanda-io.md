@@ -17,12 +17,13 @@ Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 619
 
 Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect via WebSocket at `ws://127.0.0.1:9222`. Compatible with Puppeteer, Playwright (partial), and chromedp.
 
-### Implemented CDP Domains (18 total)
+### Implemented CDP Domains (19 total)
 
 | Domain | File | Notes |
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
 | **Browser** | browser.zig | Basic browser-level commands |
+| **Console** | console.zig | `Console.messageAdded` event; `Runtime.consoleAPICalled` wired up when `Runtime.enable` is on (PR #2339, merged 2026-05-13). The gem's Turbo activity tracker depends on `Runtime.consoleAPICalled`. |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs; `setUserAgentOverride` works |
@@ -31,7 +32,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe/worker loading; was `setSubframeLoading` until PR #2426, also extended in PR #2440 to accept a `worker` flag) |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride` |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, cache control (`clearBrowserCache`/`canClearBrowserCache`, PR #2454; `requestServedFromCache` event + `Response.fromDiskCache` field, PRs #2453/#2455 — none used by this gem yet) |
 | **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors (use `LP.handleJavaScriptDialog`). |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
@@ -52,6 +53,7 @@ Page.getNavigationHistory    Page.navigateToHistoryEntry
 Runtime.enable               Runtime.evaluate
 Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
+Runtime.consoleAPICalled (event)
 DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
 DOM.describeNode
 Network.getAllCookies        Network.setCookie
@@ -90,6 +92,7 @@ DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
 Network.setCacheDisabled (stub)
+Network.clearBrowserCache    Network.canClearBrowserCache    Network.requestServedFromCache (event)
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
 Fetch.enable                 Fetch.disable
@@ -209,7 +212,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.2.9. Tags drop the `v` prefix (`0.2.9`); pre-2026-04 tags use `v` (`v0.2.6`). Asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus `lightpanda-0.2.9-1-{aarch64,x86_64}.pkg.tar.zst` (Arch).
+- Latest release: 0.3.0 (2026-05-13). Tags drop the `v` prefix (`0.3.0`); pre-2026-04 tags use `v` (`v0.2.6`). Asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus Debian packages `lightpanda_0.3.0_{amd64,arm64}.deb` (the Arch `.pkg.tar.zst` assets shipped through ≤0.2.9 were dropped in 0.3.0).
 
 ## Differences from Chrome/Chromium CDP
 
