@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-05-13 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `25367b52` (2026-04-22). No new commits on `main` since prior 2026-05-12 review. No gem-relevant changes — Outstanding adoption candidates and Diverged-on-purpose entries below stay valid.
+**Last reviewed**: 2026-05-14 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `25367b52` (2026-04-22). No new commits on `main` since the 2026-05-13 review. No gem-relevant changes — Outstanding adoption candidates and Diverged-on-purpose entries below stay valid.
 
 ### Adopted
 
@@ -30,7 +30,6 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 ### Outstanding adoption candidates
 
 - **[tiny] `Node#exists?` predicate** — `lib/ferrum/node.rb` ↔ our `Node`. We raise `ObsoleteNode` from `ensure_connected`; a quiet `exists?` check (returns boolean instead of raising) is a small ergonomic win.
-- **[tiny] `Frame#parent` and `Frame#frame_element`** — Ferrum 0.17 (May 2025) ↔ our `lib/capybara/lightpanda/frame.rb`. We track `parent_id` already; exposing `parent` (resolves to the parent `Frame`) and `frame_element` (the `<iframe>` Node hosting this frame) matches Ferrum's API and is purely additive.
 - **[medium] Frame `Runtime#evaluate` / `evaluate_async` / `execute` / `evaluate_func` / `evaluate_on` family** — `lib/ferrum/frame/runtime.rb` ↔ our `Node#call` + ad-hoc `Browser#call_function_on`. Ferrum's split (a) wraps raw expressions vs. function declarations consistently, (b) supports `awaitPromise: true` for async evaluation, (c) passes `Node` arguments through `DOM.resolveNode`. Worth at least pulling the `evaluate_async` shape — we don't currently have Promise-aware evaluation. Caveat: Lightpanda's `Runtime.evaluate` is shaky after navigation (issue #2187), so any async path needs the retry helper above.
 - **[tiny] `Network::Exchange` typed wrapper** — `lib/ferrum/network/exchange.rb` ↔ would replace the loose `{request_id:, url:, method:, response: …}` hashes in our `Network#traffic`. Ferrum exposes `request`, `response`, `finished?`, `blob?`, `loader_id`, `unknown` predicates. Useful when callers want to inspect failed/pending requests; currently they have to peek into the raw hash shape.
 
@@ -40,6 +39,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 - **`Node#click` uses JS `this.click()` / fetch+swap, not CDP `Input.dispatchMouseEvent`** — Ferrum dispatches mouse events through CDP and computes content quads (hence its `CoordinatesNotFoundError`). Lightpanda has no real layout, so coordinate-based clicks don't help; JS click + the gem's submit-bypass pipeline is the only thing that actually navigates. See `CLICK_JS` in `node.rb` and the "No rendering engine (CSS much improved)" limitation in `lightpanda-io.md`.
 - **No `Mouse` / `Keyboard` coordinate abstractions in our public API** — Ferrum exposes `Mouse#scroll_by`, `Mouse#move`, `Keyboard#type` etc. Lightpanda lacks rendering and `window.scrollTo` is a no-op, so most mouse abstractions would be misleading. We have `Browser#keyboard` for `send_keys` only.
 - **Returns from CDP serialized via `returnByValue: true`** — Ferrum's `Frame::Runtime#handle_response` walks rich `Runtime.RemoteObject` types (boolean/number/string/undefined/function/object with array/date/null subtypes). We sidestep the whole tree by serializing values upfront, accepting the loss of node references in JS return values in exchange for simpler code paths. Different design, same goal.
+- **No `Frame` class — frame state is `Browser#frame_stack`** — Ferrum models frames as first-class `Frame` objects with `#parent` / `#frame_element` accessors (`lib/ferrum/frame.rb`). Our gem has no `Frame` class: `Browser#frame_stack` is a public `attr_reader` holding an `Array<Node>` of `<iframe>` elements, and `Driver#switch_to_frame` only ever needs `:top` / `:parent` / element. The data Ferrum's `Frame#frame_element` (hosting `<iframe>`) and `Frame#parent` expose is already directly available as `frame_stack.last` / `frame_stack[-2]` — `driver.rb` uses it that way for `frame_url` / `frame_title`. A `Frame` wrapper would be a speculative abstraction over already-exposed, single-use data. `window.frameElement` (Lightpanda PR #2437) doesn't change this: the gem tracks the hosting iframe from *outside* the frame, which is strictly more robust than reading it from inside the frame's V8 context.
 
 ---
 
@@ -48,7 +48,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-05-13 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, "Extend Node#set with additional input types (#295)"). No new commits since prior 2026-05-12 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted.
+**Last reviewed**: 2026-05-14 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, "Extend Node#set with additional input types (#295)"). No new commits since the 2026-05-13 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted.
 
 ### Adopted
 
