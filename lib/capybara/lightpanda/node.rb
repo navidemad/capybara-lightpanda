@@ -113,6 +113,17 @@ module Capybara
         call("function() { this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true})) }")
       end
 
+      # Lightpanda has no rendering engine — `window.scrollTo` / `scrollIntoView`
+      # are no-ops at the browser level, and `getBoundingClientRect` reflects
+      # logical-DOM geometry rather than scroll-aware viewport coords. So
+      # there's nothing to scroll. Silently succeed so callers like
+      # `session.scroll_to(find('#thing'))` (Selenium-flavoured specs leaning
+      # on real layout) don't crash with NotImplementedError; assertions that
+      # depend on post-scroll visibility are already gated by the cuprite
+      # fallback in dual-driver setups.
+      def scroll_to(*); end
+      def scroll_by(*); end
+
       # Dispatch an arbitrary DOM event by name. Mirrors Cuprite's Node#trigger
       # — picks the right Event constructor for known mouse/focus/form names
       # and falls back to a generic Event for everything else (so callers can

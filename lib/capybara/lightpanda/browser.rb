@@ -403,19 +403,31 @@ module Capybara
 
       # Find child elements within a specific node.
       # Returns an array of remote object ID strings.
+      #
+      # Wrapped in `with_default_context_wait` so a click that triggered a
+      # navigation immediately before the find (e.g. a fill_in following a
+      # link that mutated the DOM) doesn't race against
+      # `Runtime.executionContextCreated` and surface as
+      # `NoExecutionContextError`. `find_in_document` and `find_in_frame`
+      # already use the same wrapper; `find_within` was the odd one out.
       def find_within(remote_object_id, method, selector)
-        result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
-        extract_node_object_ids(result)
+        with_default_context_wait do
+          result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
+          extract_node_object_ids(result)
+        end
       rescue JavaScriptError => e
         raise_invalid_selector(e, method, selector)
       end
 
       # Ancestor chain of `remote_object_id` from parentNode up to (but
       # excluding) `document`, returned as an array of remote object IDs.
-      # Mirrors Cuprite's JS `parents` helper.
+      # Mirrors Cuprite's JS `parents` helper. Same `with_default_context_wait`
+      # wrapping as `find_within` — same race window applies.
       def parents_of(remote_object_id)
-        result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
-        extract_node_object_ids(result)
+        with_default_context_wait do
+          result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
+          extract_node_object_ids(result)
+        end
       end
 
       # objectId of document.activeElement, or nil if none/document detached.

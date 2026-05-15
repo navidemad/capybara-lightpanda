@@ -157,9 +157,24 @@ module Capybara
         def parse_message(data)
           JSON.parse(data, max_nesting: false)
         rescue JSON::ParserError => e
-          warn "Failed to parse WebSocket message: #{e.message}"
+          warn_parse_failure(e.message)
 
           nil
+        end
+
+        # Dedupe identical parse-failure warnings per WebSocket instance.
+        # Lightpanda occasionally emits CDP frames that embed a bare
+        # `undefined` token (invalid JSON — see upstream-wishlist.md A41)
+        # and a complex page reproduces the same frame on every load,
+        # which previously flooded test output with one warn per frame.
+        # Surface the first occurrence per unique error so the upstream
+        # regression stays visible, then suppress repeats.
+        def warn_parse_failure(message)
+          @parse_warnings ||= {}
+          return if @parse_warnings[message]
+
+          @parse_warnings[message] = true
+          warn "Failed to parse WebSocket message: #{message}"
         end
       end
     end
