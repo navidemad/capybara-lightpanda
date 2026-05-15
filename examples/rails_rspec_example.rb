@@ -93,6 +93,18 @@ RSpec.describe "capybara-lightpanda system tests", type: :feature do
       click_link "Create another"
       expect(page).to have_css("h1", text: "New Contact")
     end
+
+    it "selects multiple values in a multi-select" do
+      select "Low", from: "Priority"
+      select "High", from: "Priority"
+      expect(page).to have_select("Priority", selected: %w[Low High])
+    end
+
+    it "appends to an input via send_keys" do
+      find("#name").set("Jane")
+      find("#name").send_keys(" Doe")
+      expect(page).to have_field("Name", with: "Jane Doe")
+    end
   end
 
   # ── Element inspection ─────────────────────────────────────────
@@ -113,6 +125,29 @@ RSpec.describe "capybara-lightpanda system tests", type: :feature do
     it "reads attributes" do
       expect(find("#name")["placeholder"]).to eq("Full name")
       expect(find("#email")["type"]).to eq("email")
+    end
+
+    it "reads bounding rect" do
+      visit "/dashboard"
+      rect = find("#stats").rect
+      # rect mirrors getBoundingClientRect — useful for layout-aware assertions.
+      %w[x y top bottom left right width height].each { |k| expect(rect).to have_key(k) }
+    end
+
+    it "detects obscured elements" do
+      visit "/dynamic"
+      expect(find("#toggleable", visible: :all)).to be_obscured
+
+      click_button "Toggle Section"
+      expect(find("#toggleable")).not_to be_obscured
+    end
+
+    it "walks the ancestor chain" do
+      visit "/dashboard"
+      cell = find(:xpath, "//td[text()='Visitors']")
+      # Driver-level method — Capybara's Element wraps standard methods only.
+      parent_tags = cell.base.parents.map(&:tag_name)
+      %w[tr tbody table body html].each { |tag| expect(parent_tags).to include(tag) }
     end
   end
 
@@ -239,6 +274,13 @@ RSpec.describe "capybara-lightpanda system tests", type: :feature do
       expect(result["items"]).to eq([1, 2])
       expect(result["nested"]["ok"]).to be true
     end
+
+    it "waits for in-flight requests via wait_for_network_idle" do
+      visit "/dynamic"
+      click_button "Fetch"
+      page.driver.wait_for_network_idle(timeout: 5)
+      expect(page).to have_css("#fetch-result", text: "Fetch done")
+    end
   end
 
   # ── Cookies ────────────────────────────────────────────────────
@@ -282,6 +324,13 @@ RSpec.describe "capybara-lightpanda system tests", type: :feature do
       end
       # Back in main page context
       expect(find("#main-title")).to have_text("Main Page")
+    end
+
+    it "clicks a button inside an iframe" do
+      within_frame find("#inner-frame") do
+        click_button "Frame button"
+        expect(page).to have_css("#frame-content", text: "Button clicked")
+      end
     end
   end
 

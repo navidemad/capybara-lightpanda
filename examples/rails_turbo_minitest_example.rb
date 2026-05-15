@@ -57,6 +57,7 @@ class TurboFrameTest < TurboSystemTest
 
   def test_frame_link_loads_new_content
     visit "/"
+    wait_for_turbo_init
     assert_css "#notif-badge", text: "3 unread"
     click_link "Write a post"
     assert_css "#post-title"

@@ -210,6 +210,14 @@ Capybara.default_driver = :lightpanda
 Capybara.default_max_wait_time = 5
 Capybara.server = :puma, { Silent: true }
 
-def wait_for_turbo_init
-  sleep 1
+# Turbo loads from a CDN as an ES module, so its readiness is async.
+# Poll instead of `sleep N` — same shape, deterministic, faster.
+def wait_for_turbo_init(timeout: 5)
+  deadline = Time.now + timeout
+  loop do
+    return true if evaluate_script("typeof Turbo !== 'undefined' && !!Turbo.session")
+    raise "Turbo did not initialize within #{timeout}s" if Time.now > deadline
+
+    sleep 0.05
+  end
 end
