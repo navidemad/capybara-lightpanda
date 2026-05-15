@@ -1,0 +1,104 @@
+diff --git a/.mise.toml b/.mise.toml
+index 236067d..0ef00b6 100644
+--- a/.mise.toml
++++ b/.mise.toml
+@@ -1,4 +1,22 @@
+ [tools]
+-yarn = "1"
++ruby = "3.3.9"
++yarn = "1.22.22"
+ postgres = "13.12"
+-redis = "6.0.9"
++node = "20.16.0"
++# Redis: using Homebrew's redis (already running on :6379) instead of compiling 6.0.9.
++
++[env]
++APP_PROTOCOL = "http://"
++APP_DOMAIN = "localhost:3000"
++COMMUNITY_NAME = "DEV(local)"
++DEFAULT_EMAIL = "yo@dev.to"
++FOREM_OWNER_SECRET = "secret"
++DATABASE_NAME = "Forem_development"
++DATABASE_URL = "postgresql://localhost:5432/Forem_development"
++DATABASE_NAME_TEST = "Forem_test"
++DATABASE_URL_TEST = "postgresql://localhost:5432/Forem_test"
++REDIS_URL = "redis://localhost:6379"
++SESSION_KEY = "_Dev_Community_Session"
++SESSION_EXPIRY_SECONDS = "1209600"
++RAILS_MAX_THREADS = "5"
++COVERAGE = "false"
+diff --git a/.ruby-version b/.ruby-version
+index 15a2799..3b47f2e 100644
+--- a/.ruby-version
++++ b/.ruby-version
+@@ -1 +1 @@
+-3.3.0
++3.3.9
+diff --git a/Gemfile b/Gemfile
+index 16d2439..962736a 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -161,7 +161,7 @@ group :development, :test do
+ end
+ 
+ group :test do
+-  gem "cuprite", "~> 0.13" # Capybara driver for Chrome
++  gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__" # Capybara driver for Lightpanda (CDP)
+   gem "exifr", ">= 1.3.6" # EXIF Reader is a module to read EXIF from JPEG and TIFF images
+   gem "factory_bot_rails", "~> 6.2" # factory_bot is a fixtures replacement with a straightforward definition syntax, support for multiple build strategies
+   gem "fakeredis", "~> 0.8.0" # Fake (In-memory) driver for redis-rb. Useful for testing environment and machines without Redis.
+diff --git a/spec/support/initializers/capybara.rb b/spec/support/initializers/capybara.rb
+index 1ae762e..1bac92a 100644
+--- a/spec/support/initializers/capybara.rb
++++ b/spec/support/initializers/capybara.rb
+@@ -12,7 +12,7 @@
+   end
+ 
+   config.before(:each, :js, type: :system) do
+-    driven_by :better_cuprite
++    driven_by :lightpanda
+   end
+ end
+ 
+diff --git a/spec/support/initializers/cuprite.rb b/spec/support/initializers/cuprite.rb
+index 6860b14..f109b7b 100644
+--- a/spec/support/initializers/cuprite.rb
++++ b/spec/support/initializers/cuprite.rb
+@@ -1,36 +1 @@
+-require "capybara/cuprite"
+-
+-REMOTE_CHROME_URL = ENV.fetch("CHROME_URL", nil)
+-REMOTE_CHROME_HOST, REMOTE_CHROME_PORT =
+-  if REMOTE_CHROME_URL
+-    URI.parse(REMOTE_CHROME_URL).then do |uri|
+-      [uri.host, uri.port]
+-    end
+-  end
+-
+-remote_chrome =
+-  begin
+-    if REMOTE_CHROME_URL.nil?
+-      false
+-    else
+-      Socket.tcp(REMOTE_CHROME_HOST, REMOTE_CHROME_PORT, connect_timeout: 1).close
+-      true
+-    end
+-  rescue Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SocketError
+-    false
+-  end
+-
+-remote_options = remote_chrome ? { url: REMOTE_CHROME_URL } : {}
+-
+-Capybara.register_driver(:better_cuprite) do |app|
+-  Capybara::Cuprite::Driver.new(
+-    app,
+-    window_size: [1200, 800],
+-    browser_options: {},
+-    process_timeout: 60,
+-    timeout: 15,
+-    pending_connection_errors: false,
+-    inspector: true,
+-    headless: !ENV["HEADLESS"].in?(%w[n 0 no false]), **remote_options
+-  )
+-end
++require "capybara-lightpanda"

@@ -1,0 +1,74 @@
+diff --git a/spree/admin/Gemfile b/spree/admin/Gemfile
+index 159819f..b33bf1d 100644
+--- a/spree/admin/Gemfile
++++ b/spree/admin/Gemfile
+@@ -6,7 +6,7 @@ gem 'spree_emails', path: '../emails'
+ gem 'sprockets-rails', '>= 3.5.2'
+ 
+ group :test, :development do
+-  gem 'selenium-webdriver'
++  gem 'capybara-lightpanda', path: '__CAPYBARA_LIGHTPANDA_PATH__'
+ end
+ 
+ gemspec
+diff --git a/spree/admin/spec/spec_helper.rb b/spree/admin/spec/spec_helper.rb
+index 0c98a13..e6a22bb 100644
+--- a/spree/admin/spec/spec_helper.rb
++++ b/spree/admin/spec/spec_helper.rb
+@@ -82,7 +82,7 @@ RSpec.configure do |config|
+   config.before(:suite) do
+     Spree::Events.disable!
+     Capybara.match = :smart
+-    Capybara.javascript_driver = :selenium_chrome_headless
++    Capybara.javascript_driver = :lightpanda
+     Capybara.default_max_wait_time = 10
+     Capybara.raise_server_errors = false
+     # Clean out the database state before the tests run
+diff --git a/spree/core/lib/spree/testing_support/capybara_config.rb b/spree/core/lib/spree/testing_support/capybara_config.rb
+index c0bb2cc..19c5850 100644
+--- a/spree/core/lib/spree/testing_support/capybara_config.rb
++++ b/spree/core/lib/spree/testing_support/capybara_config.rb
+@@ -1,10 +1,11 @@
+ require 'capybara-screenshot/rspec'
++require 'capybara-lightpanda'
+ 
+ Capybara.configure do |config|
+   config.save_path = ENV['CI_ARTIFACTS'] if ENV['CI_ARTIFACTS']
+   config.server = :puma
+   config.default_driver = :rack_test
+-  config.javascript_driver = :selenium_chrome_headless
++  config.javascript_driver = :lightpanda
+   config.default_max_wait_time = ENV.fetch('CAPYBARA_MAX_WAIT_TIME', 45).to_i
+   config.always_include_port = true
+   config.match = :smart
+@@ -16,30 +17,3 @@ if ENV['WEBDRIVER'] == 'accessible'
+   require 'capybara/accessible'
+   Capybara.javascript_driver = :accessible
+ end
+-
+-Capybara.register_driver :selenium_chrome_headless do |app|
+-  options = ::Selenium::WebDriver::Chrome::Options.new
+-
+-  options.add_argument '--headless=new'
+-  options.add_argument '--disable-gpu'
+-
+-  # Larger window size helps with dialog rendering in headless mode
+-  options.add_argument '--window-size=1920,1080'
+-  options.add_argument '--disable-search-engine-choice-screen'
+-
+-  # Required for running in CI containers
+-  options.add_argument '--no-sandbox'
+-  options.add_argument '--disable-dev-shm-usage'
+-
+-  # Disable timers being throttled in background pages/tabs. Useful for parallel test runs.
+-  options.add_argument '--disable-background-timer-throttling'
+-
+-  # Normally, Chrome will treat a 'foreground' tab instead as backgrounded if the surrounding window is occluded (aka
+-  # visually covered) by another window. This flag disables that. Useful for parallel test runs.
+-  options.add_argument '--disable-backgrounding-occluded-windows'
+-
+-  # This disables non-foreground tabs from getting a lower process priority. Useful for parallel test runs.
+-  options.add_argument '--disable-renderer-backgrounding'
+-
+-  Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
+-end

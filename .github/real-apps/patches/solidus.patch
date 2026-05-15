@@ -1,0 +1,32 @@
+diff --git a/Gemfile b/Gemfile
+index 57e5ff3..c98d76e 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -46,7 +46,7 @@ gem "factory_bot_rails", ">= 4.8", require: false
+ group :backend do
+   gem "capybara", "~> 3.13", require: false
+   gem "capybara-screenshot", ">= 1.0.18", require: false
+-  gem "selenium-webdriver", require: false
++  gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__", require: false
+ 
+   # JavaScript testing
+   gem "teaspoon", require: false
+diff --git a/core/lib/spree/testing_support/capybara_driver.rb b/core/lib/spree/testing_support/capybara_driver.rb
+index a9a7979..562ad10 100644
+--- a/core/lib/spree/testing_support/capybara_driver.rb
++++ b/core/lib/spree/testing_support/capybara_driver.rb
+@@ -1,9 +1,10 @@
+ # frozen_string_literal: true
+ 
+-require "selenium/webdriver"
++require "capybara-lightpanda"
+ require "capybara-screenshot"
+ 
+-Capybara::Screenshot.register_driver(:selenium_headless) do |driver, path|
+-  driver.browser.save_screenshot(path)
++Capybara::Screenshot.register_driver(:lightpanda) do |driver, path|
++  # Lightpanda has no rendering engine — screenshots are a hardcoded 1920x1080 PNG.
++  driver.save_screenshot(path)
+ end
+-Capybara.javascript_driver = (ENV["CAPYBARA_DRIVER"] || :selenium_headless).to_sym
++Capybara.javascript_driver = (ENV["CAPYBARA_DRIVER"] || :lightpanda).to_sym

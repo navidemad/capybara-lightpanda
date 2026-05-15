@@ -1,0 +1,94 @@
+diff --git a/.ruby-version b/.ruby-version
+index c4e41f9..c5106e6 100644
+--- a/.ruby-version
++++ b/.ruby-version
+@@ -1 +1 @@
+-4.0.3
++4.0.4
+diff --git a/Gemfile b/Gemfile
+index f9edab7..535418a 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -134,8 +134,7 @@ group :test do
+ 
+   # Browser integration testing
+   gem 'capybara', '~> 3.39'
+-  gem 'capybara-playwright-driver'
+-  gem 'playwright-ruby-client', '1.59.1', require: false # Pinning the exact version as it needs to be kept in sync with the installed npm package
++  gem 'capybara-lightpanda', path: '__CAPYBARA_LIGHTPANDA_PATH__'
+ 
+   # Used to reset the database between system tests
+   gem 'database_cleaner-active_record'
+diff --git a/spec/rails_helper.rb b/spec/rails_helper.rb
+index a3a0629..39cd9af 100644
+--- a/spec/rails_helper.rb
++++ b/spec/rails_helper.rb
+@@ -51,7 +51,8 @@ end
+ 
+ RSpec.configure do |config|
+   # By default, skip specs that need full JS browser
+-  config.filter_run_excluding :js
++  # Temporarily disabled while testing capybara-lightpanda — we WANT the :js specs.
++  # config.filter_run_excluding :js
+ 
+   # By default, skip specs that need elastic search server
+   config.filter_run_excluding :search
+diff --git a/spec/support/browser_errors.rb b/spec/support/browser_errors.rb
+index 860c8bd..5bf342a 100644
+--- a/spec/support/browser_errors.rb
++++ b/spec/support/browser_errors.rb
+@@ -17,11 +17,10 @@ RSpec.configure do |config|
+     @ignored_js_errors_for_spec = []
+ 
+     example.metadata[:js_console_messages] ||= []
+-    Capybara.current_session.driver.with_playwright_page do |page|
+-      page.on('console', lambda { |msg|
+-        example.metadata[:js_console_messages] << { type: msg.type, text: msg.text, location: msg.location, page: msg.page.url }
+-      })
+-    end
++    # Lightpanda driver does not expose Playwright's `with_playwright_page` /
++    # console-subscription hook. Console-error assertions in the after-hook
++    # therefore see an empty list. Real JS errors are still raised back as
++    # Ruby exceptions through Capybara when they surface during interactions.
+   end
+ 
+   config.after(:each, :js, type: :system) do |example|
+diff --git a/spec/support/capybara.rb b/spec/support/capybara.rb
+index aa548c3..44bec6e 100644
+--- a/spec/support/capybara.rb
++++ b/spec/support/capybara.rb
+@@ -1,13 +1,12 @@
+ # frozen_string_literal: true
+ 
++require 'capybara-lightpanda'
++
+ Capybara.server_host = 'localhost'
+ Capybara.server_port = 3000
+ Capybara.app_host = "http://#{Capybara.server_host}:#{Capybara.server_port}"
+ 
+-Capybara.register_driver(:playwright) do |app|
+-  Capybara::Playwright::Driver.new(app)
+-end
+-Capybara.javascript_driver = :playwright
++Capybara.javascript_driver = :lightpanda
+ 
+ if ENV['CI'].present?
+   # Reduce intermittent failures from slow CI runner environment
+diff --git a/.mise.toml b/.mise.toml
+new file mode 100644
+index 0000000..7e72ab5
+--- /dev/null
++++ b/.mise.toml
+@@ -0,0 +1,12 @@
++[tools]
++ruby = "4.0.4"
++node = "24.14.1"
++# yarn 4 ships via corepack-enabled node; package.json has packageManager: yarn@4.14.1
++# Postgres: using Postgres.app (system, port 5432)
++# Redis: using Homebrew redis (system, port 6379)
++# Elasticsearch: not running — chewy specs will be skipped/fail until ES is up.
++
++[env]
++# Mastodon's chewy/Elasticsearch configuration is enabled by default;
++# disable it for the test run since we don't have a local ES instance.
++ES_ENABLED = "false"

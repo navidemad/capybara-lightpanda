@@ -1,0 +1,156 @@
+diff --git a/.ruby-version b/.ruby-version
+index 2aa5131..1cf8253 100644
+--- a/.ruby-version
++++ b/.ruby-version
+@@ -1 +1 @@
+-3.4.7
++3.4.6
+diff --git a/Gemfile b/Gemfile
+index 85852c1..ef9a166 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -4,6 +4,8 @@ source "https://rubygems.org"
+ 
+ ruby RUBY_VERSION
+ 
++gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__"
++
+ gem "decidim", path: "."
+ gem "decidim-ai", path: "."
+ gem "decidim-collaborative_texts", path: "."
+diff --git a/decidim-dev/decidim-dev.gemspec b/decidim-dev/decidim-dev.gemspec
+index 36de4b4..44aa38e 100644
+--- a/decidim-dev/decidim-dev.gemspec
++++ b/decidim-dev/decidim-dev.gemspec
+@@ -64,7 +64,7 @@ Gem::Specification.new do |s|
+   s.add_dependency "rubocop-rspec_rails", ">= 2.31", "< 2.33"
+   s.add_dependency "rubocop-rubycw", "~> 0.2.0"
+   s.add_dependency "rubocop-yard", ">= 1.0", "< 1.2"
+-  s.add_dependency "selenium-webdriver", "~> 4.9"
++  s.add_dependency "capybara-lightpanda"
+   s.add_dependency "simplecov", "~> 0.22.0"
+   s.add_dependency "simplecov-cobertura", "~> 3.1.0"
+   s.add_dependency "spring", "~> 4.0"
+diff --git a/decidim-dev/lib/decidim/dev/test/rspec_support/capybara.rb b/decidim-dev/lib/decidim/dev/test/rspec_support/capybara.rb
+index 381002a..c592c6c 100644
+--- a/decidim-dev/lib/decidim/dev/test/rspec_support/capybara.rb
++++ b/decidim-dev/lib/decidim/dev/test/rspec_support/capybara.rb
+@@ -1,7 +1,7 @@
+ # frozen_string_literal: true
+ 
+ require "parallel_tests"
+-require "selenium-webdriver"
++require "capybara-lightpanda"
+ 
+ module Decidim
+   # Helpers meant to be used only during capybara test runs.
+@@ -47,79 +47,19 @@ Capybara.server_port = 1.step do |num|
+   end
+ end
+ 
++# All three driver names alias to :lightpanda. Lightpanda has no rendering engine,
++# so PWA/mobile-emulation specifics (notifications, viewport, etc.) are not
++# honored — those specs are expected to fail or be skipped under this driver.
+ Capybara.register_driver :headless_chrome do |app|
+-  options = Selenium::WebDriver::Chrome::Options.new
+-  options.args << "--explicitly-allowed-ports=#{Capybara.server_port}"
+-  options.args << "--headless=new"
+-  options.args << "--disable-search-engine-choice-screen" # Prevents closing the window normally
+-  # Do not limit browser resources
+-  options.args << "--disable-dev-shm-usage"
+-  options.args << "--no-sandbox"
+-  options.args << if ENV["BIG_SCREEN_SIZE"].present?
+-                    "--window-size=1920,3000"
+-                  else
+-                    "--window-size=1920,1080"
+-                  end
+-  options.args << "--ignore-certificate-errors" if ENV["TEST_SSL"]
+-
+-  options.add_preference(:download,
+-                         directory_upgrade: true,
+-                         prompt_for_download: false,
+-                         default_directory: DownloadHelper::PATH.to_s)
+-  options.add_preference(:browser, set_download_behavior: { behavior: "allow" })
+-
+-  Capybara::Selenium::Driver.new(
+-    app,
+-    browser: :chrome,
+-    options:
+-  )
++  Capybara::Lightpanda::Driver.new(app)
+ end
+ 
+-# In order to work with PWA apps, Chrome cannot be run in headless mode, and requires
+-# setting up special prefs and flags
+ Capybara.register_driver :pwa_chrome do |app|
+-  options = Selenium::WebDriver::Chrome::Options.new
+-  options.args << "--explicitly-allowed-ports=#{Capybara.server_port}"
+-  # If we have a headless browser things like the offline navigation feature stop working,
+-  # so we need to have a headful/recapitated (aka not headless) browser for these specs
+-  # options.args << "--headless"
+-  options.args << "--no-sandbox"
+-  # Do not limit browser resources
+-  options.args << "--disable-dev-shm-usage"
+-  # Add pwa.lvh.me host as a secure origin
+-  options.args << "--unsafely-treat-insecure-origin-as-secure=http://pwa.lvh.me:#{Capybara.server_port}"
+-  # User data flag is mandatory when preferences and locale state is set
+-  options.args << "--user-data-dir=/tmp/decidim_tests_user_data_#{rand(1000)}"
+-  options.args << if ENV["BIG_SCREEN_SIZE"].present?
+-                    "--window-size=1920,3000"
+-                  else
+-                    "--window-size=1920,1080"
+-                  end
+-  # Set notifications allowed in http protocol
+-  options.local_state["browser.enabled_labs_experiments"] = ["enable-system-notifications@1", "unsafely-treat-insecure-origin-as-secure"]
+-  # Mark notification permission as enabled
+-  options.prefs["profile.default_content_setting_values.notifications"] = 1
+-
+-  Capybara::Selenium::Driver.new(
+-    app,
+-    browser: :chrome,
+-    options:
+-  )
++  Capybara::Lightpanda::Driver.new(app)
+ end
+ 
+ Capybara.register_driver :iphone do |app|
+-  options = Selenium::WebDriver::Chrome::Options.new
+-  options.args << "--headless=new"
+-  options.args << "--no-sandbox"
+-  # Do not limit browser resources
+-  options.args << "--disable-dev-shm-usage"
+-  options.add_emulation(device_name: "iPhone XR")
+-
+-  Capybara::Selenium::Driver.new(
+-    app,
+-    browser: :chrome,
+-    options:
+-  )
++  Capybara::Lightpanda::Driver.new(app)
+ end
+ 
+ server_options = { Silent: true, queue_requests: false }
+@@ -150,11 +90,11 @@ RSpec.configure do |config|
+       # JavaScript sets the cookie also for all subdomains but localhost is a
+       # special case.
+       domain = ".#{domain}" unless domain == "localhost"
+-      page.driver.browser.execute_cdp(
+-        "Network.setCookie",
+-        domain:,
++      # Lightpanda driver: use the gem's cookies API instead of Chrome's execute_cdp.
++      page.driver.browser.cookies.set(
+         name: Decidim.consent_cookie_name,
+         value: { essential: true }.to_json,
++        domain: domain,
+         path: "/",
+         expires: 1.day.from_now.to_i,
+         same_site: "Lax"
+@@ -175,7 +115,7 @@ RSpec.configure do |config|
+   end
+ 
+   config.after(type: :system) do |example|
+-    warn page.driver.browser.logs.get(:browser) unless example.metadata[:driver].eql?(:rack_test)
++    # Lightpanda doesn't expose Selenium's `.logs` accessor; skip the console dump.
+   end
+ 
+   config.include Decidim::CapybaraTestHelpers, type: :system
