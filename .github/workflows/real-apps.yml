@@ -43,7 +43,10 @@ jobs:
           - name: forem
             repo: forem/forem
             sha: 3a22391a6d83ee1fda6a185799c86dcb76800318
-            ruby: "3.3"
+            # Forem's Gemfile reads .ruby-version (patched to 3.3.9) and
+            # demands an exact match, so pin Ruby to that version exactly
+            # rather than letting setup-ruby resolve "3.3" to the latest patch.
+            ruby: "3.3.9"
             node: "20"
             work_dir: "."
             spec_dir: "."
@@ -200,9 +203,21 @@ jobs:
           ref: ${{ matrix.sha }}
           path: target
 
+      - name: Install common OS deps
+        if: steps.guard.outputs.skip != 'true'
+        # libvips is loaded at Rails boot by every target via image_processing /
+        # ruby-vips (Active Storage variants, file attachments, etc.). Ubuntu
+        # 24.04 renames the runtime package to libvips42t64 (time64 migration);
+        # 22.04 still has libvips42 — try the new name first, fall back.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips42t64 \
+            || sudo apt-get install -y libvips42 \
+            || sudo apt-get install -y libvips
+
       - name: Install extra OS deps
         if: steps.guard.outputs.skip != 'true' && matrix.extra_apt != ''
-        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.extra_apt }}
+        run: sudo apt-get install -y ${{ matrix.extra_apt }}
 
       - name: Set per-target env overrides
         if: steps.guard.outputs.skip != 'true'
