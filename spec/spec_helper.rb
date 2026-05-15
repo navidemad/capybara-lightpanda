@@ -3,13 +3,24 @@
 require "bundler/setup"
 require "rspec"
 require "socket"
+require "zlib"
 require "capybara/spec/spec_helper"
 require "capybara/spec/test_app"
 require "capybara-lightpanda"
 
 PROJECT_ROOT = File.expand_path("..", __dir__)
 
-Capybara.save_path = File.join(PROJECT_ROOT, "spec", "tmp")
+# Worker partitioning: when RSPEC_WORKER_COUNT > 1, each worker process
+# (identified by RSPEC_WORKER_INDEX) runs ~1/Nth of the examples, partitioned
+# by a CRC32 hash of the example's full description. Stable across runs so
+# the same example always lands on the same worker.
+WORKER_COUNT = ENV.fetch("RSPEC_WORKER_COUNT", "1").to_i
+WORKER_INDEX = ENV.fetch("RSPEC_WORKER_INDEX", "0").to_i
+
+# Per-worker paths so concurrent workers don't stomp on each other's
+# tmp files (rspec status persistence, Capybara save_path).
+worker_suffix = WORKER_COUNT > 1 ? "_#{WORKER_INDEX}" : ""
+Capybara.save_path = File.join(PROJECT_ROOT, "spec", "tmp#{worker_suffix}")
 Capybara.server = :puma, { Silent: true }
 
 # Find an available port to avoid conflicts with running Lightpanda instances.
@@ -34,7 +45,20 @@ module TestSessions
 end
 
 RSpec.configure do |config|
-  config.example_status_persistence_file_path = File.join(PROJECT_ROOT, "tmp", "rspec_status.txt")
+  config.example_status_persistence_file_path = File.join(PROJECT_ROOT, "tmp", "rspec_status#{worker_suffix}.txt")
+
+  # Worker partitioning: skip examples whose CRC32 bucket doesn't match this
+  # worker. Uses before(:each) + skip so the partitioning runs per-example
+  # (define_derived_metadata propagates to all examples in a group, which
+  # would force every example in a top-level describe onto the same worker).
+  if WORKER_COUNT > 1
+    config.before(:each) do |example|
+      desc = example.full_description
+      if (Zlib.crc32(desc) % WORKER_COUNT) != WORKER_INDEX
+        skip "partitioned to a different worker (#{WORKER_INDEX} of #{WORKER_COUNT})"
+      end
+    end
+  end
 
   # AUDIT_SKIPS=1 bypasses the skip blocks below and tags those specs with
   # `:skip_audit` instead, then filter_run_when_matching narrows the run to
@@ -170,8 +194,13 @@ RSpec.configure do |config|
   end
 
   config.around do |example|
-    # Clean up any temp files after each test
-    FileUtils.rm_rf(Capybara.save_path) if File.directory?(Capybara.save_path)
+    # Clean up any temp files after each test. Guard against nil: a few
+    # Capybara shared specs (save_page, save_screenshot) set save_path to nil
+    # in their `before`, and if a Lightpanda failure mid-example prevents
+    # their `after` from restoring it, the next example's around lands here
+    # with nil. Skip cleanup in that case rather than crashing the around.
+    save_path = Capybara.save_path
+    FileUtils.rm_rf(save_path) if save_path && File.directory?(save_path)
     example.run
   end
 

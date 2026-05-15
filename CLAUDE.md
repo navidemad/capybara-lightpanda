@@ -22,7 +22,9 @@ bundle exec rake test:incremental     # PREFERRED: run test files one at a time,
 bundle exec rake test                 # Run only test/features/driver_test.rb (~2 min)
 bundle exec rake test:unit            # Run test/unit/*_test.rb (~1s)
 bundle exec rake test:all             # Run every Minitest file under test/
-bundle exec rake spec:shared          # Run spec/features/session_spec.rb (~10 min, RSpec — full Capybara shared specs)
+bundle exec rake spec:shared          # Run spec/features/session_spec.rb (~5-6 min, RSpec — full Capybara shared specs)
+bundle exec rake spec:shared:parallel # Same suite split across workers (default: Etc.nprocessors/2; override with RSPEC_WORKERS=N).
+                                      #   Partitions examples by CRC32 of full description. ~90s on 4 workers, ~50s on 8.
 bundle exec rake suite                # Full suite: test:all + spec:shared
 bundle exec rubocop                   # Lint
 bundle exec rubocop -a                # Lint with auto-fix
