@@ -23,7 +23,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
 | **Browser** | browser.zig | Basic browser-level commands |
-| **Console** | console.zig | `Console.messageAdded` event; `Runtime.consoleAPICalled` wired up when `Runtime.enable` is on (PR #2339, merged 2026-05-13). The gem's Turbo activity tracker depends on `Runtime.consoleAPICalled`. |
+| **Console** | console.zig | `Console.messageAdded` event (PR #2339, merged 2026-05-13); console.* calls are also still mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on. The gem's Turbo activity tracker depends on `Runtime.consoleAPICalled` (no migration needed). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs; `setUserAgentOverride` works |
@@ -32,7 +32,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe/worker loading; was `setSubframeLoading` until PR #2426, also extended in PR #2440 to accept a `worker` flag) |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, cache control (`clearBrowserCache`/`canClearBrowserCache`, PR #2454; `requestServedFromCache` event + `Response.fromDiskCache` field, PRs #2453/#2455 — none used by this gem yet) |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. Cache control: `clearBrowserCache` / `canClearBrowserCache` (PR #2454), `setCacheDisabled` properly bypasses CacheLayer (PR #2456), `Network.requestServedFromCache` event (PR #2453), `fromDiskCache` field on `Network.Response` (PR #2455) — all merged 2026-05-14/15. Not used by this gem (reset disposes the BrowserContext, which wipes cache implicitly). |
 | **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors (use `LP.handleJavaScriptDialog`). |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
@@ -91,8 +91,9 @@ DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
-Network.setCacheDisabled (stub)
-Network.clearBrowserCache    Network.canClearBrowserCache    Network.requestServedFromCache (event)
+Network.setCacheDisabled (now properly disables CacheLayer, PR #2456)
+Network.clearBrowserCache    Network.canClearBrowserCache (PR #2454)
+Network.requestServedFromCache (event, PR #2453)
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
 Fetch.enable                 Fetch.disable
@@ -161,6 +162,7 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
 | #2363 | Navigation | `Page.navigate("about:blank")` against a non-blank tab fires the full event sequence but does NOT replace the document — `window.location.href`, `document.URL`, and the frame tree all still report the previous URL. **Gem sidesteps it**: `Browser#reset` disposes the BrowserContext via `Target.disposeBrowserContext` (ferrum/cuprite parity) instead of navigating to `about:blank`. |
 | #2400 | Runtime | Child iframe navigation invalidates main frame's `executionContextId` for CDP drivers. Root cause: shared V8 inspector `CONTEXT_GROUP_ID` + single `IsolatedWorld` per BrowserContext, so any `frameNavigated` re-emits `executionContextCreated` for the main frame's V8 context under the child's frameId and churns the id. Opt-in workaround (`LP.configureLoading {subFrame: false}`, formerly `LP.setSubframeLoading` until PR #2426) NOT applicable to this gem — would break `switch_to_frame` / `within_frame`. **Fixed upstream 2026-05-13** by the pair PR #2431 (`ffc2baa7`, removes duplicate `Page.frameNavigated` emission + reuses child frame's V8 context for `inspector.contextCreated`) **and** PR #2445 (`12971a24`, resets browser-context arena on `Target.disposeBrowserContext`, which restores per-spec state hygiene during `Driver#reset!`). Validation against local main build `1.0.0-dev.6200+198c4e5a` across seeds 62467 / 99999 / 11111: **24 examples, 0 failures, 4 pending** (the four `frame is closed` cases stay pending due to an unrelated browser limitation). First nightly carrying both: ≥6199. **Gem-side mitigation removed**: the `refresh_frame_stack!` rescue in `Browser#find_in_frame` has been dropped along with the floor bump to `MINIMUM_NIGHTLY_BUILD = 6199`, so every supported binary already has the upstream fix. |
 | #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only). Trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect cycles. Currently not gem-relevant — gem tests don't load Worker-heavy pages. Keep on watchlist. |
+| #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory — long-running pages with repeated DOM mutation leak monotonically. Not gem-relevant for short-session test runs (`Driver#reset!` disposes the BrowserContext and a fresh page is built), but a very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. Opened 2026-05-14 against nightly 6240. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.
 
