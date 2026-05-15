@@ -121,7 +121,12 @@ jobs:
     # on a per-matrix-entry condition.
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector:pg16 is postgres:16 with the pgvector extension
+        # pre-installed. Forem's schema.rb does `CREATE EXTENSION "vector"` at
+        # db:schema:load time; vanilla postgres:16 doesn't ship vector.so.
+        # The other targets don't use pgvector but the image is a drop-in
+        # replacement.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
