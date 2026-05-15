@@ -48,7 +48,9 @@ jobs:
             work_dir: "."
             spec_dir: "."
             db_create: true
-            spec: "spec/system/user_views_logo_spec.rb spec/system/sidebar_tooltip_spec.rb spec/system/feedback_message_spec.rb"
+            # ~228 examples; locally ~89% pass (24 fails in comment-tree /
+            # announcement-banner visibility + 1 file-upload limitation).
+            spec: "spec/system/homepage spec/system/comments spec/system/articles spec/system/authentication"
           - name: solidus
             repo: solidusio/solidus
             sha: 57280f7b79a9829a77f1e3555ea24c98fafb7327
@@ -59,7 +61,9 @@ jobs:
             spec_dir: "backend"
             db_create: false
             pre_spec: "bundle exec rake -f backend/Rakefile test_app"
-            spec: "spec/features/admin/javascript_format_money_spec.rb"
+            # Full admin features suite: ~338 examples, locally ~77% pass
+            # (~77 fails clustered on select2 autocomplete + file uploads).
+            spec: "spec/features/admin"
           - name: spree
             repo: spree/spree
             sha: 3548616e242ca2eb43acbc81c338f8f618143e4d
@@ -71,7 +75,10 @@ jobs:
             spec_dir: "spree/admin"
             db_create: false
             pre_spec: "bundle exec rake test_app"
-            spec: "spec/features/spree/admin/getting_started_spec.rb"
+            # Curated subset: avoid the 16-min full-features run. Mix of
+            # cleanly-passing files (getting_started, settings) plus the
+            # NoExecutionContextError-prone customers_spec for regression signal.
+            spec: "spec/features/spree/admin/getting_started_spec.rb spec/features/spree/admin/settings spec/features/spree/admin/api_keys_spec.rb spec/features/spree/admin/products/option_types_spec.rb spec/features/spree/admin/customers_spec.rb"
           - name: decidim
             repo: decidim/decidim
             sha: d22e3584e07045fea4f1c759454cbfd5478168e7
@@ -86,7 +93,9 @@ jobs:
             # `../spec/decidim_dummy_app` from cwd=decidim-core). Move it.
             db_create: false
             pre_spec: "cd decidim-core && bundle exec rake decidim:generate_external_test_app && mkdir -p ../spec && rm -rf ../spec/decidim_dummy_app && mv spec/decidim_dummy_app ../spec/decidim_dummy_app"
-            spec: "spec/system/accesslist_spec.rb"
+            # accesslist locally was 4/4. Adding account_spec for an extra signal
+            # without pulling in authentication_spec (28/46 fails — too noisy).
+            spec: "spec/system/accesslist_spec.rb spec/system/account_spec.rb"
           - name: mastodon
             repo: mastodon/mastodon
             sha: 8bbde181db0d6d79018fb1754a8296e753d47415
@@ -96,7 +105,11 @@ jobs:
             spec_dir: "."
             db_create: true
             extra_apt: "libidn11-dev"
-            spec: "spec/system/home_spec.rb --tag js"
+            # Most of Mastodon's :js specs are also :streaming-tagged and need
+            # the Node streaming server (skipped here). Without --tag js, all
+            # of home_spec + log_in_spec + log_out_spec run — a mix of rack_test
+            # baselines and the few :js specs that don't need streaming.
+            spec: "spec/system/home_spec.rb spec/system/log_in_spec.rb spec/system/log_out_spec.rb"
 
     name: ${{ matrix.name }}
 
@@ -307,7 +320,9 @@ jobs:
       - name: Run spec
         if: steps.guard.outputs.skip != 'true'
         working-directory: target/${{ matrix.spec_dir }}
-        run: bundle exec rspec ${{ matrix.spec }} --format documentation
+        # `--format progress` keeps dot/F output compact while the trailing
+        # failure block still prints full backtraces.
+        run: bundle exec rspec ${{ matrix.spec }} --format progress
 
       - name: Upload screenshots on failure
         if: failure() && steps.guard.outputs.skip != 'true'
