@@ -764,7 +764,6 @@ module Capybara
 
       def register_auto_scripts
         page_command("Page.addScriptToEvaluateOnNewDocument", source: AutoScripts::JS)
-        page_command("Page.addScriptToEvaluateOnNewDocument", source: AutoScripts::POLYFILLS_JS)
       end
 
       def subscribe_to_console_logs

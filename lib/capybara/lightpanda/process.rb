@@ -25,7 +25,7 @@ module Capybara
       # PR #2342 (<summary> click toggles parent <details>.open),
       # PR #2352 (HTMLInputElement.pattern + patternMismatch via V8 RegExp),
       # PR #2368 (events: report listener exceptions instead of halting
-      # dispatch — lets us drop the polyfills.js patchDispatch IIFE),
+      # dispatch — load-bearing for the gem's JS bundle dispatch assumptions),
       # PR #2289 (Page.getNavigationHistory + Page.navigateToHistoryEntry —
       # lets us drop the history.back()/history.forward() JS workaround in
       # Browser#back / #forward), PR #2305 (XPath 1.0: Document.evaluate,
@@ -38,10 +38,15 @@ module Capybara
       # — restores per-spec state hygiene during Driver#reset!, cures the
       # batch-mode pollution that PR #2431 alone exposed),
       # PR #2435 (dom: implement HTMLDialogElement.{show, showModal, close}
-      # natively — lets us drop the polyfills.js HTMLDialogElement block).
-      # Build 6199 = first nightly carrying all three 2026-05-13 merges
-      # (#2431, #2445, #2435); nightly 6198 was published before the merges.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6199")
+      # natively — load-bearing for the gem's HTMLDialogElement assumptions
+      # after polyfills.js was deleted),
+      # PR #2450 (forms: add enctype + 5 submitter form-* IDL accessors +
+      # text/plain submission — lets us delete polyfills.js entirely; reads
+      # of form.enctype / submitter.form{Action,Enctype,Method,NoValidate,
+      # Target} now return spec-typed values natively).
+      # Build 6220 = first nightly carrying PR #2450 (merge commit
+      # 143bffdf, 2026-05-14); nightly 6219 was cut before the merge.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6220")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

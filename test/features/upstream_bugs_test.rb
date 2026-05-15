@@ -4,8 +4,8 @@ require_relative "../test_helper"
 
 # Tests d'intégration ciblés sur les bugs upstream du binaire Lightpanda
 # documentés dans UPSTREAM_BUGS.md. Chaque exemple exerce le scénario qui
-# crashe nativement, puis vérifie que le workaround côté gem (CLICK_JS,
-# polyfills.js) le fait passer.
+# crashait nativement ; certains sont désormais corrigés upstream, d'autres
+# restent couverts par un workaround côté gem (`CLICK_JS` dans `node.rb`).
 #
 # Si une PR upstream supprime un workaround, ces tests doivent rester verts
 # sur le binaire patché — ils décrivent le contrat fonctionnel attendu, pas
@@ -18,9 +18,9 @@ describe "Upstream Lightpanda bug repros & workarounds" do
   after { session.reset_session! }
 
   # ───────────────────────────────────────────────
-  # Bug #3 — Element.dispatchEvent crashes during the bubble phase.
-  # Workaround: polyfills.js monkey-patches dispatchEvent to fall back to
-  # manual ancestor propagation when the native bubble throws.
+  # Bug #3 — Element.dispatchEvent halted the whole dispatch path when a
+  # listener threw (see UPSTREAM_BUGS.md). No JS polyfill ships for it
+  # anymore; `CLICK_JS` in `node.rb` stays load-bearing. Contract test.
   # ───────────────────────────────────────────────
 
   describe "Bug #3 — synthetic clicks must bubble to document" do
@@ -59,9 +59,9 @@ describe "Upstream Lightpanda bug repros & workarounds" do
   end
 
   # ───────────────────────────────────────────────
-  # Bug #4 — HTMLDialogElement.{showModal, show, close} unimplemented.
-  # Workaround: polyfills.js adds prototype methods that toggle [open]
-  # and dispatch the 'close' event.
+  # Bug #4 — HTMLDialogElement.{showModal, show, close} were unimplemented;
+  # implemented natively upstream by PR #2435 (covered by the gem's
+  # MINIMUM_NIGHTLY_BUILD floor). Kept as a contract/regression test.
   # ───────────────────────────────────────────────
 
   describe "Bug #4 — HTMLDialogElement polyfill" do
