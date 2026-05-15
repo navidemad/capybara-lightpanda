@@ -130,25 +130,26 @@ jobs:
     env:
       RAILS_ENV: test
       DISABLE_SPRING: "1"
+      # libpq defaults: any Postgres client connection picks these up when the
+      # app's database.yml leaves user/host/port unset (Decidim's generated
+      # dummy app does this). Harmless for SQLite-only targets (Solidus, Spree).
+      # IMPORTANT: do NOT set DATABASE_URL at job level — Rails treats it as an
+      # absolute override, which forces Solidus's sqlite-configured dummy app
+      # to try to load the `pg` adapter that isn't in its Gemfile.
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      # Mastodon's database.yml reads DB_* explicitly.
       DB_HOST: localhost
       DB_PORT: "5432"
       DB_USER: postgres
       DB_PASS: postgres
-      # Mastodon-specific (skip Elasticsearch path)
+      # Mastodon: skip Elasticsearch path.
       ES_ENABLED: "false"
-      # Forem-specific (URL/cookie/Redis settings normally provided by .env)
-      APP_PROTOCOL: "http://"
-      APP_DOMAIN: "localhost:3000"
-      COMMUNITY_NAME: "DEV(local)"
-      DEFAULT_EMAIL: "yo@dev.to"
-      FOREM_OWNER_SECRET: "secret"
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/Forem_development"
-      DATABASE_URL_TEST: "postgresql://postgres:postgres@localhost:5432/Forem_test"
-      DATABASE_NAME: "Forem_development"
-      DATABASE_NAME_TEST: "Forem_test"
+      # Shared Redis URL — used by Forem, Decidim, and Mastodon. Apps that
+      # don't speak Redis just ignore the var.
       REDIS_URL: "redis://localhost:6379"
-      SESSION_KEY: "_Dev_Community_Session"
-      SESSION_EXPIRY_SECONDS: "1209600"
 
     steps:
       - name: Should this matrix entry run?
@@ -189,6 +190,31 @@ jobs:
       - name: Install extra OS deps
         if: steps.guard.outputs.skip != 'true' && matrix.extra_apt != ''
         run: sudo apt-get update && sudo apt-get install -y ${{ matrix.extra_apt }}
+
+      - name: Set per-target env overrides
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          case "${{ matrix.name }}" in
+            forem)
+              # Forem reads these via ApplicationConfig (env-backed). It DOES
+              # use DATABASE_URL itself, so it's set here (Forem-only) rather
+              # than at job level where it'd shadow other apps' database.yml.
+              {
+                echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/Forem_development"
+                echo "DATABASE_URL_TEST=postgresql://postgres:postgres@localhost:5432/Forem_test"
+                echo "DATABASE_NAME=Forem_development"
+                echo "DATABASE_NAME_TEST=Forem_test"
+                echo "APP_PROTOCOL=http://"
+                echo "APP_DOMAIN=localhost:3000"
+                echo "COMMUNITY_NAME=DEV(local)"
+                echo "DEFAULT_EMAIL=yo@dev.to"
+                echo "FOREM_OWNER_SECRET=secret"
+                echo "SESSION_KEY=_Dev_Community_Session"
+                echo "SESSION_EXPIRY_SECONDS=1209600"
+              } >> "$GITHUB_ENV"
+              ;;
+          esac
 
       - name: Set up Ruby
         if: steps.guard.outputs.skip != 'true'
