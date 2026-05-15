@@ -12,6 +12,49 @@ RSpec::Core::RakeTask.new("spec:shared") do |t|
   t.pattern = "spec/features/session_spec.rb"
 end
 
+namespace :spec do
+  desc "Run shared specs across N parallel workers (default: Etc.nprocessors / 2, min 2)"
+  task :"shared:parallel" do
+    require "etc"
+    require "fileutils"
+
+    workers = ENV.fetch("RSPEC_WORKERS", [Etc.nprocessors / 2, 2].max).to_i
+    log_dir = File.expand_path("tmp/spec_parallel", __dir__)
+    FileUtils.rm_rf(log_dir)
+    FileUtils.mkdir_p(log_dir)
+
+    puts "Running spec:shared across #{workers} workers (logs: #{log_dir})"
+    start = Time.now
+
+    pids = (0...workers).map do |idx|
+      log_file = File.join(log_dir, "worker_#{idx}.log")
+      env = { "RSPEC_WORKER_COUNT" => workers.to_s, "RSPEC_WORKER_INDEX" => idx.to_s }
+      pid = Process.spawn(env, "bundle exec rspec spec/features/session_spec.rb",
+                          out: log_file, err: %i[child out])
+      puts "  worker #{idx}: pid=#{pid} log=#{log_file}"
+      pid
+    end
+
+    statuses = pids.map do |pid|
+      _, status = Process.waitpid2(pid)
+      status
+    end
+    elapsed = Time.now - start
+
+    puts "\n=== Parallel run: #{elapsed.round(1)}s wall clock ==="
+    failed = false
+    statuses.each_with_index do |status, idx|
+      log = File.read(File.join(log_dir, "worker_#{idx}.log"))
+      summary = log.lines.grep(/^\d+ examples?, /).last&.strip || "(no summary)"
+      mark = status.success? ? "ok" : "FAIL"
+      puts "  worker #{idx} [#{mark}, exit=#{status.exitstatus}]: #{summary}"
+      failed ||= !status.success?
+    end
+
+    abort "spec:shared:parallel: one or more workers failed" if failed
+  end
+end
+
 Rake::TestTask.new(:test) do |t|
   t.libs << "lib" << "test"
   t.test_files = FileList["test/features/driver_test.rb"]
