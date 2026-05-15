@@ -28,7 +28,9 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.targets == '' || github.event.inputs.targets == 'all' || contains(github.event.inputs.targets, matrix.name) }}
+    # NOTE: `matrix` context is not available in job-level `if:`, so per-target
+    # filtering happens in the "Should this matrix entry run?" step below; every
+    # later step is gated on `steps.guard.outputs.skip != 'true'`.
     strategy:
       fail-fast: false
       matrix:
@@ -149,12 +151,35 @@ jobs:
       SESSION_EXPIRY_SECONDS: "1209600"
 
     steps:
+      - name: Should this matrix entry run?
+        id: guard
+        env:
+          TARGETS: ${{ github.event.inputs.targets }}
+          EVENT_NAME: ${{ github.event_name }}
+          ENTRY_NAME: ${{ matrix.name }}
+        run: |
+          # Run if: scheduled, or no input given, or input is "all", or the
+          # entry's name appears in the comma-separated `targets` input.
+          # Spaces in the input are stripped so "forem, spree" still works.
+          set -euo pipefail
+          normalized=",${TARGETS// /},"
+          if [ "$EVENT_NAME" = "schedule" ] || [ -z "$TARGETS" ] || [ "$TARGETS" = "all" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$normalized" == *",${ENTRY_NAME},"* ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping ${ENTRY_NAME} (not in targets: ${TARGETS})"
+          fi
+
       - name: Check out capybara-lightpanda
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/checkout@v6
         with:
           path: capybara-lightpanda
 
       - name: Check out ${{ matrix.repo }} @ ${{ matrix.sha }}
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/checkout@v6
         with:
           repository: ${{ matrix.repo }}
@@ -162,10 +187,11 @@ jobs:
           path: target
 
       - name: Install extra OS deps
-        if: matrix.extra_apt != ''
+        if: steps.guard.outputs.skip != 'true' && matrix.extra_apt != ''
         run: sudo apt-get update && sudo apt-get install -y ${{ matrix.extra_apt }}
 
       - name: Set up Ruby
+        if: steps.guard.outputs.skip != 'true'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
@@ -175,12 +201,13 @@ jobs:
           bundler-cache: false
 
       - name: Set up Node
-        if: matrix.node != ''
+        if: steps.guard.outputs.skip != 'true' && matrix.node != ''
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
 
       - name: Apply patch
+        if: steps.guard.outputs.skip != 'true'
         env:
           PATCH_NAME: ${{ matrix.name }}.patch
         run: |
@@ -196,20 +223,21 @@ jobs:
           git -C target diff --name-only
 
       - name: Configure idn-ruby native build (Mastodon)
-        if: matrix.name == 'mastodon'
+        if: steps.guard.outputs.skip != 'true' && matrix.name == 'mastodon'
         working-directory: target/${{ matrix.work_dir }}
         run: bundle config set build.idn-ruby --with-idn-dir=/usr
 
       - name: Bundle install
+        if: steps.guard.outputs.skip != 'true'
         working-directory: target/${{ matrix.work_dir }}
         run: bundle install --jobs 4 --retry 3
 
       - name: Enable corepack
-        if: matrix.node != ''
+        if: steps.guard.outputs.skip != 'true' && matrix.node != ''
         run: corepack enable
 
       - name: Yarn install
-        if: matrix.node != ''
+        if: steps.guard.outputs.skip != 'true' && matrix.node != ''
         working-directory: target/${{ matrix.work_dir }}
         run: |
           set -euo pipefail
@@ -227,20 +255,22 @@ jobs:
           fi
 
       - name: Create DB + load schema
-        if: matrix.db_create
+        if: steps.guard.outputs.skip != 'true' && matrix.db_create
         working-directory: target/${{ matrix.work_dir }}
         run: bundle exec rails db:create db:schema:load
 
       - name: Pre-spec hook
-        if: matrix.pre_spec != ''
+        if: steps.guard.outputs.skip != 'true' && matrix.pre_spec != ''
         working-directory: target/${{ matrix.work_dir }}
         run: ${{ matrix.pre_spec }}
 
       - name: Determine Lightpanda cache key
+        if: steps.guard.outputs.skip != 'true'
         id: lightpanda-cache-key
         run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Lightpanda nightly binary
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/lightpanda
@@ -249,11 +279,12 @@ jobs:
             lightpanda-${{ runner.os }}-
 
       - name: Run spec
+        if: steps.guard.outputs.skip != 'true'
         working-directory: target/${{ matrix.spec_dir }}
         run: bundle exec rspec ${{ matrix.spec }} --format documentation
 
       - name: Upload screenshots on failure
-        if: failure()
+        if: failure() && steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: screenshots-${{ matrix.name }}
@@ -263,7 +294,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload patch-reject hunks on failure
-        if: failure()
+        if: failure() && steps.guard.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: patch-rejects-${{ matrix.name }}
