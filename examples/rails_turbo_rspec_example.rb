@@ -67,6 +67,7 @@ RSpec.describe "Rails + Turbo system tests", type: :feature do
 
     it "clicking a frame link loads new content" do
       visit "/"
+      wait_for_turbo_init
       expect(page).to have_css("#notif-badge", text: "3 unread")
       click_link "Write a post"
       expect(page).to have_css("#post-title")

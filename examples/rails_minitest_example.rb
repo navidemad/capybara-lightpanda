@@ -101,6 +101,20 @@ class FormTest < SystemTest
     click_link "Create another"
     assert_css "h1", text: "New Contact"
   end
+
+  def test_multi_select
+    visit "/contacts/new"
+    select "Low", from: "Priority"
+    select "High", from: "Priority"
+    assert_select "Priority", selected: %w[Low High]
+  end
+
+  def test_send_keys
+    visit "/contacts/new"
+    find("#name").set("Jane")
+    find("#name").send_keys(" Doe")
+    assert_field "Name", with: "Jane Doe"
+  end
 end
 
 # ── Element state tests ────────────────────────────────────────────
@@ -123,6 +137,30 @@ class ElementStateTest < SystemTest
     assert_equal "Full name", find("#name")["placeholder"]
     assert_equal "email", find("#email")["type"]
   end
+
+  def test_rect
+    visit "/dashboard"
+    rect = find("#stats").rect
+    # rect mirrors getBoundingClientRect — useful for layout-aware assertions.
+    %w[x y top bottom left right width height].each { |k| assert rect.key?(k), "rect missing #{k}" }
+  end
+
+  def test_obscured
+    visit "/dynamic"
+    hidden = find("#toggleable", visible: :all)
+    assert_predicate hidden, :obscured?
+
+    click_button "Toggle Section"
+    refute_predicate find("#toggleable"), :obscured?
+  end
+
+  def test_parents
+    visit "/dashboard"
+    cell = find(:xpath, "//td[text()='Visitors']")
+    # Driver-level method — Capybara's Element wraps standard methods only.
+    parent_tags = cell.base.parents.map(&:tag_name)
+    %w[tr tbody table body html].each { |tag| assert_includes parent_tags, tag }
+  end
 end
 
 # ── Scoped finding tests ──────────────────────────────────────────
@@ -133,8 +171,10 @@ class ScopedFindingTest < SystemTest
     within "#stats" do
       rows = all(".stat")
       assert_equal 3, rows.length
-      assert_css ".name", text: "Visitors"
-      assert_css ".value", text: "1234"
+      within rows[0] do
+        assert_css ".name", text: "Visitors"
+        assert_css ".value", text: "1234"
+      end
     end
   end
 
@@ -253,6 +293,13 @@ class JavaScriptTest < SystemTest
     assert_equal [1, 2], result["items"]
     assert result["nested"]["ok"]
   end
+
+  def test_wait_for_network_idle
+    visit "/dynamic"
+    click_button "Fetch"
+    page.driver.wait_for_network_idle(timeout: 5)
+    assert_css "#fetch-result", text: "Fetch done"
+  end
 end
 
 # ── Cookie tests ───────────────────────────────────────────────────
@@ -296,6 +343,14 @@ class FrameTest < SystemTest
     end
     # Back in main context
     assert_css "#main-title", text: "Main Page"
+  end
+
+  def test_click_button_in_frame
+    visit "/frame_host"
+    within_frame find("#inner-frame") do
+      click_button "Frame button"
+      assert_css "#frame-content", text: "Button clicked"
+    end
   end
 end
 

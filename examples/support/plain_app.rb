@@ -88,6 +88,7 @@ class PagesController < ActionController::Base
       <div id="counter">Count: 0</div>
       <button id="btn-count" type="button">Increment</button>
       <button id="btn-delayed" type="button">Delayed Append</button>
+      <button id="btn-fetch" type="button">Fetch</button>
       <input id="live-search" type="text" placeholder="Type to search...">
       <div id="search-results"></div>
       <script>
@@ -116,6 +117,14 @@ class PagesController < ActionController::Base
             document.getElementById('output').appendChild(el);
           }, 200);
         });
+        document.getElementById('btn-fetch').addEventListener('click', function() {
+          fetch('/about').then(function() {
+            var el = document.createElement('p');
+            el.id = 'fetch-result';
+            el.textContent = 'Fetch done';
+            document.getElementById('output').appendChild(el);
+          });
+        });
         document.getElementById('live-search').addEventListener('input', function(e) {
           var results = document.getElementById('search-results');
           if (e.target.value.length > 0) {
@@ -139,7 +148,7 @@ class PagesController < ActionController::Base
   def frame_inner
     render inline: <<~HTML
       <p id="frame-content">Inside the iframe</p>
-      <a id="frame-link" href="#">Frame link</a>
+      <button id="frame-button" type="button" onclick="document.getElementById('frame-content').textContent = 'Button clicked'">Frame button</button>
     HTML
   end
 end
