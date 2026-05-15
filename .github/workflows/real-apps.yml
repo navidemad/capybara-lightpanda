@@ -43,11 +43,19 @@ jobs:
           - name: forem
             repo: forem/forem
             sha: 3a22391a6d83ee1fda6a185799c86dcb76800318
-            ruby: "3.3"
+            # Forem's Gemfile reads .ruby-version (patched to 3.3.9) and
+            # demands an exact match, so pin Ruby to that version exactly
+            # rather than letting setup-ruby resolve "3.3" to the latest patch.
+            ruby: "3.3.9"
             node: "20"
             work_dir: "."
             spec_dir: "."
             db_create: true
+            # `yarn build` populates app/assets/builds/ via esbuild — Forem's
+            # Sprockets manifest.js does `link_tree ../builds`, which dies if
+            # the directory doesn't exist. Locally this runs automatically
+            # under bin/dev / Spring; on CI we trigger it explicitly.
+            pre_spec: "yarn build"
             # ~228 examples; locally ~89% pass (24 fails in comment-tree /
             # announcement-banner visibility + 1 file-upload limitation).
             spec: "spec/system/homepage spec/system/comments spec/system/articles spec/system/authentication"
@@ -118,7 +126,12 @@ jobs:
     # on a per-matrix-entry condition.
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector:pg16 is postgres:16 with the pgvector extension
+        # pre-installed. Forem's schema.rb does `CREATE EXTENSION "vector"` at
+        # db:schema:load time; vanilla postgres:16 doesn't ship vector.so.
+        # The other targets don't use pgvector but the image is a drop-in
+        # replacement.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -200,9 +213,21 @@ jobs:
           ref: ${{ matrix.sha }}
           path: target
 
+      - name: Install common OS deps
+        if: steps.guard.outputs.skip != 'true'
+        # libvips is loaded at Rails boot by every target via image_processing /
+        # ruby-vips (Active Storage variants, file attachments, etc.). Ubuntu
+        # 24.04 renames the runtime package to libvips42t64 (time64 migration);
+        # 22.04 still has libvips42 — try the new name first, fall back.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips42t64 \
+            || sudo apt-get install -y libvips42 \
+            || sudo apt-get install -y libvips
+
       - name: Install extra OS deps
         if: steps.guard.outputs.skip != 'true' && matrix.extra_apt != ''
-        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.extra_apt }}
+        run: sudo apt-get install -y ${{ matrix.extra_apt }}
 
       - name: Set per-target env overrides
         if: steps.guard.outputs.skip != 'true'
