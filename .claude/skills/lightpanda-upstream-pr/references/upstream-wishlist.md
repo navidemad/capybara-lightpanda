@@ -66,6 +66,18 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
 - **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The phantom-newline gem-side bug goes away too if upstream collapses required line breaks around empty blocks.
 
+### A41. CDP wire frames embed raw `undefined` token (invalid JSON)
+
+- **Today (observed 2026-05-15 against installed nightly during Decidim smoke run; reproducible per page load)**: a CDP reply payload near the `sessionId` field serializes a JavaScript `undefined` value as the bare token `undefined` instead of valid JSON `null` (or omitting the key). Each Decidim system spec triggers ~4 of these, surfaced by the gem's WebSocket `JSON.parse` rescue:
+  ```
+  Failed to parse WebSocket message: unexpected character: 'undefined}]},"sessionId":"SID-N"' at line 1 column ~800
+  ```
+  The 800-column hint points to a multi-target / multi-context payload — likely `Target.targetInfoChanged` or `Runtime.executionContextCreated` for the auxiliary contexts Decidim creates (it runs multi-tenant via `switch_to_host`).
+- **Want**: emit `null` (or omit the key) wherever a value is `undefined`. JSON has no `undefined` literal — the current frame is unparseable by any strict CDP client (Playwright, Puppeteer would crash here; our gem rescues + drops).
+- **Upstream issue/PR**: not yet filed. Capturing one offending raw frame via `LIGHTPANDA_LOG_LEVEL=debug` is the prerequisite — without the exact CDP method we can't point the maintainer at a Zig serializer site.
+- **Gem workaround**: `lib/capybara/lightpanda/client/web_socket.rb#parse_message` catches `JSON::ParserError` and returns `nil`. Currently flooded with one `warn` per frame; deduped (warn once per unique error message per WebSocket instance) so a single occurrence still surfaces but doesn't drown other test output.
+- **Drop-on-fix**: nothing strictly removable on the gem side — the `JSON::ParserError` rescue stays as defense-in-depth for future malformed frames. The visible win is the disappearance of the warning under normal use and parity with strict-JSON CDP clients.
+
 ---
 
 ## B. Missing CDP / DOM methods
@@ -126,6 +138,14 @@ Three independent issues:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/polyfills.js:8-36` (~30 LOC) — adds `showModal` (with `InvalidStateError` parity), `show`, `close([returnValue])` on the prototype. Toggles `[open]` and dispatches a `'close'` event. No focus trap, no backdrop, no top-layer (Lightpanda has no layout anyway).
 - **Drop-on-fix**: remove the dialog block from `polyfills.js`. ~30 LOC. The spec test in `spec/features/upstream_bugs_spec.rb` becomes a regression check for the upstream implementation.
 
+### B13. `Network.emulateNetworkConditions` not implemented
+
+- **Today (observed 2026-05-15)**: not in the implemented Network methods listed in `lightpanda-io.md`. Decidim's `decidim-dev/lib/decidim/dev/test/rspec_support/network_conditions_helpers.rb#with_browser_in_offline_mode` (lines 3-12) drives the toggle via Selenium's `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. PWA tests at `decidim-core/spec/system/pwa_features_spec.rb` depend on it.
+- **Want**: standard Chrome CDP semantics — offline toggle plus optional latency / download / upload throughput throttles. Aligns with the Network domain Lightpanda already serves (cookies, headers, request lifecycle events).
+- **Upstream issue/PR**: not filed. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (now native) and `Log.entryAdded` (still missing).
+- **Gem workaround**: none. Decidim's helper is not callable through this gem as written (uses `execute_cdp`, a Selenium convenience). Captured here as a portability gap for any future Ruby app that wants offline / throttled assertions against Lightpanda.
+- **Drop-on-fix**: nothing to remove on the gem side today. Could expose a Ruby surface (`Driver#emulate_network_conditions` mirroring ferrum's `Network#emulate_network_conditions`) once upstream ships.
+
 ---
 
 ## C. Inherent limitations (out of scope — keep cuprite for these)
@@ -168,6 +188,16 @@ These exist because Lightpanda has no rendering engine, no compositor, no real l
 ### C9. CORS not enforced
 - Acknowledged in upstream README. Tests can request anywhere.
 - **Status**: not relevant for testing context.
+
+### C10. External CSS not fetched, `@media` not evaluated, `matchMedia()` always false (verified 2026-05-15)
+- **Confirmed by upstream maintainer (2026-05-15)** as an intentional design choice: Lightpanda is a headless agentic-AI / scraping browser, not a layout engine. Skipping external CSS fetch + media-query evaluation is a deliberate cost trade-off and an upstream PR adding them won't be accepted.
+- Concrete observed behavior on installed nightly:
+  - `<link rel="stylesheet" href="…">` → `link.sheet === null`, `document.styleSheets.length === 0` indefinitely (no fetch, no CSSOM entry). Selectors that live in linked stylesheets render with UA defaults only.
+  - `@media` blocks inside inline `<style>` parse into `cssRules` (type code `4` = `MEDIA_RULE`) but expose as the generic `CSSRule` base — `rule.media`, `rule.cssRules`, `rule.conditionText` are all absent. The contained declarations are never applied to the cascade regardless of query.
+  - `window.matchMedia(q).matches === false` for EVERY query, including `'all'`, `'screen'`, `'(min-width: 1px)'`.
+- **Gem impact**: any responsive UI that hides one of two mobile/desktop CTA duplicates via `@media (min-width: …) { display: none }` will report BOTH variants as visible. Surfaces in Capybara as `Capybara::Ambiguous: found 2 elements matching "…"`. Hit hard by Decidim authentication specs and Spree confirm dialogs during the 2026-05-15 real-app smoke run.
+- **No gem-side workaround.** Reimplementing the CSS cascade in JS would need a CSS parser, sync access to remote stylesheets, and a real media-query evaluator. Out of scope.
+- **Status**: out of scope upstream AND in this gem. The documented answer is the dual-driver pattern — run cuprite (or Selenium-Chrome) for any spec whose visibility assertions depend on responsive CSS or external stylesheets; keep the rest on lightpanda for speed.
 
 ---
 
@@ -238,6 +268,8 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 17 `#attach_file` skip patterns. Net positive: enables a feature.
 6. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
 7. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+8. **A41 — CDP frames embed bare `undefined` token (invalid JSON)** — surfaces as ~4 `Failed to parse WebSocket message…` warnings per Decidim system spec; the gem's `JSON::ParserError` rescue drops the frame, so functionally the test passes, but a strict-JSON CDP client (Playwright, Puppeteer) would crash. Filing requires a captured raw frame via `LIGHTPANDA_LOG_LEVEL=debug` first — the column-800 hint suggests it's a multi-target / multi-context payload (`Target.targetInfoChanged` or `Runtime.executionContextCreated`).
+9. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 

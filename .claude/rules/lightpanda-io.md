@@ -144,6 +144,16 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
+6. **External CSS and viewport-aware cascade are intentionally out of scope** (upstream-wishlist.md C10; confirmed by upstream maintainer 2026-05-15 — NOT a bug, an explicit design choice)
+   - Lightpanda is a headless agentic-AI / scraping browser, not a layout engine. To keep the cost profile flat, it skips external CSS fetch AND the parts of the cascade that depend on viewport semantics. An upstream PR adding them won't be accepted.
+   - Concrete observed behavior:
+     - `<link rel="stylesheet" href="…">` → `link.sheet === null`, `document.styleSheets.length === 0` indefinitely. Selectors that live in linked stylesheets render with UA defaults only.
+     - `@media` blocks inside inline `<style>` parse into `document.styleSheets[*].cssRules` (type code `4` = `MEDIA_RULE`) but their declarations are NEVER applied to elements that match the contained selectors. `rule.media` / `rule.cssRules` are absent.
+     - `window.matchMedia(q).matches === false` for every query — including trivial `'all'`, `'screen'`, `'(min-width: 1px)'`.
+   - **Consequence for Capybara tests**: any responsive UI that hides a mobile-vs-desktop CTA variant via `@media (min-width: …)` shows BOTH variants as visible. Surfaces as `Capybara::Ambiguous: found 2 elements matching "…"` (hit by Decidim auth + Spree confirm dialogs during the 2026-05-15 real-app smoke run).
+   - **NO gem-side workaround.** Reimplementing the CSS cascade in JS would require a CSS parser, sync remote-stylesheet fetch, and a media-query evaluator — wildly out of scope for a driver. Documented user-facing answer: run cuprite (or Selenium-Chrome) for any spec whose visibility assertions depend on responsive CSS or external stylesheets; keep the rest on lightpanda for speed.
+   - `_lightpanda.isVisible` uses `el.checkVisibility()` — which works correctly for `display:none` via inline styles / outside-`@media` stylesheet rules / `[hidden]` / UA sheet. It cannot detect `@media`-gated hides because the engine itself doesn't apply them.
+
 ### Open Fix PRs (not yet merged)
 
 - **PR #2157**: Feat: add full SVG DOM support — could affect tests that interact with SVG elements (icons, charts).

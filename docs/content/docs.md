@@ -187,10 +187,12 @@ These are upstream Lightpanda limits, not driver bugs:
 | Screenshots | Not supported — no rendering engine |
 | `window.getComputedStyle()` | Returns defaults — no CSS engine |
 | `scroll_to`, `resize` | No layout engine |
+| External stylesheets (`<link rel="stylesheet">`) | Not fetched — by design (headless agentic browser, not a layout engine) |
+| Responsive CSS (`@media`, `matchMedia`) | Not evaluated — same reason; `matchMedia()` returns false for every query, `@media` rule contents aren't applied to the cascade |
 | File uploads (`<input type="file">`) | Not yet supported (upstream [#2175](https://github.com/lightpanda-io/browser/issues/2175)) |
 | Complex Stimulus controllers | Some may not execute fully |
 
-If you need any of these, run that spec under Cuprite and keep the rest on Lightpanda.
+If your test depends on an external stylesheet or on `@media`-gated visibility (mobile/desktop CTA duplicates that one viewport hides), keep that spec on Cuprite — the visibility cascade won't resolve the duplicates under Lightpanda. The dual-driver pattern above is built for exactly this — fast Lightpanda for the structural majority, Cuprite for the layout-sensitive minority.
 
 ## How it works { #internals }
 
