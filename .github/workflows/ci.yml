@@ -44,7 +44,16 @@ jobs:
         run: bundle exec rubocop
       - name: Unit tests
         run: bundle exec rake test:unit
+      - name: Cache examples' inline-bundle gems
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/example-bundles
+          key: example-bundles-${{ runner.os }}-${{ matrix.ruby }}-${{ hashFiles('examples/**/*.rb') }}
+          restore-keys: |
+            example-bundles-${{ runner.os }}-${{ matrix.ruby }}-
       - name: Examples
+        env:
+          EXAMPLES_BUNDLE_PATH: ~/.cache/example-bundles
         run: bundle exec rake examples:all
 
   capybara-specs:

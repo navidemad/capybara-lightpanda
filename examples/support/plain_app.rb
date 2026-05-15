@@ -220,3 +220,4 @@ end
 
 Capybara.app = Rails.application
 Capybara.default_driver = :lightpanda
+Capybara.server = :puma, { Silent: true }

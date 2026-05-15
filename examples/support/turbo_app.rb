@@ -208,6 +208,7 @@ end
 Capybara.app = Rails.application
 Capybara.default_driver = :lightpanda
 Capybara.default_max_wait_time = 5
+Capybara.server = :puma, { Silent: true }
 
 def wait_for_turbo_init
   sleep 1

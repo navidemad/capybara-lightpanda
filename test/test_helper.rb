@@ -13,6 +13,7 @@ require_relative "support/driver_setup"
 PROJECT_ROOT = File.expand_path("..", __dir__) unless defined?(PROJECT_ROOT)
 
 Capybara.save_path = File.join(PROJECT_ROOT, "spec", "tmp")
+Capybara.server = :puma, { Silent: true }
 
 module Minitest
   class Spec

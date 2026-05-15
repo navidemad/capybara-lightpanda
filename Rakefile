@@ -168,12 +168,20 @@ require "rubocop/rake_task"
 RuboCop::RakeTask.new
 
 namespace :examples do
+  # Bundler clears BUNDLE_* inside with_unbundled_env, so re-set BUNDLE_PATH there
+  # to redirect `bundler/inline` installs into a stable, cacheable directory.
+  # EXAMPLES_BUNDLE_PATH overrides the local default (set by CI to a cached path).
+  examples_bundle_path = ENV.fetch("EXAMPLES_BUNDLE_PATH") do
+    File.expand_path("tmp/example-bundles", __dir__)
+  end
+
   desc "Run plain Rails examples (Minitest + RSpec)"
   task :plain do
     %w[rails_minitest_example.rb rails_rspec_example.rb].each do |file|
       path = File.join("examples", file)
       puts "\n=== #{file} ==="
       Bundler.with_unbundled_env do
+        ENV["BUNDLE_PATH"] = examples_bundle_path
         sh "ruby #{path}" do |ok, _|
           abort "#{file} failed" unless ok
         end
@@ -187,6 +195,7 @@ namespace :examples do
       path = File.join("examples", file)
       puts "\n=== #{file} ==="
       Bundler.with_unbundled_env do
+        ENV["BUNDLE_PATH"] = examples_bundle_path
         sh "ruby #{path}" do |ok, _|
           abort "#{file} failed" unless ok
         end

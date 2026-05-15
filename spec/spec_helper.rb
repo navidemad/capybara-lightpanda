@@ -10,6 +10,7 @@ require "capybara-lightpanda"
 PROJECT_ROOT = File.expand_path("..", __dir__)
 
 Capybara.save_path = File.join(PROJECT_ROOT, "spec", "tmp")
+Capybara.server = :puma, { Silent: true }
 
 # Find an available port to avoid conflicts with running Lightpanda instances.
 def find_available_port
