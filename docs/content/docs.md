@@ -161,7 +161,7 @@ end
 | Navigation — `visit`, `click_link`, `go_back`, `go_forward`, `refresh` | ✓ |
 | JavaScript — `evaluate_script`, `execute_script`, `evaluate_async_script` | ✓ (V8) |
 | Forms — `fill_in`, `click_button`, `select`, `choose`, `check`, `uncheck` | ✓ |
-| Finders — `find`, `all`, `within`, CSS + XPath | ✓ (XPath via polyfill) |
+| Finders — `find`, `all`, `within`, CSS + XPath | ✓ |
 | Matchers — `assert_selector`, `assert_text`, `has_field?`, `has_select?` | ✓ |
 | Cookies — `set_cookie`, `clear_cookies`, `remove_cookie` | ✓ |
 | Frames — `within_frame`, scoped finding | ✓ |
@@ -174,7 +174,7 @@ The driver handles Turbo-enabled Rails apps transparently.
 | Feature | Status | Mechanism |
 |---|---|---|
 | **Turbo Frames** | Native | Lazy-load (`src=`) and scoped link navigation use Turbo's existing `fetch` + `innerHTML` swap |
-| **Turbo Drive** | Native | Lightpanda's `body.replaceWith` works since v0.2.9; the driver's selector polyfill keeps `#id` lookups working through the snapshot+swap pattern |
+| **Turbo Drive** | Native | Lightpanda's `body.replaceWith` works since v0.2.9; `#id` lookups survive the snapshot+swap pattern natively |
 | **Form submission** | Auto-handled | `fetch()` + `document.write()` shim bypasses Turbo's interception when needed |
 | **Turbo Streams** | Not supported | Lightpanda lacks the rendering pipeline Streams depend on |
 
@@ -189,7 +189,6 @@ These are upstream Lightpanda limits, not driver bugs:
 | `scroll_to`, `resize` | No layout engine |
 | File uploads (`<input type="file">`) | Not yet supported (upstream [#2175](https://github.com/lightpanda-io/browser/issues/2175)) |
 | Complex Stimulus controllers | Some may not execute fully |
-| XPath axes / functions | Polyfill covers ~80% of Capybara's usage |
 
 If you need any of these, run that spec under Cuprite and keep the rest on Lightpanda.
 
@@ -202,7 +201,7 @@ If you need any of these, run that spec under Cuprite and keep the rest on Light
 | `Capybara::Lightpanda::Driver` | The Capybara driver — registers as `:lightpanda`, exposes `set_cookie` / `clear_cookies` / `remove_cookie` |
 | `Capybara::Lightpanda::Node` | DOM operations via `Runtime.callFunctionOn` with object-id binding |
 | `Capybara::Lightpanda::Cookies` | Wraps `Network.getCookies` / `setCookie` / `deleteCookies` with safe fallbacks |
-| `javascripts/index.js` | XPath polyfill, Turbo activity tracking, `requestSubmit` polyfill, `#id` selector rewrite for Lightpanda's CSS-engine quirk |
+| `javascripts/index.js` | Turbo activity tracking + DOM visibility/state predicates (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`) |
 
 The driver speaks the same CDP dialect Cuprite and Ferrum use, so most patterns from those projects translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 

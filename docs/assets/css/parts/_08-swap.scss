@@ -8,12 +8,12 @@
   margin-bottom: clamp(28px, 3vw, 40px);
 }
 .swap__compare {
-  max-width: 960px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
-/* shared Capybara header — spans both halves to make the visual argument that
-   the API surface is the same; only the runtime below diverges */
+/* shared Capybara header — spans all three lanes to make the visual argument
+   that the API surface is the same; only the runtime below diverges */
 .swap__shared {
   display: grid;
   grid-template-columns: 1fr;
@@ -54,21 +54,6 @@
   font-family: var(--mono);
   position: relative;
 }
-.swap__shared-card::before,
-.swap__shared-card::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  width: 1px;
-  height: 14px;
-  background: color-mix(in oklab, var(--paper) 25%, var(--ink-line-2));
-}
-.swap__shared-card::before {
-  left: 25%;
-}
-.swap__shared-card::after {
-  right: 25%;
-}
 .swap__shared-name {
   font-size: 15px;
   font-weight: 600;
@@ -107,16 +92,16 @@
   white-space: nowrap;
 }
 
-/* the diverging halves */
-.swap__halves {
+/* the diverging lanes */
+.swap__lanes {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(20px, 3vw, 40px);
   align-items: stretch;
 }
 
-@media (max-width: 720px) {
-  .swap__halves {
+@media (max-width: 1024px) {
+  .swap__lanes {
     grid-template-columns: 1fr;
   }
   .swap__split {
@@ -173,9 +158,20 @@
 
 .stack__head {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+/* In the 3-up lane layout the cards are too narrow for both halves of the
+   head to share a row when the tag is long ("WebDriver + visual"). Force
+   the weight onto a second row consistently so the three heads share the
+   same vertical rhythm and the layers below line up across cards. */
+@media (min-width: 1025px) {
+  .swap__lanes .stack__weight {
+    flex-basis: 100%;
+  }
 }
 .stack__tag {
   font-family: var(--mono);

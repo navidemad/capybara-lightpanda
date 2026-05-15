@@ -314,10 +314,12 @@
           <span class="section__title-text">The split</span>
         </h2>
         <p class="section__deck">
-          <strong>cuprite</strong> drives Chromium for real rendering.
-          <strong>capybara-lightpanda</strong>
-          speaks the same CDP on a leaner runtime — sized for headless tests.
-          Run them side by side; each owns the specs it's best at.
+          Three Capybara drivers, one DSL.
+          <strong>selenium-webdriver</strong> speaks WebDriver,
+          <strong>cuprite</strong> speaks CDP — both drive a full Chromium
+          for real rendering. <strong>capybara-lightpanda</strong> speaks
+          CDP on Lightpanda, a fraction of the weight when you don't need
+          pixels.
         </p>
       </header>
 
@@ -325,7 +327,7 @@
         <div class="swap__shared">
           <p class="swap__shared-tag">
             <span class="swap__shared-glyph" aria-hidden="true">§</span>
-            Shared · same Capybara API on both sides
+            Shared · same Capybara API on all three
           </p>
           <div class="swap__shared-card">
             <span class="swap__shared-name">Capybara</span>
@@ -341,10 +343,36 @@
           <span class="swap__split-rule"></span>
         </div>
 
-        <div class="swap__halves">
+        <div class="swap__lanes">
           <article
             class="stack stack--before"
-            aria-label="Headless + visual stack"
+            aria-label="Selenium stack"
+          >
+            <header class="stack__head">
+              <span class="stack__tag">WebDriver + visual</span>
+              <span class="stack__weight">~ 300 MB&nbsp;RSS / test</span>
+            </header>
+            <ol class="stack__layers">
+              <li class="layer layer--mid">
+                selenium-webdriver
+                <span class="layer__pill">chromedriver</span>
+              </li>
+              <li class="layer layer--heavy">
+                <span class="layer__name">Chromium</span>
+                <span class="layer__sub"
+                  >multi-process · Blink · V8 · Skia · …</span
+                >
+              </li>
+            </ol>
+            <p class="stack__note">
+              WebDriver hop through chromedriver. Cross-browser ecosystem;
+              the heaviest of the three.
+            </p>
+          </article>
+
+          <article
+            class="stack stack--before"
+            aria-label="Cuprite stack"
           >
             <header class="stack__head">
               <span class="stack__tag">Headless + visual</span>
@@ -362,12 +390,15 @@
               </li>
             </ol>
             <p class="stack__note">
-              Boots the entire Chromium pipeline for every
-              <em>headless</em> test.
+              Boots Chromium directly over CDP. Faster than WebDriver,
+              real rendering preserved.
             </p>
           </article>
 
-          <article class="stack stack--after" aria-label="Headless-only stack">
+          <article
+            class="stack stack--after"
+            aria-label="capybara-lightpanda stack"
+          >
             <header class="stack__head">
               <span class="stack__tag stack__tag--accent">Headless only</span>
               <span class="stack__weight">~ 17 MB&nbsp;RSS / test</span>
@@ -835,7 +866,7 @@ end` "ruby" "" }}
       (function () {
         if (!("IntersectionObserver" in window)) return;
         var targets = document.querySelectorAll(
-          ".section__head, .why__manifesto, .why__pillars > *, .why__stats > *, .why__source, .swap__shared, .swap__split, .swap__halves > *, .matrix__col, .beta__try, .beta__ask, .endrail__inner",
+          ".section__head, .why__manifesto, .why__pillars > *, .why__stats > *, .why__source, .swap__shared, .swap__split, .swap__lanes > *, .matrix__col, .beta__try, .beta__ask, .endrail__inner",
         );
         targets.forEach(function (el) {
           el.classList.add("reveal");

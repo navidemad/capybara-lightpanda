@@ -10,7 +10,10 @@
   opacity: 1;
   transform: none;
 }
-.swap__halves > .stack--after.reveal {
+.swap__lanes > .reveal:nth-child(2) {
+  transition-delay: 60ms;
+}
+.swap__lanes > .reveal:nth-child(3) {
   transition-delay: 120ms;
 }
 .swap__split.reveal {
