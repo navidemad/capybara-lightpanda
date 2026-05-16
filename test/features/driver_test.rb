@@ -128,6 +128,82 @@ describe Capybara::Lightpanda::Driver do
   end
 
   # ───────────────────────────────────────────────
+  # Escape hatches
+  # ───────────────────────────────────────────────
+
+  describe "with_lightpanda_browser" do
+    it "yields the underlying Browser to the block" do
+      yielded = nil
+      driver.with_lightpanda_browser { |b| yielded = b }
+      assert_same browser, yielded
+    end
+
+    it "returns the value of the block" do
+      result = driver.with_lightpanda_browser { |b| b.options.timeout }
+      assert_equal browser.options.timeout, result
+    end
+
+    it "raises ArgumentError when no block is given" do
+      assert_raises(ArgumentError) { driver.with_lightpanda_browser }
+    end
+  end
+
+  describe "Element#with_lightpanda_node" do
+    it "yields the driver Node so callers can read remote_object_id" do
+      session.visit("/lightpanda/simple")
+      element = session.find(:css, "h1")
+      yielded = nil
+      element.with_lightpanda_node { |n| yielded = n }
+      assert_kind_of Capybara::Lightpanda::Node, yielded
+      assert_match(/\S/, yielded.remote_object_id) # non-empty string
+    end
+
+    it "raises ArgumentError when no block is given" do
+      session.visit("/lightpanda/simple")
+      assert_raises(ArgumentError) { session.find(:css, "h1").with_lightpanda_node }
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Navigation response (status_code, response_headers)
+  # ───────────────────────────────────────────────
+
+  describe "navigation response" do
+    it "exposes the status_code of the last document navigation" do
+      session.visit("/lightpanda/simple")
+      assert_equal 200, driver.status_code
+    end
+
+    it "exposes response_headers with case-insensitive lookup" do
+      session.visit("/lightpanda/simple")
+      headers = driver.response_headers
+      # The point of the Headers wrapper: callers reach for canonical casing
+      # ("Content-Type") even though CDP returns the header lowercased.
+      assert_match(%r{\Atext/html}, headers["Content-Type"])
+      assert_equal headers["Content-Type"], headers["content-type"]
+    end
+
+    it "clears the captured response on session reset so a fresh session reports nil" do
+      session.visit("/lightpanda/simple")
+      assert_equal 200, driver.status_code
+      session.reset_session!
+      assert_nil driver.status_code
+      assert_empty driver.response_headers
+    end
+
+    it "updates status_code on each subsequent navigation" do
+      session.visit("/lightpanda/simple")
+      first = driver.status_code
+      session.visit("/lightpanda/other")
+      # Both should be 200 but assert separately to prove the second visit
+      # actually re-triggered the responseReceived handler instead of
+      # silently re-using the prior capture.
+      assert_equal 200, first
+      assert_equal 200, driver.status_code
+    end
+  end
+
+  # ───────────────────────────────────────────────
   # Node#trigger
   # ───────────────────────────────────────────────
 

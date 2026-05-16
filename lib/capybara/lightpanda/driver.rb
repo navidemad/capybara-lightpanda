@@ -10,7 +10,7 @@ module Capybara
 
       attr_reader :app, :options
 
-      delegate %i[current_url title] => :browser
+      delegate %i[current_url title status_code response_headers] => :browser
 
       def initialize(app, options = {})
         super()
@@ -29,6 +29,22 @@ module Capybara
         @browser.client && !@browser.client.closed?
       rescue StandardError
         false
+      end
+
+      # Escape hatch to the underlying Browser for callers that need raw CDP
+      # access — e.g. Lightpanda's `LP.*` extensions (`getMarkdown`,
+      # `getSemanticTree`, `detectForms`, …) that aren't worth exposing through
+      # the Capybara DSL. Mirrors `capybara-playwright-driver`'s
+      # `with_playwright_page`. Yields the Browser; returns whatever the block
+      # returns.
+      #
+      #   driver.with_lightpanda_browser do |browser|
+      #     browser.page_command("LP.getMarkdown")
+      #   end
+      def with_lightpanda_browser(&block)
+        raise ArgumentError, "block must be given" unless block
+
+        block.call(browser)
       end
 
       def visit(url)
