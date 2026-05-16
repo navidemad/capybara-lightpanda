@@ -79,9 +79,8 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
 - **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
 - **Branching off a stale `main`.** Every session that enters `/Users/navid/code/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
-- **Running `zig build` without `$V8`.** Falls back to building V8 from source (~20+ min per invocation). The user's fish shell exports `$V8` via `~/.config/fish/conf.d/lightpanda.fish` pointing at a prebuilt V8 archive in `.lp-cache/prebuilt-v8/`. Always include `$V8` on every `zig build` command — see "Local build & test commands" below.
-- **Running bare `zig build` instead of `mise exec -- zig build`.** The repo pins Zig 0.15.2 via `build.zig.zon`'s `minimum_zig_version`; the system Zig on this machine is newer (0.16.0). Bare `zig` in Claude's non-interactive subshells resolves to the system install — `cd` alone does NOT activate mise's pinned version (the directory hook only fires in interactive shells, not in the per-command subshells the Bash tool spawns). Building with the wrong Zig produces stdlib mismatch errors that look like real bugs. Always prefix `zig build` / `zig` invocations with `mise exec --`. See "Local build & test commands" below.
-- **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `mise exec -- zig build check $V8` / `mise exec -- zig build test $V8` directly.
+- **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.15.2 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. The prebuilt-V8 `-Dprebuilt_v8_path=…` flag is auto-injected by the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`). Just write `zig build check` / `zig build test` — the hook substitutes the literal `$V8` with the resolved flag if you include it, or appends the flag if you forget. See "Local build & test commands" below.
+- **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `zig build check` / `zig build test` directly.
 
 ### Step 0c: Pivot policy when verification surfaces an adjacent bug
 
@@ -108,14 +107,14 @@ Use this branch when the user says "branch X is done, verify it" / "we made chan
 
 Run these checks in order. Each one cross-references an existing Step in this file — go read that Step's detail if a check fails:
 
-1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `mise.toml`, no `repro/`).
+1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `repro/`, no editor config).
 2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
-3. **Toolchain pin.** `mise exec -- zig version` prints `0.15.2` — see Step 2's pin block.
-4. **Compile clean.** `mise exec -- zig build check $V8` is clean — see Step 4a.
+3. **Toolchain pin.** `zig version` prints `0.15.2` — see Step 2's pin block.
+4. **Compile clean.** `zig build check` is clean — see Step 4a.
 5. **Targeted test passes.** Run the new test with the right `TEST_FILTER` form (see "Local build & test commands" — `<test-name>#<html-basename>` for fixtures). Confirm it passes.
 6. **Toggle-off proves the test exercises the fix.** `git checkout main -- <production-file>`, re-run the targeted test, confirm it fails. Restore with `git checkout HEAD -- <production-file>`. See Step 4a's two-pattern bullet.
-7. **Full suite has no NEW failures.** `mise exec -- zig build test $V8`. Cross-reference any failures against the "Known-flaky-on-macOS tests" list; only investigate failures NOT on that list.
-8. **End-to-end reproducer.** Build the local debug binary if missing (`mise exec -- zig build $V8`), then `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro/<dir>/repro.sh` exits 0. See Step 6c.
+7. **Full suite has no NEW failures.** `zig build test`. Cross-reference any failures against the "Known-flaky-on-macOS tests" list; only investigate failures NOT on that list.
+8. **End-to-end reproducer.** Build the local debug binary if missing (`zig build`), then `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro/<dir>/repro.sh` exits 0. See Step 6c.
 9. **Issue + PR body content.** `gh issue view <n> --json body --jq .body > /tmp/issue.txt` and same for PR. Audit per `references/visual-verification.md`: 2 mermaid diagrams (sequence in issue, flowchart in PR), CSS/HTML/CDP spec citation, no Ruby/Capybara/gem leak, no wishlist-ID leak, `Closes #<n>` literal text in PR body. See Steps 7a/7c and 8b/8d.
 10. **PR CI.** `gh pr checks <n> --repo lightpanda-io/browser` — for first-time external contributors only `CLAAssistant` runs until a maintainer approves; that's normal, surface as a status note, don't try to "fix" it.
 
@@ -123,25 +122,25 @@ If any of 1–8 fail, surface the specific failure to the user with a fix propos
 
 ## Local build & test commands
 
-Two non-negotiables on every `zig build` invocation:
+The recipes below are bare `zig build …`. Two layers do the right thing automatically so the recipe stays minimal:
 
-1. **Prefix with `mise exec --`** so Zig 0.15.2 (pinned in the repo's `build.zig.zon` as `minimum_zig_version`, and pinned locally in `mise.toml`) is used. Bare `zig` in Claude's per-command Bash subshells resolves to the system install (currently 0.16.0 on this machine) because mise's directory activation only fires in interactive shells. Building with a Zig version newer than 0.15.2 produces stdlib mismatch errors that masquerade as real bugs and waste a debugging session.
-2. **Pass `$V8`** so the build links against the prebuilt V8 archive at `/Users/navid/code/browser/.lp-cache/prebuilt-v8/libc_v8_<version>_macos_aarch64.a` instead of compiling V8 from source (~20+ min). The user's fish shell auto-exports `$V8` via `~/.config/fish/conf.d/lightpanda.fish`; the cache is keyed by `V8_VERSION` from `zig-pkg/v8-*/build.zig` so it refreshes when upstream bumps V8.
+1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.15.2"` and `zls = "0.15.1"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.15.2 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.15.2`.
+2. **V8 prebuilt flag** — the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`) intercepts every `zig build` command targeting `/Users/navid/code/browser*` and injects `-Dprebuilt_v8_path=/Users/navid/code/browser/.lp-cache/prebuilt-v8/libc_v8_<version>_macos_aarch64.a` if missing. Writing `zig build $V8 check` is also fine — the hook substitutes the literal `$V8` with the resolved flag. Without the hook, plain `zig build` would rebuild V8 from source (~20+ min). The hook stderr-logs every rewrite so you can audit it in the tool output.
 
 | Command | When to use |
 |---|---|
-| `mise exec -- zig build check $V8` | After every Zig edit. Fastest signal — type-check only, no codegen, no link. Catches compile errors across the whole project. |
-| `TEST_FILTER='<test-name>#<html-basename>' mise exec -- zig build test $V8` | After writing/changing the test for the fix. **Both halves are substring matches** via `std.mem.indexOf`, so `'Element'` will pick up `WebApi: Element` AND `MCP - findElement` — be specific. The `#<html-basename>` half is only consulted by `htmlRunner(...)` to filter which `tests/<dir>/*.html` fixtures run; omit it for plain `test "..."` blocks. Concrete examples: `TEST_FILTER='Selector: Parser.attributeValue'` (Zig unit test), `TEST_FILTER='WebApi: Element#attribute_value_escapes.html'` (one HTML fixture under `tests/element/`). |
-| `mise exec -- zig build test $V8` | Before pushing. Full unit-test suite — verifies nothing else regressed. |
-| `mise exec -- zig build $V8` | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix). |
-| `mise exec -- zig build run $V8 -- <args>` | Build & run the binary in one step. |
+| `zig build check` | After every Zig edit. Fastest signal — type-check only, no codegen, no link. Catches compile errors across the whole project. |
+| `TEST_FILTER='<test-name>#<html-basename>' zig build test` | After writing/changing the test for the fix. **Both halves are substring matches** via `std.mem.indexOf`, so `'Element'` will pick up `WebApi: Element` AND `MCP - findElement` — be specific. The `#<html-basename>` half is only consulted by `htmlRunner(...)` to filter which `tests/<dir>/*.html` fixtures run; omit it for plain `test "..."` blocks. Concrete examples: `TEST_FILTER='Selector: Parser.attributeValue'` (Zig unit test), `TEST_FILTER='WebApi: Element#attribute_value_escapes.html'` (one HTML fixture under `tests/element/`). |
+| `zig build test` | Before pushing. Full unit-test suite — verifies nothing else regressed. |
+| `zig build` | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix). |
+| `zig build run -- <args>` | Build & run the binary in one step. |
 
-Sanity-check the toolchain once per session before the first build: `mise exec -- zig version` must print `0.15.2`. If it doesn't, mise hasn't installed the pinned toolchain yet — run `mise install` in `/Users/navid/code/browser` and re-check.
+Sanity-check the toolchain once per session before the first build: `zig version` must print `0.15.2`. If it prints `0.16.x` (system Homebrew install), the global mise pin in `~/.config/mise/config.toml` isn't reaching this shell's PATH — restart Claude Code so the snapshot regenerates, then retry. If `zig` isn't installed at all, `mise install zig@0.15.2 zls@0.15.1` from anywhere does it.
 
 Performance notes:
 - First run after a dep update builds curl/brotli/sqlite/html5ever (~1–2 min). Subsequent runs are incremental.
-- `mise exec -- zig build check $V8` typically finishes in <10s after warm-up.
-- `mise exec -- zig build test $V8` runs in 30s–2min depending on what changed.
+- `zig build check` typically finishes in <10s after warm-up.
+- `zig build test` runs in 30s–2min depending on what changed.
 - The `extras` step (legacy_test, snapshot_creator) is not in the default — don't trigger it.
 
 Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by your branch):
@@ -149,7 +148,7 @@ Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by 
 - `cdp.lp: action tools` (`src/cdp/domains/lp.zig:357`)
 - `cdp.lp: waitForSelector` (`src/cdp/domains/lp.zig:423`)
 
-If `mise exec -- zig build test $V8` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/browser && TEST_FILTER='<test name>' mise exec -- zig build test $V8` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
+If `zig build test` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/browser && TEST_FILTER='<test name>' zig build test` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
 
 Local verification reduces the cost of a broken CI run: catch trivial errors on your machine first, let upstream CI be the authoritative second opinion (it builds on Linux against the upstream toolchain, which catches macOS-vs-Linux drift you can't see locally).
 
@@ -170,7 +169,7 @@ Three confirmation paths, in order of cheapness:
 
 1. **Pure-CDP probe against the installed nightly** — the strongest signal and the right default for any DOM / event / navigation / form / cookie bug. Copy `references/probe-lib/cdp.js` into `/tmp/probe-<id>/`, write a 30-line `probe.js` that exercises the bug via `Page.navigate` + `Runtime.evaluate` + `Target.attachToTarget`, and run it against a `lightpanda serve` from the binary already on disk. Asserts the wishlist's claim with no gem code in the loop. **Do this even if you "know" the bug is real** — the 5 minutes saves the 30+ minutes of branch + tests + issue-draft work that gets thrown away when you discover the bug is already fixed.
 2. **Grep the relevant `.zig` file for the missing symbol** — only valid for *pure absence* (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
-3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `mise exec -- zig build $V8` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
+3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `zig build` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
 
 **Cross-check intuition with `git blame`**: if the wishlist comment says "method X doesn't navigate" but `git blame src/<path>.zig` on the relevant function shows the navigation call has been in place for weeks/months, trust blame. The wishlist note is one author's empirical claim from a single timestamp; blame is what's actually in `main` right now. Today's session burned an hour on A4 because the gem's `CLICK_JS` comment authoritatively claimed `form.submit()` doesn't navigate, but `git blame Frame.zig:3756-3768` showed the navigation logic had been there for a month — the gem author had misdiagnosed a symptom.
 
@@ -212,7 +211,7 @@ The wishlist says where the workaround lives, and `references/file-mapping.md` h
 
 ```bash
 cd /Users/navid/code/browser
-git status                                     # must be clean (mise.toml ignored)
+git status                                     # must be clean
 git checkout main                              # ALWAYS — never branch off whatever was checked out last
 git pull origin main                           # ALWAYS — never branch off a stale main
 git log --oneline -5                           # sanity-check the new HEAD
@@ -227,23 +226,13 @@ If `git status` is dirty (uncommitted work from a previous session, stray repro 
 
 **Remote naming**: this clone uses two remotes — `origin = lightpanda-io/browser` (upstream, where `git pull` reads from) and a personal fork (e.g. `fork = navidemad/browser`, where pushes go). Run `git remote -v` to confirm. The pull above targets `origin`; **the push at Step 8a targets the fork** (`git push -u fork ...`) and `gh pr create` needs `--head <fork-owner>:<branch> --repo lightpanda-io/browser` since the source branch lives on the fork. If `git remote -v` shows only `origin` pointing at your fork, the convention collapses to plain `origin` — but verify before assuming.
 
-Pin the Zig toolchain via mise. The repo's `build.zig.zon` declares `minimum_zig_version = "0.15.2"` but does not commit a `.zig-version` / `.tool-versions` file, so each contributor manages their own pin. We use a local (gitignored) `mise.toml`:
+Sanity-check the Zig toolchain. The repo's `build.zig.zon` declares `minimum_zig_version = "0.15.2"` but does not commit a `.zig-version` / `.tool-versions` file. The pin lives in `~/.config/mise/config.toml` globally (`zig = "0.15.2"`, `zls = "0.15.1"`), so any shell resolves `zig` to the right version without per-project setup:
 
 ```bash
-# Ensure mise.toml exists with the right pin (idempotent — overwrites only if wrong/missing)
-if ! grep -qF 'zig = "0.15.2"' mise.toml 2>/dev/null; then
-  printf '[tools]\nzig = "0.15.2"\n' > mise.toml
-fi
-
-# Ensure it's gitignored locally so it doesn't leak into a commit
-grep -qF "mise.toml" .git/info/exclude || echo "mise.toml" >> .git/info/exclude
-
-# Install the pinned toolchain if not already, then verify
-mise install
-mise exec -- zig version   # MUST print 0.15.2 — abort if not
+zig version   # MUST print 0.15.2 — see "Local build & test commands" if not
 ```
 
-If `mise exec -- zig version` prints anything other than `0.15.2`, stop and surface it. Building with the wrong Zig produces stdlib errors that look like real bugs and burn debugging time.
+If it prints anything else, restart Claude Code so the snapshot picks up the global mise pin. Building with the wrong Zig produces stdlib errors that look like real bugs and burn debugging time.
 
 ## Step 3: Locate the Zig code
 
@@ -261,23 +250,23 @@ Work TDD: failing test → confirm it fails → implement → confirm it passes 
 
 Use the local commands from "Local build & test commands" — fast enough that all of these gates are cheap:
 
-- `mise exec -- zig version` prints `0.15.2`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
-- `mise exec -- zig build check $V8` is clean. No compile errors anywhere in the project (not just the file you edited).
-- A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> mise exec -- zig build test $V8` and confirm it passes.
+- `zig version` prints `0.15.2`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
+- `zig build check` is clean. No compile errors anywhere in the project (not just the file you edited).
+- A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> zig build test` and confirm it passes.
 - Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. Two patterns by where the test lives:
   - **Test in the same `.zig` file as the fix** (common for CDP changes — both live in `src/cdp/domains/<domain>.zig`): **Use `Edit` to surgically revert just the production lines, NOT `git stash`**. A `git stash` sweeps the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
-  - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common for `htmlRunner` directories like `tests/element/`, `tests/document/`): the production code and the fixture live in different paths, so use `git checkout main -- <production-file>` to surgically revert just the production code. The fixture stays untouched and the same `TEST_FILTER='<runner>#<fixture>.html'` re-run reports a real fail (e.g. for the B7 fix: `git checkout main -- src/browser/webapi/selector/Parser.zig`, then `TEST_FILTER='WebApi: Element#attribute_value_escapes.html' mise exec -- zig build test $V8`). Restore with `git checkout HEAD -- <production-file>` ONLY IF the branch has at least one commit on it. **If you haven't committed the fix yet, HEAD points at the same SHA as `main` and the restore is a silent no-op** — your edited Input.zig is gone and the next run validates the wrong-and-restored production code with no warning. Two ways to avoid the trap: (a) commit the fix first, then toggle, then `git checkout HEAD --` actually restores; or (b) `cp <production-file> /tmp/<file>.fix` before the `git checkout main --`, then `cp /tmp/<file>.fix <production-file>` to restore. Either way, sanity-check after the restore by grepping for a unique token from your fix (e.g. `grep -c snapToStep src/<path>` should be ≥1).
+  - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common for `htmlRunner` directories like `tests/element/`, `tests/document/`): the production code and the fixture live in different paths, so use `git checkout main -- <production-file>` to surgically revert just the production code. The fixture stays untouched and the same `TEST_FILTER='<runner>#<fixture>.html'` re-run reports a real fail (e.g. for the B7 fix: `git checkout main -- src/browser/webapi/selector/Parser.zig`, then `TEST_FILTER='WebApi: Element#attribute_value_escapes.html' zig build test`). Restore with `git checkout HEAD -- <production-file>` ONLY IF the branch has at least one commit on it. **If you haven't committed the fix yet, HEAD points at the same SHA as `main` and the restore is a silent no-op** — your edited Input.zig is gone and the next run validates the wrong-and-restored production code with no warning. Two ways to avoid the trap: (a) commit the fix first, then toggle, then `git checkout HEAD --` actually restores; or (b) `cp <production-file> /tmp/<file>.fix` before the `git checkout main --`, then `cp /tmp/<file>.fix <production-file>` to restore. Either way, sanity-check after the restore by grepping for a unique token from your fix (e.g. `grep -c snapToStep src/<path>` should be ≥1).
   - **Verify the test actually ran the new fixture, not nothing.** Both `WebApi: Element` and `WebApi: HTML.Input` are valid test names but each owns *different* fixtures via separate `htmlRunner(...)` calls — `tests/element/*.html` (top-level) vs. `tests/element/html/*.html` (subdirectory, registered explicitly per file). A wrong `TEST_FILTER` matches the test name but skips your fixture entirely; both pre- and post-fix runs print `1 of 1 test passed` and look fine, hiding the bug. Two tells: (1) the timing — a fixture-less run finishes in ~0.1ms; a real fixture run shows tens of ms (e.g. `9.46ms`). (2) The output should print `- src/browser/tests/.../<your-fixture>.html` under the test name. If it doesn't, the filter missed; `grep htmlRunner src/browser/webapi/<area>/<File>.zig` to find which test name owns your fixture.
-- `mise exec -- zig build test $V8` (full suite, no filter) passes — catches regressions in adjacent code.
-- The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
+- `zig build test` (full suite, no filter) passes — catches regressions in adjacent code.
+- The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `zig build` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
 - The diff matches the surrounding file's existing style (naming, comment density, helper layout) and contains no "while-we're-here" reformatting. Outsider PRs get reviewed line-by-line — reviewers reject mixed scope. Every changed line traces directly to the bug; if you wrote 200 lines and 50 would do, rewrite.
-- `git diff` shows only files relevant to the fix. No `mise.toml`, no editor config.
+- `git diff` shows only files relevant to the fix. No editor config, no local-only artifacts.
 
 Local pass is necessary but not sufficient — upstream CI runs on Linux against the upstream toolchain and may surface platform-specific issues you can't see on macOS. Treat CI as the authoritative final check after a clean local pass.
 
 ### 4b. If upstream CI is broken for unrelated reasons
 
-If recent `main` runs in upstream's GitHub Actions are red without your changes (toolchain mismatch, dependency churn, transient breakage), **stop and report the failing CI URL to the user**. Check via `gh run list --repo lightpanda-io/browser --branch main --limit 5`. Do not paper over it by editing `.zig-version`, bumping deps, or rebasing onto an older commit — those are separate decisions the user has to make. Possible next steps to surface: pin to the last green commit, file a separate upstream issue about the breakage, or wait it out. Local `zig build test $V8` passing on a red-CI `main` is a useful data point but doesn't substitute — surface the CI breakage anyway.
+If recent `main` runs in upstream's GitHub Actions are red without your changes (toolchain mismatch, dependency churn, transient breakage), **stop and report the failing CI URL to the user**. Check via `gh run list --repo lightpanda-io/browser --branch main --limit 5`. Do not paper over it by editing `.zig-version`, bumping deps, or rebasing onto an older commit — those are separate decisions the user has to make. Possible next steps to surface: pin to the last green commit, file a separate upstream issue about the breakage, or wait it out. Local `zig build test` passing on a red-CI `main` is a useful data point but doesn't substitute — surface the CI breakage anyway.
 
 ## Step 5: Validate against the gem (sanity check, no edits)
 
@@ -334,7 +323,7 @@ Cap the whole thing at ~80 lines of shell + ~50 lines of JS. If the bug requires
 
 Run the reproducer against the current nightly binary already on disk and confirm exit code 1 (bug observed). This proves the bug exists in nightly and the reproducer correctly catches it.
 
-After Step 4 implements the fix, build a local debug binary with `mise exec -- zig build $V8` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed). This is the most direct end-to-end signal — it exercises the fix through the same CDP surface the maintainer will use to verify the patch. If the unit test passes but the reproducer still exits 1, the fix is incomplete (often: the test exercises an internal helper but the CDP dispatch path was missed).
+After Step 4 implements the fix, build a local debug binary with `zig build` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed). This is the most direct end-to-end signal — it exercises the fix through the same CDP surface the maintainer will use to verify the patch. If the unit test passes but the reproducer still exits 1, the fix is incomplete (often: the test exercises an internal helper but the CDP dispatch path was missed).
 
 ## Step 7: File the issue first
 
@@ -372,9 +361,9 @@ Stage the PR body the same way as the issue body — use the `Write` tool to put
 
 ```bash
 cd /Users/navid/code/browser
-git status                                     # confirm only intended files (no repro/, no mise.toml)
+git status                                     # confirm only intended files (no repro/, no editor config)
 git diff --stat                                # confirm reasonable surface
-git add <specific files>                       # NEVER `git add -A` — the repro dir and mise.toml are local-only
+git add <specific files>                       # NEVER `git add -A` — the repro dir is local-only
 git commit                                     # use commit message template in references/templates.md — body MUST include "Closes #<issue-num>"
 git push -u origin fix-<id>-<slug>             # if origin is your fork; on a two-remote setup substitute fork (see Step 2's "Remote naming")
 
@@ -458,7 +447,7 @@ Skip this sub-step if `mergeable` is `MERGEABLE`. If it's `CONFLICTING`:
 1. **Use `git merge origin/main`, not rebase.** The branch is published on the fork and the PR is open — rebase rewrites SHAs that the PR's review threads anchor on, breaks `gh pr view --json closingIssuesReferences`, and forces reviewers to re-fetch. Merge keeps SHAs stable and the merge commit is its own diff for the reviewer to skim.
 2. **Common conflict pattern**: both branches added a new `test "..." { ... }` block at the same file location, producing a diff3 conflict where the merge-base section (`||||||| <sha>` to `=======`) is empty. Resolution: keep both blocks complete in the new file. The trailing `}` `}` *outside* the conflict region close whichever test sits last — read the original file structure before the merge to see how many closing braces existed there. Don't blindly delete content from either side; both maintainers added intentional code.
 3. **Auto-merged files need verification, not trust.** `git merge` reports "Auto-merging X" for files where it applied a successful three-way merge — but that doesn't prove your branch's changes survived. After `git commit` of the merge, grep for the key identifiers your branch added (struct fields, function names, test names, route paths, `_navigated_options.body`, etc.) in the merged tree. If something's missing, the merge took the wrong side; redo the resolution.
-4. **Compile + run targeted tests** (`mise exec -- zig build check $V8` then `TEST_FILTER='<your test>' mise exec -- zig build test $V8`) to catch the merge dropping a struct field or rename. Then move on to apply the review fixes; commit them as a separate follow-up commit on top of the merge so the reviewer sees a clean "merge + fixes" pair, not a tangled single commit.
+4. **Compile + run targeted tests** (`zig build check` then `TEST_FILTER='<your test>' zig build test`) to catch the merge dropping a struct field or rename. Then move on to apply the review fixes; commit them as a separate follow-up commit on top of the merge so the reviewer sees a clean "merge + fixes" pair, not a tangled single commit.
 
 **Skip the Step 4a toggle-off for behavior-preserving refactors.** The toggle-off gate ("revert production, confirm test fails, restore") exists to prove a *new* test exercises a *new* fix. When the maintainer asks for a refactor that should preserve behavior — extract a helper, rename, dedupe, factor a single iteration — branch HEAD already contains a verified fix and the relevant tests. The verification is "tests pass before AND after the refactor", not toggle-off. Don't reach for `git stash` + `git checkout main -- <file>` here either: HEAD's previous-fix version, the stash's refactor, and main's pre-fix version are three different versions of the same hunk and `git stash pop` will conflict on every overlapping line. If the refactor changes observable behavior (rare in review-driven follow-ups), fall back to Step 4a's full toggle-off.
 

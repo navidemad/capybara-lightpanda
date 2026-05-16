@@ -36,7 +36,7 @@ gem's upstream wishlist: `<one-line description>`.
 - Primary: `<file from file-mapping.md>`
 - Related: `<any test fixtures or sibling files>`
 
-**TDD steps** (local builds are fast — `mise exec --` activates Zig 0.15.2 and `$V8` reuses the prebuilt V8 archive, so `check` finishes in <10s and a filtered `test` in 30s–2min):
+**TDD steps** (local builds are fast — global mise pin handles Zig 0.15.2, the PreToolUse hook injects the prebuilt-V8 `-D` flag, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
 
 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes
    use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file
@@ -49,15 +49,15 @@ gem's upstream wishlist: `<one-line description>`.
    `htmlRunner("<dir>", .{})` and an extra block duplicates work.
 2. Run the targeted test against unmodified production and confirm it
    **fails**:
-   `TEST_FILTER='<test name>' mise exec -- zig build test $V8`.
+   `TEST_FILTER='<test name>' zig build test`.
    Both halves of `TEST_FILTER` are substring matches via `std.mem.indexOf`
    — be specific (e.g. `'WebApi: Element#attribute_value_escapes.html'` for
    an HTML fixture, `'cdp.network: clearBrowserCookies'` for a Zig unit test).
 3. Implement the fix in `<primary file>`. Keep the diff minimal — no
    surrounding cleanup, no formatting churn unrelated to the fix.
 4. Re-run the targeted test and confirm it **passes**. Then run
-   `mise exec -- zig build check $V8` (project-wide type-check) and
-   `mise exec -- zig build test $V8` (full unit-test suite, no filter) to
+   `zig build check` (project-wide type-check) and
+   `zig build test` (full unit-test suite, no filter) to
    catch regressions in adjacent code. Cross-reference any failures against
    the "Known-flaky-on-macOS tests" list in `SKILL.md` — only investigate
    failures NOT on that list.
@@ -207,7 +207,7 @@ exec node probe.js
 
 Step 6c says to verify the repro pre-fix (against installed nightly, exit 1) and post-fix (against local debug build, exit 0). **Do both before drafting Step 7's issue body**, because the issue body's `Today` and `Expected after the fix` blocks should paste the actual exit lines verbatim — not paraphrased. Order:
 
-1. Build the local debug binary (`mise exec -- zig build $V8`) — only needed once per branch.
+1. Build the local debug binary (`zig build`) — only needed once per branch.
 2. `bash repro.sh` against installed nightly → capture exit code + last 5 lines of output.
 3. `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro.sh` → capture exit code + output.
 4. *Then* draft `/tmp/<id>-issue-body.md` (Step 7a), pasting both captured outputs into the `Run` section.
