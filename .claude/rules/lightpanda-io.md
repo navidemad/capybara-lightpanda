@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6199` (first nightly carrying the 2026-05-13 trio: PR #2431 + #2445 — iframe contextId churn fix and BrowserContext arena reset — plus PR #2435 — native `HTMLDialogElement.{show, showModal, close}`).
+Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6220` (first nightly carrying PR #2450 "forms: add enctype + 5 submitter form-* IDL accessors", commit `143bffdfe` — the upstream replacement for the gem's deleted `polyfills.js`). The floor also covers the 2026-05-13 trio: PR #2431 + #2445 (iframe contextId churn fix and BrowserContext arena reset, in nightlies ≥6199) and PR #2435 (native `HTMLDialogElement.{show, showModal, close}`).
 
 ## Architecture
 
@@ -17,11 +17,12 @@ Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 619
 
 Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect via WebSocket at `ws://127.0.0.1:9222`. Compatible with Puppeteer, Playwright (partial), and chromedp.
 
-### Implemented CDP Domains (19 total)
+### Implemented CDP Domains (21 total)
 
 | Domain | File | Notes |
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
+| **Audits** | audits.zig | `enable` / `disable` stubs only (added 2026-05-04 commit `080e1e64`, renamed from `Audit` → `Audits`). Not used by this gem. |
 | **Browser** | browser.zig | Basic browser-level commands |
 | **Console** | console.zig | `Console.messageAdded` event (PR #2339, merged 2026-05-13); console.* calls are also still mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on. The gem's Turbo activity tracker depends on `Runtime.consoleAPICalled` (no migration needed). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
@@ -38,7 +39,8 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
 | **Storage** | storage.zig | Storage state; `createContext` with storage state fails (#1550) |
-| **Target** | target.zig | Target/session management |
+| **Target** | target.zig | Target/session management. Frame IDs are now scoped to the connection-lifetime `Browser` (PR #2474, merged 2026-05-16, fixes #2472 "Duplicate target FID-0000000001" assertion in Playwright); not gem-relevant since we don't keep targetId-keyed state across `Driver#reset!`. |
+| **webMCP** | webmcp.zig | Lightpanda Model Context Protocol surface (added 2026-05-12 commit `c23d0f4f`). Not used by this gem. |
 
 ### CDP Methods Used by This Gem
 
@@ -144,8 +146,9 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
-6. **External CSS and viewport-aware cascade are intentionally out of scope** (upstream-wishlist.md C10; confirmed by upstream maintainer 2026-05-15 — NOT a bug, an explicit design choice)
-   - Lightpanda is a headless agentic-AI / scraping browser, not a layout engine. To keep the cost profile flat, it skips external CSS fetch AND the parts of the cascade that depend on viewport semantics. An upstream PR adding them won't be accepted.
+6. **External CSS and viewport-aware cascade are intentionally out of scope for the BROAD scope** (upstream-wishlist.md C10; confirmed by upstream maintainer 2026-05-15 — NOT a bug, an explicit design choice for the full feature set)
+   - Lightpanda is a headless agentic-AI / scraping browser, not a layout engine. To keep the cost profile flat, it skips external CSS fetch AND the parts of the cascade that depend on viewport semantics. A broad-scope upstream PR (parser changes + sync remote-stylesheet fetch + cascade reimpl) won't be accepted.
+   - **Narrow-scope PR #2478 in flight 2026-05-15** (`css: evaluate @media and matchMedia against viewport`, by navidemad, closes #2477) — inline-only `@media` evaluation + spec-correct `matchMedia` booleans against the same hardcoded 1920×1080 viewport already exposed by `Window.innerWidth`/`innerHeight`. Carves out external `<link rel="stylesheet">` fetch from scope. ~200 LOC plus 23 unit tests. State as of 2026-05-16: OPEN, no maintainer comments yet, won't-be-accepted verdict not yet tested at the narrower scope. If merged, only the inline `@media` and `matchMedia` halves of this limitation close; external `<link>` stays out of scope by design.
    - Concrete observed behavior:
      - `<link rel="stylesheet" href="…">` → `link.sheet === null`, `document.styleSheets.length === 0` indefinitely. Selectors that live in linked stylesheets render with UA defaults only.
      - `@media` blocks inside inline `<style>` parse into `document.styleSheets[*].cssRules` (type code `4` = `MEDIA_RULE`) but their declarations are NEVER applied to elements that match the contained selectors. `rule.media` / `rule.cssRules` are absent.
