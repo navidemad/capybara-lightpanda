@@ -591,21 +591,20 @@ module Capybara
 
       def find_modal(type, text: nil, wait: options.timeout)
         regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
-        deadline = monotonic_time + wait
         last_matching_type_message = nil
         last_seen_message = nil
-        loop do
+        claimed = nil
+        Utils::Wait.until(timeout: wait, interval: 0.05) do
           claimed = pop_modal_message(type.to_s, regexp)
-          return claimed[:message] if claimed
+          next true if claimed
 
           last = peek_last_modal_message(type.to_s)
           last_matching_type_message = last[:matching_type] || last_matching_type_message
           last_seen_message = last[:any] || last_seen_message
-
-          break if monotonic_time > deadline
-
-          sleep 0.05
+          false
         end
+        claimed[:message]
+      rescue TimeoutError
         raise_modal_not_found(type, text, last_matching_type_message, last_seen_message)
       end
 
@@ -1133,25 +1132,24 @@ module Capybara
       end
 
       # Poll document.readyState as a fallback when Page.loadEventFired
-      # doesn't fire. When starting_url is provided, the poll ignores
+      # doesn't fire (CLAUDE.md rules call this out as load-bearing — do
+      # not remove). When starting_url is provided, the poll ignores
       # readyState values from the old page (e.g. about:blank reports
       # "complete" while the new page is still loading in the background).
       def poll_ready_state(timeout, loaded_event: nil, starting_url: nil)
-        deadline = monotonic_time + timeout
         # Use a short per-evaluation timeout because Lightpanda may block
         # all commands while navigating. Without this, a single evaluate()
         # call would consume the entire @options.timeout, making the poll
         # loop effectively a single attempt.
         poll_cmd_timeout = [timeout / 5.0, 2].max
 
-        loop do
-          break if loaded_event&.set?
-          break if @client.closed?
-          break if page_ready?(poll_cmd_timeout, starting_url)
-          break if monotonic_time > deadline
-
-          sleep 0.1
+        Utils::Wait.until(timeout: timeout, interval: 0.1) do
+          loaded_event&.set? || @client.closed? || page_ready?(poll_cmd_timeout, starting_url)
         end
+      rescue TimeoutError
+        # Expected — readyState fallback exhausted its budget. The caller
+        # (await_navigation) keeps going and lets handle_navigation_crash
+        # decide whether the session is recoverable.
       end
 
       POLL_STATE_JS = "(function(){return{r:document.readyState,u:location.href}})()"

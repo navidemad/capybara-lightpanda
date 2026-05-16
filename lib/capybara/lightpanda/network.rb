@@ -87,26 +87,23 @@ module Capybara
         pending_connections <= connections
       end
 
-      def wait_for_idle(timeout: 5, connections: 0) # rubocop:disable Naming/PredicateMethod
-        started_at = Time.now
-
-        while Time.now - started_at < timeout
-          return true if idle?(connections)
-
-          sleep 0.1
-        end
-
+      def wait_for_idle(timeout: 5, connections: 0)
+        wait_for_idle!(timeout: timeout, connections: connections)
+      rescue TimeoutError
         false
       end
 
       # Raising variant of #wait_for_idle (ferrum parity). Returns true on
       # success, raises TimeoutError on timeout so callers that treat the
       # idle wait as a precondition don't have to remember to check a bool.
-      def wait_for_idle!(timeout: 5, connections: 0)
-        return true if wait_for_idle(timeout: timeout, connections: connections)
-
-        raise TimeoutError, "Network did not become idle within #{timeout}s " \
-                            "(pending=#{pending_connections}, allowed=#{connections})"
+      def wait_for_idle!(timeout: 5, connections: 0) # rubocop:disable Naming/PredicateMethod
+        Utils::Wait.until(
+          timeout: timeout,
+          interval: 0.1,
+          message: "Network did not become idle within #{timeout}s " \
+                   "(pending=#{pending_connections}, allowed=#{connections})"
+        ) { idle?(connections) }
+        true
       end
 
       private
