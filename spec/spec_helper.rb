@@ -35,7 +35,7 @@ Capybara.register_driver(:lightpanda) do |app|
   options = {
     timeout: 10,
     port: find_available_port,
-    browser_path: ENV["LIGHTPANDA_BIN"] || Capybara::Lightpanda::Binary.ensure_nightly,
+    browser_path: ENV["LIGHTPANDA_BIN"] || Capybara::Lightpanda::Binary.update,
   }
   Capybara::Lightpanda::Driver.new(app, options)
 end

@@ -23,7 +23,7 @@ module Capybara
         end
       end
 
-      GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download/nightly"
+      GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download"
 
       PLATFORMS = {
         %w[x86_64 linux] => "lightpanda-x86_64-linux",
@@ -31,21 +31,88 @@ module Capybara
         %w[arm64 darwin] => "lightpanda-aarch64-macos",
       }.freeze
 
+      DEFAULT_CACHE_TIME = 86_400
+
       class << self
+        # Set a specific release tag (e.g. "0.3.0") to pin downloads to that
+        # release. When nil, the rolling "nightly" tag is used. The pin only
+        # affects download URL construction — the gem's MINIMUM_NIGHTLY_BUILD
+        # floor is still enforced at process start.
+        attr_accessor :required_version
+
+        # Seconds before a cached unpinned binary is re-downloaded. Pinned
+        # binaries are never refreshed on age (they're pinned).
+        attr_writer :cache_time, :install_dir, :logger
+        attr_accessor :proxy_addr, :proxy_port, :proxy_user, :proxy_pass
+
+        def cache_time
+          @cache_time ||= Integer(ENV.fetch("LIGHTPANDA_CACHE_TIME", DEFAULT_CACHE_TIME))
+        end
+
+        def install_dir
+          @install_dir ||= File.dirname(default_binary_path)
+        end
+
+        def logger
+          return @logger if defined?(@logger) && @logger
+          return nil unless ENV["LIGHTPANDA_DEBUG"]
+
+          @logger = Capybara::Lightpanda::Logger.new($stderr.tap { |s| s.sync = true })
+        end
+
+        def configure
+          yield self
+        end
+
         def path
-          @path ||= find_or_download
+          @path ||= update
         end
 
-        def find_or_download
-          find || download
+        # Canonical entrypoint: ensure the binary at install_path is current,
+        # download if needed, return its path. Pinned (required_version set)
+        # never re-downloads when present. Unpinned re-downloads when older
+        # than cache_time.
+        def update
+          destination = install_path
+
+          if required_version
+            if File.executable?(destination)
+              log("Pinned #{required_version} present at #{destination}")
+              return destination
+            end
+          elsif cached_fresh?(destination)
+            log("Cached binary at #{destination} is fresh (< #{cache_time}s)")
+            return destination
+          end
+
+          download
         end
 
-        # Always return the nightly binary, downloading if missing or stale.
-        # Skips PATH lookup so the system binary is never used.
-        def ensure_nightly(max_age: 86_400)
-          path = default_binary_path
-          download if !File.executable?(path) || (Time.now - File.mtime(path)) > max_age
+        # Delete the cached binary. Returns the path that was deleted, or nil
+        # if nothing was there.
+        def remove
+          path = install_path
+          unless File.exist?(path)
+            log("Nothing to remove at #{path}")
+            return nil
+          end
+
+          File.delete(path)
+          @path = nil
+          log("Removed #{path}")
           path
+        end
+
+        # Returns the `lightpanda version` output of the cached binary, or nil
+        # if the binary isn't present / not runnable.
+        def current_version
+          path = install_path
+          return nil unless File.executable?(path)
+
+          stdout, _, status = Open3.capture3(path, "version")
+          status.success? ? stdout.strip : nil
+        rescue Errno::ENOENT
+          nil
         end
 
         def run(*)
@@ -72,28 +139,18 @@ module Capybara
           result.output.strip
         end
 
-        def find
-          env_path = ENV.fetch("LIGHTPANDA_BIN", nil)
-          return env_path if env_path && File.executable?(env_path)
-
-          path_binary = find_in_path
-          return path_binary if path_binary
-
-          default_path = default_binary_path
-          return default_path if File.executable?(default_path)
-
-          nil
-        end
-
         def download
           binary_name = platform_binary
-          url = "#{GITHUB_RELEASE_URL}/#{binary_name}"
-          destination = default_binary_path
+          tag = required_version || "nightly"
+          url = "#{GITHUB_RELEASE_URL}/#{tag}/#{binary_name}"
+          destination = install_path
 
+          log("Downloading #{binary_name} (#{tag}) → #{destination}")
           FileUtils.mkdir_p(File.dirname(destination))
 
           download_file(url, destination)
           FileUtils.chmod(0o755, destination)
+          @path = destination
 
           destination
         end
@@ -111,35 +168,23 @@ module Capybara
           File.join(cache_dir, "lightpanda", "lightpanda")
         end
 
+        # Path the gem writes the downloaded binary to. Honors a
+        # user-configured install_dir; otherwise falls back to default_binary_path.
+        def install_path
+          if @install_dir
+            File.join(@install_dir, "lightpanda")
+          else
+            default_binary_path
+          end
+        end
+
         private
 
-        def find_in_path
-          ENV["PATH"].to_s.split(File::PATH_SEPARATOR).each do |dir|
-            path = File.join(dir, "lightpanda")
+        def cached_fresh?(path)
+          return false unless File.executable?(path)
+          return true if cache_time.zero?
 
-            return path if File.executable?(path) && native_binary?(path)
-          end
-
-          nil
-        end
-
-        def native_binary?(path)
-          header = File.binread(path, 4)
-
-          return true if elf_binary?(header)
-          return true if mach_o_binary?(header)
-
-          false
-        rescue StandardError
-          false
-        end
-
-        def elf_binary?(header)
-          header.start_with?("\x7FELF")
-        end
-
-        def mach_o_binary?(header)
-          header.start_with?("\xCF\xFA\xED\xFE")
+          (Time.now - File.mtime(path)) < cache_time
         end
 
         def normalize_arch(arch)
@@ -167,7 +212,7 @@ module Capybara
         def follow_redirects(uri, destination, limit = 10)
           raise BinaryNotFoundError, "Too many redirects" if limit.zero?
 
-          Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
+          http_start(uri) do |http|
             request = Net::HTTP::Get.new(uri)
 
             http.request(request) do |response|
@@ -177,12 +222,29 @@ module Capybara
                   response.read_body { |chunk| file.write(chunk) }
                 end
               when Net::HTTPRedirection
+                log("Redirected → #{response['location']}")
                 follow_redirects(URI.parse(response["location"]), destination, limit - 1)
               else
                 raise BinaryNotFoundError, "Failed to download binary: #{response.code} #{response.message}"
               end
             end
           end
+        end
+
+        def http_start(uri, &)
+          if proxy_addr
+            Net::HTTP.start(
+              uri.host, uri.port,
+              proxy_addr, proxy_port, proxy_user, proxy_pass,
+              use_ssl: uri.scheme == "https", &
+            )
+          else
+            Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", &)
+          end
+        end
+
+        def log(message)
+          logger&.puts("[lightpanda binary] #{message}")
         end
       end
     end
