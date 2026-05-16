@@ -64,6 +64,7 @@ Metrics/BlockLength:
     - test/**/*
     - Rakefile
     - examples/**/*.rb
+    - "**/*.rake"
 
 Lint/EmptyBlock:
   Exclude:

@@ -5,6 +5,8 @@ require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 require "rake/testtask"
 
+load File.expand_path("lib/capybara/lightpanda/tasks/binary.rake", __dir__)
+
 # RSpec is retained solely for the Capybara shared-spec battery, which is
 # distributed in RSpec format by the capybara gem itself. Local tests live
 # under test/ and use Minitest::Spec.

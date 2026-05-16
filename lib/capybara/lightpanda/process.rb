@@ -64,7 +64,7 @@ module Capybara
       end
 
       def start
-        binary_path = @options.browser_path || Binary.find_or_download
+        binary_path = @options.browser_path || Binary.update
 
         raise BinaryNotFoundError, "Lightpanda binary not found" unless binary_path
 
