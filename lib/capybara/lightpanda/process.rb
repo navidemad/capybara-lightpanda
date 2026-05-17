@@ -43,10 +43,19 @@ module Capybara
       # PR #2450 (forms: add enctype + 5 submitter form-* IDL accessors +
       # text/plain submission — lets us delete polyfills.js entirely; reads
       # of form.enctype / submitter.form{Action,Enctype,Method,NoValidate,
-      # Target} now return spec-typed values natively).
-      # Build 6220 = first nightly carrying PR #2450 (merge commit
-      # 143bffdf, 2026-05-14); nightly 6219 was cut before the merge.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6220")
+      # Target} now return spec-typed values natively),
+      # PR #2478 (css: evaluate @media and matchMedia against viewport —
+      # inline <style> @media blocks now apply declarations against the
+      # hardcoded 1920×1080 viewport, and window.matchMedia(q).matches
+      # returns spec-correct booleans. Lets _lightpanda.isVisible detect
+      # inline-@media-gated hides via el.checkVisibility() without any
+      # gem-side workaround. External <link rel="stylesheet"> fetch stays
+      # out of scope by design — see .claude/rules/lightpanda-io.md
+      # limitation #6).
+      # Build 6269 = first nightly carrying PR #2478 (merge commit
+      # ab63cfbf, 2026-05-16); the 2026-05-16 nightly cut at 03:36 UTC
+      # was hours before the merge at 13:42 UTC.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6269")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 
