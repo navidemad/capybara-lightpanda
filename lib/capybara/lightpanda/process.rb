@@ -184,7 +184,7 @@ module Capybara
       end
 
       def build_args
-        [
+        base = [
           "serve",
           "--host",
           @options.host.to_s,
@@ -193,6 +193,8 @@ module Capybara
           "--log_level",
           "info",
         ]
+        extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
+        base + extra
       end
 
       def wait_for_ready
