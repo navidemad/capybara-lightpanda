@@ -75,7 +75,39 @@ Use this taxonomy across all targets — every finding lands in exactly one buck
 - **Diverged on purpose** — places we deliberately differ because Lightpanda's constraints require it. Don't flag as adoption candidates again.
 - **New risks** — open issues / regressions that could break our gem, or bugs the peers fixed that may also affect us.
 
-## Step 4: Update the right rules file
+## Step 4: Prune-and-densify pass
+
+Both rules files are loaded into Claude's context on every conversation in this project (`CLAUDE.md` includes them). They cost ~10K tokens, every turn — stale or verbose entries pay that cost forever. This pass runs BEFORE Step 5 (apply new findings) so the prune is a separate, auditable diff from the new-content edits.
+
+For each entry in `lightpanda-io.md` and `ruby-cdp-peers.md`, ask three questions:
+
+1. **Still current?** Re-verify the underlying claim:
+   - "Open Issues That Affect This Gem" rows → `gh issue view <N> --repo lightpanda-io/browser --json state` for every issue listed; if `CLOSED`, delete the row.
+   - "CDP Methods Used by This Gem" entries → grep the gem source (`git grep -nE "command\(.Network\.getCookies"` etc.); if no gem caller, move to the available-but-unused list or drop.
+   - PR references (`PR #NNNN`) embedded in rules text → `gh pr view <N> --json state,mergedAt`. If merged > 30 days ago AND the gem floor in `process.rb` covers it AND no gem-side TODO mentions the PR number, the inline `(PR #N, …)` parenthetical can be dropped — the floor comment in `process.rb` is the authoritative record.
+   - "Outstanding adoption candidates" (ruby-cdp-peers.md) → grep the gem for the named pattern (e.g. `git grep -n "wait_for_stop_moving" lib/`); if it exists, move "Outstanding" → "Adopted".
+   - "Adopted" entries → verify the cited gem file:line still exists (`git grep -n "<symbol>" lib/`). If the symbol moved, update the pointer; if the symbol was deleted, drop the entry.
+
+2. **Still load-bearing?** Can a future reader who has the gem source open figure this out without the entry?
+   - Yes → delete. The code is the source of truth.
+   - No (subtle invariant, hidden constraint, past-incident reason) → keep, but compress.
+
+3. **Densable?** Hold each surviving entry against these targets:
+   - "Open Issues" table row: ≤ 1 line, columns `Issue | Impact | Description`.
+   - "CDP Methods Used" entries: bare method name, no prose unless the gem does something non-obvious with it.
+   - Adopted / Outstanding / Diverged entry: `peer_file ↔ our_file ↔ one-clause why` — usually one line, two at most.
+   - "Limitation" sections: lead with the one-line claim; supporting prose only when a reader would otherwise re-discover a bug we already paid for.
+   - If an entry has multiple paragraphs of historical narrative ("originally we did X, then PR #N landed, then we tried Y, …"), keep the current behavior in one sentence and delete the history. `git log` is the changelog.
+
+Mechanical rules:
+- **Delete, don't archive.** No "Recently Merged Fixes", no "Historical Notes", no commented-out lines. If you need the old text, `git log -p` has it.
+- **Don't preserve numbering for missing entries.** If a list had A1–A9 and A4 becomes obsolete, renumber (or convert to bullets). The rules files aren't the upstream-wishlist's stable-cross-ref doc.
+- **One pass per file per sync run.** Don't loop — diminishing returns and risk of over-pruning.
+- **Surface what you cut in the report** (Step 6's "Prune pass" section). The user sees the entries you dropped and can object before the diff lands.
+
+Skip the prune pass entirely on a **targeted investigation** (Step 0's last bucket) — single-question runs shouldn't drag a full audit along.
+
+## Step 5: Update the right rules file
 
 - Lightpanda findings → `.claude/rules/lightpanda-io.md` (per `references/lightpanda.md` hygiene rules)
 - Ferrum / Cuprite findings → `.claude/rules/ruby-cdp-peers.md` (per `references/{ferrum,cuprite}.md` hygiene rules)
@@ -84,7 +116,7 @@ Both rules files are **current-state references, not changelogs**. Edit affected
 
 **Verify before claiming.** Don't speculatively mark issues as fixed or methods as added without confirmation from the upstream issue/PR. For workaround-removal claims specifically, validation = specs green against `LIGHTPANDA_BIN` pointing at the locally-built `main` browser (see `references/lightpanda.md`).
 
-## Step 5: Generate report
+## Step 6: Generate report
 
 Use this exact template. Omit sections with no findings rather than leaving them empty.
 
@@ -98,6 +130,12 @@ Targets run: [Lightpanda / Ferrum / Cuprite / subset]
 - ✅ Done: [slug] — [one-line: where the gem code now lives, or which upstream PR closed it]
 - ⏳ Still open: [slug] — [reason it's still pending]
 - ❌ Stale: [slug] — [why it's no longer relevant]
+
+### Prune pass
+(Omit only on targeted investigations.)
+- lightpanda-io.md: deleted N entries (issue #X closed, PR #Y embedded ref removed); compressed M entries from prose to one-liner.
+- ruby-cdp-peers.md: moved K entries from Outstanding to Adopted; compressed J entries.
+- Total token delta: roughly −N tokens from CLAUDE.md context.
 
 ### Lightpanda
 **Broken**
@@ -138,7 +176,7 @@ Targets run: [Lightpanda / Ferrum / Cuprite / subset]
 
 For pre-release audits specifically, the **Release Readiness** section is required. "Block release" should only fire on Lightpanda-side breakage (broken CDP methods, regressions affecting test passage). Ferrum/Cuprite adoption candidates never block a release — they're improvement opportunities, not bugs.
 
-## Step 6: Suggest code changes (do not implement)
+## Step 7: Suggest code changes (do not implement)
 
 If a finding has a clear next code change (workaround removal, pattern adoption), describe the specific change in the report — file:line, what to change, why — but **do not implement it** unless the user explicitly asks. The skill is for reconnaissance and planning. Code edits belong in a follow-up turn where the user has agreed to the scope.
 
@@ -150,7 +188,7 @@ LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake
 
 Don't run it yourself — `spec:incremental` is long-running and the user decides when to validate.
 
-## Step 7: Persist state for the next run
+## Step 8: Persist state for the next run
 
 After the report, **overwrite** `.claude/skills/sync-upstream/state/last-sync.md` with the report's open items so the next run can pick up where this one left off. Use this exact format:
 
@@ -176,7 +214,7 @@ Upstream PRs / issues to recheck next sync. Promote to findings if they move.
 Rules:
 - **One entry per slug** — slugs are short kebab-case identifiers (e.g. `htmldialog-polyfill-cleanup`, `pr-2431-frame-context-fix`). Stable across runs so reconciliation is trivial.
 - **No duplicates from the rules files.** Anything fully described in `lightpanda-io.md` (open issues table) or `ruby-cdp-peers.md` (outstanding adoption candidates) doesn't need to be in the state file — the rules files are the source of truth for those. State file is specifically for *follow-up actions* (cleanup, validation, gem-side code changes) and *watch items* (upstream PRs we expect to land soon).
-- **Always overwrite the whole file.** Don't append — Step 5's report is the authoritative source for what's still open after this run.
+- **Always overwrite the whole file.** Don't append — Step 6's report is the authoritative source for what's still open after this run.
 - **If there's nothing open**, write the headers + an explicit `(none)` under each section so future runs know the file is current, not abandoned.
 
-The directory `state/` is checked into the repo (one tracked file: `last-sync.md`). It's a single Markdown file, not a JSON store — human-editable if the user wants to drop a stale item between runs.
+The file `state/last-sync.md` is gitignored — local-only sync bookkeeping that the next run reads. The Write tool creates the parent directory as needed on a fresh clone, so no `.gitkeep` is required. It's a single Markdown file, not a JSON store — human-editable if the user wants to drop a stale item between runs.

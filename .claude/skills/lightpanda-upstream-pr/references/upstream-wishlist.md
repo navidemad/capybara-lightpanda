@@ -4,7 +4,7 @@ What `capybara-lightpanda` patches around because of upstream gaps in
 [lightpanda-io/browser](https://github.com/lightpanda-io/browser).
 
 Each entry has:
-- **Today** — actual behavior on current public nightly (build ≥ 6167 as of 2026-05-12) and against the gem's enforced floor `MINIMUM_NIGHTLY_BUILD = 6109`. Where verified against a different build, the entry calls it out.
+- **Today** — actual behavior on current public nightly (build ≥ 6269 as of 2026-05-17) and against the gem's enforced floor `MINIMUM_NIGHTLY_BUILD = 6269`. Where verified against a different build, the entry calls it out.
 - **Want** — Chrome / spec behavior the gem assumes
 - **Gem workaround** — where the workaround lives + one-liner
 - **Drop-on-fix** — what gem code becomes superfluous when upstream lands the fix
@@ -27,7 +27,7 @@ Use this file when:
 
 ## A. Bugs to fix upstream
 
-> Items A1–A9, A13–A21, A24–A35 have all been resolved (or retracted as gem misdiagnoses) — see section D for the historical record. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design). Numbering preserved to keep cross-references stable.
+> Items A1–A9, A13–A21, A24–A35, A41 have all been resolved (or retracted as gem misdiagnoses) — see section D for the historical record. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design). Numbering preserved to keep cross-references stable.
 
 ### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801 OPEN; #1832 CLOSED 2026-04-09)
 
@@ -65,18 +65,6 @@ Use this file when:
 - **Upstream issue/PR**: not filed.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
 - **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The phantom-newline gem-side bug goes away too if upstream collapses required line breaks around empty blocks.
-
-### A41. CDP wire frames embed raw `undefined` token (invalid JSON)
-
-- **Today (observed 2026-05-15 against installed nightly during Decidim smoke run; reproducible per page load)**: a CDP reply payload near the `sessionId` field serializes a JavaScript `undefined` value as the bare token `undefined` instead of valid JSON `null` (or omitting the key). Each Decidim system spec triggers ~4 of these, surfaced by the gem's WebSocket `JSON.parse` rescue:
-  ```
-  Failed to parse WebSocket message: unexpected character: 'undefined}]},"sessionId":"SID-N"' at line 1 column ~800
-  ```
-  The 800-column hint points to a multi-target / multi-context payload — likely `Target.targetInfoChanged` or `Runtime.executionContextCreated` for the auxiliary contexts Decidim creates (it runs multi-tenant via `switch_to_host`).
-- **Want**: emit `null` (or omit the key) wherever a value is `undefined`. JSON has no `undefined` literal — the current frame is unparseable by any strict CDP client (Playwright, Puppeteer would crash here; our gem rescues + drops).
-- **Upstream issue/PR**: not yet filed. Capturing one offending raw frame via `LIGHTPANDA_LOG_LEVEL=debug` is the prerequisite — without the exact CDP method we can't point the maintainer at a Zig serializer site.
-- **Gem workaround**: `lib/capybara/lightpanda/client/web_socket.rb#parse_message` catches `JSON::ParserError` and returns `nil`. Currently flooded with one `warn` per frame; deduped (warn once per unique error message per WebSocket instance) so a single occurrence still surfaces but doesn't drown other test output.
-- **Drop-on-fix**: nothing strictly removable on the gem side — the `JSON::ParserError` rescue stays as defense-in-depth for future malformed frames. The visible win is the disappearance of the warning under normal use and parity with strict-JSON CDP clients.
 
 ---
 
@@ -244,6 +232,7 @@ A11 (`with_default_context_wait`) and A12 (`handle_navigation_crash`) are **NOT 
 | **Bug #6 — `fetch`/`XHR` FormData multipart encoding** | 0 (no gem-side polyfill existed) | DONE 2026-05-06 (PR #2358). Turbo Drive form submits started working as soon as the nightly carrying the fix was installed. |
 | **Bug #8 — listener lifecycle during dispatch** | ~50 | DONE 2026-05-11 (commit `8d5eef44` "Improve events" — dedup check in `register` now skips `removed=true` entries; `patchListenerLifecycle` IIFE removed from `polyfills.js`). First nightly carrying the fix: ≥6198. Verified 2026-05-13 on build `1.0.0-dev.6200+198c4e5a` via direct-CDP probe (no polyfill injected). |
 | **A11 + A12 — defensive helpers** | NOT drop-on-fix | Issues closed (#2187 2026-05-04, #1849 2026-03-16) but helpers stay as defense-in-depth — see A-entries above. |
+| **A41 — CDP frames embed `undefined` token** | NOT a drop-on-fix | DONE 2026-05-15 (PR #2475 `js: emit null when JSON-stringifying unserializable values`, by us). Gem's `web_socket.rb#parse_message` `JSON::ParserError` rescue + warn-dedupe stays as defense-in-depth for any future malformed frame. |
 | **A34 — `getBoundingClientRect()` zero rect for `display:none`** | NOT A BUG | Retracted 2026-05-13 after probe verified `getBoundingClientRect()` already returns `DOMRect{0,0,0,0}` for every `display:none` case (inline, stylesheet, ancestor, `[hidden]`, descendants thereof) on installed nightly 6198 + main HEAD. Karl Seguin added the zero-rect short-circuit in `^a9b9cf14` on 2026-03-15 (`src/browser/webapi/Element.zig:1196-1207`); the gem's `_lightpanda.isObscured` comment ("Lightpanda returns a fake bounding rect…") was empirically stale by two months. Gem-side: the `style.display === 'none'` short-circuit at `javascripts/index.js:130` is dead code — `r.width === 0 \|\| r.height === 0` at line 138 already catches it. `visibility:hidden` short-circuit at line 131 stays (visibility takes a box). |
 | **A35 — `getComputedStyle(el).display` cascade resolution** | NOT A BUG | Retracted 2026-05-13. Empirical verification: `getComputedStyle(descendant-of-display-none-ancestor).display === 'block'` is Chrome behavior, not a Lightpanda gap — per CSSOM the resolved value of `display` is the element's own value, not its ancestor's. Probe confirmed: descendants of `display:none` and `[hidden]` ancestors get the correct zero rect from `getBoundingClientRect()` (via `StyleManager.isHidden` ancestor walk in `src/browser/StyleManager.zig:202-235`), and `el.checkVisibility()` correctly returns false. Gem-side: the `offsetParent === null` fallback at `_lightpanda.isVisible:116-117` and the `[hidden]` ancestor walk at `_lightpanda.isObscured:132-136` are both dead defensive code now that `checkVisibility()` is correctly implemented and `getBoundingClientRect()` zeros hidden elements. |
 
@@ -268,8 +257,7 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 17 `#attach_file` skip patterns. Net positive: enables a feature.
 6. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
 7. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
-8. **A41 — CDP frames embed bare `undefined` token (invalid JSON)** — surfaces as ~4 `Failed to parse WebSocket message…` warnings per Decidim system spec; the gem's `JSON::ParserError` rescue drops the frame, so functionally the test passes, but a strict-JSON CDP client (Playwright, Puppeteer) would crash. Filing requires a captured raw frame via `LIGHTPANDA_LOG_LEVEL=debug` first — the column-800 hint suggests it's a multi-target / multi-context payload (`Target.targetInfoChanged` or `Runtime.executionContextCreated`).
-9. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
+8. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 

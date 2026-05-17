@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6269` (first build carrying PR #2478 "css: evaluate @media and matchMedia against viewport", merge commit `ab63cfbf`, 2026-05-16 — inline `@media` + `matchMedia` now apply against the hardcoded 1920×1080 viewport, so `_lightpanda.isVisible`'s `checkVisibility()` call detects inline-`@media`-gated hides natively). Also covers PR #2450 (`forms: add enctype + 5 submitter form-* IDL accessors`, the upstream replacement for the gem's deleted `polyfills.js`), the 2026-05-13 trio PR #2431 + #2445 (iframe contextId churn fix and BrowserContext arena reset) and PR #2435 (native `HTMLDialogElement.{show, showModal, close}`).
+Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6269`. See `lib/capybara/lightpanda/process.rb:14-58` for the per-PR rationale of every bump in this floor.
 
 ## Architecture
 
@@ -22,9 +22,9 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | Domain | File | Notes |
 |---|---|---|
 | **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
-| **Audits** | audits.zig | `enable` / `disable` stubs only (added 2026-05-04 commit `080e1e64`, renamed from `Audit` → `Audits`). Not used by this gem. |
+| **Audits** | audits.zig | `enable` / `disable` stubs only. Not used by this gem. |
 | **Browser** | browser.zig | Basic browser-level commands |
-| **Console** | console.zig | `Console.messageAdded` event (PR #2339, merged 2026-05-13); console.* calls are also still mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on. The gem's Turbo activity tracker depends on `Runtime.consoleAPICalled` (no migration needed). |
+| **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
 | **Emulation** | emulation.zig | Viewport/device emulation stubs; `setUserAgentOverride` works |
@@ -32,15 +32,15 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
-| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe/worker loading; was `setSubframeLoading` until PR #2426, also extended in PR #2440 to accept a `worker` flag) |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. Cache control: `clearBrowserCache` / `canClearBrowserCache` (PR #2454), `setCacheDisabled` properly bypasses CacheLayer (PR #2456), `Network.requestServedFromCache` event (PR #2453), `fromDiskCache` field on `Network.Response` (PR #2455) — all merged 2026-05-14/15. Not used by this gem (reset disposes the BrowserContext, which wipes cache implicitly). |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors (use `LP.handleJavaScriptDialog`). |
+| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe and/or worker loading; params `{subFrame, worker}`) |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
 | **Storage** | storage.zig | Storage state; `createContext` with storage state fails (#1550) |
-| **Target** | target.zig | Target/session management. Frame IDs are now scoped to the connection-lifetime `Browser` (PR #2474, merged 2026-05-16, fixes #2472 "Duplicate target FID-0000000001" assertion in Playwright); not gem-relevant since we don't keep targetId-keyed state across `Driver#reset!`. |
-| **webMCP** | webmcp.zig | Lightpanda Model Context Protocol surface (added 2026-05-12 commit `c23d0f4f`). Not used by this gem. |
+| **Target** | target.zig | Target/session management. Frame IDs scoped to the connection-lifetime `Browser`; not gem-relevant since we don't keep targetId-keyed state across `Driver#reset!`. |
+| **webMCP** | webmcp.zig | Lightpanda Model Context Protocol surface. Not used by this gem. |
 
 ### CDP Methods Used by This Gem
 
@@ -93,9 +93,8 @@ DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
 Network.setCookies (batch)   Network.getResponseBody
-Network.setCacheDisabled (now properly disables CacheLayer, PR #2456)
-Network.clearBrowserCache    Network.canClearBrowserCache (PR #2454)
-Network.requestServedFromCache (event, PR #2453)
+Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
+Network.requestServedFromCache (event)
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
 Fetch.enable                 Fetch.disable
@@ -110,10 +109,9 @@ LP.getStructuredData         LP.waitForSelector
 LP.getMarkdown               LP.getNodeDetails
 LP.detectForms               LP.clickNode
 LP.fillNode                  LP.scrollNode
-LP.configureLoading          (per-session opt-out for iframe AND/OR worker loading,
+LP.configureLoading          (per-session opt-out for iframe and/or worker loading,
                               params {subFrame, worker}; NOT applicable to this gem —
-                              disabling subframes breaks switch_to_frame/within_frame.
-                              Previously named LP.setSubframeLoading until PR #2426.)
+                              disabling subframes breaks switch_to_frame/within_frame.)
 ```
 
 ## Known Bugs and Limitations
@@ -142,23 +140,19 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
    - Polyfills are auto-injected on every navigation via `Page.addScriptToEvaluateOnNewDocument`, registered once at session creation in `Browser#create_page`. Ad-hoc `Runtime.evaluate` calls still need to be re-run after each `visit`.
    - Node references (objectIds) become invalid after navigation
 
-5. **`HTMLElement.isContentEditable` IDL attribute always returns false** (closes #2309)
+5. **`HTMLElement.isContentEditable` IDL attribute always returns false**
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
-6. **External `<link rel="stylesheet">` fetch is intentionally out of scope** (upstream-wishlist.md C10; confirmed by upstream maintainer 2026-05-15 — NOT a bug, an explicit design choice for the headless agentic-AI / scraping use case)
-   - Lightpanda doesn't fetch remote stylesheets — `<link rel="stylesheet" href="…">` leaves `link.sheet === null` and `document.styleSheets` empty for that node indefinitely. Selectors that live in linked stylesheets render with UA defaults only. A broad-scope upstream PR (parser changes + sync remote-stylesheet fetch + cascade reimpl) won't be accepted.
-   - **Inline `@media` + matchMedia FIXED upstream**: PR #2478 (`css: evaluate @media and matchMedia against viewport`, by navidemad, closes #2477) merged 2026-05-16 (merge commit `ab63cfbf`, `git rev-list --count HEAD = 6269`). Inline `<style>` `@media` blocks now apply their declarations against the hardcoded 1920×1080 viewport already exposed by `Window.innerWidth`/`innerHeight`, and `window.matchMedia(q).matches` returns spec-correct booleans for the same viewport. Gem floor bumped to `MINIMUM_NIGHTLY_BUILD = 6269` so `el.checkVisibility()` can be trusted for inline-`@media`-gated hides without conditionals.
-   - Residual gap (external stylesheets only):
-     - `<link rel="stylesheet" href="…">` → `link.sheet === null`, the `<link>`'s entry never appears in `document.styleSheets`. Selectors that live in linked stylesheets render with UA defaults only.
-     - For Capybara tests: any responsive UI that gates a mobile-vs-desktop CTA variant via an **externally-loaded** stylesheet shows BOTH variants as visible. Hit by Decidim auth + Spree confirm dialogs during the 2026-05-15 real-app smoke run; should partially clear once the gem floor bumps to ≥6269 (whatever variants of those flows used **inline** `@media` will start hiding correctly; the externally-stylesheet-gated ones will still surface as `Capybara::Ambiguous`).
-   - **NO gem-side workaround.** Reimplementing remote-stylesheet fetch + the CSS cascade in JS is wildly out of scope for a driver. Documented user-facing answer for the residual external-stylesheet case: run cuprite (or Selenium-Chrome) for any spec whose visibility assertions depend on **externally** loaded responsive CSS; keep the rest on lightpanda for speed.
-   - `_lightpanda.isVisible` uses `el.checkVisibility()` — works for `display:none` via inline styles / outside-`@media` stylesheet rules / `[hidden]` / UA sheet, and (since the floor bump to ≥6269) also detects inline-`@media`-gated hides. Externally-loaded `@media` rules still slip through because the engine never fetches those stylesheets.
+6. **External `<link rel="stylesheet">` fetch is intentionally out of scope** (upstream design choice for the headless agentic-AI / scraping use case; broad-scope upstream PR adding remote-stylesheet fetch + cascade reimpl won't be accepted)
+   - `<link rel="stylesheet" href="…">` leaves `link.sheet === null`, never enters `document.styleSheets`. Selectors that live in linked stylesheets render with UA defaults only.
+   - Inline `<style>` `@media` + `matchMedia` ARE evaluated (against the hardcoded 1920×1080 viewport) — covered by the gem floor.
+   - **Capybara impact**: responsive UIs gating a mobile-vs-desktop CTA variant via an **externally-loaded** stylesheet show BOTH variants → `Capybara::Ambiguous`. Inline-`@media`-gated variants work correctly.
+   - **No gem-side workaround.** Documented answer: run cuprite (or Selenium-Chrome) for any spec whose visibility assertions depend on externally loaded responsive CSS; keep the rest on lightpanda.
 
 ### Open Fix PRs (not yet merged)
 
-- **PR #2157**: Feat: add full SVG DOM support — could affect tests that interact with SVG elements (icons, charts).
-- **PR #2077**: fix: Target.attachToTarget returns unique session id per call — fixes bug where multiple `attachToTarget` calls return the same session ID. Our gem only calls `attachToTarget` once per page, but improves CDP spec compliance.
+- **PR #2077**: `Target.attachToTarget` returns unique session id per call. Gem only calls `attachToTarget` once per page, so spec-compliance win only.
 
 ### Upstream Open Issues That Affect This Gem
 
@@ -170,10 +164,9 @@ LP.configureLoading          (per-session opt-out for iframe AND/OR worker loadi
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed; SharedWorker still missing and many Worker APIs still unimplemented. |
-| #2363 | Navigation | `Page.navigate("about:blank")` against a non-blank tab fires the full event sequence but does NOT replace the document — `window.location.href`, `document.URL`, and the frame tree all still report the previous URL. **Gem sidesteps it**: `Browser#reset` disposes the BrowserContext via `Target.disposeBrowserContext` (ferrum/cuprite parity) instead of navigating to `about:blank`. |
-| #2400 | Runtime | Child iframe navigation invalidates main frame's `executionContextId` for CDP drivers. Root cause: shared V8 inspector `CONTEXT_GROUP_ID` + single `IsolatedWorld` per BrowserContext, so any `frameNavigated` re-emits `executionContextCreated` for the main frame's V8 context under the child's frameId and churns the id. Opt-in workaround (`LP.configureLoading {subFrame: false}`, formerly `LP.setSubframeLoading` until PR #2426) NOT applicable to this gem — would break `switch_to_frame` / `within_frame`. **Fixed upstream 2026-05-13** by the pair PR #2431 (`ffc2baa7`, removes duplicate `Page.frameNavigated` emission + reuses child frame's V8 context for `inspector.contextCreated`) **and** PR #2445 (`12971a24`, resets browser-context arena on `Target.disposeBrowserContext`, which restores per-spec state hygiene during `Driver#reset!`). Validation against local main build `1.0.0-dev.6200+198c4e5a` across seeds 62467 / 99999 / 11111: **24 examples, 0 failures, 4 pending** (the four `frame is closed` cases stay pending due to an unrelated browser limitation). First nightly carrying both: ≥6199. **Gem-side mitigation removed**: the `refresh_frame_stack!` rescue in `Browser#find_in_frame` has been dropped along with the floor bump to `MINIMUM_NIGHTLY_BUILD = 6199`, so every supported binary already has the upstream fix. |
-| #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only). Trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect cycles. Currently not gem-relevant — gem tests don't load Worker-heavy pages. Keep on watchlist. |
-| #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory — long-running pages with repeated DOM mutation leak monotonically. Not gem-relevant for short-session test runs (`Driver#reset!` disposes the BrowserContext and a fresh page is built), but a very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. Opened 2026-05-14 against nightly 6240. |
+| #2363 | Navigation | `Page.navigate("about:blank")` against a non-blank tab fires the full event sequence but does NOT replace the document. **Gem sidesteps it** by disposing the BrowserContext in `Browser#reset` instead of navigating to `about:blank`. |
+| #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only; trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect). Not gem-relevant — gem tests don't load Worker-heavy pages. Watch only. |
+| #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory. Not gem-relevant — `Driver#reset!` disposes the BrowserContext per spec. A very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.
 
@@ -225,7 +218,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.3.0 (2026-05-13). Tags drop the `v` prefix (`0.3.0`); pre-2026-04 tags use `v` (`v0.2.6`). Asset matrix per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` plus Debian packages `lightpanda_0.3.0_{amd64,arm64}.deb` (the Arch `.pkg.tar.zst` assets shipped through ≤0.2.9 were dropped in 0.3.0).
+- Latest release: 0.3.0 (2026-05-13). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 ## Differences from Chrome/Chromium CDP
 

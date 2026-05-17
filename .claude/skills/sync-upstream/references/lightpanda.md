@@ -44,7 +44,7 @@ For each PR returned, classify by state:
 - **MERGED** — high-priority finding. The gem-side workaround the PR was meant to obsolete can probably be removed. Add an entry in the report's **Workarounds to re-evaluate** bucket with: PR number, what gem code it unblocks, what test or spec validates the removal. Validation runs against a locally-built `main` binary (see "Build local browser from main" below) — don't wait for the nightly the gem currently consumes, since `main` HEAD usually leads nightly by hours or days. When recommending removal, also call out which `MINIMUM_NIGHTLY_BUILD` the user must bump in `lib/capybara/lightpanda/process.rb` before merging the gem-side cleanup so end-users (who don't build locally) aren't broken.
 - **CLOSED (not merged)** — investigate. Either upstream rejected our approach, or the PR was superseded. Update `lightpanda-io.md` to drop any reference that assumed it would land, and check whether the underlying bug needs a new gem-side workaround.
 
-When `lightpanda-io.md` mentions a PR by number (search for `PR #` in that file), keep its state line in sync with what `gh pr view` reports. Stale "PR #X OPEN" notes against an actually-merged PR are exactly the kind of speculative claim Step 4 of SKILL.md tells us to avoid.
+When `lightpanda-io.md` mentions a PR by number (search for `PR #` in that file), keep its state line in sync with what `gh pr view` reports. Stale "PR #X OPEN" notes against an actually-merged PR are exactly the kind of speculative claim Step 5 of SKILL.md tells us to avoid — and the prune pass (Step 4) is where those notes should be cleaned up.
 
 ### New issues that touch our domains
 

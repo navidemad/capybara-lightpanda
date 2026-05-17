@@ -15,3 +15,4 @@
 .playwright-mcp/
 .zig-cache/
 node_modules/
+.claude/skills/sync-upstream/state/last-sync.md
