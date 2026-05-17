@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.4.0] - 2026-05-17
+
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6269 (published 2026-05-16 or later). The driver refuses to start against older binaries.
+
+### Added
+
+- `Driver#status_code` and `Driver#response_headers` — read the HTTP status code and response headers from the most recent document navigation. Lookups on `response_headers` are case-insensitive (`response_headers["Content-Type"]` works against any header casing). Caveat: calling `driver.network.disable` also disables the navigation-response handler — they share a CDP toggle.
+- `Driver#with_lightpanda_browser { |browser| … }` and `element.with_lightpanda_node { |node| … }` — escape hatches for tests that need raw access to Lightpanda's CDP client and `LP.*` extensions. Mixed-driver setups are safe: the element helper no-ops against non-Lightpanda elements.
+- Shifted-symbol keyboard input — `send_keys([:shift, "1"])` now produces `"!"`, `[:shift, "2"]` produces `"@"`, etc., matching a US keyboard layout. Letters fall through to their existing upcase path unchanged.
+- `LIGHTPANDA_EXTRA_ARGS` env var — whitespace-split tokens get appended to the spawned `lightpanda serve` command line, so you can experiment with opt-in upstream flags (e.g. `LIGHTPANDA_EXTRA_ARGS="--log_format pretty"`) without forking the gem.
+- `Binary.configure { |b| b.required_version = "…"; b.cache_time = …; b.install_dir = "…"; b.proxy_addr = … }`, plus `Binary.update`, `Binary.remove`, `Binary.current_version`, `Binary.install_path` — explicit, scriptable binary management. Pair with the new `rake lightpanda:binary:{version, update[version], remove}` tasks if you want to download the binary once before parallel workers start.
+
+### Changed
+
+- Inline `<style> @media` rules and `window.matchMedia(q).matches` now evaluate against the fixed 1920×1080 viewport, so visibility checks on mobile-vs-desktop CTAs gated by **inline** `@media` queries no longer surface both variants. External `<link rel="stylesheet">` responsive CSS is still out of scope (browser limitation — see README).
+- `network.headers = { … }`, `network.add_headers(…)`, and `network.clear_headers` now enable the Network domain on first call. No need to flip `network.enable` separately.
+
+### Fixed
+
+- A WebSocket-level error (bad frame, oversized message) no longer tears down the Ruby process. Pending CDP commands now fail immediately on disconnect instead of blocking for the full 30 s timeout, so teardown after a browser crash no longer freezes the suite.
+- `Cookies#load` now restores the `SameSite` attribute. Auth-cookie flows that rely on `SameSite=Strict` / `Lax` survive a YAML round-trip through `cookies.store` / `cookies.load`.
+- Stale (detached) element references now raise `ObsoleteNode` from every node operation, not just `text` / `all_text` / `visible_text`. Capybara's automatic-reload re-runs the original query instead of silently reading stale data.
+- A browser crash followed by reconnect now wipes session state (modal subscriptions, frame stack). Subsequent tests no longer see "no dialog fired" or stale iframe handles.
+- `save_screenshot` from Rails' `before_teardown` after a failed system test no longer masks the original failure with a "browser already gone" stack trace.
+- `find_modal` of the wrong type now reports the message of whatever other dialog actually fired — so an `alert` firing where the test expected a `confirm` shows up clearly in the failure message.
+- A `find(...)` immediately after a click that triggers navigation no longer raises `NoExecutionContextError`.
+- A broken or permission-denied `lsof` now surfaces as a `BinaryError` pointing at the underlying problem instead of silently failing port reclamation.
+- `session.scroll_to(node)` no longer raises `NotImplementedError`. Lightpanda still has no rendering so the call does nothing, but callers who didn't care about the result no longer crash.
+- `network.traffic` reads (used by `wait_for_network_idle`) are now thread-safe — no more inconsistent counts when the CDP message thread is busy.
+- Several internal browser-side handle leaks plugged — long shared-spec sessions no longer accumulate orphaned object references.
+
+### Removed
+
+- The last JavaScript polyfill bundle (form-IDL accessors like `form.enctype` and submitter `formAction` / `formMethod`) is gone — Lightpanda implements these natively now. No code change required on your end.
+- The iframe-context retry workaround and the `HTMLDialogElement.show` / `showModal` / `close` polyfill — both implemented natively upstream. No code change required.
+
+### Internal
+
+- `rake spec:shared:parallel` — the Capybara shared-spec battery now runs in parallel across N worker processes (~3.7× at 4 workers, ~6.6× at 8). Default worker count is `Etc.nprocessors / 2`; override with `RSPEC_WORKERS=N`.
+
 ## [0.3.0] - 2026-05-12
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6109 (published 2026-05-12). The driver refuses to start against older binaries.
