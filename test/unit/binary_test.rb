@@ -148,6 +148,9 @@ describe Capybara::Lightpanda::Binary do
       Capybara::Lightpanda::Binary.required_version = "0.3.0"
 
       sentinel = "/tmp/sentinel-path"
+      # Pinned mode must download even if PATH has lightpanda — the pin is
+      # an explicit version contract that PATH-detection should not honor.
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns("/opt/homebrew/bin/lightpanda")
       Capybara::Lightpanda::Binary.expects(:download).once.returns(sentinel)
       assert_equal sentinel, Capybara::Lightpanda::Binary.update
     end
@@ -177,6 +180,7 @@ describe Capybara::Lightpanda::Binary do
       File.chmod(0o755, path)
       File.utime(Time.now - 3600, Time.now - 3600, path)
 
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
       Capybara::Lightpanda::Binary.expects(:download).once.returns(path)
       assert_equal path, Capybara::Lightpanda::Binary.update
     end
@@ -193,6 +197,63 @@ describe Capybara::Lightpanda::Binary do
 
       Capybara::Lightpanda::Binary.expects(:download).never
       assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+
+    it "uses lightpanda from PATH when cache is empty (brew install case)" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.cache_time = 86_400
+
+      brew_dir = Dir.mktmpdir
+      brew_path = File.join(brew_dir, "lightpanda")
+      File.write(brew_path, "#!/bin/sh\necho fake\n")
+      File.chmod(0o755, brew_path)
+
+      original_path = ENV.fetch("PATH", nil)
+      ENV["PATH"] = "#{brew_dir}#{File::PATH_SEPARATOR}#{original_path}"
+
+      Capybara::Lightpanda::Binary.expects(:download).never
+      assert_equal brew_path, Capybara::Lightpanda::Binary.update
+    ensure
+      ENV["PATH"] = original_path
+    end
+
+    it "uses lightpanda from PATH when the cache is stale" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 60
+
+      stale = File.join(dir, "lightpanda")
+      File.write(stale, "stale")
+      File.chmod(0o755, stale)
+      File.utime(Time.now - 3600, Time.now - 3600, stale)
+
+      brew_dir = Dir.mktmpdir
+      brew_path = File.join(brew_dir, "lightpanda")
+      File.write(brew_path, "#!/bin/sh\necho fake\n")
+      File.chmod(0o755, brew_path)
+
+      original_path = ENV.fetch("PATH", nil)
+      ENV["PATH"] = "#{brew_dir}#{File::PATH_SEPARATOR}#{original_path}"
+
+      Capybara::Lightpanda::Binary.expects(:download).never
+      assert_equal brew_path, Capybara::Lightpanda::Binary.update
+    ensure
+      ENV["PATH"] = original_path
+    end
+
+    it "falls back to download when neither cache nor PATH has lightpanda" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.cache_time = 86_400
+
+      empty_dir = Dir.mktmpdir
+      original_path = ENV.fetch("PATH", nil)
+      ENV["PATH"] = empty_dir
+
+      sentinel = "/tmp/sentinel-path"
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(sentinel)
+      assert_equal sentinel, Capybara::Lightpanda::Binary.update
+    ensure
+      ENV["PATH"] = original_path
     end
   end
 

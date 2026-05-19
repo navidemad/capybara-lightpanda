@@ -18,7 +18,7 @@ if ENV["BROWSER"] == "lightpanda"
 end
 ```
 
-Install the binary once:
+**Binary install is optional.** By default the gem auto-downloads the nightly Lightpanda binary into `~/.cache/lightpanda/lightpanda` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
 
 ```bash
 # macOS

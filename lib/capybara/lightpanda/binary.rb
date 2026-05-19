@@ -71,7 +71,10 @@ module Capybara
         # Canonical entrypoint: ensure the binary at install_path is current,
         # download if needed, return its path. Pinned (required_version set)
         # never re-downloads when present. Unpinned re-downloads when older
-        # than cache_time.
+        # than cache_time. When unpinned and the gem cache is empty/stale,
+        # an already-installed `lightpanda` on PATH (e.g. via Homebrew) wins
+        # over re-downloading — keeps test suites running under VCR/WebMock
+        # from triggering surprise HTTP to github.com.
         def update
           destination = install_path
 
@@ -80,9 +83,17 @@ module Capybara
               log("Pinned #{required_version} present at #{destination}")
               return destination
             end
-          elsif cached_fresh?(destination)
+            return download
+          end
+
+          if cached_fresh?(destination)
             log("Cached binary at #{destination} is fresh (< #{cache_time}s)")
             return destination
+          end
+
+          if (system_path = system_binary_path)
+            log("Using lightpanda from PATH at #{system_path}")
+            return system_path
           end
 
           download
@@ -179,6 +190,20 @@ module Capybara
         end
 
         private
+
+        # Scan ENV["PATH"] for an executable `lightpanda`. Returns the first
+        # match (PATH order), or nil. Lets `brew install lightpanda-io/
+        # lightpanda/lightpanda` (and Linux package installs at /usr/local/bin)
+        # short-circuit the auto-download path in `update`.
+        def system_binary_path
+          ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).each do |dir|
+            next if dir.empty?
+
+            candidate = File.join(dir, "lightpanda")
+            return candidate if File.file?(candidate) && File.executable?(candidate)
+          end
+          nil
+        end
 
         def cached_fresh?(path)
           return false unless File.executable?(path)
