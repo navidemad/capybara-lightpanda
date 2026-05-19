@@ -135,8 +135,7 @@ module Capybara
         raise BinaryError,
               "Lightpanda #{@version} is too old. " \
               "This gem requires build >= #{MINIMUM_NIGHTLY_BUILD}. " \
-              "Update: curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/" \
-              "#{Binary.platform_binary} -o #{binary_path} && chmod +x #{binary_path}"
+              "Update: #{Binary.update_hint(binary_path)}"
       rescue Errno::ENOENT
         # Binary not runnable — let attempt_start handle it
       end
