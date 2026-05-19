@@ -166,6 +166,30 @@ module Capybara
           destination
         end
 
+        # Build a path-appropriate "how to update" command for Process's
+        # too-old-binary error. Three branches:
+        #
+        # - Symlink into a `/Cellar/` directory → installed via Homebrew;
+        #   suggest `brew update && brew upgrade lightpanda` (brew pins
+        #   each user's binary at install time and doesn't refresh on its
+        #   own when the tap publishes a newer nightly).
+        # - Path equals our own cache → suggest the gem's rake tasks; the
+        #   `remove` step is required because `update` honors `cache_time`
+        #   and would otherwise no-op on a too-old-but-not-yet-expired file.
+        # - Anything else (user-managed install at a custom path) → keep
+        #   the curl-overwrite suggestion, since we don't know how the file
+        #   got there.
+        def update_hint(binary_path)
+          if brew_managed?(binary_path)
+            "brew update && brew upgrade lightpanda"
+          elsif binary_path == install_path
+            "bundle exec rake lightpanda:binary:remove lightpanda:binary:update"
+          else
+            "curl -sL #{GITHUB_RELEASE_URL}/nightly/#{platform_binary} " \
+              "-o #{binary_path} && chmod +x #{binary_path}"
+          end
+        end
+
         def platform_binary
           arch = normalize_arch(RbConfig::CONFIG["host_cpu"])
           os = normalize_os(RbConfig::CONFIG["host_os"])
@@ -190,6 +214,19 @@ module Capybara
         end
 
         private
+
+        # Detects a Homebrew-managed binary by checking whether `path` is a
+        # symlink that resolves into a `/Cellar/` directory — the convention
+        # both `/opt/homebrew` (Apple Silicon) and `/usr/local` (Intel /
+        # linuxbrew) use. Plain files (manual installs) and gem-cache files
+        # both return false.
+        def brew_managed?(path)
+          return false unless File.symlink?(path)
+
+          File.realpath(path).include?("/Cellar/")
+        rescue Errno::ENOENT, Errno::EACCES
+          false
+        end
 
         # Scan ENV["PATH"] for an executable `lightpanda`. Returns the first
         # match (PATH order), or nil. Lets `brew install lightpanda-io/

@@ -257,6 +257,44 @@ describe Capybara::Lightpanda::Binary do
     end
   end
 
+  describe ".update_hint" do
+    it "suggests brew upgrade when the binary is a Cellar-resolving symlink" do
+      tmp = Dir.mktmpdir
+      cellar = File.join(tmp, "Cellar", "lightpanda", "nightly", "bin")
+      FileUtils.mkdir_p(cellar)
+      target = File.join(cellar, "lightpanda")
+      File.write(target, "fake")
+      File.chmod(0o755, target)
+
+      bin_dir = File.join(tmp, "bin")
+      FileUtils.mkdir_p(bin_dir)
+      symlink = File.join(bin_dir, "lightpanda")
+      File.symlink(target, symlink)
+
+      assert_equal "brew update && brew upgrade lightpanda",
+                   Capybara::Lightpanda::Binary.update_hint(symlink)
+    end
+
+    it "suggests the rake tasks when the binary is at the gem's install_path" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      path = File.join(dir, "lightpanda")
+
+      assert_equal "bundle exec rake lightpanda:binary:remove lightpanda:binary:update",
+                   Capybara::Lightpanda::Binary.update_hint(path)
+    end
+
+    it "falls back to a curl command for paths the gem doesn't recognize" do
+      path = "/usr/local/bin/lightpanda"
+      hint = Capybara::Lightpanda::Binary.update_hint(path)
+      platform = Capybara::Lightpanda::Binary.platform_binary
+
+      expected = "curl -sL https://github.com/lightpanda-io/browser/releases/download/nightly/" \
+                 "#{platform} -o #{path} && chmod +x #{path}"
+      assert_equal expected, hint
+    end
+  end
+
   describe ".logger" do
     it "returns nil by default" do
       Capybara::Lightpanda::Binary.instance_variable_set(:@logger, nil)
