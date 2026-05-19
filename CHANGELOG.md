@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-05-19
+
+### Fixed
+
+- The gem now picks up a pre-installed `lightpanda` from `PATH` (e.g. `brew install lightpanda-io/lightpanda/lightpanda` or a manual `curl` install) instead of always re-downloading the nightly binary into `~/.cache/lightpanda/`. Test suites that block outbound HTTP via VCR/WebMock no longer crash on the surprise GET to `github.com` the first time the driver starts. Auto-download still kicks in if no `lightpanda` is on `PATH` and the gem cache is empty/stale, so default setups are unaffected.
+
 ## [0.4.0] - 2026-05-17
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6269 (published 2026-05-16 or later). The driver refuses to start against older binaries.
