@@ -48,6 +48,7 @@ end
 
 class DropdownsController < ActionController::Base
   include Rails.application.routes.url_helpers
+
   skip_forgery_protection
 
   def safe
