@@ -156,6 +156,11 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - Stop-gap while pinned <6353: set `el.style.display` instead of toggling the `hidden` attribute (inline style always wins).
    - Repro (passes on ≥6353): `examples/rails_dropdown_minitest_example.rb`.
 
+8. **SIGTERM ignored after a CDP connection — regression in builds ≥~6331 (NOT in 6323)**
+   - A lightpanda process that has served a CDP client no longer terminates on `SIGTERM` (idle processes still do; today's published nightly 6323 is clean both ways). Introduced between 6323 and 6353; prime suspect is the CDP socket-ownership rework (#2495 "Main/Network reads CDP socket", build ~6331, `875c1477`) — `git merge-base` puts it in the broken window, absent at clean 6323 (`037db695`).
+   - **Gem impact**: `Process#stop` and the `weak_kill` finalizer send `TERM` (group, then direct) then call `Process.wait` with **no SIGKILL fallback** → teardown hangs forever once any browser has been used (observed: 45-min hang at the end of `rake test:all` on build 6353).
+   - **Blocks** adopting any nightly ≥~6331 (including the build carrying #2498/#2487) until either upstream makes SIGTERM interrupt the new CDP socket-read path, or the gem adds a `SIGKILL`-after-timeout fallback to `Process#stop`/`weak_kill` (defensive — worth doing regardless).
+
 ### Open Fix PRs (not yet merged)
 
 - **PR #2077**: `Target.attachToTarget` returns unique session id per call. Gem only calls `attachToTarget` once per page, so spec-compliance win only.
