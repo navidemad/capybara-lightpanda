@@ -11,7 +11,7 @@ module Capybara
       # Seconds to wait for a graceful SIGTERM before escalating to SIGKILL in
       # `stop` / the GC finalizer. Some Lightpanda builds stop responding to
       # SIGTERM once they've served a CDP connection (regression ~build 6331,
-      # upstream #2495 — see .claude/rules/lightpanda-io.md limitation #8); the
+      # upstream #2495 — see .claude/rules/lightpanda-io.md limitation #7); the
       # escalation keeps teardown from blocking forever on Process.wait.
       STOP_GRACE_SECONDS = 3
 
@@ -56,13 +56,19 @@ module Capybara
       # hardcoded 1920×1080 viewport, and window.matchMedia(q).matches
       # returns spec-correct booleans. Lets _lightpanda.isVisible detect
       # inline-@media-gated hides via el.checkVisibility() without any
-      # gem-side workaround. External <link rel="stylesheet"> fetch stays
-      # out of scope by design — see .claude/rules/lightpanda-io.md
-      # limitation #6).
-      # Build 6269 = first nightly carrying PR #2478 (merge commit
-      # ab63cfbf, 2026-05-16); the 2026-05-16 nightly cut at 03:36 UTC
-      # was hours before the merge at 13:42 UTC.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6269")
+      # gem-side workaround),
+      # PR #2487 (css: external <link rel="stylesheet"> fetch behind the
+      # --enable-external-stylesheets flag — build_args now passes that flag
+      # unconditionally, so the floor MUST include the build that introduced
+      # it; the flag is a fatal UnknownOption on builds < 6353),
+      # PR #2498 (StyleManager: author display rule beats UA [hidden] — fixes
+      # the Stimulus/Alpine dropdown ElementNotFound).
+      # NOTE: builds >= ~6331 also carry the #2495 CDP-socket-read regression
+      # where a CDP-used process ignores SIGTERM (upstream #2507); the gem
+      # tolerates it via the STOP_GRACE_SECONDS SIGKILL escalation above.
+      # Build 6353 = main HEAD merge f1b0adf9 (2026-05-20) carrying #2487 +
+      # #2498; the first published nightly with it is the 2026-05-21 cut.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6353")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 
@@ -191,6 +197,10 @@ module Capybara
           @options.port.to_s,
           "--log_level",
           "info",
+          # External stylesheet fetch (PR #2487, build >= 6353 — enforced by the
+          # floor). Always on so linked CSS contributes to checkVisibility /
+          # getComputedStyle; see .claude/rules/lightpanda-io.md limitation #6.
+          "--enable-external-stylesheets",
         ]
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
