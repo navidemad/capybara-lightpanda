@@ -11,6 +11,49 @@ module Capybara
 
       delegate %i[on off] => :client
 
+      # --- Live-browser registry: clean teardown at process exit --------------
+      # Capybara's per-test reset (Driver#reset!) disposes only the
+      # BrowserContext and keeps the process + CDP connection alive, so a
+      # browser outlives the suite. With nothing calling #quit at exit, teardown
+      # would fall to the Process GC finalizer, which SIGTERMs the binary WITHOUT
+      # first closing the CDP WebSocket. Lightpanda swallows a *single* SIGTERM
+      # while a CDP connection is live (graceful shutdown blocks on the
+      # connection worker; it takes three signals to force-exit), so that SIGTERM
+      # is absorbed and only the STOP_GRACE_SECONDS SIGKILL escalation reaps it —
+      # 3s per process, and a hard hang before that escalation existed. #quit
+      # closes the WS first, so we track live browsers and #quit them from a
+      # single at_exit, guaranteeing the socket is closed before any SIGTERM.
+      @live = []
+      @live_mutex = Mutex.new
+      @at_exit_installed = false
+
+      class << self
+        def track(browser)
+          @live_mutex.synchronize do
+            @live << browser unless @live.include?(browser)
+            next if @at_exit_installed
+
+            @at_exit_installed = true
+            at_exit { quit_all }
+          end
+        end
+
+        def untrack(browser)
+          @live_mutex.synchronize { @live.delete(browser) }
+        end
+
+        # at_exit handler: close every live browser's CDP WebSocket (via #quit)
+        # before its Process finalizer can SIGTERM the binary. Per-browser rescue
+        # so one wedged browser can't strand the rest.
+        def quit_all
+          @live_mutex.synchronize { @live.dup }.each do |browser|
+            browser.quit
+          rescue StandardError
+            nil
+          end
+        end
+      end
+
       # Lightpanda binary version (e.g. "lightpanda 0.2.9 nightly.5267") and
       # parsed nightly build number, captured at Process startup. nil when
       # the gem is connecting to an externally-managed Lightpanda via ws_url.
@@ -58,6 +101,7 @@ module Capybara
         create_page
 
         @started = true
+        self.class.track(self)
       end
 
       # Per-session BrowserContext (Chrome's incognito-profile primitive).
@@ -144,6 +188,7 @@ module Capybara
       end
 
       def quit
+        self.class.untrack(self)
         begin
           @client&.close
         rescue StandardError
