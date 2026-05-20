@@ -144,11 +144,17 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
-6. **External `<link rel="stylesheet">` fetch is intentionally out of scope** (upstream design choice for the headless agentic-AI / scraping use case; broad-scope upstream PR adding remote-stylesheet fetch + cascade reimpl won't be accepted)
-   - `<link rel="stylesheet" href="…">` leaves `link.sheet === null`, never enters `document.styleSheets`. Selectors that live in linked stylesheets render with UA defaults only.
-   - Inline `<style>` `@media` + `matchMedia` ARE evaluated (against the hardcoded 1920×1080 viewport) — covered by the gem floor.
-   - **Capybara impact**: responsive UIs gating a mobile-vs-desktop CTA variant via an **externally-loaded** stylesheet show BOTH variants → `Capybara::Ambiguous`. Inline-`@media`-gated variants work correctly.
-   - **No gem-side workaround.** Documented answer: run cuprite (or Selenium-Chrome) for any spec whose visibility assertions depend on externally loaded responsive CSS; keep the rest on lightpanda.
+6. **External `<link rel="stylesheet">` fetch is now opt-in** (PR #2487, merged 2026-05-20, build ≥6353; default OFF)
+   - Default (flag off): `<link rel="stylesheet" href="…">` leaves `link.sheet === null`, never enters `document.styleSheets`; linked selectors get UA defaults only. The gem passes no flag, so this is still its out-of-the-box behavior.
+   - Opt in via `--enable-external-stylesheets` (e.g. `LIGHTPANDA_EXTRA_ARGS=--enable-external-stylesheets`) or `LP.configureLoading {externalStylesheets: true}` per-session: linked sheets are fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contribute to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct since PR #2498 (see #7).
+   - Inline `<style>` `@media` + `matchMedia` evaluate against the hardcoded 1920×1080 viewport regardless of the flag.
+   - **Capybara impact**: with the flag OFF, a CTA variant gated by an externally-loaded stylesheet shows BOTH variants → `Capybara::Ambiguous`; turning the flag ON fixes those specs at the cost of one synchronous CSS fetch per `<link>`. Inline-`@media`-gated variants work either way.
+
+7. **Author class/id `display` rules now beat UA `[hidden]` — FIXED in build ≥6353** (PR #2498, merge `f1b0adf9`, merged 2026-05-20)
+   - Was: `StyleManager.isElementHidden` short-circuited to hidden on a UA `display:none` match (`[hidden]` attr, `<script>`/`<style>`/closed-`<details>` children, `input[type=hidden]`) *before* the author-rule walk, so `<div class="flex" hidden>` with `.flex{display:flex}` read as hidden and `click_on` raised `ElementNotFound` on Stimulus/Alpine dropdown items. Fix moves the UA short-circuit to *after* the author walk (gated on no author `display` rule matching).
+   - **Floor not yet bumped**: gem floor is still 6269; the first published nightly carrying #2498 (build 6353) lands in the 2026-05-21 nightly. Builds 6269–6352 still exhibit the bug. **After the floor is bumped to 6353, delete this entry.**
+   - Stop-gap while pinned <6353: set `el.style.display` instead of toggling the `hidden` attribute (inline style always wins).
+   - Repro (passes on ≥6353): `examples/rails_dropdown_minitest_example.rb`.
 
 ### Open Fix PRs (not yet merged)
 
