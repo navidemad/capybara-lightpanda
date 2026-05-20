@@ -142,10 +142,6 @@ RSpec.configure do |config|
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
-      # Frame-closed detection — Lightpanda doesn't expose enough state to
-      # distinguish a closed iframe from a live one within the frame_stack.
-      /#switch_to_frame works if the frame is closed/,
-      /#within_frame works if the frame is closed/,
       # CSS text-transform / case sensitivity for invisible text — depends
       # on getComputedStyle returning cascade-resolved `text-transform`,
       # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.
@@ -157,21 +153,6 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
-      # Modal dialogs — Capybara's accept_alert/accept_confirm/accept_prompt/
-      # dismiss_confirm/dismiss_prompt block API doesn't yet pass against
-      # Lightpanda's LP.handleJavaScriptDialog pre-arm model. The async-alert
-      # variants (setTimeout-driven) are particularly hard given pre-arm
-      # semantics — the response must be set BEFORE the dialog opens, but the
-      # timing is unknown. Sync variants may be partly a gem impl gap.
-      # TODO: triage which are gem bugs vs. genuine architectural limits.
-      /#accept_alert should accept the alert/,
-      /#accept_alert with an asynchronous alert/,
-      /#accept_confirm should accept the confirm/,
-      /#accept_confirm should work with nested modals/,
-      /#accept_prompt should accept the prompt/,
-      /#accept_prompt should allow special characters in the reponse/,
-      /#dismiss_confirm should dismiss the confirm/,
-      /#dismiss_prompt should dismiss the prompt/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }

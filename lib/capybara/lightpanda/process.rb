@@ -8,6 +8,13 @@ module Capybara
       READY_PATTERN = /server running.*address\s*=\s*(\d+\.\d+\.\d+\.\d+:\d+)/m
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
+      # Seconds to wait for a graceful SIGTERM before escalating to SIGKILL in
+      # `stop` / the GC finalizer. Some Lightpanda builds stop responding to
+      # SIGTERM once they've served a CDP connection (regression ~build 6331,
+      # upstream #2495 — see .claude/rules/lightpanda-io.md limitation #8); the
+      # escalation keeps teardown from blocking forever on Process.wait.
+      STOP_GRACE_SECONDS = 3
+
       # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch/
       # xpath/history/iframe-context/dialog fixes the gem now relies on:
       # PR #2255 (Network.clearBrowserCookies empty params + Network.getAllCookies),
@@ -89,23 +96,7 @@ module Capybara
       def stop
         return unless @pid
 
-        begin
-          ::Process.kill("TERM", -@pid) # Kill process group
-        rescue Errno::ESRCH, Errno::EPERM
-          # Process group already dead, try direct
-          begin
-            ::Process.kill("TERM", @pid)
-          rescue Errno::ESRCH
-            # Process already dead
-          end
-        end
-
-        begin
-          ::Process.wait(@pid)
-        rescue Errno::ECHILD
-          # Already reaped
-        end
-
+        self.class.send(:terminate, @pid)
         cleanup_pipes
         @pid = nil
       end
@@ -306,17 +297,57 @@ module Capybara
         end
       end
 
-      # Class method so the finalizer proc doesn't capture `self` (which
-      # would prevent GC from ever running the finalizer).
+      # Class methods so the finalizer proc doesn't capture `self` (which
+      # would prevent GC from ever running the finalizer). `terminate` is shared
+      # by the instance `#stop` and the finalizer so both escalate TERM -> KILL.
       class << self
         private
 
         def weak_kill(pid)
-          proc do
-            ::Process.kill("TERM", -pid)
+          proc { terminate(pid) }
+        end
+
+        # SIGTERM the process group, then SIGKILL if it hasn't exited within
+        # `grace` seconds; reap the child. Safe on an already-dead pid. The
+        # SIGKILL escalation is what keeps teardown from hanging on builds that
+        # ignore SIGTERM after serving CDP (see STOP_GRACE_SECONDS).
+        def terminate(pid, grace: STOP_GRACE_SECONDS)
+          signal(pid, "TERM")
+          return if reap_within(pid, grace)
+
+          signal(pid, "KILL")
+          begin
             ::Process.wait(pid)
-          rescue Errno::ESRCH, Errno::ECHILD, Errno::EPERM
+          rescue Errno::ECHILD
             nil
+          end
+        end
+
+        # Signal the process group (-pid), falling back to the bare pid if the
+        # group send is rejected (ESRCH/EPERM).
+        def signal(pid, name)
+          ::Process.kill(name, -pid)
+        rescue Errno::ESRCH, Errno::EPERM
+          begin
+            ::Process.kill(name, pid)
+          rescue Errno::ESRCH
+            nil
+          end
+        end
+
+        # True once `pid` is reaped (or already gone); false if still alive
+        # after `seconds`.
+        def reap_within(pid, seconds)
+          deadline = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) + seconds
+          loop do
+            begin
+              return true if ::Process.wait(pid, ::Process::WNOHANG)
+            rescue Errno::ECHILD
+              return true
+            end
+            return false if ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) >= deadline
+
+            sleep 0.05
           end
         end
       end
