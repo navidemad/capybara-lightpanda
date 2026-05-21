@@ -9,10 +9,16 @@ module Capybara
       ADDRESS_IN_USE_PATTERN = /err=AddressInUse/
 
       # Seconds to wait for a graceful SIGTERM before escalating to SIGKILL in
-      # `stop` / the GC finalizer. Some Lightpanda builds stop responding to
-      # SIGTERM once they've served a CDP connection (regression ~build 6331,
-      # upstream #2495 — see .claude/rules/lightpanda-io.md limitation #7); the
-      # escalation keeps teardown from blocking forever on Process.wait.
+      # `stop` / the GC finalizer. Lightpanda absorbs a *single* SIGTERM while a
+      # CDP connection is still live (graceful shutdown blocks on the connection
+      # worker — see .claude/rules/lightpanda-io.md limitation #7B). The PRIMARY
+      # fix is gem-side: Browser closes the CDP WebSocket before SIGTERM at exit
+      # (Browser.quit_all via at_exit), so SIGTERM lands after EOF and teardown is
+      # instant. This escalation is the BACKSTOP for crash / GC-abandon paths the
+      # at_exit can't reach — without it, a SIGTERM left to the finalizer (which
+      # can't close the WS) blocked Process.wait forever (the 45-min
+      # `rake test:all` hang). NOT the same as #2507/#2509 (telemetry curl-multi),
+      # which the gem never hits because it disables telemetry.
       STOP_GRACE_SECONDS = 3
 
       # Floor for the cookie/navigation/redirect/modal/keyboard/css/forms/dispatch/
@@ -63,9 +69,12 @@ module Capybara
       # it; the flag is a fatal UnknownOption on builds < 6353),
       # PR #2498 (StyleManager: author display rule beats UA [hidden] — fixes
       # the Stimulus/Alpine dropdown ElementNotFound).
-      # NOTE: builds >= ~6331 also carry the #2495 CDP-socket-read regression
-      # where a CDP-used process ignores SIGTERM (upstream #2507); the gem
-      # tolerates it via the STOP_GRACE_SECONDS SIGKILL escalation above.
+      # NOTE: the gem's teardown hang is the live-CDP-connection SIGTERM hang
+      # (limitation #7B) — telemetry-independent, present on 6353 AND on the #2509
+      # fix build, handled by the at_exit WS-close plus the SIGKILL backstop
+      # above. It is NOT #2507 (telemetry curl-multi, fixed by #2509): the gem
+      # disables telemetry, so it never creates the curl multi #2507 needs. Keep
+      # both teardown defenses even after #2509 lands in a nightly.
       # Build 6353 = main HEAD merge f1b0adf9 (2026-05-20) carrying #2487 +
       # #2498; the first published nightly with it is the 2026-05-21 cut.
       MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6353")
