@@ -32,14 +32,19 @@ jobs:
           bundler-cache: true
       - name: Determine Lightpanda cache key
         id: lightpanda-cache-key
-        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        # Fold the gem's minimum build into the key so a MINIMUM_NIGHTLY_BUILD
+        # bump invalidates the cache — otherwise restore-keys resurrects a
+        # sub-floor binary the gem then rejects with BinaryError.
+        run: |
+          echo "floor=$(grep 'MINIMUM_NIGHTLY_BUILD = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+')" >> "$GITHUB_OUTPUT"
+          echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: Cache Lightpanda nightly binary
         uses: actions/cache@v5
         with:
           path: ~/.cache/lightpanda
-          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
           restore-keys: |
-            lightpanda-${{ runner.os }}-
+            lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
       - name: Lint
         run: bundle exec rubocop
       - name: Unit tests
@@ -72,13 +77,18 @@ jobs:
           bundler-cache: true
       - name: Determine Lightpanda cache key
         id: lightpanda-cache-key
-        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        # Fold the gem's minimum build into the key so a MINIMUM_NIGHTLY_BUILD
+        # bump invalidates the cache — otherwise restore-keys resurrects a
+        # sub-floor binary the gem then rejects with BinaryError.
+        run: |
+          echo "floor=$(grep 'MINIMUM_NIGHTLY_BUILD = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+')" >> "$GITHUB_OUTPUT"
+          echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: Cache Lightpanda nightly binary
         uses: actions/cache@v5
         with:
           path: ~/.cache/lightpanda
-          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
           restore-keys: |
-            lightpanda-${{ runner.os }}-
+            lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
       - name: Capybara shared specs
         run: bundle exec rake spec:shared
