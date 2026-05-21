@@ -196,7 +196,10 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
      with a live CDP connection (graceful shutdown shouldn't block forever on the connection
      worker). Minimal repro (Lightpanda + raw CDP only): open a CDP WebSocket, leave it open,
      send one SIGTERM (no navigation needed) → process hangs; close the WS first → clean exit.
-     Filed upstream as #2510.
+     Filed upstream as #2510; fix proposed in navidemad's PR #2511 (`network: terminate live
+     CDP connections on shutdown`, OPEN). #2511 only fixes the browser side — keep both gem
+     layers (`at_exit` primary + finalizer escalation backstop) regardless, since crash and
+     GC-abandon paths still need the gem's teardown.
 
 ### Open Fix PRs (not yet merged)
 
