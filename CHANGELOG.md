@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0] - 2026-05-22
+
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6353 (published 2026-05-21). The driver refuses to start against older binaries.
+
+### Changed
+
+- External `<link rel="stylesheet">` CSS is now fetched and applied by default. Responsive variants gated by an external stylesheet — a desktop-vs-mobile CTA defined in your app's compiled CSS bundle, say — now resolve to the single variant matching the fixed 1920×1080 viewport, so finding or clicking them no longer raises `Capybara::Ambiguous`. Specs that previously had to fall back to cuprite or Selenium for externally-loaded responsive CSS now run on lightpanda. The cost is one extra synchronous CSS fetch per `<link>` while the page loads.
+
+### Fixed
+
+- Suites no longer hang at exit. After the last test, the browser process could absorb the shutdown signal and keep the run blocked for minutes (much longer on CI) before being force-killed. The gem now closes the CDP connection before signaling the process and escalates to a hard kill if it doesn't exit promptly, so the process always dies fast and leaves no orphaned `lightpanda` behind.
+- Elements toggled via the `[hidden]` attribute now respect an explicit `display` set by your app's CSS, the way a real browser does. This clears the `Capybara::ElementNotFound` and visibility failures that hit dropdowns and disclosure widgets built with Stimulus or Alpine.
+- When your installed Lightpanda binary is too old, the update hint now matches where that binary actually lives — a `PATH` install, the gem's download cache, or a Homebrew install each get the right command instead of a generic one. Especially handy this release, since the raised floor means an outdated binary will refuse to start.
+
 ## [0.4.1] - 2026-05-19
 
 ### Fixed
