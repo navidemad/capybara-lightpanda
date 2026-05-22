@@ -150,56 +150,31 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - Inline `<style>` `@media` + `matchMedia` evaluate against the hardcoded 1920×1080 viewport.
    - **Capybara impact**: responsive CTA variants gated by an external stylesheet now resolve to a single variant (no more `Capybara::Ambiguous`); externally-loaded responsive specs that previously needed cuprite/Selenium work on lightpanda.
 
-7. **SIGTERM can be ignored after a CDP connection — handled gem-side**
+7. **SIGTERM after a live CDP connection — fixed upstream, gem keeps its own teardown**
 
-   There are **two distinct** SIGTERM hangs here; don't conflate them.
+   Two distinct hangs, both now fixed upstream. The gem keeps both teardown layers
+   regardless, because crash / GC-abandon paths still need them.
 
-   - **(A) Telemetry/curl-multi hang** (upstream #2507, fixed by #2509). On a build that
-     owns a curl `multi` handle, the Network loop drops the CDP fds from its poll set and
-     `poll(timeout=-1)` starves, so SIGTERM is ignored *even if the CDP socket was already
-     closed*. The `multi` is created **only by telemetry** (`telemetry/lightpanda.zig`
-     `submitRequest`). **The gem never hits this** — it spawns with
-     `LIGHTPANDA_DISABLE_TELEMETRY=true`, so no `multi` is ever created. Verified: a broken
-     6353 ReleaseFast build hangs 8/8 with telemetry on, 0/8 with telemetry off. #2509 fixes
-     it (8/8 → 0/8) for telemetry-on CDP clients (Puppeteer/Playwright/chromedp).
+   - **(A) Telemetry/curl-multi hang** (#2507, fixed by #2509, MERGED). A curl `multi` handle
+     (created *only* by telemetry) makes the Network loop drop the CDP fds from its poll set,
+     so SIGTERM is ignored even with the socket closed. **The gem never hits this** — it spawns
+     with `LIGHTPANDA_DISABLE_TELEMETRY=true`, so no `multi` exists.
+   - **(B) Live-CDP-connection hang — the gem's actual 45-min teardown hang** (#2510, fixed by
+     #2511, MERGED 2026-05-21, build ≥6371). Lightpanda absorbed a *single* SIGTERM while a CDP
+     connection was live (graceful shutdown blocked on the connection worker; 3 signals to
+     force-exit). Telemetry-independent; a bare WS connect with zero CDP commands triggers it.
+     The gem hit it because `Driver#reset!` keeps the process + open client alive between tests
+     and nothing called `#quit` at suite exit, so teardown fell to the Process GC finalizer —
+     which has only the pid and never closes the WS.
 
-   - **(B) Live-CDP-connection hang — this is the gem's actual 45-min teardown hang.**
-     Lightpanda absorbs a **single** SIGTERM whenever a CDP connection is **still live**.
-     `Sighandler.zig` runs the graceful-shutdown listeners on the 1st/2nd signal and only
-     `process.exit(1)`s on the **3rd**; the graceful path (`Server.deinit`) spins
-     `while active_threads > 0` waiting for the per-connection worker, which doesn't unwind
-     while the CDP socket is open. **Telemetry-independent and NOT fixed by #2509** — verified:
-     with the CDP WS left open at SIGTERM, *both* the broken 6353 and the #2509 fix 6354
-     ReleaseFast builds hang identically (telemetry off); closing the WS first → clean exit
-     on the next SIGTERM. A bare WS connect with zero CDP commands is enough to trigger it.
-     (Untested whether pre-#2495 6323 also had variant B.)
-
-   - **Why the gem hit (B):** `Browser#quit` closes the CDP client (WS) *before* `Process#stop`
-     (SIGTERM), so explicit quit is clean (~0.05s). But `Driver#reset!` keeps the process +
-     open client alive between tests, nothing called `quit` at suite exit, and Capybara 3.40
-     doesn't quit drivers — so cleanup fell to the **Process GC finalizer** (`weak_kill` →
-     `terminate(pid)`), which only has the pid and never closes the WS → SIGTERM on a live-CDP
-     process → pre-escalation `Process.wait` deadlocked the finalizer pass = the 45-min hang.
-
-   - **Gem handling (two layers):**
+   - **Gem handling (keep both layers regardless of the upstream fixes):**
      1. **Primary** — `Browser` tracks live instances and `#quit`s them (closing the CDP WS
-        first) from a single `at_exit` (`Browser.track`/`quit_all`). So at process exit the
-        socket is closed before any SIGTERM and teardown is instant. Regression-tested by
-        `test/features/teardown_test.rb` (asserts at-exit teardown < 2s, i.e. clean SIGTERM,
-        not the 3s SIGKILL fallback).
-     2. **Backstop** — `Process#stop` and the `weak_kill` finalizer still escalate `TERM` →
-        wait `STOP_GRACE_SECONDS` (3s) → `SIGKILL` → reap, covering crash/GC-abandon paths the
-        `at_exit` can't reach. Keep both regardless of any floor bump — variant (B) is not what
-        #2509 fixes.
-
-   - **Open upstream (separate from #2509):** a single SIGTERM should terminate lightpanda even
-     with a live CDP connection (graceful shutdown shouldn't block forever on the connection
-     worker). Minimal repro (Lightpanda + raw CDP only): open a CDP WebSocket, leave it open,
-     send one SIGTERM (no navigation needed) → process hangs; close the WS first → clean exit.
-     Filed upstream as #2510; fix proposed in navidemad's PR #2511 (`network: terminate live
-     CDP connections on shutdown`, OPEN). #2511 only fixes the browser side — keep both gem
-     layers (`at_exit` primary + finalizer escalation backstop) regardless, since crash and
-     GC-abandon paths still need the gem's teardown.
+        first) from a single `at_exit` (`Browser.track`/`quit_all`), so the socket is closed
+        before any SIGTERM. Regression-tested by `test/features/teardown_test.rb` (at-exit
+        teardown < 2s = clean SIGTERM, not the 3s SIGKILL fallback).
+     2. **Backstop** — `Process#stop` and the `weak_kill` finalizer escalate `TERM` → wait
+        `STOP_GRACE_SECONDS` (3s) → `SIGKILL` → reap, covering the crash / GC-abandon paths the
+        `at_exit` can't reach (#2511 only fixes the browser side).
 
 ### Open Fix PRs (not yet merged)
 
