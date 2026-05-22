@@ -185,14 +185,13 @@ These are upstream Lightpanda limits, not driver bugs:
 | Surface | Status |
 |---|---|
 | Screenshots | Not supported — no rendering engine |
-| `window.getComputedStyle()` | Returns defaults — no CSS engine |
-| `scroll_to`, `resize` | No layout engine |
-| External stylesheets (`<link rel="stylesheet">`) | Not fetched — by design (headless agentic browser, not a layout engine) |
-| Responsive CSS (`@media`, `matchMedia`) | Not evaluated — same reason; `matchMedia()` returns false for every query, `@media` rule contents aren't applied to the cascade |
+| `scroll_to`, `resize` | No layout engine — no real scroll/resize; the viewport is fixed at 1920×1080 |
+| `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
+| CSS: external `<link>`, `@media`, `matchMedia` | Now fetched, parsed, and evaluated — but against the fixed 1920×1080 viewport, so responsive variants always resolve at desktop width (no resize to other breakpoints) |
 | File uploads (`<input type="file">`) | Not yet supported (upstream [#2175](https://github.com/lightpanda-io/browser/issues/2175)) |
 | Complex Stimulus controllers | Some may not execute fully |
 
-If your test depends on an external stylesheet or on `@media`-gated visibility (mobile/desktop CTA duplicates that one viewport hides), keep that spec on Cuprite — the visibility cascade won't resolve the duplicates under Lightpanda. The dual-driver pattern above is built for exactly this — fast Lightpanda for the structural majority, Cuprite for the layout-sensitive minority.
+External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. The catch is the viewport is fixed at 1920×1080 with no real layout, so everything resolves at desktop width. If a spec needs to switch breakpoints (resize to a mobile width) or asserts on pixel-level layout, keep it on Cuprite — that's what the dual-driver pattern above is for.
 
 ## How it works { #internals }
 

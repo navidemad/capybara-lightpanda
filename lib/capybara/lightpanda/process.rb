@@ -74,7 +74,8 @@ module Capybara
       # fix build, handled by the at_exit WS-close plus the SIGKILL backstop
       # above. It is NOT #2507 (telemetry curl-multi, fixed by #2509): the gem
       # disables telemetry, so it never creates the curl multi #2507 needs. Keep
-      # both teardown defenses even after #2509 lands in a nightly.
+      # both teardown defenses even after #2511 (the variant-B fix, MERGED in
+      # build 6371) lands in a nightly.
       # Build 6353 = main HEAD merge f1b0adf9 (2026-05-20) carrying #2487 +
       # #2498; the first published nightly with it is the 2026-05-21 cut.
       MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6353")
