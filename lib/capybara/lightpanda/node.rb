@@ -147,6 +147,21 @@ module Capybara
         end
       end
 
+      # Capybara's drag-and-drop API (`Element#drop`). String/Pathname arguments
+      # are file paths — read here and rebuilt as `File` objects in the page;
+      # Hash arguments are `{ mime_type => data }` string drops. We assemble a
+      # `DataTransfer` and fire `dragenter` -> `dragover` -> `drop` on this
+      # element, so HTML5 dropzones see the payload via `event.dataTransfer`.
+      #
+      # Requires a Lightpanda build with DataTransfer/DataTransferItem/DragEvent
+      # (lightpanda-io/browser#2043, PR #2671); on older builds the drop JS
+      # raises "DataTransfer is not defined".
+      def drop(*args)
+        files, strings = partition_drop_args(args)
+        call(DROP_JS, files.to_json, strings.to_json)
+        nil
+      end
+
       def select_option
         call(SELECT_OPTION_JS)
       end
@@ -355,6 +370,44 @@ module Capybara
         n.positive? ? str[0, n] : str
       end
 
+      # Split `drop` arguments into file descriptors and string-data descriptors.
+      # Strings/Pathnames (Capybara normalizes `#to_path`) are file paths, read
+      # here and base64-encoded so binary content survives the JSON hop; Hashes
+      # are `{ type => data }` string drops. Returns `[files, strings]`.
+      def partition_drop_args(args)
+        files = []
+        strings = []
+        args.each do |arg|
+          if arg.is_a?(Hash)
+            arg.each { |type, data| strings << { type: type.to_s, data: data.to_s } }
+          else
+            path = arg.to_s
+            files << {
+              name: File.basename(path),
+              type: drop_mime_for(path),
+              b64: [File.binread(path)].pack("m0"),
+            }
+          end
+        end
+        [files, strings]
+      end
+
+      # The dropzone handler only reads `file.name`, but real upload widgets key
+      # off `file.type`, so map the common upload extensions and fall back to a
+      # generic binary type.
+      DROP_MIME_TYPES = {
+        ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".png" => "image/png",
+        ".gif" => "image/gif", ".webp" => "image/webp", ".svg" => "image/svg+xml",
+        ".pdf" => "application/pdf", ".txt" => "text/plain", ".csv" => "text/csv",
+        ".json" => "application/json", ".html" => "text/html", ".xml" => "application/xml",
+        ".zip" => "application/zip",
+      }.freeze
+      private_constant :DROP_MIME_TYPES
+
+      def drop_mime_for(path)
+        DROP_MIME_TYPES.fetch(File.extname(path).downcase, "application/octet-stream")
+      end
+
       # Whitespace-normalized text (Cuprite pattern). Capybara's text matchers compare
       # against this, and Lightpanda's textContent preserves source-template whitespace
       # differently than Chrome — without normalization, multi-line fixtures fail
@@ -477,6 +530,26 @@ module Capybara
             event = new Event(name, init);
           }
           this.dispatchEvent(event);
+        }
+      JS
+
+      # Build a DataTransfer from the JSON payloads and replay the HTML5 drop
+      # sequence on this element. Files arrive base64-encoded and are rebuilt
+      # with `atob` (Blob accepts the binary string directly); string drops are
+      # added as typed items so the page can read them via getData/getAsString.
+      DROP_JS = <<~JS
+        function(filesJson, stringsJson) {
+          var el = this;
+          var dt = new DataTransfer();
+          JSON.parse(filesJson).forEach(function(f) {
+            dt.items.add(new File([atob(f.b64)], f.name, { type: f.type }));
+          });
+          JSON.parse(stringsJson).forEach(function(s) {
+            dt.items.add(s.data, s.type);
+          });
+          ['dragenter', 'dragover', 'drop'].forEach(function(name) {
+            el.dispatchEvent(new DragEvent(name, { bubbles: true, cancelable: true, dataTransfer: dt }));
+          });
         }
       JS
 

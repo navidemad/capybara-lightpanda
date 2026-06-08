@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+> **Needs a Lightpanda build with the drag-and-drop DataTransfer APIs** ([lightpanda-io/browser#2671](https://github.com/lightpanda-io/browser/pull/2671), closing the last gap in [#2043](https://github.com/lightpanda-io/browser/issues/2043)). Until that ships in a nightly, the drop test fails against released binaries.
+
+### Added
+
+- Drag-and-drop file and data upload through Capybara's standard `Element#drop`. `find("#dropzone").drop("/path/to/report.pdf")` reads the file and rebuilds it as a `File` inside the page; `find("#dropzone").drop("text/plain" => "hello")` drops typed string data. The driver builds a `DataTransfer` and fires `dragenter` → `dragover` → `drop`, so HTML5 dropzones (React Dropzone, Uppy, ActiveStorage direct-upload) receive the payload through `event.dataTransfer.files` / `.items`. This is drag-and-drop *upload*, not element-to-element `drag_to`, which still needs the layout geometry Lightpanda doesn't have.
+
 ## [0.5.0] - 2026-05-22
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6353 (published 2026-05-21). The driver refuses to start against older binaries.
