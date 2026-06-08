@@ -78,28 +78,6 @@ RSpec.configure do |config|
     # a `requires:` flag we can pass through `capybara_skip`. Each entry maps
     # to a documented Lightpanda CDP gap in `.claude/rules/lightpanda-io.md`.
     browser_limitation_patterns = [
-      # File uploads — `Page.setFileInputFiles` not implemented (upstream
-      # #2175); `Node#set` raises NotImplementedError for `<input type=file>`.
-      # Narrowed to skip only the cases that actually attempt an upload —
-      # the no-file / locator-error / make-visible-error variants pass
-      # because they don't hit the missing CDP method.
-      /#attach_file with normal form should set a file path/,
-      /#attach_file with normal form should be able to set on element if no locator passed/,
-      /#attach_file with normal form casts to string/,
-      /#attach_file with multipart form should set a file path/,
-      /#attach_file with multipart form should send prior hidden field/,
-      /#attach_file with multipart form should send content type/,
-      /#attach_file with multipart form should not break when uploading/,
-      /#attach_file with multipart form should not break when using HTML5/,
-      /#attach_file with multipart form should not send anything when attaching no files/,
-      /#attach_file with multipart form should not append files/,
-      /#attach_file with multipart form should fire change/,
-      /#attach_file with :exact option should set a file path/,
-      /#attach_file with :make_visible option applies/,
-      /#attach_file with :make_visible option accepts/,
-      /#attach_file with :make_visible option resets/,
-      /#attach_file with :make_visible option should fire/,
-      /#attach_file with a block/,
       # Click coordinate / modifier / delay tests rely on real geometry and
       # `Input.dispatchMouseEvent` modifier flags. `Page.getLayoutMetrics`
       # returns hardcoded 1920x1080 and modifier propagation is incomplete.
