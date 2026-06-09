@@ -47,7 +47,6 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. T
 - **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` returns a hardcoded 1920×1080 PNG.
 - **Visual regression / pixel tests** — same reason; keep these on Cuprite.
 - **Scroll, resize, full `getComputedStyle`** — no layout engine.
-- **File uploads** (`input[type=file]`) — not yet implemented upstream ([lightpanda#2175](https://github.com/lightpanda-io/browser/issues/2175)).
 - **Service Workers, Web Workers** — not yet implemented ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
 - **WebAuthn / passkeys** — not implemented.
 - **`accept_modal(:confirm | :prompt)` overriding the JS return value** — Lightpanda auto-dismisses dialogs; the gem captures the message but cannot influence the JS-side return. `accept_modal(:alert)` and `dismiss_modal(:confirm | :prompt)` work.
@@ -59,8 +58,8 @@ def skip_on_lightpanda(reason)
   skip(reason) if ENV["BROWSER"] == "lightpanda"
 end
 
-it "uploads an avatar", :file_upload do
-  skip_on_lightpanda "lightpanda: input[type=file] not implemented"
+it "matches the dashboard screenshot", :visual do
+  skip_on_lightpanda "lightpanda: no compositor — screenshots are stubbed"
   # ...
 end
 ```

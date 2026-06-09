@@ -161,6 +161,7 @@ end
 | Navigation — `visit`, `click_link`, `go_back`, `go_forward`, `refresh` | ✓ |
 | JavaScript — `evaluate_script`, `execute_script`, `evaluate_async_script` | ✓ (V8) |
 | Forms — `fill_in`, `click_button`, `select`, `choose`, `check`, `uncheck` | ✓ |
+| File uploads — `attach_file` | ✓ — `DOM.setFileInputFiles` + multipart submit (build ≥6672) |
 | Finders — `find`, `all`, `within`, CSS + XPath | ✓ |
 | Matchers — `assert_selector`, `assert_text`, `has_field?`, `has_select?` | ✓ |
 | Cookies — `set_cookie`, `clear_cookies`, `remove_cookie` | ✓ |
@@ -188,7 +189,6 @@ These are upstream Lightpanda limits, not driver bugs:
 | `scroll_to`, `resize` | No layout engine — no real scroll/resize; the viewport is fixed at 1920×1080 |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
 | CSS: external `<link>`, `@media`, `matchMedia` | Now fetched, parsed, and evaluated — but against the fixed 1920×1080 viewport, so responsive variants always resolve at desktop width (no resize to other breakpoints) |
-| File uploads (`<input type="file">`) | Not yet supported (upstream [#2175](https://github.com/lightpanda-io/browser/issues/2175)) |
 | Complex Stimulus controllers | Some may not execute fully |
 
 External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. The catch is the viewport is fixed at 1920×1080 with no real layout, so everything resolves at desktop width. If a spec needs to switch breakpoints (resize to a mobile width) or asserts on pixel-level layout, keep it on Cuprite — that's what the dual-driver pattern above is for.

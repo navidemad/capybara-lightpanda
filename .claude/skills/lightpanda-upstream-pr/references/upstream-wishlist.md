@@ -70,13 +70,7 @@ Use this file when:
 
 ## B. Missing CDP / DOM methods
 
-> Items B1–B3, B6, B7 have all been resolved — see section D for the historical record. Numbering preserved to keep cross-references stable.
-
-### B4. `<input type=file>` / `Page.setFileInputFiles` not implemented (#2175)
-
-- **Want**: file upload support.
-- **Gem workaround**: `Node#set` raises `NotImplementedError` for file inputs. Skip-listed: 26 `#attach_file` specs.
-- **Drop-on-fix**: implement `Node#set_file` using `Page.setFileInputFiles`. Removes 26 skip patterns.
+> Items B1–B4, B6, B7 have all been resolved — see section D for the historical record. Numbering preserved to keep cross-references stable.
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
@@ -199,7 +193,6 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | **B12 — `HTMLDialogElement` methods** | ~30 | Dialog block in `polyfills.js` |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
 | **Bug #7 residual — `enctype` + 5 submitter IDL overrides** | ~40 | `patchFormIDL` IIFE can be removed once `enctype` getter + submitter overrides land |
-| **B4 — file uploads** | adds ~30, removes 17 skips | Net positive: enables a feature |
 | **B5#1, B5#2 — keyCode/charCode + caret keys** | 2 skip patterns | Synthetic CDP keyboard events need keyCode populated; ArrowLeft/Home/End need to move the input caret |
 | **B8, B9, B10 — datalist + frame-closed + getComputedStyle cascade** | ~10 skip patterns | Removes spec_helper entries |
 | **Bug #9 — `requestSubmit()` cancel throws** | ~5 | `try { … } catch` wrap in CLICK_JS |
@@ -233,6 +226,7 @@ A11 (`with_default_context_wait`) and A12 (`handle_navigation_crash`) are **NOT 
 | **Bug #8 — listener lifecycle during dispatch** | ~50 | DONE 2026-05-11 (commit `8d5eef44` "Improve events" — dedup check in `register` now skips `removed=true` entries; `patchListenerLifecycle` IIFE removed from `polyfills.js`). First nightly carrying the fix: ≥6198. Verified 2026-05-13 on build `1.0.0-dev.6200+198c4e5a` via direct-CDP probe (no polyfill injected). |
 | **A11 + A12 — defensive helpers** | NOT drop-on-fix | Issues closed (#2187 2026-05-04, #1849 2026-03-16) but helpers stay as defense-in-depth — see A-entries above. |
 | **A41 — CDP frames embed `undefined` token** | NOT a drop-on-fix | DONE 2026-05-15 (PR #2475 `js: emit null when JSON-stringifying unserializable values`, by us). Gem's `web_socket.rb#parse_message` `JSON::ParserError` rescue + warn-dedupe stays as defense-in-depth for any future malformed frame. |
+| **B4 — `<input type=file>` upload** | adds ~14 LOC, removes 17 skips | DONE 2026-06-08. Both halves landed upstream: `DOM.setFileInputFiles` (PR #2635, build 6625) + multipart `.file` submission encoding (PR #2654, build 6672 — our #2663 closed in favour of the maintainer's more complete impl). Gem wired `Node#fill_input`'s `when "file"` → `Browser#set_file_input_files` → `DOM.setFileInputFiles`, bumped `MINIMUM_NIGHTLY_BUILD` to 6672, removed the 17 `#attach_file` skip patterns. Validated: 29 `#attach_file` specs, 0 failures. |
 | **A34 — `getBoundingClientRect()` zero rect for `display:none`** | NOT A BUG | Retracted 2026-05-13 after probe verified `getBoundingClientRect()` already returns `DOMRect{0,0,0,0}` for every `display:none` case (inline, stylesheet, ancestor, `[hidden]`, descendants thereof) on installed nightly 6198 + main HEAD. Karl Seguin added the zero-rect short-circuit in `^a9b9cf14` on 2026-03-15 (`src/browser/webapi/Element.zig:1196-1207`); the gem's `_lightpanda.isObscured` comment ("Lightpanda returns a fake bounding rect…") was empirically stale by two months. Gem-side: the `style.display === 'none'` short-circuit at `javascripts/index.js:130` is dead code — `r.width === 0 \|\| r.height === 0` at line 138 already catches it. `visibility:hidden` short-circuit at line 131 stays (visibility takes a box). |
 | **A35 — `getComputedStyle(el).display` cascade resolution** | NOT A BUG | Retracted 2026-05-13. Empirical verification: `getComputedStyle(descendant-of-display-none-ancestor).display === 'block'` is Chrome behavior, not a Lightpanda gap — per CSSOM the resolved value of `display` is the element's own value, not its ancestor's. Probe confirmed: descendants of `display:none` and `[hidden]` ancestors get the correct zero rect from `getBoundingClientRect()` (via `StyleManager.isHidden` ancestor walk in `src/browser/StyleManager.zig:202-235`), and `el.checkVisibility()` correctly returns false. Gem-side: the `offsetParent === null` fallback at `_lightpanda.isVisible:116-117` and the `[hidden]` ancestor walk at `_lightpanda.isObscured:132-136` are both dead defensive code now that `checkVisibility()` is correctly implemented and `getBoundingClientRect()` zeros hidden elements. |
 
@@ -254,10 +248,9 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 2. **Bug #7 (residual) — `HTMLFormElement.enctype` IDL + 5 submitter overrides** — ~40 LOC drop-on-fix when bundled with the gem-side polyfill removal. Tiny upstream PR: same pattern as the existing `getMethod`/`getAction`/`getTarget` accessors at Form.zig:58-111. Submitter side (`formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate`) lives in HTMLButton.zig + HTMLInput.zig and reflects the corresponding HTML attributes. Bundling all six in one PR is the right shape — Turbo's `FormSubmission` constructor reads them all together. **Upstream issue**: #2449, **Upstream PR**: #2450 (open as of 2026-05-13).
 3. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest single-item LOC saving among open items, but the most expensive to implement.
 4. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing, still open. Keep the gem's readyState fallback as a safety net even after a fix lands (cheap), but the 2-second cap could be retired.
-5. **B4 — `<input type=file>` / `Page.setFileInputFiles` (#2175)** — adds ~30 gem LOC, removes 17 `#attach_file` skip patterns. Net positive: enables a feature.
-6. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
-7. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
-8. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
+5. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
+6. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+7. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 

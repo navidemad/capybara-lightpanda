@@ -57,7 +57,7 @@ Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
 Runtime.consoleAPICalled (event)
 DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
-DOM.describeNode
+DOM.describeNode             DOM.setFileInputFiles
 Network.getAllCookies        Network.setCookie
 Network.deleteCookies        Network.clearBrowserCookies
 Network.enable               Network.disable
@@ -184,13 +184,10 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 | Issue | Impact | Description |
 |---|---|---|
-| #2175 | JS/CDP | **Implement `<input type="file">` support**. Aligned with our existing `NotImplementedError` in `Node#set` for file inputs. |
 | #2173 | Crash | `TargetClosedError` navigating to React apps via CDP — browser crashes. Our `handle_navigation_crash` reconnect logic covers this, but would appear as `DeadBrowserError` after retry. |
-| #2043 | CDP | Roadmap discussion for CDP automation features (setFileInputFiles, Input events, dialog, history, window.open); directly relevant to our workarounds. |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed; SharedWorker still missing and many Worker APIs still unimplemented. |
-| #2363 | Navigation | `Page.navigate("about:blank")` against a non-blank tab fires the full event sequence but does NOT replace the document. **Gem sidesteps it** by disposing the BrowserContext in `Browser#reset` instead of navigating to `about:blank`. |
 | #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only; trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect). Not gem-relevant — gem tests don't load Worker-heavy pages. Watch only. |
 | #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory. Not gem-relevant — `Driver#reset!` disposes the BrowserContext per spec. A very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. |
 
@@ -209,7 +206,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - Web Workers: partial support — `URL`, `AbortController`, `AbortSignal`, `OffscreenCanvas`. Many Worker APIs still missing (#2017). Workers run in the same thread as the page and have a separate context.
 - No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
-- File upload not supported (`input[type=file]` operations will fail; Node#set raises `NotImplementedError`)
+- File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635, build ≥6625) sets `input.files` + fires `change`; PR #2654 (build ≥6672) wires multipart `.file` submission in `webapi/net/FormData.zig` (filename + Content-Type + raw bytes, RFC 7578). `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files` (objectId + `Array(value).map(&:to_s)`); the 6672 floor guarantees both halves are present. Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures). Paths are read off the machine running Lightpanda — fine for the gem's locally-spawned process.
 
 ## CLI Reference
 
@@ -244,7 +241,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.3.0 (2026-05-13). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+- Latest release: 0.3.1 (2026-05-26). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 ## Differences from Chrome/Chromium CDP
 

@@ -136,11 +136,6 @@ module Capybara
       # would otherwise require explicit cookies.clear / storage.clear /
       # close-target dance, and the browser auto-isolates state for the
       # new context. Driver#reset! delegates here.
-      #
-      # Side benefit: avoids `Page.navigate("about:blank")` against a
-      # non-blank tab, which doesn't actually replace the document on
-      # current Lightpanda nightly (lightpanda-io/browser#2363). The
-      # context-disposal path sidesteps that bug entirely.
       def reset
         dispose_browser_context
         @client.clear_subscriptions
@@ -506,6 +501,17 @@ module Capybara
       # so this is what we compare for cross-query node equality.
       def backend_node_id(remote_object_id)
         page_command("DOM.describeNode", objectId: remote_object_id).dig("node", "backendNodeId")
+      end
+
+      # Populate a file <input> from one or more local file paths via
+      # DOM.setFileInputFiles (PR #2635, build ≥6625): Lightpanda resolves the
+      # objectId, replaces input.files with a real FileList, and fires
+      # `input`/`change`. The submitted form then carries the bytes as
+      # multipart/form-data (PR #2654, build ≥6672) — both halves are needed,
+      # which is why MINIMUM_NIGHTLY_BUILD sits at the 6672 floor. Paths are
+      # read off the machine running Lightpanda (local for the spawned process).
+      def set_file_input_files(remote_object_id, paths)
+        page_command("DOM.setFileInputFiles", objectId: remote_object_id, files: paths)
       end
 
       def screenshot(path: nil, format: :png, quality: nil, full_page: false, encoding: :binary)

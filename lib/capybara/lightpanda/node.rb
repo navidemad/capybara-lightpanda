@@ -272,7 +272,13 @@ module Capybara
         when "checkbox", "radio"
           call(SET_CHECKBOX_JS, value ? true : false)
         when "file"
-          raise NotImplementedError, "File uploads not yet supported by Lightpanda"
+          # DOM.setFileInputFiles (PR #2635, build ≥6625) sets input.files +
+          # fires change; multipart form submission carries the bytes upstream
+          # (PR #2654, build ≥6672, webapi/net/FormData.zig). Both halves are in
+          # the floor, so attach_file uploads end-to-end. `value` is a path
+          # String or Array<String> (multiple: true); cast each element so a
+          # Pathname / non-string locator still serializes over CDP.
+          driver.browser.set_file_input_files(@remote_object_id, Array(value).map(&:to_s))
         when "date"
           call(SET_VALUE_JS, format_date_value(value))
         when "time"

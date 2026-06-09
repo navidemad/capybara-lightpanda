@@ -68,7 +68,15 @@ module Capybara
       # unconditionally, so the floor MUST include the build that introduced
       # it; the flag is a fatal UnknownOption on builds < 6353),
       # PR #2498 (StyleManager: author display rule beats UA [hidden] — fixes
-      # the Stimulus/Alpine dropdown ElementNotFound).
+      # the Stimulus/Alpine dropdown ElementNotFound),
+      # PR #2635 (dom: DOM.setFileInputFiles backs input.files + fires change
+      # for <input type=file>) AND PR #2654 (forms: encode file inputs as
+      # multipart/form-data on submit — filename + Content-Type + bytes per
+      # RFC 7578). Both halves are required for attach_file to upload end-to-end:
+      # #2635 populates the FileList, #2654 makes form submission carry the
+      # bytes. Node#fill_input's `when "file"` branch calls
+      # Browser#set_file_input_files, so the floor MUST include the #2654 build;
+      # on builds 6625–6671 the file attaches but the form submits empty.
       # NOTE: the gem's teardown hang is the live-CDP-connection SIGTERM hang
       # (limitation #7B) — telemetry-independent, present on 6353 AND on the #2509
       # fix build, handled by the at_exit WS-close plus the SIGKILL backstop
@@ -76,9 +84,10 @@ module Capybara
       # disables telemetry, so it never creates the curl multi #2507 needs. Keep
       # both teardown defenses even after #2511 (the variant-B fix, MERGED in
       # build 6371) lands in a nightly.
-      # Build 6353 = main HEAD merge f1b0adf9 (2026-05-20) carrying #2487 +
-      # #2498; the first published nightly with it is the 2026-05-21 cut.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6353")
+      # Build 6672 = the #2654 merge (22d1c5ec, 2026-06-08) — the first commit
+      # carrying both file-upload halves, and now the binding floor. (The prior
+      # 6353 floor — main HEAD f1b0adf9 carrying #2487 + #2498 — is subsumed.)
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6672")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

@@ -49,7 +49,7 @@ Cuprite is small — only ~7 files of interest. Direct file-by-file comparison i
 
 - `lib/capybara/cuprite/options.rb` — Chromium flag list, not transferable
 - Anything related to Chrome binary discovery / Xvfb / headless flag toggling
-- File upload helpers — Lightpanda doesn't support `input[type=file]` (issue #2175 upstream)
+- ~~File upload helpers~~ — no longer a skip: file input support landed upstream (build ≥6672, PR #2635 + #2654) and the gem wires `attach_file` via `DOM.setFileInputFiles`. Cuprite's file-upload / `drag_to` helpers are now comparison candidates.
 
 ## Categorize findings
 
