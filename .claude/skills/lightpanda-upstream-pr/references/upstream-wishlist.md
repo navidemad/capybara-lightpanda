@@ -85,6 +85,15 @@ Use this file when:
 - **Gem workaround**: none possible gem-side (the header is assembled in Zig; page JS cannot set `Origin`). App-side workaround for beta testers: `config.action_cable.disable_request_forgery_protection = true` in `config/environments/test.rb`.
 - **Drop-on-fix**: nothing to drop in the gem — remove the app-side workaround advice from beta docs once the floor covers the fix.
 
+### A43. 3xx response without `Location` header aborts navigation (body never rendered, document left empty)
+
+- **Today (verified 2026-06-12 against installed nightly 6703)**: a navigation (tested: native form POST) answered with `303 + HTML body and NO Location header` never renders — the old document is torn down and nothing replaces it, leaving the page with no `<html>` node at all (Capybara: `Unable to find xpath "/html"`). Cause in source: `src/browser/HttpClient.zig` `processOneMessage` (~line 1083) routes **every** 300–399 status into the redirect path, and `handleRedirect` (~line 1888) returns `error.LocationNotFound` when the header is absent. Per RFC 9110 §15.4 and the fetch spec, a 3xx without `Location` is a normal final response whose body must be delivered; Chrome renders it. Control case verified working: `422 + body` renders fine.
+- **Real-world impact**: Rails apps render bodies with a 3xx status to satisfy Turbo's "form responses must redirect to another location" check — alonetone's signup success path does exactly `render 'thank_you', layout: 'pages', status: 303`. Found 2026-06-12 adding alonetone to the real-apps suite: `spec/features/account_requests_spec.rb` "submits the form and succeeds" never sees the thank-you page (with Turbo in front the symptom softens to "page stays on the form"). Minimal Ruby-side trigger: Rack app where `POST /submit` → `[303, {"content-type" => "text/html"}, ["<h1>Thank you</h1>"]]`, click the submit button, assert the body — fails; same with 422 passes. (Upstream reproducer must be rebuilt CDP-only per the skill's rules.)
+- **Want**: enter the redirect path only when a `Location` header is present; otherwise fall through to the normal "transfer done" path so the body/status/headers are delivered as the final response. Fix shape: in `processOneMessage`, guard the `status >= 300 and status <= 399` branch with `conn.getResponseHeader("location", 0) != null`.
+- **Upstream issue**: not yet filed.
+- **Gem workaround**: none possible gem-side (redirect handling lives in the Zig HTTP client). The real-apps workflow pins alonetone's spec to the error-render example (`account_requests_spec.rb:4`) to keep the matrix green.
+- **Drop-on-fix**: widen `spec:` for the alonetone entry in `.github/workflows/real-apps.yml` back to the whole `account_requests_spec.rb` once `MINIMUM_NIGHTLY_BUILD` covers the fix.
+
 ---
 
 ## B. Missing CDP / DOM methods
