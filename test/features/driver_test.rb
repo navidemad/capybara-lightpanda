@@ -1105,15 +1105,18 @@ describe Capybara::Lightpanda::Driver do
       assert_match(/boom/, err.message)
     end
 
-    it "raises NotImplementedError for file uploads" do
+    # Uploads are supported since build 6672 (DOM.setFileInputFiles) — a bad
+    # path must surface the browser's FileNotFound instead of silently
+    # submitting an empty input. Happy-path coverage: #attach_file shared specs.
+    it "raises BrowserError(FileNotFound) when the upload path doesn't exist" do
       session.visit("/lightpanda/form_test")
       js = "var fi = document.createElement('input'); fi.type='file'; fi.id='file-input'; document.body.appendChild(fi)"
       session.execute_script(js)
       file_input = session.find(:css, "#file-input", visible: false)
-      err = assert_raises(NotImplementedError) do
-        file_input.set("/tmp/test.txt")
+      err = assert_raises(Capybara::Lightpanda::BrowserError) do
+        file_input.set("/nonexistent/lightpanda/upload.txt")
       end
-      assert_match(/File uploads/, err.message)
+      assert_match(/FileNotFound/, err.message)
     end
   end
 

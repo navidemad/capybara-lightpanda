@@ -18,6 +18,18 @@ if ENV["BROWSER"] == "lightpanda"
 end
 ```
 
+**Rails system tests don't read `Capybara.javascript_driver`** — `ActionDispatch::SystemTestCase` (and RSpec system specs) pick their driver through `driven_by`. Gate it the same way:
+
+```ruby
+# minitest — test/application_system_test_case.rb
+driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
+
+# RSpec — spec/support/system.rb
+config.before(:each, type: :system) do
+  driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
+end
+```
+
 **Binary install is optional.** By default the gem auto-downloads the nightly Lightpanda binary into `~/.cache/lightpanda/lightpanda` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
 
 ```bash
@@ -28,6 +40,12 @@ brew install lightpanda-io/browser/lightpanda
 curl -L -o /usr/local/bin/lightpanda \
   https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux
 chmod +x /usr/local/bin/lightpanda
+```
+
+WebMock/VCR intercepts the auto-download because it runs as plain `Net::HTTP` inside the test process. If you'd rather not install a binary, trigger the download once from an unstubbed process and the cached copy is used from then on:
+
+```bash
+bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'
 ```
 
 Run one suite:

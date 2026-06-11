@@ -483,5 +483,35 @@ describe "Lightpanda Hotwire-zone probes" do
       assert_equal true, result["ok"], "popstate did not fire after history.back(): #{result.inspect}"
     end
   end
+
+  # ───────────────────────────────────────────────
+  # Zone 5 — document lifecycle events.
+  # Turbo's PageObserver reaches pageLoaded() (→ turbo:load) ONLY through
+  # `readystatechange`. Lightpanda never fires it natively (wishlist A36);
+  # the gem's index.js shim re-dispatches it from DOMContentLoaded / load.
+  # These assert the guarantee pages actually see — shim today, native once
+  # upstream lands and the shim is dropped.
+  # ───────────────────────────────────────────────
+
+  describe "Zone 5 — document lifecycle events" do
+    before { session.visit("/lightpanda/probe/lifecycle") }
+
+    it "delivers readystatechange at interactive and complete to page listeners" do
+      log = session.evaluate_script("window.__lifecycle_log")
+      states = log.filter_map { |entry| entry[/\Areadystatechange:(.+)\z/, 1] }
+
+      assert_includes states, "interactive",
+                      "readystatechange(interactive) never reached the page — Turbo's PageObserver stalls at stage=loading: #{log.inspect}"
+      assert_includes states, "complete",
+                      "readystatechange(complete) never reached the page — turbo:load can't fire: #{log.inspect}"
+    end
+
+    it "fires DOMContentLoaded then window load with the matching readyState" do
+      log = session.evaluate_script("window.__lifecycle_log")
+
+      assert_includes log, "DOMContentLoaded:interactive", log.inspect
+      assert_includes log, "window.load:complete", log.inspect
+    end
+  end
 end
 # rubocop:enable Layout/LineLength

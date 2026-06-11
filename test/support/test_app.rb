@@ -574,6 +574,58 @@ class TestApp
     "ok"
   end
 
+  # Records every document lifecycle signal from a head script, so the probe
+  # can assert which events actually reached page listeners (wishlist A36:
+  # Lightpanda never fires readystatechange natively; the gem shims it).
+  get "/lightpanda/probe/lifecycle" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Lifecycle Probe</title>
+          <script>
+            window.__lifecycle_log = ["script-eval:" + document.readyState];
+            document.addEventListener("readystatechange", function() { window.__lifecycle_log.push("readystatechange:" + document.readyState); });
+            document.addEventListener("DOMContentLoaded", function() { window.__lifecycle_log.push("DOMContentLoaded:" + document.readyState); });
+            window.addEventListener("load", function() { window.__lifecycle_log.push("window.load:" + document.readyState); });
+          </script>
+        </head>
+        <body><h1>lifecycle probe</h1></body>
+      </html>
+    HTML
+  end
+
+  # Real @hotwired/turbo bundle (vendored UMD build) — NOT the mock Turbo
+  # global used by the /lightpanda/turbo_* fixtures above. Serves the
+  # end-to-end turbo:load regression in test/features/turbo_load_test.rb.
+  get "/lightpanda/probe/turbo_dist.js" do
+    content_type "text/javascript"
+    File.read(File.expand_path("../fixtures/turbo-8.0.23.umd.js", __dir__))
+  end
+
+  # Mirrors the beta-tester pattern that exposed A36: the server renders
+  # html[data-turbo-not-loaded] and only Turbo's own turbo:load callback
+  # removes it. If Turbo's PageObserver never completes, the attribute sticks.
+  get "/lightpanda/probe/turbo_load" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html data-turbo-not-loaded="1">
+        <head>
+          <title>Turbo Load Probe</title>
+          <script>
+            window.__turbo_load_fired = false;
+            document.addEventListener("turbo:load", function() {
+              window.__turbo_load_fired = true;
+              document.documentElement.removeAttribute("data-turbo-not-loaded");
+            });
+          </script>
+          <script src="/lightpanda/probe/turbo_dist.js"></script>
+        </head>
+        <body><h1>Turbo load probe</h1></body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/elements" do
     <<~HTML
       <!DOCTYPE html>
