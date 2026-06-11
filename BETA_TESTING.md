@@ -60,22 +60,20 @@ BROWSER=lightpanda bundle exec rspec spec/system/
 
 ## Parallel test suites
 
-Each worker needs its own Lightpanda port — sharing the default kills the second worker with `ProcessTimeoutError: port 9222 is already in use`. Set the port to `0` and the OS assigns a free ephemeral port to every worker; the gem reads the actual address back from Lightpanda's startup output:
+Nothing to configure. The default port is `0`: the OS assigns every worker its own free ephemeral port, and the gem reads the actual address back from Lightpanda's startup output. `parallel_rspec` / `parallel_tests` work out of the box, and a Lightpanda you started manually on `9222` doesn't conflict either.
+
+Need a fixed, known port (external tooling, firewall rules)? Pin it:
 
 ```ruby
 # spec/support/capybara.rb — right after require "capybara-lightpanda"
 Capybara::Lightpanda.configure do |c|
-  c.port = 0
+  c.port = 9222
 end
 ```
 
-The gem's default `:lightpanda` registration reads this configuration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both pick it up — no driver re-registration needed. If you'd rather have deterministic ports per worker, `parallel_tests` exposes `TEST_ENV_NUMBER`:
+The gem's default `:lightpanda` registration reads this configuration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both pick it up — no driver re-registration needed.
 
-```ruby
-Capybara::Lightpanda.configure { |c| c.port = 9222 + ENV["TEST_ENV_NUMBER"].to_i }
-```
-
-**Don't pass the port through `driven_by`.** `driven_by :lightpanda, options: { port: 0 }` is silently ignored — Rails only forwards `options:` for its built-in drivers (selenium, cuprite, rack_test, playwright) and drops them for everything else. Keep `driven_by :lightpanda` bare and configure the port as above.
+**Don't pass options through `driven_by`.** `driven_by :lightpanda, options: { port: … }` is silently ignored — Rails only forwards `options:` for its built-in drivers (selenium, cuprite, rack_test, playwright) and drops them for everything else. Use `Capybara::Lightpanda.configure` and keep `driven_by :lightpanda` bare.
 
 ## What we expect to fail (don't file these)
 

@@ -13,7 +13,13 @@ module Capybara
       # it just delays the eventual failure.
       DEFAULT_HANDSHAKE_TIMEOUT = ENV.fetch("LIGHTPANDA_HANDSHAKE_TIMEOUT", 5).to_i
       DEFAULT_HOST = "127.0.0.1"
-      DEFAULT_PORT = 9222
+      # 0 = OS-assigned ephemeral port. Lightpanda logs the address it
+      # actually bound and Process#wait_for_ready parses it back, so every
+      # driver instance — including each parallel test worker — gets its own
+      # free port with zero configuration. Pin a fixed port via
+      # `Capybara::Lightpanda.configure { |c| c.port = 9222 }` when external
+      # tooling needs a known address.
+      DEFAULT_PORT = 0
       DEFAULT_WINDOW_SIZE = [1024, 768].freeze
 
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,

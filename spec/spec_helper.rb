@@ -25,10 +25,6 @@ Capybara.server = :puma, { Silent: true }
 Capybara.register_driver(:lightpanda) do |app|
   options = {
     timeout: 10,
-    # OS-assigned ephemeral port: Lightpanda binds a free port and the gem
-    # reads the actual address back from its startup output. Race-free,
-    # unlike probing with a throwaway TCPServer.
-    port: 0,
     browser_path: ENV["LIGHTPANDA_BIN"] || Capybara::Lightpanda::Binary.update,
   }
   Capybara::Lightpanda::Driver.new(app, options)
