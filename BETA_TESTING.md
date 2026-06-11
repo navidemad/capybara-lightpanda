@@ -22,7 +22,7 @@ end
 
 ```bash
 # macOS
-brew install lightpanda-io/lightpanda/lightpanda
+brew install lightpanda-io/browser/lightpanda
 
 # Linux x86_64
 curl -L -o /usr/local/bin/lightpanda \
@@ -47,9 +47,10 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. T
 - **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` returns a hardcoded 1920×1080 PNG.
 - **Visual regression / pixel tests** — same reason; keep these on Cuprite.
 - **Scroll, resize, full `getComputedStyle`** — no layout engine.
-- **Service Workers, Web Workers** — not yet implemented ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
+- **Service Workers, SharedWorker** — not implemented; Web Worker support is partial ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
 - **WebAuthn / passkeys** — not implemented.
-- **`accept_modal(:confirm | :prompt)` overriding the JS return value** — Lightpanda auto-dismisses dialogs; the gem captures the message but cannot influence the JS-side return. `accept_modal(:alert)` and `dismiss_modal(:confirm | :prompt)` work.
+- **Coordinate-based `drag_to` / `drag_by`** — no layout engine, no coordinates. HTML5 `Element#drop` (dropping files or data onto a dropzone) works since `0.6.0`.
+- **JS dialogs fired outside Capybara's modal wrappers** — the gem pre-arms the dialog response before the triggering action, so `accept_confirm` / `dismiss_confirm` / `accept_prompt` & co. work, including the JS-side `confirm`/`prompt` return values. A dialog that opens *outside* one of those wrappers is auto-dismissed by Lightpanda.
 
 A clean way to skip those in a mixed suite:
 
@@ -84,15 +85,15 @@ When you file feedback, three signals matter most:
 - **Triage within 48 hours** for `beta-feedback`-tagged issues.
 - If a workaround exists, you'll get it the same day.
 - If it's a Lightpanda-side bug, I'll file or cross-link upstream and tell you which PR / issue to watch.
-- Breaking changes between `0.1.x` and `1.0` will land in `CHANGELOG.md` with migration notes — no silent renames.
+- Breaking changes between `0.x` and `1.0` will land in `CHANGELOG.md` with migration notes — no silent renames.
 
 ## What's coming
 
 The known matrix of in-flight upstream work that affects this gem is tracked in [`.claude/rules/lightpanda-io.md`](./.claude/rules/lightpanda-io.md). Highlights:
 
-- **PR #2244** (filed by us) — once merged, we can drop the gem-side `#id` selector polyfill that works around a CSS-engine bug exposed by Turbo Drive's body-swap pattern.
-- **PR #2241** — bounded per-tick memory growth for long-lived sessions on JS-heavy SPAs.
-- **PR #2078** (WIP) — Web Worker support; closes [#2017](https://github.com/lightpanda-io/browser/issues/2017).
+- **[#2017](https://github.com/lightpanda-io/browser/issues/2017)** — SharedWorker and the remaining Web Worker APIs (partial Worker support landed in PR #2078).
+- **[#1801](https://github.com/lightpanda-io/browser/issues/1801)** — `Page.loadEventFired` may never fire on JS-heavy pages; the gem's `readyState` polling fallback covers it, at the cost of some latency.
+- **[#2173](https://github.com/lightpanda-io/browser/issues/2173)** — browser crash navigating to some React apps over CDP; the gem auto-reconnects, but heavy SPA suites may still surface `DeadBrowserError`.
 
 ## What's _not_ on the roadmap
 

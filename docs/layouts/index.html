@@ -28,7 +28,7 @@
       <a
         class="hero__stamp"
         href="#join-beta"
-        aria-label="Join the v0.1 open beta"
+        aria-label="Join the v{{ .Site.Params.version }} open beta"
       >
         <span class="hero__stamp-ring" aria-hidden="true"></span>
         <span class="hero__stamp-tick hero__stamp-tick--n" aria-hidden="true"
@@ -44,7 +44,7 @@
           >·</span
         >
         <span class="hero__stamp-core">
-          <span class="hero__stamp-mark">v0.1</span>
+          <span class="hero__stamp-mark">v{{ .Site.Params.version }}</span>
           <span class="hero__stamp-sub">open beta</span>
         </span>
       </a>
