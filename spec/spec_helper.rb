@@ -2,7 +2,6 @@
 
 require "bundler/setup"
 require "rspec"
-require "socket"
 require "zlib"
 require "capybara/spec/spec_helper"
 require "capybara/spec/test_app"
@@ -23,18 +22,13 @@ worker_suffix = WORKER_COUNT > 1 ? "_#{WORKER_INDEX}" : ""
 Capybara.save_path = File.join(PROJECT_ROOT, "spec", "tmp#{worker_suffix}")
 Capybara.server = :puma, { Silent: true }
 
-# Find an available port to avoid conflicts with running Lightpanda instances.
-def find_available_port
-  server = TCPServer.new("127.0.0.1", 0)
-  port = server.addr[1]
-  server.close
-  port
-end
-
 Capybara.register_driver(:lightpanda) do |app|
   options = {
     timeout: 10,
-    port: find_available_port,
+    # OS-assigned ephemeral port: Lightpanda binds a free port and the gem
+    # reads the actual address back from its startup output. Race-free,
+    # unlike probing with a throwaway TCPServer.
+    port: 0,
     browser_path: ENV["LIGHTPANDA_BIN"] || Capybara::Lightpanda::Binary.update,
   }
   Capybara::Lightpanda::Driver.new(app, options)

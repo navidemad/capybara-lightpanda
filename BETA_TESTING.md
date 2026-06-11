@@ -58,6 +58,22 @@ BROWSER=lightpanda bundle exec rspec spec/system/
 
 **Rollback is the env var.** Drop `BROWSER=lightpanda` and your suite returns to whatever driver you had before. `Gemfile.lock` is the only persistent change.
 
+## Parallel test suites
+
+Each worker needs its own Lightpanda port — sharing the default kills the second worker with `ProcessTimeoutError: port 9222 is already in use`. Pass `port: 0` and the OS assigns a free ephemeral port to every worker; the gem reads the actual address back from Lightpanda's startup output:
+
+```ruby
+Capybara.register_driver(:lightpanda) do |app|
+  Capybara::Lightpanda::Driver.new(app, port: 0)
+end
+```
+
+Re-registering `:lightpanda` overrides the gem's default registration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both keep working. If you'd rather have deterministic ports per worker, `parallel_tests` exposes `TEST_ENV_NUMBER`:
+
+```ruby
+Capybara::Lightpanda::Driver.new(app, port: 9222 + ENV["TEST_ENV_NUMBER"].to_i)
+```
+
 ## What we expect to fail (don't file these)
 
 These are browser-level limitations of Lightpanda itself, not bugs in the gem. The driver raises `Capybara::NotImplementedError` so you can `skip` cleanly.
