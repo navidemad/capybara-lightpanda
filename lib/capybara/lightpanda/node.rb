@@ -153,9 +153,9 @@ module Capybara
       # `DataTransfer` and fire `dragenter` -> `dragover` -> `drop` on this
       # element, so HTML5 dropzones see the payload via `event.dataTransfer`.
       #
-      # Requires a Lightpanda build with DataTransfer/DataTransferItem/DragEvent
-      # (lightpanda-io/browser#2043, PR #2671); on older builds the drop JS
-      # raises "DataTransfer is not defined".
+      # DataTransfer/DataTransferItem/DragEvent landed upstream in PR #2671
+      # (build ≥6699) and are guaranteed by the MINIMUM_NIGHTLY_BUILD floor;
+      # without them the drop JS raises "DataTransfer is not defined".
       def drop(*args)
         files, strings = partition_drop_args(args)
         call(DROP_JS, files.to_json, strings.to_json)

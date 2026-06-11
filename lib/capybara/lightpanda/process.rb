@@ -85,9 +85,15 @@ module Capybara
       # both teardown defenses even after #2511 (the variant-B fix, MERGED in
       # build 6371) lands in a nightly.
       # Build 6672 = the #2654 merge (22d1c5ec, 2026-06-08) — the first commit
-      # carrying both file-upload halves, and now the binding floor. (The prior
-      # 6353 floor — main HEAD f1b0adf9 carrying #2487 + #2498 — is subsumed.)
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6672")
+      # carrying both file-upload halves.
+      # PR #2671 (DataTransfer / DataTransferItem / DataTransferItemList +
+      # DragEvent, merged 2026-06-10) provides the APIs Node#drop's DROP_JS
+      # assembles its payload from; on builds without it the drop JS raises
+      # "DataTransfer is not defined".
+      # Build 6699 = the #2671 merge (d1f4c409, 2026-06-10) — now the binding
+      # floor. (The prior 6672 file-upload floor — and 6353 before it — are
+      # subsumed.)
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6699")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

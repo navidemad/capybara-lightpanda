@@ -9,9 +9,9 @@ require_relative "../test_helper"
 # HTML5 drag_to tests Lightpanda can't do. File/data drops need no geometry, so
 # we exercise them here against the `/lightpanda/drop_test` dropzone.
 #
-# Requires a Lightpanda build with DataTransfer/DataTransferItem/DragEvent
-# (lightpanda-io/browser#2043, PR #2671); on older builds the drop JS raises
-# "DataTransfer is not defined" and these fail.
+# DataTransfer/DataTransferItem/DragEvent landed upstream in PR #2671
+# (build ≥6699), guaranteed by the MINIMUM_NIGHTLY_BUILD floor — a binary
+# without them is rejected at startup before these tests run.
 describe "Capybara::Lightpanda::Node#drop" do
   let(:session) { TestSessions::Lightpanda }
 

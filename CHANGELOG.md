@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-> **Needs a Lightpanda build with the drag-and-drop DataTransfer APIs** ([lightpanda-io/browser#2671](https://github.com/lightpanda-io/browser/pull/2671), closing the last gap in [#2043](https://github.com/lightpanda-io/browser/issues/2043)). Until that ships in a nightly, the drop test fails against released binaries.
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6699 (published 2026-06-11), which adds the drag-and-drop DataTransfer APIs ([lightpanda-io/browser#2671](https://github.com/lightpanda-io/browser/pull/2671), closing the last gap in [#2043](https://github.com/lightpanda-io/browser/issues/2043)). The driver refuses to start against older binaries.
 
 ### Added
 
