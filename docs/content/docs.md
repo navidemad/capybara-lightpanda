@@ -165,6 +165,7 @@ end
 | Finders — `find`, `all`, `within`, CSS + XPath | ✓ |
 | Matchers — `assert_selector`, `assert_text`, `has_field?`, `has_select?` | ✓ |
 | Cookies — `set_cookie`, `clear_cookies`, `remove_cookie` | ✓ |
+| HTTP response — `status_code`, `response_headers` | ✓ — from `Network.responseReceived` |
 | Frames — `within_frame`, scoped finding | ✓ |
 | Keyboard — `send_keys` with modifiers | ✓ |
 
