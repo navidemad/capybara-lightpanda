@@ -88,7 +88,17 @@ describe Capybara::Lightpanda::Process do
 
   describe "#build_args" do
     before { @extra_args = ENV.delete("LIGHTPANDA_EXTRA_ARGS") }
-    after { ENV["LIGHTPANDA_EXTRA_ARGS"] = @extra_args if @extra_args }
+
+    # Restore-or-delete: a plain `ENV[...] = @extra_args if @extra_args` would
+    # leak the value set inside the test below into the rest of the test:all
+    # process — and poison every later test that spawns a real Lightpanda.
+    after do
+      if @extra_args
+        ENV["LIGHTPANDA_EXTRA_ARGS"] = @extra_args
+      else
+        ENV.delete("LIGHTPANDA_EXTRA_ARGS")
+      end
+    end
 
     it "builds the full serve command line, stylesheets flag included" do
       assert_equal %w[serve --host 127.0.0.1 --port 0 --log_level info --enable-external-stylesheets],
@@ -105,8 +115,9 @@ describe Capybara::Lightpanda::Process do
     end
 
     it "appends LIGHTPANDA_EXTRA_ARGS split on whitespace" do
-      ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log_format json --obey_robots"
-      assert_equal %w[--log_format json --obey_robots], process.send(:build_args).last(3)
+      ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log-format pretty --log-filter-scopes telemetry"
+      assert_equal %w[--log-format pretty --log-filter-scopes telemetry],
+                   process.send(:build_args).last(4)
     end
   end
 
