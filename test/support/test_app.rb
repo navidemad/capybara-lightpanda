@@ -648,4 +648,31 @@ class TestApp
       </html>
     HTML
   end
+
+  # Hover target. `.reveal` is hidden and CSS-revealed only on `.box:hover`
+  # (which Lightpanda can't satisfy — no pointer state), while a JS `mouseover`
+  # listener records into `#log` (which Node#hover's event dispatch DOES drive).
+  get "/lightpanda/hover_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Hover Test</title>
+          <style>
+            .reveal { display: none; }
+            .box:hover .reveal { display: block; }
+          </style>
+        </head>
+        <body>
+          <div id="box" class="box"><span id="reveal" class="reveal">revealed</span></div>
+          <div id="log"></div>
+          <script>
+            document.getElementById('box').addEventListener('mouseover', function() {
+              document.getElementById('log').textContent = 'mouseover-fired';
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
 end

@@ -113,14 +113,18 @@ module Capybara
         call("function() { this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true})) }")
       end
 
-      # Lightpanda has no rendering engine — `window.scrollTo` / `scrollIntoView`
-      # are no-ops at the browser level, and `getBoundingClientRect` reflects
-      # logical-DOM geometry rather than scroll-aware viewport coords. So
-      # there's nothing to scroll. Silently succeed so callers like
-      # `session.scroll_to(find('#thing'))` (Selenium-flavoured specs leaning
-      # on real layout) don't crash with NotImplementedError; assertions that
-      # depend on post-scroll visibility are already gated by the cuprite
-      # fallback in dual-driver setups.
+      # Kept as a deliberate no-op despite upstream now tracking scroll position
+      # (`window.scrollTo`/`scrollBy` update `window._scroll_pos`, `Element`
+      # exposes `scrollTop`/`scrollLeft` — Window.zig/Element.zig). Wiring it
+      # would still misbehave: Lightpanda never clamps to content height
+      # (`scrollHeight`/`clientHeight` are a hardcoded 1e8), so `:bottom`/`:center`
+      # are meaningless; element scroll is decoupled from window scroll; and with
+      # no layout `getBoundingClientRect` isn't scroll-aware, so `scroll_to(el,
+      # align:)` can't position anything. So there's nothing meaningful to scroll
+      # to. Silently succeed so callers like `session.scroll_to(find('#thing'))`
+      # don't crash with NotImplementedError. The `:scroll` capability stays in
+      # `capybara_skip`. (Window-position scroll IS reachable for real via
+      # `execute_script('window.scrollTo(...)')` if a caller truly needs it.)
       def scroll_to(*); end
       def scroll_by(*); end
 
