@@ -47,8 +47,11 @@ jobs:
             lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
       - name: Lint
         run: bundle exec rubocop
-      - name: Unit tests
-        run: bundle exec rake test:unit
+      - name: Tests (unit + features)
+        # test:all = test/**/*_test.rb — includes the per-fix regression files
+        # under test/features/ (turbo_load, drop, teardown, upstream_bugs, …)
+        # that previously never ran in CI.
+        run: bundle exec rake test:all
       - name: Cache examples' inline-bundle gems
         uses: actions/cache@v5
         with:
@@ -90,5 +93,11 @@ jobs:
           key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
           restore-keys: |
             lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
-      - name: Capybara shared specs
-        run: bundle exec rake spec:shared
+      - name: Capybara shared specs (parallel workers)
+        # Each worker boots its own Lightpanda on an OS-assigned port, so this
+        # continuously exercises the port-0 ephemeral path (#72) under real
+        # concurrency — and roughly halves the job's wall clock.
+        run: bundle exec rake spec:shared:parallel
+      - name: Print worker logs on failure
+        if: failure()
+        run: cat tmp/spec_parallel/worker_*.log
