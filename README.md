@@ -41,7 +41,7 @@ Capybara.javascript_driver = :lightpanda
 > The Lightpanda binary is auto-downloaded on first use — no separate install step needed.
 
 > [!IMPORTANT]
-> Lightpanda is a headless agentic browser, not a layout engine. By design it does **not** fetch external `<link rel="stylesheet">`, evaluate `@media` rules, or implement `window.matchMedia()`. Any spec whose visibility depends on responsive CSS — for example a mobile/desktop CTA pair hidden via `@media (min-width: …)` — should stay on Cuprite (or whichever full-browser driver you were already using). The [dual-driver setup](https://navidemad.github.io/capybara-lightpanda/#docs) routes the layout-sensitive minority to Cuprite and the structural majority to Lightpanda for speed.
+> Lightpanda is a headless agentic browser, not a layout engine. External `<link rel="stylesheet">` **are** fetched and applied (the gem enables this by default), but `@media` rules and `window.matchMedia()` evaluate against a fixed 1920×1080 viewport — there is no resize emulation. Any spec whose visibility depends on a non-desktop viewport — for example a mobile-only CTA shown via `@media (max-width: …)` — should stay on Cuprite (or whichever full-browser driver you were already using). The [dual-driver setup](https://navidemad.github.io/capybara-lightpanda/#docs) routes the layout-sensitive minority to Cuprite and the structural majority to Lightpanda for speed.
 
 ## Credits
 
