@@ -35,6 +35,9 @@ In your test setup:
 ```ruby
 require "capybara-lightpanda"
 Capybara.javascript_driver = :lightpanda
+
+# Rails system tests don't read Capybara.javascript_driver — use driven_by:
+driven_by :lightpanda
 ```
 
 > [!TIP]

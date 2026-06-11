@@ -66,6 +66,15 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
 - **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The phantom-newline gem-side bug goes away too if upstream collapses required line breaks around empty blocks.
 
+### A36. `document` never fires `readystatechange` (breaks Turbo's `turbo:load`)
+
+- **Today (verified 2026-06-11 against installed nightly, floor 6699)**: `document.readyState` transitions correctly (`loading` → `interactive` → `complete`) and both `DOMContentLoaded` and `window` `load` fire, but the `readystatechange` event is never dispatched at the document (Chrome fires it twice per load). Lifecycle probe log: `["script-eval:loading", "DOMContentLoaded:interactive", "window.load:complete"]` — zero `readystatechange` entries. Per [HTML "current document readiness"](https://html.spec.whatwg.org/multipage/dom.html#current-document-readiness), every readiness change must fire `readystatechange` at the `Document`.
+- **Real-world impact**: Turbo 8's `PageObserver` listens ONLY for `readystatechange` to walk its stage machine to `pageLoaded()` — so `turbo:load` never fires. Found by the first external beta tester (2026-06-11): every spec failed in a `wait_for_turbo_drive` helper gated on a `data-turbo-not-loaded` html attribute that only a `turbo:load` listener removes. Reproduced with real Turbo 8.0.23 in all three loading modes (UMD, ESM, importmap) — Turbo boots fine, the event just never arrives. Also degraded the gem's own `turbo:load` listener in `index.js` (idle-reset path of the Turbo activity tracker).
+- **Want**: dispatch `readystatechange` at the document whenever `document.readyState` changes (twice per load: `interactive`, `complete`). Fix shape: wherever the Zig load pipeline flips readiness, dispatch the event — mirror how `DOMContentLoaded` is emitted. No layout dependency.
+- **Upstream issue/PR**: not filed yet — queued for the next `/lightpanda-upstream-pr` session.
+- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` (top of the IIFE, ~7 LOC) — re-dispatches `readystatechange` from `DOMContentLoaded` (readyState=interactive) and `window` `load` (readyState=complete). Regression coverage: Zone 5 in `test/features/hotwire_zones_probe_test.rb` (event delivery) + `test/features/turbo_load_test.rb` (end-to-end against the vendored real Turbo bundle, `test/fixtures/turbo-8.0.23.umd.js`).
+- **Drop-on-fix**: remove the shim block from `index.js` once `MINIMUM_NIGHTLY_BUILD` covers the fix; both tests stay as regression checks. Until the floor bump, a fixed nightly plus the shim double-fires the event — harmless for readyState-reading state machines like Turbo's PageObserver, but drop the shim promptly anyway.
+
 ---
 
 ## B. Missing CDP / DOM methods
@@ -222,6 +231,7 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | Item | LOC saved | Reason |
 |---|---|---|
 | **A23 — `Element.innerText` block-level newlines** | ~50 | `_lightpanda.visibleText` polyfill |
+| **A36 — `readystatechange` never fires** | ~7 | `index.js` shim re-dispatching from DOMContentLoaded / load |
 | **B12 — `HTMLDialogElement` methods** | ~30 | Dialog block in `polyfills.js` |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
 | **Bug #7 residual — `enctype` + 5 submitter IDL overrides** | ~40 | `patchFormIDL` IIFE can be removed once `enctype` getter + submitter overrides land |
@@ -287,12 +297,13 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 9. **B16 — File downloads (`Browser.setDownloadBehavior` path + `downloadWillBegin`/`downloadProgress`)** — unblocks `:download`. The CDP method is already a dispatched stub; needs the disk write + two events. No rendering required. **Upstream issue**: #2701 (filed 2026-06-11, issue-first; awaiting maintainer's call on the page-preservation design before a PR).
 10. **B15 — Independent multi-window targets for `window.open`/`_blank`** — unblocks `:windows`. Larger: upstream multi-target maturity *plus* gem-side `Driver` window methods. window.open v1 already landed (PR #2237).
 11. **C11 — CSS `:hover` state (low confidence)** — would unblock `:hover`'s reveal half, but it's interaction-driven CSS in the same class the maintainer declined for `@media` (C10). The mouseover-dispatch half already works and is gem-tested.
+12. **A36 — fire `readystatechange` at document on readiness changes** — by impact this belongs in the top 3 (it's what kept Turbo's `turbo:load` from ever firing for the first external beta tester); listed last only to preserve numbering. Tiny, layout-free fix: dispatch the event wherever readiness flips, next to the existing `DOMContentLoaded` emit. ~7 LOC drop-on-fix in `index.js` + instant Turbo-ecosystem win.
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 
 ### New bugs not yet folded into this wishlist (discovered 2026-05-04 → 2026-05-06 via Turbo Drive probes)
 
-Tracked in `UPSTREAM_BUGS.md` at gem root. Each has a gem-side polyfill in `polyfills.js` waiting on upstream fix. Need wishlist entries (suggest A36–A40 — A34/A35 are consumed as retractions in section D):
+Tracked in `UPSTREAM_BUGS.md` at gem root. Each has a gem-side polyfill in `polyfills.js` waiting on upstream fix. Need wishlist entries (suggest A37–A40 — A34/A35 are consumed as retractions in section D, A36 by the readystatechange entry above):
 
 - **~~Bug #6~~ — FormData multipart encoding — FIXED upstream 2026-05-06** by PR #2358 ("net: multipart-encode FormData bodies in fetch and XMLHttpRequest"). No gem-side polyfill existed (encoding lives in Zig), so nothing to drop on the gem side — Turbo Drive form submits started working as soon as the nightly carrying #2358 was installed. Build floor for the fix: nightly ≥ ~6090.
 - **Bug #7 — Form IDL accessors — PARTIALLY FIXED upstream**. `HTMLFormElement.{method, action, target, name, acceptCharset}` accessors landed 2026-03-15 (`src/browser/webapi/element/html/Form.zig:208-211`) — predating when we filed this bug from the gem side; the polyfill's `name in proto` guard means those branches were already auto-no-op. **Still missing upstream**: `HTMLFormElement.enctype` getter (the property Turbo's `FormSubmission` constructor actually fetches first); the entire submitter side — `formEnctype`/`formMethod`/`formAction`/`formTarget`/`formNoValidate` on `HTMLButtonElement` and `HTMLInputElement`. These are what keep `patchFormIDL` IIFE (~70 LOC) load-bearing in `polyfills.js`. **Filed 2026-05-13**: issue #2449 + PR #2450 (open).
