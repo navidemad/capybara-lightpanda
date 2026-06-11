@@ -2,8 +2,8 @@
 name: lightpanda-upstream-pr
 description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "file an issue and PR for the requestSubmit gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
 user_invocable: true
-model: opus
-effort: max
+model: fable
+effort: medium
 ---
 
 # Lightpanda Upstream PR
@@ -12,10 +12,10 @@ Drive **one** Section A or Section B item from `references/upstream-wishlist.md`
 
 Two repos are in play. Keep them straight:
 
-| Path | Role | What this skill edits |
-|---|---|---|
+| Path                                    | Role                                    | What this skill edits                                                                                                       |
+| --------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/Users/navid/code/capybara-lightpanda` | The gem (Ruby). Source of the wishlist. | NOTHING — only reads `references/upstream-wishlist.md` (this skill's own reference) and gem workaround sources for context. |
-| `/Users/navid/code/browser` | Lightpanda upstream (Zig). | All edits land here. New branch, new commit, PR opened from here. |
+| `/Users/navid/code/browser`             | Lightpanda upstream (Zig).              | All edits land here. New branch, new commit, PR opened from here.                                                           |
 
 The gem stays untouched in this skill. Removing the gem-side workaround happens in a **separate** turn after the upstream PR merges — never speculatively delete a workaround in the same session as the fix.
 
@@ -56,7 +56,7 @@ The wishlist's "Quick wins" section reflects the priority. If unsure, pick the s
 
 **First, filter through the wishlist's own annotations.** Each item in `references/upstream-wishlist.md` may carry a `**Upstream issue**:` / `**Upstream PR**:` line — items already filed by us are ineligible for this skill (don't open duplicates). Skim the candidates' wishlist entries before consulting the priority list below; Step 1b's `gh pr list` is the second-pass safety net, not the first.
 
-**Treat `(open as of YYYY-MM-DD)` annotations as hints, not facts.** The wishlist is hand-maintained and stale fast — items can flip from `open` to merged-and-shipped on the same day you start work. Always cross-check `git fetch && git log --oneline origin/main -20` and `gh pr list --state all --limit 20` before committing to an item. Step 1a/1b run these checks anyway, but a stale annotation can mislead the *recommended-order* picking before you ever get there.
+**Treat `(open as of YYYY-MM-DD)` annotations as hints, not facts.** The wishlist is hand-maintained and stale fast — items can flip from `open` to merged-and-shipped on the same day you start work. Always cross-check `git fetch && git log --oneline origin/main -20` and `gh pr list --state all --limit 20` before committing to an item. Step 1a/1b run these checks anyway, but a stale annotation can mislead the _recommended-order_ picking before you ever get there.
 
 1. **A14** — `requestSubmit()` polyfill on `HTMLFormElement`. Smallest, isolated, easy to test. Good first PR.
 2. **A6** — `Page.reload` replays POST. Targeted CDP fix, single domain file.
@@ -70,7 +70,7 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 ### Step 0b: Anti-patterns (refuse to do these)
 
 - **Bundling unrelated fixes into one PR.** Each item gets its own branch + issue + PR. Reviewers reject mixed changes. The A1+A2+B3 bundle above is the only exception, and only because they share a one-function fix.
-- **Writing Ruby tests for the Zig fix.** Verification on the gem side is a separate phase (Step 5) and uses the *existing* gem-side test as a regression check, not a new spec.
+- **Writing Ruby tests for the Zig fix.** Verification on the gem side is a separate phase (Step 5) and uses the _existing_ gem-side test as a regression check, not a new spec.
 - **Skipping the Zig test.** Every fix gets at least one `test "..."` block in the same .zig file or under `src/browser/tests/`. CI requires it and reviewers will block.
 - **Opening a PR without an issue first.** Always file the issue (Step 7) before the PR (Step 8). An orphan PR has no place to record the reproducer cleanly and gives the maintainer no chance to weigh in on approach before code review.
 - **Opening a PR without a `Closes #<n>` line.** The PR body MUST include the literal text `Closes #<issue-num>` referencing the Step 7 issue. This wires up GitHub's auto-close on merge. Without it, the issue stays open after the PR merges and someone has to remember to close it manually — which never happens. Step 8d verifies GitHub actually parsed the link via `gh pr view ... --json closingIssuesReferences`. If that returns empty, the PR body is wrong and must be edited before continuing.
@@ -96,6 +96,7 @@ When this happens, decide between **pivot in-session** or **stop and let the use
 - **Stop** otherwise. Surface the new finding to the user (one paragraph: what you saw, where, why it's distinct from the retracted item) and ask whether to pivot to it, file a tracking issue without a PR, or move to the next wishlist item.
 
 When you pivot:
+
 1. Add a new entry for the discovered bug to `references/upstream-wishlist.md` (mirror the format of existing items: Today / Want / Gem workaround / Drop-on-fix). Pick the next free `A##` or `B##` ID.
 2. Retract the original entry per the `A4`/`A5`/`A9` precedent (NOT A BUG with empirical evidence + git-blame citation).
 3. Restart the skill flow at Step 1c for the new item — Steps 0/0a/0b are already satisfied (you just selected it).
@@ -127,23 +128,25 @@ The recipes below are bare `zig build …`. Two layers do the right thing automa
 1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.15.2"` and `zls = "0.15.1"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.15.2 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.15.2`.
 2. **V8 prebuilt flag** — the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`) intercepts every `zig build` command targeting `/Users/navid/code/browser*` and injects `-Dprebuilt_v8_path=/Users/navid/code/browser/.lp-cache/prebuilt-v8/libc_v8_<version>_macos_aarch64.a` if missing. Writing `zig build $V8 check` is also fine — the hook substitutes the literal `$V8` with the resolved flag. Without the hook, plain `zig build` would rebuild V8 from source (~20+ min). The hook stderr-logs every rewrite so you can audit it in the tool output.
 
-| Command | When to use |
-|---|---|
-| `zig build check` | After every Zig edit. Fastest signal — type-check only, no codegen, no link. Catches compile errors across the whole project. |
+| Command                                                    | When to use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zig build check`                                          | After every Zig edit. Fastest signal — type-check only, no codegen, no link. Catches compile errors across the whole project.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `TEST_FILTER='<test-name>#<html-basename>' zig build test` | After writing/changing the test for the fix. **Both halves are substring matches** via `std.mem.indexOf`, so `'Element'` will pick up `WebApi: Element` AND `MCP - findElement` — be specific. The `#<html-basename>` half is only consulted by `htmlRunner(...)` to filter which `tests/<dir>/*.html` fixtures run; omit it for plain `test "..."` blocks. Concrete examples: `TEST_FILTER='Selector: Parser.attributeValue'` (Zig unit test), `TEST_FILTER='WebApi: Element#attribute_value_escapes.html'` (one HTML fixture under `tests/element/`). |
-| `zig build test` | Before pushing. Full unit-test suite — verifies nothing else regressed. |
-| `zig build` | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix). |
-| `zig build run -- <args>` | Build & run the binary in one step. |
+| `zig build test`                                           | Before pushing. Full unit-test suite — verifies nothing else regressed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `zig build`                                                | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix).                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `zig build run -- <args>`                                  | Build & run the binary in one step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Sanity-check the toolchain once per session before the first build: `zig version` must print `0.15.2`. If it prints `0.16.x` (system Homebrew install), the global mise pin in `~/.config/mise/config.toml` isn't reaching this shell's PATH — restart Claude Code so the snapshot regenerates, then retry. If `zig` isn't installed at all, `mise install zig@0.15.2 zls@0.15.1` from anywhere does it.
 
 Performance notes:
+
 - First run after a dep update builds curl/brotli/sqlite/html5ever (~1–2 min). Subsequent runs are incremental.
 - `zig build check` typically finishes in <10s after warm-up.
 - `zig build test` runs in 30s–2min depending on what changed.
 - The `extras` step (legacy_test, snapshot_creator) is not in the default — don't trigger it.
 
 Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by your branch):
+
 - `MCP - findElement` (`src/mcp/tools.zig:1141`)
 - `cdp.lp: action tools` (`src/cdp/domains/lp.zig:357`)
 - `cdp.lp: waitForSelector` (`src/cdp/domains/lp.zig:423`)
@@ -158,7 +161,7 @@ Before touching any code, confirm three things. **Do this before Step 2** — th
 
 ### 1a. Verify the bug with a pure-CDP probe (the wishlist's `Today` line is not authoritative)
 
-The wishlist entries are written from gem-level Capybara observation by humans on a specific date. The gem routes through workarounds (CLICK_JS, fetch+swap, polyfills) that can mask or *misdiagnose* what's actually broken upstream — you'll see this most often when the wishlist's `Today` claim is broader than the actual bug. **Always confirm with a pure-CDP probe before bootstrapping the branch.**
+The wishlist entries are written from gem-level Capybara observation by humans on a specific date. The gem routes through workarounds (CLICK_JS, fetch+swap, polyfills) that can mask or _misdiagnose_ what's actually broken upstream — you'll see this most often when the wishlist's `Today` claim is broader than the actual bug. **Always confirm with a pure-CDP probe before bootstrapping the branch.**
 
 ```bash
 cd /Users/navid/code/browser
@@ -168,16 +171,17 @@ git fetch origin && git log --oneline origin/main -10
 Three confirmation paths, in order of cheapness:
 
 1. **Pure-CDP probe against the installed nightly** — the strongest signal and the right default for any DOM / event / navigation / form / cookie bug. Copy `references/probe-lib/cdp.js` into `/tmp/probe-<id>/`, write a 30-line `probe.js` that exercises the bug via `Page.navigate` + `Runtime.evaluate` + `Target.attachToTarget`, and run it against a `lightpanda serve` from the binary already on disk. Asserts the wishlist's claim with no gem code in the loop. **Do this even if you "know" the bug is real** — the 5 minutes saves the 30+ minutes of branch + tests + issue-draft work that gets thrown away when you discover the bug is already fixed.
-2. **Grep the relevant `.zig` file for the missing symbol** — only valid for *pure absence* (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
+2. **Grep the relevant `.zig` file for the missing symbol** — only valid for _pure absence_ (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
 3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `zig build` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
 
 **Cross-check intuition with `git blame`**: if the wishlist comment says "method X doesn't navigate" but `git blame src/<path>.zig` on the relevant function shows the navigation call has been in place for weeks/months, trust blame. The wishlist note is one author's empirical claim from a single timestamp; blame is what's actually in `main` right now. Today's session burned an hour on A4 because the gem's `CLICK_JS` comment authoritatively claimed `form.submit()` doesn't navigate, but `git blame Frame.zig:3756-3768` showed the navigation logic had been there for a month — the gem author had misdiagnosed a symptom.
 
 If the bug appears already fixed, **stop and tell the user**. Either:
+
 - The wishlist is stale → retract the entry per the `A4`/`A5` precedent (NOT A BUG with empirical evidence + git-blame citation in the wishlist + `lightpanda-io.md`) and recommend a follow-up gem cleanup PR if a workaround can now be deleted.
 - The fix is in `main` but not in the installed nightly → record it as `merged + waiting for nightly` in the wishlist; pick a different item.
 
-If verification surfaces an *adjacent* real bug (the original is fixed but a sibling code path is broken), see Step 0c.
+If verification surfaces an _adjacent_ real bug (the original is fixed but a sibling code path is broken), see Step 0c.
 
 ### 1b. No existing upstream issue or PR addresses it
 
@@ -192,6 +196,7 @@ gh pr list --repo lightpanda-io/browser --search "<keyword>" --state all --limit
 Keywords to use per item: `requestSubmit` for A14, `clearBrowserCookies` for A1, `getNavigationHistory` for B2, `XPathResult` for B1, `handleJavaScriptDialog` for A3, etc.
 
 If a PR exists:
+
 - **Open** — link it, ask user whether to add to it (comment) or skip. Don't open a duplicate.
 - **Merged but not in nightly** — wait for next nightly, don't re-do.
 - **Closed unmerged** — read the close reason. Either upstream rejected the approach (don't re-file the same way) or it was superseded (find the successor).
@@ -203,7 +208,7 @@ The wishlist says where the workaround lives, and `references/file-mapping.md` h
 
 **Read gem-side comments as one author's hypothesis, not as authoritative spec.** Comments like "Lightpanda's `form.submit()` does NOT navigate — it parses, validates, but never issues an HTTP request" describe what the gem author observed at a single point in time, often via a Capybara-level test that routes through several gem layers. The actual upstream behavior may differ — symptom misattribution is common when the bug surfaces through framework code. **Cross-check every load-bearing claim in a gem comment against `git blame` on the upstream production code.** If blame shows the relevant call has been in place for months, the comment is wrong (or stale, or referring to a different code path). Step 1a's pure-CDP probe is the tiebreaker.
 
-**Verify only the item you're fixing — don't take *adjacent* wishlist items at face value.** The wishlist is updated by hand and entries drift between reviews; a neighbor item described as broken may have been silently fixed upstream. If the design of your reproducer or fix depends on a neighbor item's behavior (e.g., A6's reproducer happens to call `form.submit()`, and A4 claims `form.submit()` doesn't navigate), spend two minutes confirming the neighbor is still broken — empirically, via a tiny CDP probe — before designing around the wishlist's claim. Cheaper than over-engineering a workaround you didn't need.
+**Verify only the item you're fixing — don't take _adjacent_ wishlist items at face value.** The wishlist is updated by hand and entries drift between reviews; a neighbor item described as broken may have been silently fixed upstream. If the design of your reproducer or fix depends on a neighbor item's behavior (e.g., A6's reproducer happens to call `form.submit()`, and A4 claims `form.submit()` doesn't navigate), spend two minutes confirming the neighbor is still broken — empirically, via a tiny CDP probe — before designing around the wishlist's claim. Cheaper than over-engineering a workaround you didn't need.
 
 ## Step 2: Bootstrap branch in `/Users/navid/code/browser`
 
@@ -256,7 +261,7 @@ Use the local commands from "Local build & test commands" — fast enough that a
 - Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. Two patterns by where the test lives:
   - **Test in the same `.zig` file as the fix** (common for CDP changes — both live in `src/cdp/domains/<domain>.zig`): **Use `Edit` to surgically revert just the production lines, NOT `git stash`**. A `git stash` sweeps the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
   - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common for `htmlRunner` directories like `tests/element/`, `tests/document/`): the production code and the fixture live in different paths, so use `git checkout main -- <production-file>` to surgically revert just the production code. The fixture stays untouched and the same `TEST_FILTER='<runner>#<fixture>.html'` re-run reports a real fail (e.g. for the B7 fix: `git checkout main -- src/browser/webapi/selector/Parser.zig`, then `TEST_FILTER='WebApi: Element#attribute_value_escapes.html' zig build test`). Restore with `git checkout HEAD -- <production-file>` ONLY IF the branch has at least one commit on it. **If you haven't committed the fix yet, HEAD points at the same SHA as `main` and the restore is a silent no-op** — your edited Input.zig is gone and the next run validates the wrong-and-restored production code with no warning. Two ways to avoid the trap: (a) commit the fix first, then toggle, then `git checkout HEAD --` actually restores; or (b) `cp <production-file> /tmp/<file>.fix` before the `git checkout main --`, then `cp /tmp/<file>.fix <production-file>` to restore. Either way, sanity-check after the restore by grepping for a unique token from your fix (e.g. `grep -c snapToStep src/<path>` should be ≥1).
-  - **Verify the test actually ran the new fixture, not nothing.** Both `WebApi: Element` and `WebApi: HTML.Input` are valid test names but each owns *different* fixtures via separate `htmlRunner(...)` calls — `tests/element/*.html` (top-level) vs. `tests/element/html/*.html` (subdirectory, registered explicitly per file). A wrong `TEST_FILTER` matches the test name but skips your fixture entirely; both pre- and post-fix runs print `1 of 1 test passed` and look fine, hiding the bug. Two tells: (1) the timing — a fixture-less run finishes in ~0.1ms; a real fixture run shows tens of ms (e.g. `9.46ms`). (2) The output should print `- src/browser/tests/.../<your-fixture>.html` under the test name. If it doesn't, the filter missed; `grep htmlRunner src/browser/webapi/<area>/<File>.zig` to find which test name owns your fixture.
+  - **Verify the test actually ran the new fixture, not nothing.** Both `WebApi: Element` and `WebApi: HTML.Input` are valid test names but each owns _different_ fixtures via separate `htmlRunner(...)` calls — `tests/element/*.html` (top-level) vs. `tests/element/html/*.html` (subdirectory, registered explicitly per file). A wrong `TEST_FILTER` matches the test name but skips your fixture entirely; both pre- and post-fix runs print `1 of 1 test passed` and look fine, hiding the bug. Two tells: (1) the timing — a fixture-less run finishes in ~0.1ms; a real fixture run shows tens of ms (e.g. `9.46ms`). (2) The output should print `- src/browser/tests/.../<your-fixture>.html` under the test name. If it doesn't, the filter missed; `grep htmlRunner src/browser/webapi/<area>/<File>.zig` to find which test name owns your fixture.
 - `zig build test` (full suite, no filter) passes — catches regressions in adjacent code.
 - The reproducer from Step 6 has been confirmed to exit 1 (bug observed) against the current nightly binary already on disk. Recommended: build a local debug binary with `zig build` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed end-to-end). This is the strongest pre-push signal — it validates the unit test, the binary, and the reproducer together. (The local debug build needs ~5 GB free in `.zig-cache`; if `df -h .` shows less, skip it — the unit test + pre-fix reproducer + CI cover the same ground, and a `NoSpaceLeft` error here only burns time. Don't auto-clean caches without asking the user.)
 - The diff matches the surrounding file's existing style (naming, comment density, helper layout) and contains no "while-we're-here" reformatting. Outsider PRs get reviewed line-by-line — reviewers reject mixed scope. Every changed line traces directly to the bug; if you wrote 200 lines and 50 would do, rewrite.
@@ -317,7 +322,7 @@ The script must:
 
 Cap the whole thing at ~80 lines of shell + ~50 lines of JS. If the bug requires more than that to reproduce, the bug isn't isolated enough — split it.
 
-**Keep the wishlist ID out of the file *contents*.** The directory name (`a6-page-reload-replay-post/`) is private — the maintainer never sees it. But anything inside the files (HTML `<title>`, JS comments, shell header comment, FAIL messages, Python module docstring) gets pasted verbatim into the issue body at Step 7, where strings like "A6 reproducer" or "see wishlist A4" are meaningless project-internal IDs that read as a downstream-consumer leak. Use generic, behavior-describing wording in the file contents — `"reload-replay-POST repro"`, `"FAIL: Page.reload regressed to GET."`, etc. The same rule applies to references to `capybara-lightpanda`, `Capybara`, `RSpec`, `Turbo`, etc. — none of those have any business appearing inside an upstream-facing reproducer.
+**Keep the wishlist ID out of the file _contents_.** The directory name (`a6-page-reload-replay-post/`) is private — the maintainer never sees it. But anything inside the files (HTML `<title>`, JS comments, shell header comment, FAIL messages, Python module docstring) gets pasted verbatim into the issue body at Step 7, where strings like "A6 reproducer" or "see wishlist A4" are meaningless project-internal IDs that read as a downstream-consumer leak. Use generic, behavior-describing wording in the file contents — `"reload-replay-POST repro"`, `"FAIL: Page.reload regressed to GET."`, etc. The same rule applies to references to `capybara-lightpanda`, `Capybara`, `RSpec`, `Turbo`, etc. — none of those have any business appearing inside an upstream-facing reproducer.
 
 ### 6c. Verify the reproducer pre-fix and (recommended) post-fix
 
@@ -421,7 +426,7 @@ The flow has two phases that can run in one turn or two: **analyze** (fetch comm
 
 ### 10a. Fetch the actual review comments
 
-`gh pr view --json reviews` only returns *top-level* reviews (often empty `body` when the maintainer left only inline comments). **The inline comments live at a different endpoint**:
+`gh pr view --json reviews` only returns _top-level_ reviews (often empty `body` when the maintainer left only inline comments). **The inline comments live at a different endpoint**:
 
 ```bash
 gh api repos/lightpanda-io/browser/pulls/<n>/comments \
@@ -445,11 +450,11 @@ If `grep` returns **nothing**, the branch is not in any worktree — it lives in
 Skip this sub-step if `mergeable` is `MERGEABLE`. If it's `CONFLICTING`:
 
 1. **Use `git merge origin/main`, not rebase.** The branch is published on the fork and the PR is open — rebase rewrites SHAs that the PR's review threads anchor on, breaks `gh pr view --json closingIssuesReferences`, and forces reviewers to re-fetch. Merge keeps SHAs stable and the merge commit is its own diff for the reviewer to skim.
-2. **Common conflict pattern**: both branches added a new `test "..." { ... }` block at the same file location, producing a diff3 conflict where the merge-base section (`||||||| <sha>` to `=======`) is empty. Resolution: keep both blocks complete in the new file. The trailing `}` `}` *outside* the conflict region close whichever test sits last — read the original file structure before the merge to see how many closing braces existed there. Don't blindly delete content from either side; both maintainers added intentional code.
+2. **Common conflict pattern**: both branches added a new `test "..." { ... }` block at the same file location, producing a diff3 conflict where the merge-base section (`||||||| <sha>` to `=======`) is empty. Resolution: keep both blocks complete in the new file. The trailing `}` `}` _outside_ the conflict region close whichever test sits last — read the original file structure before the merge to see how many closing braces existed there. Don't blindly delete content from either side; both maintainers added intentional code.
 3. **Auto-merged files need verification, not trust.** `git merge` reports "Auto-merging X" for files where it applied a successful three-way merge — but that doesn't prove your branch's changes survived. After `git commit` of the merge, grep for the key identifiers your branch added (struct fields, function names, test names, route paths, `_navigated_options.body`, etc.) in the merged tree. If something's missing, the merge took the wrong side; redo the resolution.
 4. **Compile + run targeted tests** (`zig build check` then `TEST_FILTER='<your test>' zig build test`) to catch the merge dropping a struct field or rename. Then move on to apply the review fixes; commit them as a separate follow-up commit on top of the merge so the reviewer sees a clean "merge + fixes" pair, not a tangled single commit.
 
-**Skip the Step 4a toggle-off for behavior-preserving refactors.** The toggle-off gate ("revert production, confirm test fails, restore") exists to prove a *new* test exercises a *new* fix. When the maintainer asks for a refactor that should preserve behavior — extract a helper, rename, dedupe, factor a single iteration — branch HEAD already contains a verified fix and the relevant tests. The verification is "tests pass before AND after the refactor", not toggle-off. Don't reach for `git stash` + `git checkout main -- <file>` here either: HEAD's previous-fix version, the stash's refactor, and main's pre-fix version are three different versions of the same hunk and `git stash pop` will conflict on every overlapping line. If the refactor changes observable behavior (rare in review-driven follow-ups), fall back to Step 4a's full toggle-off.
+**Skip the Step 4a toggle-off for behavior-preserving refactors.** The toggle-off gate ("revert production, confirm test fails, restore") exists to prove a _new_ test exercises a _new_ fix. When the maintainer asks for a refactor that should preserve behavior — extract a helper, rename, dedupe, factor a single iteration — branch HEAD already contains a verified fix and the relevant tests. The verification is "tests pass before AND after the refactor", not toggle-off. Don't reach for `git stash` + `git checkout main -- <file>` here either: HEAD's previous-fix version, the stash's refactor, and main's pre-fix version are three different versions of the same hunk and `git stash pop` will conflict on every overlapping line. If the refactor changes observable behavior (rare in review-driven follow-ups), fall back to Step 4a's full toggle-off.
 
 If the comment requires a code change, make and push the change first, then reply citing the new commit SHA. Replying with "will do" or "thanks, addressing now" is noise — the reviewer's GitHub feed surfaces every reply and "addressing" comments without a SHA make them re-check later. One reply, one commit, one SHA.
 
@@ -475,11 +480,11 @@ Use `Write` to stage each reply body at `/tmp/<id>-reply-<n>.json` (JSON wrapper
   ```
   In the body, briefly summarize which points you're addressing (since there's no thread anchor) and lead with the SHA — same template as 10d.
 
-A single review session often produces *both* shapes — Karl's typical pattern is one inline code-suggestion plus one top-level "here's the bigger concern" review. Address both in one follow-up commit and post both replies pointing at the same SHA.
+A single review session often produces _both_ shapes — Karl's typical pattern is one inline code-suggestion plus one top-level "here's the bigger concern" review. Address both in one follow-up commit and post both replies pointing at the same SHA.
 
 ### 10d. Reply template
 
-Lead with the SHA, then *why* (or the tradeoff). One or two sentences max. The maintainer is busy.
+Lead with the SHA, then _why_ (or the tradeoff). One or two sentences max. The maintainer is busy.
 
 - **Adopted verbatim**: `Adopted in <SHA>. <one-sentence rationale or property the change relies on>.` (Example: "Adopted in `a5e5639a`. Pre-sizing to `input.len` is a clean upper bound since CSS escapes only ever shrink.")
 - **Adopted with adjustment**: `Done in <SHA> — adjusted to <X> instead of <Y> because <reason>.` Surface the deviation up-front so the reviewer doesn't have to read the diff to find it.
