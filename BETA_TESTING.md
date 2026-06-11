@@ -60,19 +60,22 @@ BROWSER=lightpanda bundle exec rspec spec/system/
 
 ## Parallel test suites
 
-Each worker needs its own Lightpanda port — sharing the default kills the second worker with `ProcessTimeoutError: port 9222 is already in use`. Pass `port: 0` and the OS assigns a free ephemeral port to every worker; the gem reads the actual address back from Lightpanda's startup output:
+Each worker needs its own Lightpanda port — sharing the default kills the second worker with `ProcessTimeoutError: port 9222 is already in use`. Set the port to `0` and the OS assigns a free ephemeral port to every worker; the gem reads the actual address back from Lightpanda's startup output:
 
 ```ruby
-Capybara.register_driver(:lightpanda) do |app|
-  Capybara::Lightpanda::Driver.new(app, port: 0)
+# spec/support/capybara.rb — right after require "capybara-lightpanda"
+Capybara::Lightpanda.configure do |c|
+  c.port = 0
 end
 ```
 
-Re-registering `:lightpanda` overrides the gem's default registration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both keep working. If you'd rather have deterministic ports per worker, `parallel_tests` exposes `TEST_ENV_NUMBER`:
+The gem's default `:lightpanda` registration reads this configuration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both pick it up — no driver re-registration needed. If you'd rather have deterministic ports per worker, `parallel_tests` exposes `TEST_ENV_NUMBER`:
 
 ```ruby
-Capybara::Lightpanda::Driver.new(app, port: 9222 + ENV["TEST_ENV_NUMBER"].to_i)
+Capybara::Lightpanda.configure { |c| c.port = 9222 + ENV["TEST_ENV_NUMBER"].to_i }
 ```
+
+**Don't pass the port through `driven_by`.** `driven_by :lightpanda, options: { port: 0 }` is silently ignored — Rails only forwards `options:` for its built-in drivers (selenium, cuprite, rack_test, playwright) and drops them for everything else. Keep `driven_by :lightpanda` bare and configure the port as above.
 
 ## What we expect to fail (don't file these)
 
