@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-06-08 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `9fae889c` — no new commits since the 2026-06-06 review. Last substantive change remains #587 (`Node#click` readability refactor, Chrome-specific; our `Node#click` deliberately diverges — see Diverged on purpose). Outstanding/Diverged entries below stay valid.
+**Last reviewed**: 2026-06-11 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `9fae889c` — unchanged since the 2026-06-08 review (no new commits; latest is still #587, a Chrome-specific `Node#click` refactor our click deliberately diverges from). Outstanding/Diverged entries below stay valid.
 
 ### Adopted
 
@@ -48,7 +48,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-06-08 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — no new commits since the 2026-06-06 review. #295 only added `datetime-local` (already adopted); Cuprite's `color` input uses `setAttribute('value', …)`, which our default `SET_VALUE_JS` (`focus()` + `.value=`) already covers — no gap. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted.
+**Last reviewed**: 2026-06-11 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — unchanged since the 2026-06-08 review (no new commits). Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted. This run reclassified `drag_to`/`drag_by` from Outstanding → Diverged and recorded the gem's own `Node#drop` (which Cuprite lacks) — see Diverged on purpose.
 
 ### Adopted
 
@@ -70,8 +70,6 @@ Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary refer
 ### Outstanding adoption candidates
 
 - **[tiny] `setValue` uses native HTMLInputElement value setter** — `lib/capybara/cuprite/javascripts/index.js#setValue` ↔ our `SET_VALUE_JS`. Cuprite calls `Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set` to bypass framework value setters (React-style). Lightpanda's React SSR/hydration support is limited so this is mostly latent; defer until we have a test that needs it.
-- **[medium] `Node#drag_to` / `Node#drag_by`** — `lib/capybara/cuprite/node.rb#drag_to` ↔ would live in our `Node`. Cuprite implements drag via `Input.dispatchMouseEvent` step sequences. Lightpanda has no real layout/coordinates, so we'd need a JS-only `DragEvent` dispatch emulation (`dragstart` / `dragover` / `drop` / `dragend`). Useful for HTML5 drag-and-drop tests; non-trivial because the data-transfer object also has to be plumbed.
-
 ### Diverged on purpose
 
 - **`Node#set` writes `.value` directly + dispatches input/change** — Cuprite types char-by-char and dispatches `keydown` / `keypress` / `input` / `keyup` per character (`lib/capybara/cuprite/javascripts/index.js#set`). Lightpanda's keyboard event handling is limited and per-char CDP dispatch is much slower and more error-prone; direct `.value` + `input`/`change` events is the right choice for the gem's perf and stability. Tests that assert keystroke-level handlers may need to use `node.send_keys` instead of `node.set`.
@@ -79,3 +77,4 @@ Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary refer
 - **`isObscured` is single-frame** — Cuprite's `isObscured` walks up `frameElement` chain and accumulates offsets to support obscuring detection across nested iframes (`lib/capybara/cuprite/javascripts/index.js#isObscured`). Our `_lightpanda.isObscured` only inspects the current document. Could be added but rarely needed in tests.
 - **`isVisible` mostly mirrors Cuprite, plus an `offsetParent === null` fallback** — Cuprite walks parents checking `display`/`visibility`/`opacity` from `getComputedStyle`. Our `_lightpanda.isVisible` adds an `offsetParent === null` fallback (with `position:fixed`/BODY/HTML escapes) for ancestor `display:none` cases the cascade walk might miss — kept because Lightpanda's CSSOM still doesn't resolve every cascade case Chrome does. Revisit if a future spec run proves it redundant.
 - **`window._lightpanda` namespace, not `window._cuprite`** — Cuprite's JS bundle exposes `window._cuprite`; we use `window._lightpanda`, registered once via `Page.addScriptToEvaluateOnNewDocument` rather than per-frame injection. The bundle is small (~226 LOC): Turbo activity tracking + the `isVisible`/`isObscured`/`isDisabled`/`isContentEditable`/`visibleText` DOM predicates. The XPath 1.0 evaluator that used to live here moved to native `Document.evaluate` in `browser.rb` (PR #2305); the `#id` rewriter was retired; and `form.requestSubmit()` is a direct call in `node.rb`'s click pipeline, not a polyfill.
+- **Drag-and-drop: gem ships geometry-free `Node#drop`, not coordinate-based `drag_to`/`drag_by`** — Capybara's `Element#drop` (files/data onto a dropzone) lives in `node.rb` (`DROP_JS` + `partition_drop_args`): assemble a `DataTransfer` (files base64'd over CDP, `{mime => data}` hashes as typed items) and fire `dragenter`→`dragover`→`drop`. Needs Lightpanda `DataTransfer`/`DragEvent` (#2671, build ≥6699). Cuprite has **no** `drop` — only `drag_to`/`drag_by` via `Input.dispatchMouseEvent` step sequences, which Lightpanda can't emulate (no layout/coordinates). So `drop` exceeds Cuprite here; `drag_to`/`drag_by` stay unimplemented by design (Capybara's geometry-dependent `html5_drag` specs are skipped). Tested by `test/features/drop_test.rb`.

@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6353`. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
+Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6699`. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
 
 ## Architecture
 
@@ -146,35 +146,27 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 6. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (PR #2487, build ≥6353)
    - The gem passes `--enable-external-stylesheets` unconditionally (`Process#build_args`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct (PR #2498). Cost: one synchronous CSS fetch per `<link>`.
-   - The flag is a fatal `UnknownOption` on builds <6353 — this is the reason the gem floor is 6353. (Per-session `LP.configureLoading {externalStylesheets: true}` also exists; the gem uses the CLI flag.)
+   - The flag is a fatal `UnknownOption` on builds <6353. (Per-session `LP.configureLoading {externalStylesheets: true}` also exists; the gem uses the CLI flag.)
    - Inline `<style>` `@media` + `matchMedia` evaluate against the hardcoded 1920×1080 viewport.
    - **Capybara impact**: responsive CTA variants gated by an external stylesheet now resolve to a single variant (no more `Capybara::Ambiguous`); externally-loaded responsive specs that previously needed cuprite/Selenium work on lightpanda.
 
 7. **SIGTERM after a live CDP connection — fixed upstream, gem keeps its own teardown**
 
-   Two distinct hangs, both now fixed upstream. The gem keeps both teardown layers
-   regardless, because crash / GC-abandon paths still need them.
+   Two SIGTERM-hang causes, both fixed upstream; the gem keeps its teardown regardless
+   (crash / GC-abandon paths still need it):
+   - **(A)** Telemetry curl-multi hang (#2507, fixed #2509). The gem never hits it — it spawns
+     with `LIGHTPANDA_DISABLE_TELEMETRY=true`, so no curl `multi` exists.
+   - **(B)** Live-CDP-connection hang — the gem's actual 45-min teardown hang (#2510, fixed
+     #2511, build ≥6371, in the floor). A single SIGTERM was absorbed while a CDP connection
+     was live; the gem hit it because `Driver#reset!` leaves the process + client alive between
+     tests and teardown fell to the GC finalizer, which can't close the WS.
 
-   - **(A) Telemetry/curl-multi hang** (#2507, fixed by #2509, MERGED). A curl `multi` handle
-     (created *only* by telemetry) makes the Network loop drop the CDP fds from its poll set,
-     so SIGTERM is ignored even with the socket closed. **The gem never hits this** — it spawns
-     with `LIGHTPANDA_DISABLE_TELEMETRY=true`, so no `multi` exists.
-   - **(B) Live-CDP-connection hang — the gem's actual 45-min teardown hang** (#2510, fixed by
-     #2511, MERGED 2026-05-21, build ≥6371). Lightpanda absorbed a *single* SIGTERM while a CDP
-     connection was live (graceful shutdown blocked on the connection worker; 3 signals to
-     force-exit). Telemetry-independent; a bare WS connect with zero CDP commands triggers it.
-     The gem hit it because `Driver#reset!` keeps the process + open client alive between tests
-     and nothing called `#quit` at suite exit, so teardown fell to the Process GC finalizer —
-     which has only the pid and never closes the WS.
-
-   - **Gem handling (keep both layers regardless of the upstream fixes):**
-     1. **Primary** — `Browser` tracks live instances and `#quit`s them (closing the CDP WS
-        first) from a single `at_exit` (`Browser.track`/`quit_all`), so the socket is closed
-        before any SIGTERM. Regression-tested by `test/features/teardown_test.rb` (at-exit
-        teardown < 2s = clean SIGTERM, not the 3s SIGKILL fallback).
-     2. **Backstop** — `Process#stop` and the `weak_kill` finalizer escalate `TERM` → wait
-        `STOP_GRACE_SECONDS` (3s) → `SIGKILL` → reap, covering the crash / GC-abandon paths the
-        `at_exit` can't reach (#2511 only fixes the browser side).
+   - **Gem handling (keep both layers — #2511 only fixes the browser side):**
+     1. **Primary** — `Browser.track`/`quit_all` closes the CDP WS from a single `at_exit`
+        *before* SIGTERM, so teardown is instant. Regression-tested by
+        `test/features/teardown_test.rb` (at-exit < 2s = clean SIGTERM, not the 3s SIGKILL fallback).
+     2. **Backstop** — `Process#stop` + the `weak_kill` finalizer escalate `TERM` → 3s grace →
+        `SIGKILL` → reap, for the crash / GC-abandon paths the `at_exit` can't reach.
 
 ### Open Fix PRs (not yet merged)
 
@@ -206,7 +198,8 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - Web Workers: partial support — `URL`, `AbortController`, `AbortSignal`, `OffscreenCanvas`. Many Worker APIs still missing (#2017). Workers run in the same thread as the page and have a separate context.
 - No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
-- File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635, build ≥6625) sets `input.files` + fires `change`; PR #2654 (build ≥6672) wires multipart `.file` submission in `webapi/net/FormData.zig` (filename + Content-Type + raw bytes, RFC 7578). `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files` (objectId + `Array(value).map(&:to_s)`); the 6672 floor guarantees both halves are present. Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures). Paths are read off the machine running Lightpanda — fine for the gem's locally-spawned process.
+- File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are required — on builds 6625–6671 the file attaches but the form submits empty — and the gem floor guarantees them. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
+- Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
 
 ## CLI Reference
 
