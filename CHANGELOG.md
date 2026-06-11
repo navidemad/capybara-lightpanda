@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.0] - 2026-06-12
+
+### Changed
+
+- The driver now lets the OS pick a free port by default instead of always binding `9222`. Parallel test suites (`parallel_tests`, `parallel_rspec`) work with zero configuration — each worker gets its own ephemeral port instead of every worker fighting over `9222` and all but one dying with a startup timeout — and a Lightpanda you started by hand on `9222` no longer collides with the one the driver spawns. If you rely on a fixed port (external tooling attaching to the browser, for instance), pin it with `Capybara::Lightpanda.configure { |c| c.port = 9222 }`.
+
+### Fixed
+
+- Turbo's `turbo:load` now fires on every visit. Lightpanda advances `document.readyState` and fires `DOMContentLoaded`/`load` correctly, but never dispatched `readystatechange` — the single event Turbo's page observer waits on — so on Turbo Drive pages `turbo:load` never ran, and any Stimulus controller or initializer hanging off it stayed dormant. The driver now emits `readystatechange` itself, so Hotwire apps behave the way they do in a real browser. (Caught by a beta tester running real Turbo 8.0.23.)
+
 ## [0.6.0] - 2026-06-11
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6699 (published 2026-06-11). The driver refuses to start against older binaries.
