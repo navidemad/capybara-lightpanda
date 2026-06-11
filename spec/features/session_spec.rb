@@ -19,8 +19,6 @@ Capybara::SpecHelper.run_specs(
   #   :scroll            — no rendering engine, no scroll.
   #   :hover             — no real layout for hover positioning.
   #   :spatial           — `find(above:|below:|near:)` needs real geometry.
-  #   :status_code       — CDP doesn't expose response status.
-  #   :response_headers  — CDP doesn't expose response headers.
   #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
   #   :download          — no file download support.
   #   :active_element    — Tab-key focus traversal isn't implemented, and
@@ -33,8 +31,6 @@ Capybara::SpecHelper.run_specs(
     scroll
     hover
     spatial
-    status_code
-    response_headers
     shadow_dom
     download
     active_element

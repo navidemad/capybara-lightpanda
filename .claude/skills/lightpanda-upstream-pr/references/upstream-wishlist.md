@@ -128,6 +128,30 @@ Three independent issues:
 - **Gem workaround**: none. Decidim's helper is not callable through this gem as written (uses `execute_cdp`, a Selenium convenience). Captured here as a portability gap for any future Ruby app that wants offline / throttled assertions against Lightpanda.
 - **Drop-on-fix**: nothing to remove on the gem side today. Could expose a Ruby surface (`Driver#emulate_network_conditions` mirroring ferrum's `Network#emulate_network_conditions`) once upstream ships.
 
+### B14. Sequential focus navigation — `Tab` doesn't move `document.activeElement` (unblocks `:active_element`)
+
+- **Today (verified 2026-06-11 against `main` HEAD `d695ce10`)**: `Document.getActiveElement` (Document.zig:487) and `HTMLElement.tabIndex` get/set (Html.zig:389-401) work, and **explicit** focus is honored — a JS `el.focus()` (or `fill_in`, which focuses before setting) updates `document.activeElement`, and the gem reads it back faithfully (locked in by `test/features/active_element_test.rb`, 5 examples). What's missing: there is no sequential focus navigation — `Input.dispatchKeyEvent` with `Tab`/`Shift+Tab` does not advance focus to the next/previous element in tabindex + document order. No `Tab` handler walks the focusable set.
+- **Want**: implement HTML sequential focus navigation so a synthetic `Tab` moves `document.activeElement` to the next focusable element (firing `blur`/`focus`). No layout needed — focus order is computable from `tabindex` + document order alone.
+- **Upstream issue/PR**: not filed.
+- **Gem workaround**: none. The whole `:active_element` capability stays in `capybara_skip` because Capybara's `#active_element should return the active element` drives focus via `send_keys(:tab)`. The reachable (explicit-focus) slice is covered gem-side by `test/features/active_element_test.rb`.
+- **Drop-on-fix**: remove `:active_element` from `capybara_skip` in `spec/features/session_spec.rb` — Capybara's 3 `#active_element` examples then run (2 already pass; the `:tab` one needs this fix). The gem test stays as a finer-grained regression check.
+
+### B15. Multi-window lifecycle — `window.open` is v1, no independent CDP target for Capybara window specs (unblocks `:windows`)
+
+- **Today (verified 2026-06-11 against `main` HEAD `d695ce10`)**: `window.open(url, target, features)` exists in "v1 scope" (Window.zig:507; `_blank` reserved + named-target reuse at :544-545) and `Target.createTarget` exists (target.zig:147). But per `lightpanda-io.md`, sub-pages share the parent's lifetime — there's no distinct second top-level target the CDP client can `attachToTarget` and drive independently. Capybara's `:windows` battery (`#windows`, `#open_new_window`, `#switch_to_window`, `Window#close/#size/#resize_to/#maximize/#fullscreen`, `#within_window`) needs first-class multi-target windows.
+- **Want**: each `window.open` (esp. `_blank`) yields a distinct CDP target with `Target.targetCreated`/`targetDestroyed` events and an independent navigation/lifetime. Size/resize/maximize/fullscreen may be no-ops (no layout) but must not raise.
+- **Upstream issue/PR**: window.open landed via PR #2237 (referenced in `session_spec.rb`); independent multi-target maturity is the remaining gap — not separately filed.
+- **Gem workaround**: none. The gem's `Driver` implements no window API (only `switch_to_frame`).
+- **Drop-on-fix**: implement `Driver#window_handles`/`#switch_to_window`/`#open_new_window`/`#close_window` over CDP `Target`, then remove `:windows` from `capybara_skip`. Both halves (upstream multi-target + gem driver methods) required.
+
+### B16. File downloads not implemented — `Browser.setDownloadBehavior` is a stub, no download events (unblocks `:download`)
+
+- **Today (verified 2026-06-11 against `main` HEAD `d695ce10`)**: `Browser.setDownloadBehavior` is dispatched (browser.zig:73) but its `downloadPath` param is commented out (:77) — nothing is written to disk, and there are no `Page.downloadWillBegin`/`Browser.downloadProgress` events. An `<a download>` click or a `Content-Disposition: attachment` response produces no retrievable file.
+- **Want**: honor `Browser.setDownloadBehavior {behavior: 'allow', downloadPath}` (write the response body to disk) and emit `downloadWillBegin`/`downloadProgress(state: completed)` so a client can await + locate the file. No rendering needed.
+- **Upstream issue/PR**: not filed.
+- **Gem workaround**: none. No `Driver` download surface.
+- **Drop-on-fix**: wire a `Driver` download path (await `downloadProgress` completed, read the file) + remove `:download` from `capybara_skip`.
+
 ---
 
 ## C. Inherent limitations (out of scope — keep cuprite for these)
@@ -144,9 +168,14 @@ These exist because Lightpanda has no rendering engine, no compositor, no real l
 - **Skip-listed**: 9 patterns under `node #click`/`#double_click`/`#right_click` for offsets/modifiers, `node #obscured?` viewport tests, `#all with obscured filter` outside-viewport tests.
 - **Status**: out of scope.
 
-### C3. No scroll, no resize
-- `window.scrollTo`, `element.scrollIntoView`, `window.resizeTo` all no-op.
-- **Status**: out of scope (no layout).
+### C3. Scroll position tracked but not layout-clamped; no resize (`:scroll`)
+- Updated 2026-06-11: `window.scrollTo`/`scrollBy` now track `window._scroll_pos` (and fire `scroll`/`scrollend`), and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` (Window.zig:722 / Element.zig:1523) — so *position* scroll is readable. But there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and `getBoundingClientRect` isn't scroll-aware (no layout). `window.resizeTo` is a no-op.
+- Capybara's `#scroll_to` battery needs `:bottom`/`:center` clamping and element-relative alignment — both require real layout — so the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`. The position-scroll slice is reachable via `execute_script('window.scrollTo(...)')` if a caller truly needs it.
+- **Status**: out of scope (clamping + alignment need layout).
+
+### C11. CSS `:hover` state not tracked — reveal-on-hover doesn't work (`:hover`)
+- The gem's `Node#hover` dispatches a real `mouseover` event and JS `mouseover` listeners DO fire (locked in by `test/features/hover_test.rb`). But there is no pointer-hover state, so the CSS `:hover` pseudo-class never matches — `.box:hover .hidden { display: block }` reveals stay hidden. Capybara's `#hover` example asserts exactly that reveal, so `:hover` stays in `capybara_skip`.
+- **Status**: borderline-inherent — interaction-driven CSS, the same class the maintainer declined for `@media`/external stylesheets (C10). Tracking a hovered-element set on `mouseover`/`mouseout` (no coordinates needed) would be *implementable* without layout, but is low-confidence to land upstream. Filed here as a candidate, not a commitment. The event-dispatch half already has gem coverage.
 
 ### C4. `Page.getLayoutMetrics` returns hardcoded 1920×1080
 - No real layout to measure.
@@ -251,6 +280,10 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 5. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
 6. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
 7. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
+8. **B14 — Sequential focus navigation (`Tab` moves `document.activeElement`)** — unblocks `:active_element`. **Cheap + high-confidence**: no layout needed (focus order = tabindex + document order), and the explicit-focus half already works and is gem-tested. Closest in shape to a self-contained DOM-behavior PR.
+9. **B16 — File downloads (`Browser.setDownloadBehavior` path + `downloadWillBegin`/`downloadProgress`)** — unblocks `:download`. The CDP method is already a dispatched stub; needs the disk write + two events. No rendering required.
+10. **B15 — Independent multi-window targets for `window.open`/`_blank`** — unblocks `:windows`. Larger: upstream multi-target maturity *plus* gem-side `Driver` window methods. window.open v1 already landed (PR #2237).
+11. **C11 — CSS `:hover` state (low confidence)** — would unblock `:hover`'s reveal half, but it's interaction-driven CSS in the same class the maintainer declined for `@media` (C10). The mouseover-dispatch half already works and is gem-tested.
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side polyfills but no upstream maintainer conversation has started yet. (Bug #8 was fixed upstream 2026-05-11 without us filing — see the resolved-since-prior-tally table above.)
 

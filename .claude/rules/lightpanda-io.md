@@ -190,7 +190,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
 - `window.getComputedStyle()` works via CSSOM for many properties; `checkVisibility` matches all active stylesheets
-- No `window.scrollTo()`, `element.scrollIntoView()` (no layout)
+- `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`.
 - `MutationObserver` available; `window.postMessage` across frames works
 - No CORS enforcement (acknowledged in upstream README)
 - In-page `WebSocket` API implemented
