@@ -1,5 +1,5 @@
 baseURL = "https://navidemad.github.io/capybara-lightpanda/"
-languageCode = "en-us"
+locale = "en-us"
 title = "Capybara::Lightpanda"
 enableRobotsTXT = true
 disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]
