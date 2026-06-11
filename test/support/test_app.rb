@@ -600,4 +600,52 @@ class TestApp
       </html>
     HTML
   end
+
+  # -- HTML5 drag-and-drop dropzone --
+  # A vanilla-JS dropzone that reports what a real upload widget reads off the
+  # dropped DataTransfer: each item's kind/getAsFile/getAsString/type, plus the
+  # files count and types list. Node#drop fires dragenter -> dragover -> drop
+  # carrying a DataTransfer, so this records the payload for assertions.
+
+  get "/lightpanda/drop_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Drop Test</title></head>
+        <body>
+          <div id="dropzone">Drop here</div>
+          <ul id="result"></ul>
+          <div id="summary"></div>
+          <script>
+            var dz = document.getElementById('dropzone');
+            var result = document.getElementById('result');
+            var summary = document.getElementById('summary');
+            function add(text) {
+              var li = document.createElement('li');
+              li.textContent = text;
+              result.appendChild(li);
+            }
+            ['dragenter', 'dragover'].forEach(function(name) {
+              dz.addEventListener(name, function(e) { e.preventDefault(); });
+            });
+            dz.addEventListener('drop', function(e) {
+              e.preventDefault();
+              var dt = e.dataTransfer;
+              for (var i = 0; i < dt.items.length; i++) {
+                var item = dt.items[i];
+                if (item.kind === 'file') {
+                  add('file: ' + item.getAsFile().name);
+                } else {
+                  (function(type) {
+                    item.getAsString(function(s) { add('string: ' + type + ' ' + s); });
+                  })(item.type);
+                }
+              }
+              summary.textContent = 'files=' + dt.files.length + ' types=' + dt.types.join(',');
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
 end
