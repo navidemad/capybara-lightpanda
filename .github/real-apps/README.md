@@ -14,7 +14,8 @@ against actual production-shape codebases.
     ├── solidus.patch           # was on Selenium
     ├── spree.patch             # was on Selenium
     ├── decidim.patch           # was on Selenium
-    └── mastodon.patch          # was on Playwright
+    ├── mastodon.patch          # was on Playwright
+    └── alonetone.patch         # was on Playwright (MySQL app)
 
 .github/workflows/
 └── real-apps.yml               # matrix workflow

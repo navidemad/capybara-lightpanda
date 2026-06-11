@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: "Comma-separated list of targets (forem,solidus,spree,decidim,mastodon) or 'all'"
+        description: "Comma-separated list of targets (forem,solidus,spree,decidim,mastodon,alonetone) or 'all'"
         default: "all"
         type: string
   schedule:
@@ -118,6 +118,32 @@ jobs:
             # of home_spec + log_in_spec + log_out_spec run — a mix of rack_test
             # baselines and the few :js specs that don't need streaming.
             spec: "spec/system/home_spec.rb spec/system/log_in_spec.rb spec/system/log_out_spec.rb"
+          - name: alonetone
+            repo: sudara/alonetone
+            sha: 7545c99d66853ca6e92354c064008890f4be0f6f
+            ruby: "4.0"
+            node: "22"
+            work_dir: "."
+            spec_dir: "."
+            # MySQL app — the workflow's Postgres service is ignored. Uses the
+            # runner's preinstalled mysql.service (root/root), which is exactly
+            # what alonetone's database.example.yml test section expects, so no
+            # MySQL service container is needed. db_create is false because
+            # config/database.yml only exists after setup:copy_config.
+            db_create: false
+            # setup:touch_js stubs the gitignored MorphSVGPlugin.js (a paid GSAP
+            # plugin alonetone's CI injects from a secret); app JS guards the
+            # import, so an empty stub is fine. dartsass:build + yarn build
+            # populate app/assets/builds for Propshaft before specs boot.
+            pre_spec: "sudo systemctl start mysql.service && bin/rails setup:copy_config setup:touch_js db:create db:schema:load && bin/rails dartsass:build && yarn build"
+            # All alonetone feature specs run on the swapped :alonetone driver
+            # (it's the default_driver, not just the js one). Subset avoids the
+            # UA-bot-gated paths (listens, signup via UsersController#create):
+            # Lightpanda's UA has no whitelisted browser token and rejects
+            # Mozilla-styled overrides, so PreventAbuse flags it as a bot.
+            # audiowaveform (PPA package in alonetone's own CI) is only invoked
+            # when processing uploaded audio — not needed for this subset.
+            spec: "spec/features/pages_spec.rb spec/features/account_requests_spec.rb spec/features/users_spec.rb"
 
     name: ${{ matrix.name }}
 

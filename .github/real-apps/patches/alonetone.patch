@@ -1,0 +1,94 @@
+diff --git a/Gemfile b/Gemfile
+index aee14a1..2633d49 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -82,6 +82,6 @@
+   gem 'rspec-mocks', require: false
+   gem 'rspec-support', require: false
+   gem 'rspec-rails', require: false
+-  gem 'capybara-playwright-driver'
++  gem 'capybara-lightpanda', path: '__CAPYBARA_LIGHTPANDA_PATH__' # Capybara driver for Lightpanda (CDP)
+   gem 'webmock', require: false
+ end
+diff --git a/spec/rails_helper.rb b/spec/rails_helper.rb
+index 476e0f7..ebb24d8 100644
+--- a/spec/rails_helper.rb
++++ b/spec/rails_helper.rb
+@@ -7,7 +7,7 @@
+ 
+ require 'rspec/rails'
+ require 'capybara/rspec'
+-require 'capybara/playwright'
++require 'capybara-lightpanda'
+ require 'percy/capybara'
+ 
+ # The suite needs to be able to connect to localhost for feature specs.
+@@ -19,7 +19,11 @@
+     'ownandship.io',
+     'cdn.alonetone.com', # fonts
+     'github.com',
+-    'github-releases.githubusercontent.com'])
++    'github-releases.githubusercontent.com',
++    # capybara-lightpanda downloads the Lightpanda nightly with Net::HTTP on
++    # first boot; GitHub release assets redirect to these hosts.
++    'objects.githubusercontent.com',
++    'release-assets.githubusercontent.com'])
+ 
+ # Reloads schema.rb when database has pending migrations.
+ ActiveRecord::Migration.maintain_test_schema!
+@@ -32,15 +36,11 @@
+ ActiveRecord::FixtureSet.context_class.include RSpec::Support::WaveformHelpers
+ 
+ Capybara.register_driver :alonetone do |app|
+-  Capybara::Playwright::Driver.new(
+-    app,
+-    browser_type: :chromium,
+-    headless: ENV['HEADED'].blank?,
+-    # GitHub Actions runners run as root; chromium refuses to start without --no-sandbox.
+-    chromiumSandbox: ENV['CI'].blank?,
+-    # Default headless UA contains "HeadlessChrome", which PreventAbuse blocks as a bot.
+-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+-  )
++  # NOTE: Lightpanda's UA carries no whitelisted browser token and the browser
++  # rejects Mozilla-styled UA overrides, so PreventAbuse#is_a_bot? stays true.
++  # Bot-gated paths (listens, UsersController#create signup) are out of scope
++  # for the smoke subset; pages/account_requests/users specs are not UA-gated.
++  Capybara::Lightpanda::Driver.new(app)
+ end
+ Capybara.default_driver = :alonetone
+ Capybara.javascript_driver = :alonetone
+@@ -104,31 +104,7 @@
+   #   Rails.application.load_seed
+   # end
+ 
+-  config.before(:each, type: :feature, js: true) do
+-    @browser_console_messages = []
+-    messages = @browser_console_messages
+-    page.driver.with_playwright_page do |pw_page|
+-      pw_page.on('console', ->(msg) { messages << { level: msg.type, message: msg.text } })
+-      pw_page.on('pageerror', ->(err) { messages << { level: 'error', message: err.message } })
+-    end
+-  end
+-
+-  config.after(:each, type: :feature, js: true) do |test|
+-    next if test.metadata[:allow_js_errors]
+-    aggregate_failures 'javascript errors' do
+-      @browser_console_messages.each do |entry|
+-        # Expected: validation responses for forms and Chrome's auto-logged HTTP errors are not JS errors.
+-        next if entry[:message].include?('422')
+-        next if entry[:message].include?('Failed to load resource')
+-        # Playlist specs cancel in-flight audio requests when switching tracks; harmless AbortError.
+-        next if entry[:message].include?('AbortError')
+-        next if entry[:message].include?('The user aborted a request')
+-
+-        expect(entry[:level]).not_to eq('error'), entry[:message]
+-        next unless entry[:level] == 'warning'
+-        STDERR.puts 'WARN: javascript warning'
+-        STDERR.puts entry[:message]
+-      end
+-    end
+-  end
++  # The Playwright console-listener hooks (browser console/pageerror capture
++  # asserted after each js spec) are dropped: they rely on
++  # page.driver.with_playwright_page, which has no Lightpanda equivalent.
+ end
