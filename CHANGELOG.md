@@ -1,11 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.6.0] - 2026-06-11
 
-> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6699 (published 2026-06-11), which adds the drag-and-drop DataTransfer APIs ([lightpanda-io/browser#2671](https://github.com/lightpanda-io/browser/pull/2671), closing the last gap in [#2043](https://github.com/lightpanda-io/browser/issues/2043)). The driver refuses to start against older binaries.
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6699 (published 2026-06-11). The driver refuses to start against older binaries.
 
 ### Added
 
+- File upload through Capybara's standard `attach_file` now works end to end. `attach_file("Avatar", "/path/to/photo.png")` populates the `<input type=file>` and fires `change`, and — the piece that was missing before — the file's bytes are submitted with the form as proper multipart data (filename, `Content-Type`, content). So uploads the server actually receives (avatar pickers, CSV/import forms, ActiveStorage attachments) can be driven and asserted, not just the client-side `change` handler. File paths are read on the machine running Lightpanda.
 - Drag-and-drop file and data upload through Capybara's standard `Element#drop`. `find("#dropzone").drop("/path/to/report.pdf")` reads the file and rebuilds it as a `File` inside the page; `find("#dropzone").drop("text/plain" => "hello")` drops typed string data. The driver builds a `DataTransfer` and fires `dragenter` → `dragover` → `drop`, so HTML5 dropzones (React Dropzone, Uppy, ActiveStorage direct-upload) receive the payload through `event.dataTransfer.files` / `.items`. This is drag-and-drop *upload*, not element-to-element `drag_to`, which still needs the layout geometry Lightpanda doesn't have.
 
 ## [0.5.0] - 2026-05-22
