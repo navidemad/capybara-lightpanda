@@ -44,7 +44,6 @@ require "capybara-lightpanda"
 
 Capybara::Lightpanda.configure do |config|
   config.host = "127.0.0.1"
-  config.port = 9222
   config.timeout = 15
 end
 
@@ -59,7 +58,7 @@ That's it. Run your suite and the driver will boot a Lightpanda process and conn
 ```ruby
 Capybara::Lightpanda.configure do |config|
   config.host = "127.0.0.1"   # Lightpanda bind host
-  config.port = 9222          # CDP port
+  config.port = 0             # CDP port; 0 = OS-assigned ephemeral (pin e.g. 9222 for external tooling)
   config.timeout = 15         # navigation/command timeout (seconds)
   config.process_timeout = 10 # browser startup timeout
   config.browser_path = nil   # path to lightpanda binary; nil = auto-detect
@@ -69,7 +68,7 @@ end
 | Option | Default | Notes |
 |---|---|---|
 | `host` | `"127.0.0.1"` | Bind address for the CDP server |
-| `port` | `9222` | TCP port; use a dynamic port for parallel suites |
+| `port` | `0` | `0` = OS-assigned ephemeral port per worker — parallel suites work with zero config. Pin a fixed port for external tooling |
 | `timeout` | `15` | Per-CDP-command timeout, also covers navigation polling |
 | `process_timeout` | `10` | Wait this long for `lightpanda serve` to start before failing |
 | `browser_path` | `nil` | If `nil`, the driver searches `PATH` and common Homebrew paths |

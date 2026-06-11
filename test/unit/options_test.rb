@@ -11,8 +11,8 @@ describe Capybara::Lightpanda::Options do
       assert_equal "127.0.0.1", options.host
     end
 
-    it "uses default port" do
-      assert_equal 9222, options.port
+    it "uses an OS-assigned ephemeral port by default" do
+      assert_equal 0, options.port
     end
 
     it "uses default timeout" do
