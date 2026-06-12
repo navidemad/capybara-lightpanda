@@ -8,6 +8,10 @@
 
 - The driver no longer re-dispatches `readystatechange` itself. Lightpanda fires the event natively as of nightly 6736 (lightpanda-io/browser#2708), so the shim added in 0.7.0 became redundant and was removed. Behavior is unchanged for Turbo/Hotwire apps — `turbo:load` still fires on every visit, now from the browser's own event.
 
+### Fixed
+
+- Turbo Streams over ActionCable now connect. Page-initiated WebSocket upgrades carry the document's `Origin` header as of nightly 6736 (lightpanda-io/browser#2710, guaranteed by the new minimum build), so ActionCable's request-forgery protection accepts the connection instead of rejecting it with `Request origin not allowed: nil`. `turbo-cable-stream-source` elements reach `[connected]` and `turbo_stream_for` broadcasts (solid_cable or any adapter) arrive in specs. If you had added `config.action_cable.disable_request_forgery_protection = true` to your test environment to work around this, you can remove it.
+
 ## [0.7.0] - 2026-06-12
 
 ### Changed
