@@ -2,10 +2,12 @@
 
 require_relative "../test_helper"
 
-# Tests d'intégration ciblés sur les bugs upstream du binaire Lightpanda
-# documentés dans UPSTREAM_BUGS.md. Chaque exemple exerce le scénario qui
-# crashait nativement ; certains sont désormais corrigés upstream, d'autres
-# restent couverts par un workaround côté gem (`CLICK_JS` dans `node.rb`).
+# Tests d'intégration ciblés sur d'anciens bugs upstream du binaire
+# Lightpanda. Chaque exemple exerce le scénario qui crashait nativement ;
+# les bugs couverts ici (#1, #3, #4) sont désormais corrigés ou rétractés
+# upstream — UPSTREAM_BUGS.md ne liste plus que les bugs encore ouverts —
+# mais certains restent doublés par un workaround côté gem (`CLICK_JS` dans
+# `node.rb`).
 #
 # Si une PR upstream supprime un workaround, ces tests doivent rester verts
 # sur le binaire patché — ils décrivent le contrat fonctionnel attendu, pas
@@ -19,8 +21,8 @@ describe "Upstream Lightpanda bug repros & workarounds" do
 
   # ───────────────────────────────────────────────
   # Bug #3 — Element.dispatchEvent halted the whole dispatch path when a
-  # listener threw (see UPSTREAM_BUGS.md). No JS polyfill ships for it
-  # anymore; `CLICK_JS` in `node.rb` stays load-bearing. Contract test.
+  # listener threw. Fixed upstream by PR #2368; no JS polyfill ships for it
+  # anymore, but `CLICK_JS` in `node.rb` stays load-bearing. Contract test.
   # ───────────────────────────────────────────────
 
   describe "Bug #3 — synthetic clicks must bubble to document" do
