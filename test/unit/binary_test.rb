@@ -275,7 +275,17 @@ describe Capybara::Lightpanda::Binary do
         Capybara::Lightpanda::BinaryNotFoundError, "Failed to download binary: 504 Gateway Time-out"
       )
 
-      assert_equal path, Capybara::Lightpanda::Binary.update
+      result = nil
+      _out, err = capture_io { result = Capybara::Lightpanda::Binary.update }
+
+      assert_equal path, result
+      # The fallback must be LOUD (Kernel.warn, not the opt-in debug logger):
+      # a VCR-guarded suite lands here silently and otherwise only ever sees
+      # a confusing MINIMUM_NIGHTLY_BUILD floor error later. The warning names
+      # the original error and the unstubbed-process provision one-liner.
+      assert_includes err, "Binary download failed"
+      assert_includes err, "504 Gateway Time-out"
+      assert_includes err, Capybara::Lightpanda::Binary::PROVISION_HINT
     end
 
     # Cold cache (no binary on disk) has nothing to fall back to — the download
@@ -318,12 +328,16 @@ describe Capybara::Lightpanda::Binary do
                    Capybara::Lightpanda::Binary.update_hint(symlink)
     end
 
-    it "suggests the rake tasks when the binary is at the gem's install_path" do
+    it "suggests the require-the-gem one-liner when the binary is at the gem's install_path" do
       dir = Dir.mktmpdir
       Capybara::Lightpanda::Binary.install_dir = dir
       path = File.join(dir, "lightpanda")
 
-      assert_equal "bundle exec rake lightpanda:binary:remove lightpanda:binary:update",
+      # Not the rake tasks: in a Rails app the gem usually lives in the :test
+      # Gemfile group, so `bundle exec rake lightpanda:binary:*` only exists
+      # under RAILS_ENV=test — copied verbatim into a dev shell it fails with
+      # "Don't know how to build task". The one-liner works from any env.
+      assert_equal Capybara::Lightpanda::Binary::PROVISION_HINT,
                    Capybara::Lightpanda::Binary.update_hint(path)
     end
 
