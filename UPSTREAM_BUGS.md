@@ -4,18 +4,7 @@ Inventaire des limitations du binaire Lightpanda découvertes en exécutant des 
 
 Quand un bug est résolu upstream, le workaround correspondant côté gem peut être retiré.
 
-## Bugs résolus / rétractés
-
-Numérotation conservée — référencée depuis les tests et la wishlist.
-
-- **Bug #1** — `Element.prototype.click()` via `Runtime.callFunctionOn`. Rétracté 2026-05-04 (ne reproduit pas en probe CDP pur). `CLICK_JS` reste en place pour son chemin manuel de default action (`form.submit()` / `location.href`) côté gem.
-- **Bug #2** — `MouseEvent` dispatch via `Runtime.callFunctionOn`. Rétracté 2026-05-04.
-- **Bug #3** — `dispatchEvent` halt sur listener throw au lieu de "report exception" (DOM §2.9 step 4). Fixé upstream 2026-05-06 par PR #2368 ("events: report listener exceptions instead of halting dispatch"). Polyfill `patchDispatch` retiré avec `polyfills.js` (PR #45). `MINIMUM_NIGHTLY_BUILD = 6220` couvre.
-- **Bug #4** — `HTMLDialogElement.prototype.{showModal, show, close}` non implémentés. Fixé upstream 2026-05-13 par PR #2435 ("dom: implement HTMLDialogElement.{show, showModal, close}"). Polyfill retiré avec `polyfills.js` (PR #45). `MINIMUM_NIGHTLY_BUILD = 6220` couvre.
-- **Bug #5** — `HTMLFormElement.prototype.requestSubmit()`. Fixé upstream par PR #2253 (mergé 2026-04-27).
-- **Bug #6** — `fetch` / `XHR` n'encodent pas `FormData` en multipart. Fixé upstream 2026-05-06 par PR #2358 ("net: multipart-encode FormData bodies in fetch and XMLHttpRequest"). Build floor ~6090, couvert par `MINIMUM_NIGHTLY_BUILD = 6109`. Aucun polyfill côté gem n'existait (encoding en Zig). Les 4 tests `skip` dans `test/features/hotwire_zones_probe_test.rb` peuvent maintenant tomber.
-- **Bug #7** — IDL `enctype` / `formMethod` / `formEnctype` / `formAction` / `formTarget` / `formNoValidate` retournaient `undefined` quand l'attribut HTML correspondant était absent. Fixé upstream 2026-05-14 par PR #2450 ("forms: add enctype + 5 submitter form-* IDL accessors", commit `143bffdfe`). Le polyfill `patchFormIDL` a été retiré et `lib/capybara/lightpanda/javascripts/polyfills.js` supprimé — c'était le dernier polyfill du fichier. `MINIMUM_NIGHTLY_BUILD = 6220` couvre.
-- **Bug #8** — `addEventListener` pendant capture-phase invisible à la bubble-phase. Fixé upstream 2026-05-11 par commit `8d5eef44` ("Improve events"). Premier nightly portant le fix : ≥6198. `MINIMUM_NIGHTLY_BUILD = 6220` couvre.
+La numérotation démarre à #9 : les bugs #1–#8, résolus ou rétractés upstream, ont été retirés de ce fichier. Les numéros sont conservés (pas de renumérotation) car ils restent référencés depuis les tests (`test/features/upstream_bugs_test.rb`).
 
 ---
 

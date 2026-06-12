@@ -448,7 +448,9 @@ class TestApp
   # ─────────────────────────────────────────────────────────────────────
   # Upstream-bug fixtures.
   # Each page exposes a minimal scenario where a real browser succeeds and
-  # Lightpanda fails without the gem-side workaround. See UPSTREAM_BUGS.md.
+  # Lightpanda failed natively without the gem-side workaround. The bugs
+  # exercised here (#1, #3, #4) are now fixed or retracted upstream; the
+  # fixtures stay to back the regression tests in upstream_bugs_test.rb.
   # ─────────────────────────────────────────────────────────────────────
 
   # Bug #3 — synthetic clicks must bubble to document so delegated handlers

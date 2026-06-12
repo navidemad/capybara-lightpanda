@@ -164,7 +164,7 @@ describe "Lightpanda Hotwire-zone probes" do
       assert_equal "7", result.dig("json", "params", "count")
     end
 
-    # All 4 tests below assert different facets of UPSTREAM_BUGS.md Bug #6
+    # All 4 tests below assert different facets of Bug #6
     # (`fetch` / XHR coerce FormData via `String()` instead of multipart-encoding).
     # Skipped in CI until upstream lands the multipart encoder; remove the
     # `skip` calls once `MINIMUM_NIGHTLY_BUILD` floor catches the fix.
@@ -172,7 +172,7 @@ describe "Lightpanda Hotwire-zone probes" do
     # different (sub-)bug than the one we want fixed.
 
     it "POSTs a FormData body that the server can parse (Bug #6)" do
-      skip "UPSTREAM_BUGS.md Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
+      skip "Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
       result = session.evaluate_async_script(<<~JS)
         var done = arguments[arguments.length - 1];
         var fd = new FormData();
@@ -191,7 +191,7 @@ describe "Lightpanda Hotwire-zone probes" do
     end
 
     it "POSTs FormData with the multipart Content-Type (Bug #6 — symptom marker)" do
-      skip "UPSTREAM_BUGS.md Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
+      skip "Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
       # Key signature of Bug #6: when fetch sends a FormData body, the
       # Content-Type MUST be `multipart/form-data; boundary=<random>`,
       # not `application/x-www-form-urlencoded`. The wrong content-type
@@ -213,7 +213,7 @@ describe "Lightpanda Hotwire-zone probes" do
     end
 
     it "POSTs FormData built from an existing <form> via `new FormData(form)` (Bug #6 — Turbo path)" do
-      skip "UPSTREAM_BUGS.md Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
+      skip "Bug #6 — fetch coerces FormData via String() instead of multipart-encoding"
       # This is THE shape Turbo Drive uses on every form submit:
       # `new FormData(form)` extracts the form's inputs into a FormData,
       # then fetches with that body. Identical bug surface to the
@@ -244,7 +244,7 @@ describe "Lightpanda Hotwire-zone probes" do
     end
 
     it "XHR + FormData also fails the same way (Bug #6 — single root cause)" do
-      skip "UPSTREAM_BUGS.md Bug #6 — XHR coerces FormData via String() instead of multipart-encoding"
+      skip "Bug #6 — XHR coerces FormData via String() instead of multipart-encoding"
       # XHR uses a different code path from fetch for body init. If both
       # fail with the same `[object FormData]` symptom, the upstream fix
       # likely lives at a shared body-coercion site and a single PR
