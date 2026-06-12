@@ -729,4 +729,56 @@ class TestApp
       </html>
     HTML
   end
+
+  # Click event sequence. `#seq` records every pointer event on the button so
+  # tests can assert the mousedown -> mouseup -> click order, and `#widget`
+  # mimics select2: the panel opens from a `mousedown` listener (select2 v3
+  # binds "mousedown touchstart", never "click").
+  get "/lightpanda/click_events_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Click Events Test</title></head>
+        <body>
+          <button id="btn">Click me</button>
+          <div id="seq"></div>
+          <div id="widget">choose…</div>
+          <div id="panel" style="display: none"><span id="option">Option A</span></div>
+          <script>
+            ['mousedown', 'mouseup', 'click'].forEach(function(name) {
+              document.getElementById('btn').addEventListener(name, function() {
+                var seq = document.getElementById('seq');
+                seq.textContent += (seq.textContent ? ' ' : '') + name;
+              });
+            });
+            document.getElementById('widget').addEventListener('mousedown', function() {
+              document.getElementById('panel').style.display = 'block';
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  # Modal type leniency. The delete button fires `confirm()` (the jquery-ujs /
+  # data-confirm idiom), letting tests drive it through `accept_alert` the way
+  # real suites (solidus admin) do.
+  get "/lightpanda/modal_type_leniency" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Modal Type Leniency</title></head>
+        <body>
+          <button id="delete">Delete</button>
+          <div id="outcome"></div>
+          <script>
+            document.getElementById('delete').addEventListener('click', function() {
+              var ok = confirm('Are you sure?');
+              document.getElementById('outcome').textContent = ok ? 'deleted' : 'kept';
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
 end

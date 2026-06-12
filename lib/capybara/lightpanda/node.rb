@@ -485,6 +485,13 @@ module Capybara
       CLICK_JS = <<~JS
         function() {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
+          // Real pointer clicks are a mousedown -> mouseup -> click sequence,
+          // and widgets like select2 open on `mousedown`, not `click`.
+          // Cancelling mousedown suppresses focus/text-selection in a real
+          // browser but never the click, so the click below is dispatched
+          // unconditionally.
+          this.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          this.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
           var notCancelled = this.dispatchEvent(clickEvt);
           if (!notCancelled || clickEvt.defaultPrevented) return;
