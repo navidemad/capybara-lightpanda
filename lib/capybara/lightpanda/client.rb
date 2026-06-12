@@ -115,7 +115,11 @@ module Capybara
       def handle_message(message)
         if message["id"]
           pending = @pendings[message["id"]]
-          pending&.set(message)
+          # try_set, not set: a duplicate frame for an already-answered id
+          # (Lightpanda emits occasional malformed/duplicate frames — see
+          # upstream-wishlist.md A41) would raise MultipleAssignmentError on
+          # this thread, and abort_on_exception would kill the whole process.
+          pending&.try_set(message)
         elsif message["method"]
           @subscriber.dispatch(message["method"], message["params"])
         end

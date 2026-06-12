@@ -4,6 +4,8 @@ require "json"
 require "socket"
 require "websocket/driver"
 
+require_relative "../utils/attempt"
+
 module Capybara
   module Lightpanda
     class Client
@@ -36,7 +38,7 @@ module Capybara
 
           @status = :closing
           @messages.close
-          @driver&.close
+          @driver_mutex.synchronize { @driver&.close }
           @thread&.join(1) || @thread&.kill
           @socket&.close
           @status = :closed
@@ -49,8 +51,7 @@ module Capybara
         def write(data)
           @socket.write(data)
         rescue Errno::EPIPE, Errno::ECONNRESET, IOError
-          @status = :closed
-          @messages.close
+          mark_dead
         end
 
         private
@@ -69,13 +70,9 @@ module Capybara
           start_reader_thread
         end
 
-        def connect_with_retry(host, port, retries: 10, delay: 0.1)
-          retries.times do |i|
-            return TCPSocket.new(host, port)
-          rescue Errno::ECONNREFUSED
-            raise if i == retries - 1
-
-            sleep delay
+        def connect_with_retry(host, port)
+          Utils::Attempt.with_retry(errors: Errno::ECONNREFUSED, max: 10, wait: 0.1) do
+            TCPSocket.new(host, port)
           end
         end
 
@@ -93,8 +90,7 @@ module Capybara
           end
 
           @driver.on(:close) do
-            @status = :closed
-            @messages.close
+            mark_dead
           end
 
           @driver.on(:error) do |event|
@@ -105,8 +101,7 @@ module Capybara
             # process. Mark the connection dead and let Client#command
             # surface DeadBrowserError on its next dispatch via closed?.
             @logger&.puts("✗ WebSocket error: #{event.message}")
-            @status = :error
-            @messages.close
+            mark_dead(:error)
           end
         end
 
@@ -123,8 +118,7 @@ module Capybara
                 data = @socket.readpartial(4096)
                 @driver_mutex.synchronize { @driver.parse(data) }
               rescue Errno::ECONNRESET, Errno::EPIPE, IOError
-                @status = :closed
-                @messages.close
+                mark_dead
                 break
               end
             end
@@ -140,7 +134,7 @@ module Capybara
             begin
               data = @socket.readpartial(4096)
               @driver.parse(data)
-            rescue EOFError
+            rescue Errno::ECONNRESET, Errno::EPIPE, IOError # IOError covers EOFError
               raise DeadBrowserError, "Connection closed during handshake"
             end
           end
@@ -148,6 +142,14 @@ module Capybara
           return if @status == :open
 
           raise TimeoutError, "WebSocket handshake timed out after #{@options.handshake_timeout}s"
+        end
+
+        # Single home for the "dead implies queue closed" invariant: every
+        # path that gives up on the connection must close @messages so the
+        # Client message thread's blocking pop returns.
+        def mark_dead(status = :closed)
+          @status = status
+          @messages.close
         end
 
         def parse_message(data)

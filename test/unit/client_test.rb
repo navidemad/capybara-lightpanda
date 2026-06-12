@@ -48,4 +48,28 @@ describe Capybara::Lightpanda::Client do
       pass
     end
   end
+
+  describe "#handle_message" do
+    let(:client) { Capybara::Lightpanda::Client.allocate }
+    let(:pendings) { Concurrent::Hash.new }
+
+    before do
+      client.instance_variable_set(:@pendings, pendings)
+    end
+
+    it "keeps the first response when a duplicate frame arrives for the same id" do
+      ivar = Concurrent::IVar.new
+      pendings[7] = ivar
+      first = { "id" => 7, "result" => { "ok" => true } }
+      duplicate = { "id" => 7, "result" => { "ok" => false } }
+
+      client.send(:handle_message, first)
+      # Lightpanda occasionally emits malformed/duplicate frames (upstream
+      # A41). With IVar#set this raised MultipleAssignmentError on the message
+      # thread, where abort_on_exception kills the entire Ruby process.
+      client.send(:handle_message, duplicate)
+
+      assert_equal first, ivar.value
+    end
+  end
 end
