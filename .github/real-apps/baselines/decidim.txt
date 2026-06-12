@@ -1,0 +1,16 @@
+./spec/system/account_spec.rb # Account navigation shows the account form when clicking on the menu
+./spec/system/account_spec.rb # Account when on the account page update avatar can update avatar
+./spec/system/account_spec.rb # Account when on the account page update avatar shows error when image is too big
+./spec/system/account_spec.rb # Account when on the account page updating personal data updates the user's data
+./spec/system/account_spec.rb # Account when on the account page when login is not enabled does not have js errors
+./spec/system/account_spec.rb # Account when on the account page when update email when correct old password cancels the email change
+./spec/system/account_spec.rb # Account when on the account page when update email when correct old password resend confirmation
+./spec/system/account_spec.rb # Account when on the account page when update email when correct old password tells user to confirm new email
+./spec/system/account_spec.rb # Account when on the account page when update email when typing new email toggles the current password
+./spec/system/account_spec.rb # Account when on the account page when update password changes the password with correct password
+./spec/system/account_spec.rb # Account when on the account page when update password shows fields if password is wrong
+./spec/system/account_spec.rb # Account when on the account page when update password toggles old and new password fields
+./spec/system/account_spec.rb # Account when on the account page when updating the user's nickname changes the user's nickname - 'nickname'
+./spec/system/account_spec.rb # Account when on the account page when updating the user's nickname respects the maxlength attribute with a really long word - 'nicknamenicknamenickname'
+rspec ./spec/system/account_spec.rb[1:2:1:1] # Account when on the account page behaves like accessible page passes accessibility tests
+rspec ./spec/system/account_spec.rb[1:2:1:2] # Account when on the account page behaves like accessible page passes HTML validation

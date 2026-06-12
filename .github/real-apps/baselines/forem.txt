@@ -1,0 +1,21 @@
+./spec/system/articles/user_creates_an_article_spec.rb # Creating an article with the editor creates a new article
+./spec/system/articles/user_deletes_an_article_spec.rb # Deleting Article author of article deletes own article
+./spec/system/articles/user_discussion_locks_spec.rb # User discussion locks when an Article does not have a discussion lock shows the discussion lock button in manage
+./spec/system/articles/user_discussion_locks_spec.rb # User discussion locks when an Article has a discussion lock shows the unlock discussion lock button in manage
+./spec/system/articles/user_edits_an_article_spec.rb # Editing with an editor user previews their changes
+./spec/system/articles/user_edits_an_article_spec.rb # Editing with an editor user unpublishes their post
+./spec/system/articles/user_visits_an_article_spec.rb # Views an article shows non-negative comments
+./spec/system/articles/user_visits_an_article_spec.rb # Views an article when an article is not published with the article password, and the logged-in user is authorized to update the article shows the article edit link
+./spec/system/articles/user_visits_an_article_spec.rb # Views an article when an article is scheduled shows the article edit link for the author
+./spec/system/authentication/user_logs_in_with_email_spec.rb # Authenticating with Email when a user is new when using valid credentials creates a new user
+./spec/system/comments/like_button_state_after_reply_spec.rb # Like button and tooltip after replying keeps the like footer visible and clears replying state on parent after submitting a reply
+./spec/system/comments/user_edits_a_comment_spec.rb # Editing A Comment when user edits comment on the bottom of the article updates
+./spec/system/comments/user_edits_a_comment_spec.rb # Editing A Comment when user edits via permalinks updates
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when all comments displays child comments
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when all comments displays comments
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when all comments displays grandchild comments
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when root is specified displays child comments
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when root is specified displays grandchild comments
+./spec/system/comments/user_views_article_comments_spec.rb # Visiting article comments when root is specified displays related comments
+./spec/system/homepage/user_visits_homepage_with_announcement_spec.rb # User visits a homepage when user hasn't logged in with an active announcement dismisses the broadcast
+./spec/system/homepage/user_visits_homepage_with_announcement_spec.rb # User visits a homepage when user hasn't logged in with an active announcement renders the broadcast

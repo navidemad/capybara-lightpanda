@@ -7,6 +7,9 @@ name: Real-apps smoke test
 #   3. Applies .github/real-apps/patches/<target>.patch (after sed-substituting
 #      __CAPYBARA_LIGHTPANDA_PATH__ with the runner-side checkout path)
 #   4. Installs the project's deps and runs the same spec subset as the local run
+#   5. Compares failures against .github/real-apps/baselines/<target>.txt —
+#      known failures (Lightpanda limitations) don't fail the job, only NEW
+#      failures do; baseline entries that now pass surface as warnings.
 #
 # Trigger with `workflow_dispatch` to run a subset, or wait for the weekly cron.
 
@@ -418,8 +421,26 @@ jobs:
         env:
           LIGHTPANDA_CACHE_TIME: "0"
         # `--format progress` keeps dot/F output compact while the trailing
-        # failure block still prints full backtraces.
-        run: bundle exec rspec ${{ matrix.spec }} --format progress
+        # failure block still prints full backtraces. The JSON report feeds
+        # the baseline comparison below — known failures (Lightpanda
+        # limitations like the layout-measuring-JS cluster) live in
+        # .github/real-apps/baselines/<target>.txt and don't fail the job;
+        # only NEW failures do. `|| true` defers pass/fail to that step.
+        run: |
+          bundle exec rspec ${{ matrix.spec }} --format progress \
+            --format json --out "$GITHUB_WORKSPACE/rspec-report.json" || true
+
+      - name: Compare failures against baseline
+        if: steps.guard.outputs.skip != 'true'
+        run: ruby capybara-lightpanda/.github/real-apps/check_baseline.rb ${{ matrix.name }} "$GITHUB_WORKSPACE/rspec-report.json"
+
+      - name: Upload rspec report
+        if: always() && steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: rspec-report-${{ matrix.name }}
+          path: rspec-report.json
+          if-no-files-found: ignore
 
       - name: Upload screenshots on failure
         if: failure() && steps.guard.outputs.skip != 'true'
