@@ -1,0 +1,16 @@
+./spec/features/spree/admin/customers_spec.rb # Customers update can update user bill address
+./spec/features/spree/admin/customers_spec.rb # Customers update when bill address is the same Admin adds a new billing address
+./spec/features/spree/admin/customers_spec.rb # Customers update when user bill address is not editable creates a new one
+./spec/features/spree/admin/customers_spec.rb # Customers update when user bill address is not editable when updating an existing bill address switches the customer bill address to the existing address
+./spec/features/spree/admin/customers_spec.rb # Customers update when user ship address is not editable creates a new one
+./spec/features/spree/admin/customers_spec.rb # Customers update when user ship address is not editable when updating an existing ship address switches the customer ship address to the existing address
+./spec/features/spree/admin/customers_spec.rb # Customers without any addresses Admin adds a billing address
+./spec/features/spree/admin/customers_spec.rb # Customers without any addresses Admin adds a shipping address
+./spec/features/spree/admin/products/option_types_spec.rb # Option Types manaing option values allows an admin to manage option values
+./spec/features/spree/admin/settings/shipping_categories_spec.rb # Shipping categories can delete shipping category
+./spec/features/spree/admin/settings/shipping_methods_spec.rb # Shipping methods allows Store Owner to delete shipping method
+./spec/features/spree/admin/settings/stock_locations_spec.rb # Stock Locations allows to create a new stock location
+./spec/features/spree/admin/settings/stock_locations_spec.rb # Stock Locations allows to delete a stock location
+./spec/features/spree/admin/settings/stock_locations_spec.rb # Stock Locations allows to update an existing stock location
+./spec/features/spree/admin/settings/tax_categories_spec.rb # Tax categories allows to delete tax category
+./spec/features/spree/admin/settings/tax_rates_spec.rb # Tax Rates allows Store Owner to delete tax rate

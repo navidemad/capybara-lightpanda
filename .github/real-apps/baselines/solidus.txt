@@ -1,0 +1,82 @@
+./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source displays message when changing preference source
+./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source displays message when changing type
+./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source updates successfully and keeps secrets
+./spec/features/admin/configuration/shipping_methods_spec.rb # Shipping Methods update can change the calculator
+./spec/features/admin/configuration/stock_locations_spec.rb # Stock Locations can delete an existing stock location
+./spec/features/admin/configuration/store_spec.rb # Store editing general store settings should be able to update the default cart tax country
+./spec/features/admin/orders/adjustments_spec.rb # Adjustments when the order is completed deleting an adjustment should update the total
+./spec/features/admin/orders/adjustments_spec.rb # Adjustments when the order is not completed when the order is not complete when the user can edit and update orders allows to enter a coupon code
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details brand new order associates a user when not using guest checkout
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details brand new order does not reset guest checkout to true when returning to customer tab
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details brand new order when required quantity is more than available displays an error
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order errors when no shipping methods are available 
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order for an order in confirm state with a user updating order email works
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order selected country has no state changes state field to text input
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order should be able to update customer details for an existing order
+./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order should show validation errors
+./spec/features/admin/orders/line_items_spec.rb # Order Line Items can edit a line item's quantity
+./spec/features/admin/orders/listing_spec.rb # Orders Listing searching orders when there's a single store should be able to filter on variant_id
+./spec/features/admin/orders/new_order_spec.rb # New Order adding new item to the order inventory items show up just fine and are also registered as shipments
+./spec/features/admin/orders/new_order_spec.rb # New Order can create split payments
+./spec/features/admin/orders/new_order_spec.rb # New Order completes new order succesfully without using the cart
+./spec/features/admin/orders/new_order_spec.rb # New Order customer with attempted XSS displays the user's email escaped without executing
+./spec/features/admin/orders/new_order_spec.rb # New Order customer with default credit card transitions to confirm not to complete
+./spec/features/admin/orders/new_order_spec.rb # New Order start by customer address completes order fine
+./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when customers have same country but different state changes the bill address state accordingly
+./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when one customer address have only textual state changes the bill address state accordingly
+./spec/features/admin/orders/new_order_spec.rb # New Order without a delivery step can still see line items
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page can add tracking information
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page should allow me to edit order details
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant doesn't track inventory adds variant to order just fine
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant out of stock and not backorderable doesn't display the out of stock variant in the search results
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the item can be added to the existing shipment adds the item to the existing shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the items cannot be added to the existing shipment adds an item creating a new shipment and changes the payment status
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page with a completed order can change the shipping method
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page with a completed order can use admin-only shipping methods
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location multiple items in cart should have no problem splitting if multiple items are in the from shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location should warn you if you have not selected a location or shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a split
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a transfer via splitting off all stock
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should not allow less than or equal to zero qty
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should not allow me to split more than I had in the original shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is not enough stock at the other location and it cannot backorder should not allow me to split stock
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is not enough stock at the other location but it can backorder should allow me to split and backorder the stock
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can backorder should add more to the backorder
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should not allow a shipment to split stock to itself
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should not allow a split if the receiving shipment qty plus the incoming is greater than the count_on_hand
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should split fine if more than one line_item is in the receiving shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment should delete the old shipment if enough are split off
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment when inventory levels are not being tracked allows to ship an order's items
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Fakedispatch can change the shipping method
+./spec/features/admin/orders/payments_spec.rb # Payments with an differently named payment method is able to create a new payment
+./spec/features/admin/orders/payments_spec.rb # Payments with no prior payments with a credit card payment method is able to create a new credit card payment with valid information
+./spec/features/admin/orders/return_authorizations_spec.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows
+./spec/features/admin/orders/return_payment_state_spec.rb # Return payment state spec refunds and has outstanding_balance of zero
+./spec/features/admin/orders/shipments_spec.rb # Shipments moving variants between shipments can move a variant to a new and to an existing shipment
+./spec/features/admin/orders/shipments_spec.rb # Shipments moving variants between shipments with a ready-to-ship order can transfer all items to a new location
+./spec/features/admin/orders/shipments_spec.rb # Shipments when split shipment can split item
+./spec/features/admin/products/edit/images_spec.rb # Product Images uploading, editing, and deleting an image Using Active Storage should show a no image placeholder when images fail to download
+./spec/features/admin/products/edit/images_spec.rb # Product Images uploading, editing, and deleting an image Using the drag and drop upload window should allow an admin to upload an image and edit an image for a product
+./spec/features/admin/products/edit/images_spec.rb # Product Images uploading, editing, and deleting an image Using the new image link should allow an admin to upload and edit an image for a product
+./spec/features/admin/products/edit/images_spec.rb # Product Images uploading, editing, and deleting an image when the user cannot create images does not show links for creating images
+./spec/features/admin/products/edit/images_spec.rb # Product Images uploading, editing, and deleting an image with several variants should allow an admin to re-assign an image to another variant
+./spec/features/admin/products/edit/products_spec.rb # Product Details when default price is deleted does not show the master price
+./spec/features/admin/products/edit/taxons_spec.rb # Product Display Order managing display order should allow an admin to manage display order (taxons)
+./spec/features/admin/products/edit/variants_spec.rb # Product Variants editing variant option types allows admin to create a variant if there are option types
+./spec/features/admin/products/edit/variants_spec.rb # Product Variants editing variant option types should allow an admin to create option types for a variant
+./spec/features/admin/products/products_spec.rb # Products as admin user creating a new product can set the count on hand to a null value
+./spec/features/admin/products/products_spec.rb # Products as admin user creating a new product should allow an admin to create a new product
+./spec/features/admin/products/products_spec.rb # Products as admin user searching products should be able to search deleted products by their properties
+./spec/features/admin/products/products_spec.rb # Products as admin user updating a product should correctly update discontinue_on
+./spec/features/admin/products/products_spec.rb # Products as admin user updating a product should parse correctly available_on
+./spec/features/admin/products/properties_spec.rb # Properties linking a property to a product successfully create and then remove product property
+./spec/features/admin/products/properties_spec.rb # Properties linking a property to a product successfully remove and create a product property at the same time
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location can create a negative stock adjustment
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location can create a positive stock adjustment
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location can toggle backorderable
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location contains a link to recent stock movements
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location with stock locations that don't have stock items for variant yet can add stock items to other stock locations
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location with two variants, one of which tracks inventory while the other doesn't allows modifying backorderable only on the variant which tracks inventory
+./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location with two variants, one of which tracks inventory while the other doesn't allows modifying the count on hand only on the variant which tracks inventory
+./spec/features/admin/stock_items_spec.rb # Stock Items Management searching by variant
+./spec/features/admin/store_credits_spec.rb # Store credits admin displaying a store credit details page lets edit store credit's memo
