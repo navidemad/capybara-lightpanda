@@ -62,7 +62,7 @@ Use this file when:
 
 - **Today (re-verified 2026-05-12 against `main` HEAD `8cad175c`)**: `_getInnerText` at `src/browser/webapi/element/Html.zig:228-268` recurses through children and emits `\n` only for `<br>`. No display:block / display:list-item line breaks; no hidden-descendant filtering (source still has the `// TODO check if elt is hidden` comment at line 243); no line-collapsing pass. Empirically, nested-block fixtures return `"Ancestor Ancestor Ancestor Child  ASibling  "` (no newlines) where Chrome returns the same content with `\n` inserted around block boundaries.
 - **Want**: implement [the HTML innerText algorithm](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute) — required line breaks around block-level boxes, hidden-descendant filtering via `getComputedStyle().display`, the line-collapsing pass that drops required line breaks adjacent to empty blocks. Multi-day Zig project; needs `getComputedStyle` access from inside the writer-driven walker.
-- **Upstream issue/PR**: not filed.
+- **Upstream issue/PR**: #2734 (filed 2026-06-12, issue-first with repro; proposes v1 = StyleManager `display:none` truth + UA-default display table + line-collapse, deferring full-cascade bits to #2733; awaiting maintainer direction before a PR). Re-verified on nightly 6736: `"firstsecondtail"` and hidden-descendant leak both reproduce.
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
 - **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The phantom-newline gem-side bug goes away too if upstream collapses required line breaks around empty blocks.
 
@@ -153,8 +153,9 @@ Three independent issues:
 
 ### B10. `getComputedStyle` cascade resolution incomplete
 
-- **Today**: CSSOM merged (PR #1797) — `checkVisibility` matches all stylesheets, `insertRule`/`deleteRule` work. But `getComputedStyle(el).textTransform` (and other cascade-resolved properties) still resolves only inline styles.
+- **Today (re-probed 2026-06-12, nightly 6736)**: worse than previously recorded — `getComputedStyle` returns `""` for **all** properties except `display`/`visibility`; even inline `style=` declarations (readable via `el.style`) come back empty through the computed path. Locus: `CSSStyleDeclaration.zig` `getPropertyValue` `_is_computed` branch special-cases exactly two properties; `StyleManager` reduces matched rules to three booleans.
 - **Want**: full cascade resolution for `getComputedStyle`.
+- **Upstream issue**: #2733 (filed 2026-06-12, issue-first with repro + scope question; awaiting maintainer direction before a PR).
 - **Gem workaround**: none. Skip-listed: `node #style should return the computed style value`, `should return multiple style values`, `#assert_matches_style`, `#matches_style?`, `#has_css? :style option should support Hash`, `#has_css? with count for CSS processing drivers`, `#assert_text should raise if text invisible and incorrect case`.
 - **Drop-on-fix**: remove ~7 skip patterns.
 
@@ -347,10 +348,10 @@ Root-caused items from this run were promoted to their own entries: **A44** (CDP
 
 ### New bugs not yet folded into this wishlist (discovered 2026-05-04 → 2026-05-06 via Turbo Drive probes)
 
-Tracked in `UPSTREAM_BUGS.md` at gem root (Bug #9, #10). Each has a gem-side workaround in `node.rb` / `browser.rb` waiting on an upstream fix:
+Tracked in `UPSTREAM_BUGS.md` at gem root (Bug #9, #10). **Both retracted 2026-06-12** after pure-CDP probes on nightly 6736:
 
-- **Bug #9 — `requestSubmit()` throws when a listener cancels the SubmitEvent** — HTML §4.10.21.5 step 5 says it must return silently when cancelled. Lightpanda throws `JsException`. Gem workaround: `try { this.form.requestSubmit(this); } catch (e) {}` around `CLICK_JS`'s submit path.
-- **Bug #10 — `Runtime.evaluate` retains `const`/`let` top-level bindings between CDP calls** — V8 spec says each `Runtime.evaluate` runs in a fresh script; Lightpanda shares the scope so a second `const x = ...` throws `SyntaxError: Identifier 'x' has already been declared`. Gem workaround: wrap every no-args `evaluate(expr)` / `execute(expr)` in an IIFE on the Ruby side + surface `exceptionDetails`.
+- **Bug #9 — `requestSubmit()` throws when a listener cancels the SubmitEvent** — **RETRACTED: fixed upstream** (probe 2026-06-12, nightly 6736: returns silently for both form-level and document-level bubbling cancel listeners; almost certainly PR #2639's submit-path rework). Gem follow-up: drop the `try { ... } catch (e) {}` around `CLICK_JS`'s submit path in `node.rb` once `MINIMUM_NIGHTLY_BUILD` covers it.
+- **Bug #10 — `Runtime.evaluate` retains `const`/`let` top-level bindings between CDP calls** — **RETRACTED: NOT A BUG, Chrome parity** (probe 2026-06-12: chrome-headless-shell throws the identical `SyntaxError: Identifier 'sel' has already been declared` without `replMode`; with `replMode: true` both Chrome and Lightpanda allow redeclaration). Top-level lexical declarations persisting across classic scripts is spec behavior; the wishlist's original "fresh script scope" claim was wrong. Gem follow-up: pass `replMode: true` on `Runtime.evaluate` in `browser.rb` and drop the IIFE wrapping (keep the `exceptionDetails` surfacing — that part is a real gem fix).
 
 ## What this gem won't ever fix (run cuprite)
 
