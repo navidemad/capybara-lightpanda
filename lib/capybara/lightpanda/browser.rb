@@ -640,61 +640,52 @@ module Capybara
         page_command("LP.handleJavaScriptDialog", accept: false)
       end
 
+      # `type` is accepted for the error message only: like Selenium (where
+      # alert/confirm are indistinguishable) and Cuprite (whose dialog handler
+      # accepts whatever fires), we deliberately do NOT reject a dialog whose
+      # reported type differs from the one Capybara asked for. Real suites
+      # wrap `data-confirm` deletes in `accept_alert` (e.g. solidus admin) and
+      # expect it to work; only the message text is matched.
       def find_modal(type, text: nil, wait: options.timeout)
         regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
-        last_matching_type_message = nil
         last_seen_message = nil
         claimed = nil
         Utils::Wait.until(timeout: wait, interval: 0.05) do
-          claimed = pop_modal_message(type.to_s, regexp)
+          claimed = pop_modal_message(regexp)
           next true if claimed
 
-          last = peek_last_modal_message(type.to_s)
-          last_matching_type_message = last[:matching_type] || last_matching_type_message
-          last_seen_message = last[:any] || last_seen_message
+          last_seen_message = peek_last_modal_message || last_seen_message
           false
         end
         claimed[:message]
       rescue TimeoutError
-        raise_modal_not_found(type, text, last_matching_type_message, last_seen_message)
+        raise_modal_not_found(type, text, last_seen_message)
       end
 
       private
 
-      # Pop the first queued dialog whose type matches and (when `regexp` is
-      # non-nil) whose message matches the requested pattern. Returns the
-      # entry or nil. Serialized with the message-thread writer.
-      def pop_modal_message(type, regexp)
+      # Pop the first queued dialog whose message matches the requested
+      # pattern (any dialog when `regexp` is nil). Returns the entry or nil.
+      # Serialized with the message-thread writer.
+      def pop_modal_message(regexp)
         @modal_messages_mutex.synchronize do
           match = @modal_messages.find do |m|
-            m[:type] == type && (regexp.nil? || m[:message].to_s.match?(regexp))
+            regexp.nil? || m[:message].to_s.match?(regexp)
           end
           @modal_messages.delete(match) if match
           match
         end
       end
 
-      # Inspect the queue for diagnostics. Returns the most recent message
-      # of the requested type (if any) AND the most recent message of any
-      # type so the failure message can hint at a type mismatch.
-      def peek_last_modal_message(type)
-        @modal_messages_mutex.synchronize do
-          {
-            matching_type: @modal_messages.reverse.find { |m| m[:type] == type }&.dig(:message),
-            any: @modal_messages.last&.dig(:message),
-          }
-        end
+      # Most recent dialog message of any type, for diagnostics.
+      def peek_last_modal_message
+        @modal_messages_mutex.synchronize { @modal_messages.last&.dig(:message) }
       end
 
-      def raise_modal_not_found(type, text, matching_type_message, any_message)
-        if matching_type_message
+      def raise_modal_not_found(type, text, last_seen_message)
+        if last_seen_message
           raise Capybara::ModalNotFound,
-                "Unable to find modal dialog with #{text} - found '#{matching_type_message}' instead."
-        end
-        if any_message
-          raise Capybara::ModalNotFound,
-                "Unable to find #{type} modal#{" with #{text}" if text} - " \
-                "a different dialog fired with message '#{any_message}'."
+                "Unable to find #{type} modal with #{text} - found '#{last_seen_message}' instead."
         end
         raise Capybara::ModalNotFound, "Unable to find modal dialog#{" with #{text}" if text}"
       end
