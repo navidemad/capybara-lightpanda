@@ -50,3 +50,21 @@ Tout test Capybara qui exécute deux `page.execute_script` ou `evaluate_script` 
 ### Workaround côté gem
 
 `browser.rb` → wrap chaque expression de `evaluate(expression)` et `execute(expression)` no-args path dans une IIFE `(function(){return EXPR})()` / `(function(){EXPR})()`. La déclaration `const`/`let` se retrouve dans un function scope qui est jeté à la sortie de l'IIFE. Aligné avec ce que fait déjà la branche args via `Runtime.callFunctionOn`. **Aussi** : raise `JavaScriptError` quand `exceptionDetails` est présent dans la réponse de `execute`, sinon les exceptions JS étaient avalées silencieusement.
+
+---
+
+## Bug #11 — Réponse 3xx sans header `Location` : navigation avortée, body jamais rendu
+
+Per RFC 9110 §15.4 (et le fetch spec), une réponse 3xx sans header `Location` est une réponse finale normale dont le body doit être délivré — Chrome la rend. Lightpanda route tout status 300–399 dans le chemin redirect (`src/browser/HttpClient.zig`, `processOneMessage`) et `handleRedirect` retourne `error.LocationNotFound` quand le header est absent. L'ancien document est détruit, rien ne le remplace : la page n'a plus de nœud `<html>` (Capybara : `Unable to find xpath "/html"`).
+
+### Repro minimal
+
+App Rack où `POST /submit` → `[303, {"content-type" => "text/html"}, ["<h1>Thank you</h1>"]]` ; cliquer le bouton submit du formulaire via le gem → plus de document. Contrôle : la même réponse avec status 422 est rendue correctement. Vérifié 2026-06-12 sur nightly 6703.
+
+### Impact
+
+Idiome Rails pour satisfaire le check Turbo « Form responses must redirect to another location » sans rediriger : `render 'thank_you', status: 303` (pas de `Location`). Rencontré sur le flow signup d'alonetone (`spec/features/account_requests_spec.rb`, « submits the form and succeeds ») en l'ajoutant à la suite real-apps ; avec Turbo devant, le symptôme s'adoucit en « la page reste sur le formulaire ».
+
+### Workaround côté gem
+
+Aucun possible — la gestion des redirects vit dans le client HTTP Zig. La suite real-apps épingle le spec alonetone sur l'exemple error-render (`account_requests_spec.rb:4`) en attendant le fix. Suivi : wishlist **A43** (fix shape inclus) — issue upstream pas encore filée.

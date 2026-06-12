@@ -189,6 +189,7 @@ These are upstream Lightpanda limits, not driver bugs:
 | `scroll_to`, `resize` | No layout engine — no real scroll/resize; the viewport is fixed at 1920×1080 |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
 | CSS: external `<link>`, `@media`, `matchMedia` | Now fetched, parsed, and evaluated — but against the fixed 1920×1080 viewport, so responsive variants always resolve at desktop width (no resize to other breakpoints) |
+| User agent | `Lightpanda/1.0` — no Chrome/Safari token, and Mozilla-styled UA overrides are rejected by design. App-side UA bot detection flags the driver as a bot; allowlist `Lightpanda` in your test environment |
 | Complex Stimulus controllers | Some may not execute fully |
 
 External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. The catch is the viewport is fixed at 1920×1080 with no real layout, so everything resolves at desktop width. If a spec needs to switch breakpoints (resize to a mobile width) or asserts on pixel-level layout, keep it on Cuprite — that's what the dual-driver pattern above is for.
