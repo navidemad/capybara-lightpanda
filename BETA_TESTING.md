@@ -42,7 +42,15 @@ curl -L -o /usr/local/bin/lightpanda \
 chmod +x /usr/local/bin/lightpanda
 ```
 
-WebMock/VCR intercepts the auto-download because it runs as plain `Net::HTTP` inside the test process. If you'd rather not install a binary, trigger the download once from an unstubbed process and the cached copy is used from then on:
+WebMock/VCR intercepts the auto-download because it runs as plain `Net::HTTP` inside the test process. If you'd rather not install a binary, either allow the download hosts (`github.com` serves the release URL; the asset redirects through the other two):
+
+```ruby
+WebMock.disable_net_connect!(
+  allow_localhost: true,
+  allow: ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"])
+```
+
+or trigger the download once from an unstubbed process and the cached copy is used from then on:
 
 ```bash
 bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'
@@ -86,6 +94,7 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. T
 - **WebAuthn / passkeys** — not implemented.
 - **Coordinate-based `drag_to` / `drag_by`** — no layout engine, no coordinates. HTML5 `Element#drop` (dropping files or data onto a dropzone) works since `0.6.0`.
 - **JS dialogs fired outside Capybara's modal wrappers** — the gem pre-arms the dialog response before the triggering action, so `accept_confirm` / `dismiss_confirm` / `accept_prompt` & co. work, including the JS-side `confirm`/`prompt` return values. A dialog that opens *outside* one of those wrappers is auto-dismissed by Lightpanda.
+- **UA-based bot detection in your app** — Lightpanda identifies as `Lightpanda/1.0`. The UA carries no `Chrome`/`Safari`/`Gecko` token, and the browser refuses Mozilla-styled `setUserAgentOverride` values by design, so the gem can't disguise it. App code that gates signup, listens, or tracking on a browser-looking user agent will route the driver down the bot path — alonetone's `PreventAbuse` concern was the first real sighting. Allowlist `Lightpanda` (or skip the UA check) in your app's test environment.
 
 A clean way to skip those in a mixed suite:
 
