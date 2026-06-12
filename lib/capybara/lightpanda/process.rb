@@ -90,10 +90,16 @@ module Capybara
       # DragEvent, merged 2026-06-10) provides the APIs Node#drop's DROP_JS
       # assembles its payload from; on builds without it the drop JS raises
       # "DataTransfer is not defined".
-      # Build 6699 = the #2671 merge (d1f4c409, 2026-06-10) — now the binding
-      # floor. (The prior 6672 file-upload floor — and 6353 before it — are
-      # subsumed.)
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6699")
+      # Build 6699 = the #2671 merge (d1f4c409, 2026-06-10) — the Node#drop
+      # DataTransfer floor. (The prior 6672 file-upload floor — and 6353
+      # before it — are subsumed.)
+      # PR #2708 (document fires readystatechange on readiness changes,
+      # merged 2026-06-12) made the index.js readystatechange re-dispatch
+      # shim redundant, so it was removed — on builds without #2708 Turbo's
+      # PageObserver never reaches pageLoaded() and turbo:load never fires.
+      # Build 6736 = first published nightly carrying the #2708 merge — now
+      # the binding floor.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6736")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

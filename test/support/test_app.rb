@@ -577,8 +577,8 @@ class TestApp
   end
 
   # Records every document lifecycle signal from a head script, so the probe
-  # can assert which events actually reached page listeners (wishlist A36:
-  # Lightpanda never fires readystatechange natively; the gem shims it).
+  # can assert which events actually reached page listeners (readystatechange
+  # is fired natively since nightly 6736, lightpanda-io/browser#2708).
   get "/lightpanda/probe/lifecycle" do
     <<~HTML
       <!DOCTYPE html>

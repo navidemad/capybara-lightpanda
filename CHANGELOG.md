@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6736 (published 2026-06-12). The driver refuses to start against older binaries.
+
+### Changed
+
+- The driver no longer re-dispatches `readystatechange` itself. Lightpanda fires the event natively as of nightly 6736 (lightpanda-io/browser#2708), so the shim added in 0.7.0 became redundant and was removed. Behavior is unchanged for Turbo/Hotwire apps — `turbo:load` still fires on every visit, now from the browser's own event.
+
 ## [0.7.0] - 2026-06-12
 
 ### Changed
