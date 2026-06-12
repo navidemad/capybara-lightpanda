@@ -579,6 +579,29 @@ class TestApp
   # Records every document lifecycle signal from a head script, so the probe
   # can assert which events actually reached page listeners (readystatechange
   # is fired natively since nightly 6736, lightpanda-io/browser#2708).
+  # Emits one console call per level so Browser#console_logs capture can be
+  # asserted: types, multi-arg text joining, falsy values, and the exclusion
+  # of the Turbo activity-tracker sentinels.
+  get "/lightpanda/console_logs" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head><title>console logs</title></head>
+      <body>
+        <p>console fixture</p>
+        <script>
+          console.log("hello", 42, false);
+          console.error("boom");
+          console.warn("careful");
+          // Same prefix the gem's Turbo tracker uses — must NOT be captured.
+          // "idle" is safe to emit here: the turbo event is set (idle) by default.
+          console.debug("__lightpanda_turbo_idle");
+        </script>
+      </body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/probe/lifecycle" do
     <<~HTML
       <!DOCTYPE html>
