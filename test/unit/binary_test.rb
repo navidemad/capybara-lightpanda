@@ -255,6 +255,49 @@ describe Capybara::Lightpanda::Binary do
     ensure
       ENV["PATH"] = original_path
     end
+
+    # A stale cache + a failed refresh (network blocked under WebMock/VCR,
+    # GitHub 5xx, timeouts) must NOT hard-fail when a usable binary is already
+    # on disk: a stale-but-present binary beats no browser at all. The
+    # MINIMUM_NIGHTLY_BUILD floor still gates correctness in Process#start.
+    it "falls back to the stale cached binary when the download fails" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 60
+
+      path = File.join(dir, "lightpanda")
+      File.write(path, "stale-but-usable")
+      File.chmod(0o755, path)
+      File.utime(Time.now - 3600, Time.now - 3600, path)
+
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
+      Capybara::Lightpanda::Binary.expects(:download).raises(
+        Capybara::Lightpanda::BinaryNotFoundError, "Failed to download binary: 504 Gateway Time-out"
+      )
+
+      assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+
+    # Cold cache (no binary on disk) has nothing to fall back to — the download
+    # error must surface so the caller knows there is no browser.
+    it "propagates the download error when the cache is empty (cold cache)" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.cache_time = 86_400
+
+      empty_dir = Dir.mktmpdir
+      original_path = ENV.fetch("PATH", nil)
+      ENV["PATH"] = empty_dir
+
+      Capybara::Lightpanda::Binary.expects(:download).raises(
+        Capybara::Lightpanda::BinaryNotFoundError, "Failed to download binary: 504 Gateway Time-out"
+      )
+
+      assert_raises(Capybara::Lightpanda::BinaryNotFoundError) do
+        Capybara::Lightpanda::Binary.update
+      end
+    ensure
+      ENV["PATH"] = original_path
+    end
   end
 
   describe ".update_hint" do
