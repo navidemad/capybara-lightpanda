@@ -66,15 +66,6 @@ Use this file when:
 - **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` — `_lightpanda.visibleText` (~50 LOC) walks descendants in JS, dispatches on tag-name + `getComputedStyle().display`, wraps block-level descendants in `\n…\n` only when they actually contribute visible text. Called from `VISIBLE_TEXT_JS` in `lib/capybara/lightpanda/node.rb`, which backs `Node#visible_text` (and hence `text(:visible)`). Also: `node #shadow_root should get visible text` still fails because the polyfill emits a phantom `\n` around empty `display:block` elements between inline siblings — Chrome's innerText collapses these via the line-collapse pass. Gem-side TODO to add `/\S/.test(out)` guard or wait for upstream native impl.
 - **Drop-on-fix**: replace the polyfill with `el.innerText` and inline the read at the `VISIBLE_TEXT_JS` constant. Drops `_lightpanda.visibleText` (~50 LOC). The phantom-newline gem-side bug goes away too if upstream collapses required line breaks around empty blocks.
 
-### A36. `document` never fires `readystatechange` (breaks Turbo's `turbo:load`)
-
-- **Today (verified 2026-06-11 against installed nightly, floor 6699)**: `document.readyState` transitions correctly (`loading` → `interactive` → `complete`) and both `DOMContentLoaded` and `window` `load` fire, but the `readystatechange` event is never dispatched at the document (Chrome fires it twice per load). Lifecycle probe log: `["script-eval:loading", "DOMContentLoaded:interactive", "window.load:complete"]` — zero `readystatechange` entries. Per [HTML "current document readiness"](https://html.spec.whatwg.org/multipage/dom.html#current-document-readiness), every readiness change must fire `readystatechange` at the `Document`.
-- **Real-world impact**: Turbo 8's `PageObserver` listens ONLY for `readystatechange` to walk its stage machine to `pageLoaded()` — so `turbo:load` never fires. Found by the first external beta tester (2026-06-11): every spec failed in a `wait_for_turbo_drive` helper gated on a `data-turbo-not-loaded` html attribute that only a `turbo:load` listener removes. Reproduced with real Turbo 8.0.23 in all three loading modes (UMD, ESM, importmap) — Turbo boots fine, the event just never arrives. Also degraded the gem's own `turbo:load` listener in `index.js` (idle-reset path of the Turbo activity tracker).
-- **Want**: dispatch `readystatechange` at the document whenever `document.readyState` changes (twice per load: `interactive`, `complete`). Fix shape: wherever the Zig load pipeline flips readiness, dispatch the event — mirror how `DOMContentLoaded` is emitted. No layout dependency.
-- **Upstream issue**: #2707, **Upstream PR**: #2708 (open as of 2026-06-11). Fix dispatches the event at `Frame.zig`'s two readiness flips (helper `dispatchReadyStateChange`), before `DOMContentLoaded` and before `load`, matching spec ordering. Fixture: `src/browser/tests/page/readystatechange.html`.
-- **Gem workaround**: `lib/capybara/lightpanda/javascripts/index.js` (top of the IIFE, ~7 LOC) — re-dispatches `readystatechange` from `DOMContentLoaded` (readyState=interactive) and `window` `load` (readyState=complete). Regression coverage: Zone 5 in `test/features/hotwire_zones_probe_test.rb` (event delivery) + `test/features/turbo_load_test.rb` (end-to-end against the vendored real Turbo bundle, `test/fixtures/turbo-8.0.23.umd.js`).
-- **Drop-on-fix**: remove the shim block from `index.js` once `MINIMUM_NIGHTLY_BUILD` covers the fix; both tests stay as regression checks. Until the floor bump, a fixed nightly plus the shim double-fires the event — harmless for readyState-reading state machines like Turbo's PageObserver, but drop the shim promptly anyway.
-
 ### A42. WebSocket upgrade request missing `Origin` header (ActionCable rejects every connection → `turbo_stream_for` never connects)
 
 - **Today (verified 2026-06-11 against nightly 6703)**: `new WebSocket(url)` from page JS sends `Host`, `User-Agent: Lightpanda/1.0`, `Sec-WebSocket-Key/Version/Protocol`, and cookies — but **no `Origin` header**. RFC 6455 §4.1 (and the WHATWG WebSocket connection algorithm) require browser clients to send the document origin; Chrome/Firefox always do.
@@ -284,7 +275,6 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 | Item | LOC saved | Reason |
 |---|---|---|
 | **A23 — `Element.innerText` block-level newlines** | ~50 | `_lightpanda.visibleText` polyfill |
-| **A36 — `readystatechange` never fires** | ~7 | `index.js` shim re-dispatching from DOMContentLoaded / load |
 | **A10 — Page.loadEventFired fallback** | ~20 | Simplify (keep readyState as safety net) |
 | **B5#1, B5#2 — keyCode/charCode + caret keys** | 2 skip patterns | Synthetic CDP keyboard events need keyCode populated; ArrowLeft/Home/End need to move the input caret |
 | **B8, B9, B10 — datalist + frame-closed + getComputedStyle cascade** | ~10 skip patterns | Removes spec_helper entries |
@@ -293,7 +283,7 @@ If the remaining open / unfiled items in section A + B land upstream, the gem ca
 
 A11 (`with_default_context_wait`) and A12 (`handle_navigation_crash`) are **NOT in this table** — both are defense-in-depth guards against inherent design constraints (V8 context churn around navigation; any browser crash mid-CDP) and stay regardless of upstream state. See their A-entries above.
 
-**Total remaining drop-on-fix surface**: roughly **~90 LOC of gem-side code** plus ~14 spec_helper skip patterns. The largest single item is A23 (`innerText` block-level newlines, ~50 LOC); A10 (`Page.loadEventFired` fallback simplification, ~20 LOC) and A36 (`readystatechange` shim, ~7 LOC) follow.
+**Total remaining drop-on-fix surface**: roughly **~85 LOC of gem-side code** plus ~14 spec_helper skip patterns. The largest single item is A23 (`innerText` block-level newlines, ~50 LOC); A10 (`Page.loadEventFired` fallback simplification, ~20 LOC) follows.
 
 ---
 
@@ -320,7 +310,6 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 11. **A44 — CDP WebSocket 512KiB inbound message cap** — the cap is a single constant (`Config.zig:37`) wired into one reader (`cdp/Connection.zig:45`); kills every axe-core-style bundle injection (decidim a11y suite). **FILED 2026-06-12**: issue #2716 + PR #2717 (open; ceiling raised to Chrome's 100MB inbound).
 12. **A45 — multipart form POST body truncated (Rack `handle_empty_content!`)** — biggest real-apps failure cluster (solidus + decidim), but root cause not yet isolated: seven minimal form shapes all encode byte-exact on nightly 6703. Needs a raw-capture session against a real failing app form before it's filable.
 12b. **B18 — `@layer` blocks dropped from the cascade** — flatten-the-wrapper v1 next to the existing `@media` handling in `StyleManager.zig`; unblocks Tailwind v4 apps (spree admin). **FILED 2026-06-12**: issue #2718 + PR #2719 (open).
-13. **A36 — fire `readystatechange` at document on readiness changes** — by impact this belongs near the top (it's what kept Turbo's `turbo:load` from ever firing for the first external beta tester), though it's listed last here. Tiny, layout-free fix: dispatch the event wherever readiness flips, next to the existing `DOMContentLoaded` emit. ~7 LOC drop-on-fix in `index.js` + instant Turbo-ecosystem win. **FILED 2026-06-11**: issue #2707 + PR #2708 (open).
 
 Each Turbo-driven bug from the 2026-05-04 → 2026-05-06 wave below (#9, #10) is also unfiled but has been deferred — their fix patterns are well-understood from the gem-side workarounds but no upstream maintainer conversation has started yet.
 

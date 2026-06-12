@@ -487,10 +487,10 @@ describe "Lightpanda Hotwire-zone probes" do
   # ───────────────────────────────────────────────
   # Zone 5 — document lifecycle events.
   # Turbo's PageObserver reaches pageLoaded() (→ turbo:load) ONLY through
-  # `readystatechange`. Lightpanda never fires it natively (wishlist A36);
-  # the gem's index.js shim re-dispatches it from DOMContentLoaded / load.
-  # These assert the guarantee pages actually see — shim today, native once
-  # upstream lands and the shim is dropped.
+  # `readystatechange`. Lightpanda fires it natively since nightly 6736
+  # (lightpanda-io/browser#2708, in the MINIMUM_NIGHTLY_BUILD floor); the
+  # gem's index.js re-dispatch shim was dropped with the 6736 floor bump.
+  # These assert the guarantee pages actually see.
   # ───────────────────────────────────────────────
 
   describe "Zone 5 — document lifecycle events" do

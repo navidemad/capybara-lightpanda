@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6699`. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
+Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6736`. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
 
 ## Architecture
 
