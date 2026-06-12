@@ -96,7 +96,26 @@ module Capybara
             return system_path
           end
 
-          download
+          # Stale-or-absent cache, nothing on PATH: refresh from the network.
+          # If that fails (GitHub 5xx, DNS/connect timeouts, SocketError) but a
+          # usable — if stale — binary is already cached, keep using it rather
+          # than hard-failing. A cold cache (nothing on disk) still surfaces the
+          # error. The MINIMUM_NIGHTLY_BUILD floor is enforced downstream in
+          # Process#start, so a sub-floor binary can't slip in.
+          #
+          # Deliberately StandardError, not Exception: WebMock's
+          # NetConnectNotAllowedError descends from Exception so it propagates
+          # through app rescue blocks by design — a test suite that blocks net
+          # connections SHOULD fail loudly here, not silently fall back. CI
+          # pre-provisions the binary outside that guard instead (real-apps.yml).
+          begin
+            download
+          rescue StandardError => e
+            raise unless File.executable?(destination)
+
+            log("Download failed (#{e.class}: #{e.message}); using cached binary at #{destination}")
+            destination
+          end
         end
 
         # Delete the cached binary. Returns the path that was deleted, or nil

@@ -378,9 +378,45 @@ jobs:
           restore-keys: |
             lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
 
+      - name: Pre-provision Lightpanda binary
+        if: steps.guard.outputs.skip != 'true'
+        # The target apps run their system specs under WebMock/VCR with real
+        # net connections disabled. The gem otherwise downloads the Lightpanda
+        # nightly lazily on first use — inside the spec run — which raises
+        # WebMock::NetConnectNotAllowedError (mastodon/forem/decidim) or, on a
+        # GitHub blip, BinaryNotFoundError (solidus saw a 504). Fetch the binary
+        # HERE, in a clean Ruby process with no WebMock loaded, so it is present
+        # before the spec run. The Run spec step then sets LIGHTPANDA_CACHE_TIME=0
+        # so the present binary is treated as fresh and never re-fetched.
+        #
+        # Default freshness is kept HERE (not 0): on a cross-day cache restore the
+        # cached binary is >24h old, so this re-downloads the latest nightly —
+        # the whole point of the scheduled smoke test. Retries absorb GitHub 5xx.
+        run: |
+          set -euo pipefail
+          ok=
+          for attempt in 1 2 3; do
+            if ruby -I capybara-lightpanda/lib \
+                 -r capybara/lightpanda/errors -r capybara/lightpanda/binary \
+                 -e 'puts "Provisioned: #{Capybara::Lightpanda::Binary.update}"'; then
+              ok=1
+              break
+            fi
+            echo "Pre-provision attempt $attempt failed; retrying in 5s..." >&2
+            sleep 5
+          done
+          [ -n "$ok" ] || { echo "Could not provision Lightpanda binary after 3 attempts" >&2; exit 1; }
+
       - name: Run spec
         if: steps.guard.outputs.skip != 'true'
         working-directory: target/${{ matrix.spec_dir }}
+        # LIGHTPANDA_CACHE_TIME=0 makes the gem treat the pre-provisioned binary
+        # as always fresh, so it never re-downloads mid-spec — even for examples
+        # that travel the clock (forem's "when a year has passed" moves Time.now
+        # forward a year, which would otherwise age the cached binary past the
+        # freshness window and trigger a WebMock-blocked download).
+        env:
+          LIGHTPANDA_CACHE_TIME: "0"
         # `--format progress` keeps dot/F output compact while the trailing
         # failure block still prints full backtraces.
         run: bundle exec rspec ${{ matrix.spec }} --format progress
