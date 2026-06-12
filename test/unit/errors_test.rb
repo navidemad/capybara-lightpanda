@@ -19,6 +19,9 @@ describe "Capybara::Lightpanda errors" do
         Capybara::Lightpanda::NoExecutionContextError,
         Capybara::Lightpanda::ObsoleteNode,
         Capybara::Lightpanda::InvalidSelector,
+        Capybara::Lightpanda::MouseEventFailed,
+        Capybara::Lightpanda::NoSuchPageError,
+        Capybara::Lightpanda::StatusError,
       ].each do |klass|
         assert_includes klass.ancestors, Capybara::Lightpanda::Error
       end
@@ -159,6 +162,24 @@ describe "Capybara::Lightpanda errors" do
       node = mock("node")
       error = Capybara::Lightpanda::ObsoleteNode.new(node, "custom message")
       assert_equal "custom message", error.message
+    end
+  end
+
+  # Cuprite/Ferrum drop-in compatibility surface: never raised by this gem,
+  # but suites migrating from those drivers may reference these classes in
+  # rescue lists — they must keep existing and keep their peer shape.
+  describe "peer-compatibility error classes" do
+    it "MouseEventFailed parses position and selector from a cuprite-style message" do
+      node = mock("node")
+      error = Capybara::Lightpanda::MouseEventFailed.new(node, "at position (100, 200) selector: #btn")
+      assert_equal({ x: 100, y: 200 }, error.position)
+      assert_equal "#btn", error.selector
+    end
+
+    it "NoSuchPageError and StatusError stay rescuable as Capybara::Lightpanda::Error" do
+      [Capybara::Lightpanda::NoSuchPageError, Capybara::Lightpanda::StatusError].each do |klass|
+        assert_includes klass.ancestors, Capybara::Lightpanda::Error
+      end
     end
   end
 end

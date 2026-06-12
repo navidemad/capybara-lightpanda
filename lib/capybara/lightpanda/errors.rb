@@ -97,5 +97,29 @@ module Capybara
         super(message)
       end
     end
+
+    # --- Cuprite/Ferrum drop-in compatibility surface ---
+    # This gem never raises the three classes below (no coordinate-based
+    # mouse path, no multi-page API, no page-status tracking). They mirror
+    # the peer taxonomy (Cuprite's MouseEventFailed, Ferrum's
+    # NoSuchPageError/StatusError) so suites migrating from those drivers
+    # don't NameError on rescue lists that reference them.
+    class MouseEventFailed < BrowserError
+      attr_reader :node, :selector, :position
+
+      PATTERN = /at position \((\d+),\s*(\d+)\).*selector:\s*(.+)/i
+
+      def initialize(node, message = nil)
+        @node = node
+        if message && (match = message.match(PATTERN))
+          @position = { x: match[1].to_i, y: match[2].to_i }
+          @selector = match[3]
+        end
+        super(message || "Failed mouse event")
+      end
+    end
+
+    class NoSuchPageError < Error; end
+    class StatusError < Error; end
   end
 end

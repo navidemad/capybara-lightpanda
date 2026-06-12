@@ -27,6 +27,17 @@ describe Capybara::Lightpanda::Options do
       assert_equal 10, options.process_timeout
     end
 
+    # window_size/headless are cuprite drop-in options: accepted and readable
+    # so migrating driver registrations keep working, inert at runtime
+    # (no rendering engine to resize; headless is the only mode).
+    it "accepts window_size for cuprite compatibility" do
+      assert_equal [1024, 768], options.window_size
+    end
+
+    it "accepts headless for cuprite compatibility" do
+      assert_equal true, options.headless
+    end
+
     it "defaults browser_path to nil" do
       assert_nil options.browser_path
     end
@@ -74,7 +85,7 @@ describe Capybara::Lightpanda::Options do
     it "includes all standard options" do
       options = Capybara::Lightpanda::Options.new
       hash = options.to_h
-      %i[host port timeout handshake_timeout process_timeout browser_path].each do |key|
+      %i[host port timeout handshake_timeout process_timeout window_size browser_path headless].each do |key|
         assert_includes hash.keys, key
       end
     end
