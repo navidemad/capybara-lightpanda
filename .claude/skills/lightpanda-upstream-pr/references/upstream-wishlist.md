@@ -95,6 +95,15 @@ Use this file when:
 - **Gem workaround**: none possible — body assembly lives in the Zig form-submit/HTTP client path.
 - **Drop-on-fix**: nothing gem-side; unblocks the largest real-apps failure cluster (solidus product updates + decidim account forms).
 
+### A46. `navigator.globalPrivacyControl` hardcoded `true` — consent banners silently reject-all and never render
+
+- **Today (verified 2026-06-12 against nightly 6736)**: `navigator.globalPrivacyControl` returns `true`. `src/browser/webapi/Navigator.zig:100-102` (`getGlobalPrivacyControl`) hardcodes it. Real browsers: Chrome doesn't implement the API (`undefined`), Firefox defaults to `false` — per the [GPC spec](https://w3c.github.io/gpc/#javascript-property), the signal must reflect an explicit user preference and default to unset/false.
+- **Real-world impact**: GPC=true is, by design, an automated "reject tracking" signal — compliant consent-management code treats it like Do-Not-Track. Found beta-testing a private Rails suite (yespark): its cookie-consent module probes `navigator.globalPrivacyControl` alongside `doNotTrack`, sees `true`, calls `rejectAll()` and never shows the consent modal → all 11 cookie-consent system tests fail (`expected to find css "#cookieConsentModal.visible"`), plus every downstream spec that drives the banner. Any site with a GPC-compliant CMP (OneTrust, Didomi, axeptio…) behaves differently under Lightpanda than under every real default-config browser. Sits oddly next to `getWebdriver` returning `false` two functions up — that getter lies to *avoid* bot-path divergence; this one creates exactly such a divergence.
+- **Want**: return `false` (or omit the accessor entirely, matching Chrome). One-line Zig change + test update in `src/browser/tests/navigator/navigator.html`.
+- **Upstream issue**: not yet filed. Trivial, layout-free, high-confidence — quick-win material.
+- **Gem workaround**: feasible but not shipped — `javascripts/index.js` could `Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => false })` via the existing `Page.addScriptToEvaluateOnNewDocument` registration. Prefer the upstream fix; shim only if upstream stalls.
+- **Drop-on-fix**: nothing gem-side today (no shim shipped). Un-breaks consent-banner flows on every GPC-aware app.
+
 ---
 
 ## B. Missing CDP / DOM methods
