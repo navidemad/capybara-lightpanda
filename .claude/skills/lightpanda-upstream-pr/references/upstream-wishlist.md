@@ -110,6 +110,24 @@ Use this file when:
 
 > Resolved B-items (B1–B4, B6, B7, B12) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable.
 
+### A47. Failed root navigation never answers `Page.navigate` — CDP command hangs forever (no error response, no failure event)
+
+- **Today (verified 2026-06-12 against main dev.6746+1fae8563 and nightly 6736)**: when a root navigation fails (e.g. connection refused on `http://127.0.0.1:9/`), Lightpanda logs `$scope=frame $msg="navigate failed"` internally but the CDP client that sent `Page.navigate` never receives **any** response for that command id — no result, no error, no `Page.loadEventFired`, nothing. The command hangs forever; the WS connection itself stays usable. Chrome resolves `Page.navigate` with `{frameId, loaderId, errorText: "net::ERR_CONNECTION_REFUSED"}` per the CDP spec ([Page.navigate](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-navigate): "errorText — User friendly error message, present if and only if navigation has failed").
+- **Real-world impact**: any CDP client awaiting the `Page.navigate` response deadlocks until its own timeout. Found beta-testing a private Rails suite (yespark): an app endpoint replied `303 See Other` without a `Location` header (A43 territory, fixed by #2714), the pre-fix binary turned that into `err=LocationNotFound` → `navigate failed` → the gem's navigation wait burned its whole timeout, the WS subsequently died, and all 11 specs in the file failed with `DeadBrowserError`. With #2714 merged that *trigger* is gone, but the *class* remains: any navigation failure (connection refused, DNS failure, TLS error…) still leaves `Page.navigate` unanswered on current main.
+- **Want**: `Page.navigate` always gets a response: success → `{frameId, loaderId}`, failure → `{frameId, loaderId, errorText: "..."}` (Chrome semantics). Failure should be reported when the navigation outcome is known — including async failures discovered after the navigate is ACKed (Chrome ACKs immediately and reports late failures via `Page.frameStoppedLoading`/lifecycle events; minimum viable fix is `errorText` for failures detected during request setup/response processing).
+- **Upstream issue**: #2728, **Upstream PR**: #2729 (open as of 2026-06-12). **FILED 2026-06-12**: `frame_navigate_failed` notification dispatched from `frameErrorCallback` (guarded on `_http_status == null`), CDP answers the pending command with `errorText`; covers both root-navigation paths (fresh target + pending). Adjacent prior art: #1801 is the "never completes on slow/complex pages" case (still open); #1832 was the same symptom for a since-fixed page-load stall — neither covers the navigation-*failure* path.
+- **Gem workaround**: none possible at the protocol level — `Browser#go_to` sends `Page.navigate` async and falls back to `readyState` polling + a navigation deadline (`await_navigation`), then `handle_navigation_crash` reconnects. The polling masks the hang but turns every failed navigation into a full-timeout wait.
+- **Drop-on-fix**: nothing to delete gem-side (the readyState fallback stays for #1801), but failed navigations would fail fast with a real error instead of timing out.
+
+### A48. `console.log`/`console.warn` both emitted as type `"info"` in `Runtime.consoleAPICalled` — Chrome sends `"log"`/`"warning"`
+
+- **Today (verified 2026-06-12 against nightly 6736, pure-CDP probe)**: evaluating `console.log/warn/info/error/debug` yields `Runtime.consoleAPICalled` types `["info","info","info","error","debug"]`. `src/browser/webapi/Console.zig` maps both `log()` and `warn()` to `.info` (`dispatchConsoleMessage(values, .info, exec)`); the `Notification.ConsoleMessageType` enum has a `warn` member but per the [CDP protocol](https://chromedevtools.github.io/devtools-protocol/tot/Runtime/#event-consoleAPICalled) the wire value must be `"warning"` (allowed: `log, debug, info, error, warning, dir, …`), and `"log"` is missing from the enum entirely. Same enum feeds `Console.messageAdded`'s `level` (allowed: `log, warning, error, debug, info`) via `@tagName`.
+- **Real-world impact**: any CDP client filtering console output by severity (e.g. "fail the test on warnings", "collect only `log` entries") sees warnings and logs collapsed into `info`. Found beta-testing a private Rails suite (yespark) whose JS-error helper buckets `Browser#console_logs` entries by `type`.
+- **Want**: `console.log` → `"log"`, `console.warn` → `"warning"` on both `Runtime.consoleAPICalled` and `Console.messageAdded`; `info`/`error`/`debug`/`trace` already match. Micro-fix, same calibre as A46/GPC: add `log`/`warning` enum members + two mapping changes in `Console.zig`.
+- **Upstream issue**: #2730, **Upstream PR**: #2731 (open as of 2026-06-12). **FILED 2026-06-12**: enum `warn`→`warning` + new `log` member, `console.log`→`.log`, `console.warn`→`.warning`, CDP test asserting the five wire types.
+- **Gem workaround**: none shipped — `Browser#console_logs` stores the upstream `type` verbatim, so consumers just see the wrong bucket.
+- **Drop-on-fix**: nothing gem-side to delete; consumers filtering `console_logs` by `type == "warning"`/`"log"` start working.
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
@@ -145,6 +163,15 @@ Three independent issues:
 - **Status (re-classified 2026-04-27)**: this is a **gem-side fix, not upstream**. Chrome doesn't expose any native `Element.path()` method either — Cuprite implements `path()` entirely in JS at `lib/capybara/cuprite/javascripts/index.js`'s `Cuprite.path(node)` using `document.evaluate('./preceding-sibling::TAG', ...)` and emits `//HTML/BODY/DIV[2]/P[1]`. The gem's current `GET_PATH_JS` (at `lib/capybara/lightpanda/node.rb:700-723`) emits a CSS-like path (`html > body > div:nth-of-type(2) > p`) which is what fails Capybara's `node #path returns xpath which points to itself` spec.
 - **Fix**: rewrite `GET_PATH_JS` in the gem to mirror Cuprite's algorithm. The gem already injects an XPath polyfill (`document.evaluate` + `XPathResult`) via `addScriptToEvaluateOnNewDocument`, so the same JS works.
 - **Action**: file as a gem-side TODO instead of an upstream PR. Not actionable through this skill.
+
+### B19. IndexedDB not implemented — `indexedDB is not defined`
+
+- **Today (verified 2026-06-12 against nightly 6736, pure-CDP probe)**: the entire IndexedDB surface is absent — `typeof indexedDB`, `IDBFactory`, `IDBDatabase`, `IDBObjectStore`, `IDBKeyRange` are all `undefined`; `indexedDB.open(...)` throws `ReferenceError`. Zero occurrences in upstream `src/` (pure absence).
+- **Real-world impact**: offline-first pages (form drafts, queued uploads, PWA caches via `idb`/Dexie/localForage — all wrappers over the same core API) throw on load or on first save. Found beta-testing a private Rails suite (yespark): 7 specs fail with `indexedDB is not defined` (an offline photo store doing `open` + `onupgradeneeded` + `createObjectStore` + `transaction` + `put`/`get`).
+- **Want**: the core IndexedDB API (`IDBFactory.open/deleteDatabase`, versionchange + `createObjectStore`, `transaction` + `objectStore` + `put`/`get`/`delete`/`getAll`, request `onsuccess`/`onerror`, `tx.oncomplete`) — enough for the dominant store/retrieve patterns. Full spec coverage (indexes, cursors, key ranges) can come later. Lightpanda already ships SQLite in-tree, a natural backing store.
+- **Upstream issue**: #2732 (filed 2026-06-12, issue-first — big design surface, maintainer should scope before any implementation). No PR.
+- **Gem workaround**: none possible — a storage engine can't be polyfilled meaningfully from injected JS (an in-memory shim would lie about persistence and still miss structured-clone semantics).
+- **Drop-on-fix**: nothing gem-side; unblocks the offline-store spec cluster (7 yespark specs) and any `idb`-based PWA page.
 
 ### B13. `Network.emulateNetworkConditions` not implemented
 
