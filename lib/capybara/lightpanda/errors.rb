@@ -5,6 +5,9 @@ module Capybara
     class Error < StandardError; end
 
     class ProcessTimeoutError < Error; end
+    # Subclass so external `rescue ProcessTimeoutError` keeps catching it;
+    # Process#start dispatches on the class instead of message matching.
+    class PortInUseError < ProcessTimeoutError; end
     class BinaryNotFoundError < Error; end
     class BinaryError < Error; end
     class UnsupportedPlatformError < Error; end

@@ -8,6 +8,7 @@ describe "Capybara::Lightpanda errors" do
     it "all errors descend from Capybara::Lightpanda::Error" do
       [
         Capybara::Lightpanda::ProcessTimeoutError,
+        Capybara::Lightpanda::PortInUseError,
         Capybara::Lightpanda::BinaryNotFoundError,
         Capybara::Lightpanda::BinaryError,
         Capybara::Lightpanda::UnsupportedPlatformError,

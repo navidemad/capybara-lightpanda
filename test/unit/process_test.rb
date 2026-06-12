@@ -57,15 +57,18 @@ describe Capybara::Lightpanda::Process do
     describe "when the address is already in use" do
       let(:options) { Capybara::Lightpanda::Options.new(port: 9222) }
 
-      it "raises ProcessTimeoutError naming the port" do
+      it "raises PortInUseError naming the port" do
         _, stderr_w = wire_pipes(process)
         stderr_w.write("err(server): listen err=AddressInUse\n")
         stderr_w.flush
 
-        error = assert_raises(Capybara::Lightpanda::ProcessTimeoutError) do
+        error = assert_raises(Capybara::Lightpanda::PortInUseError) do
           process.send(:wait_for_ready)
         end
         assert_includes error.message, "port 9222 is already in use"
+        # Subclass contract: callers that `rescue ProcessTimeoutError` (the
+        # class raised before PortInUseError existed) must keep catching it.
+        assert_kind_of Capybara::Lightpanda::ProcessTimeoutError, error
       end
     end
 

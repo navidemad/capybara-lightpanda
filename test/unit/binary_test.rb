@@ -272,7 +272,7 @@ describe Capybara::Lightpanda::Binary do
 
       Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
       Capybara::Lightpanda::Binary.expects(:download).raises(
-        Capybara::Lightpanda::BinaryNotFoundError, "Failed to download binary: 504 Gateway Time-out"
+        Capybara::Lightpanda::BinaryError, "Failed to download binary: 504 Gateway Time-out"
       )
 
       result = nil
@@ -298,11 +298,13 @@ describe Capybara::Lightpanda::Binary do
       original_path = ENV.fetch("PATH", nil)
       ENV["PATH"] = empty_dir
 
+      # download raises BinaryError for HTTP failures (BinaryNotFoundError is
+      # reserved for "no binary on disk/PATH" cases).
       Capybara::Lightpanda::Binary.expects(:download).raises(
-        Capybara::Lightpanda::BinaryNotFoundError, "Failed to download binary: 504 Gateway Time-out"
+        Capybara::Lightpanda::BinaryError, "Failed to download binary: 504 Gateway Time-out"
       )
 
-      assert_raises(Capybara::Lightpanda::BinaryNotFoundError) do
+      assert_raises(Capybara::Lightpanda::BinaryError) do
         Capybara::Lightpanda::Binary.update
       end
     ensure

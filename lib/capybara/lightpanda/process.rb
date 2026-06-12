@@ -123,9 +123,7 @@ module Capybara
 
         check_minimum_version(binary_path)
         attempt_start(binary_path)
-      rescue ProcessTimeoutError => e
-        raise unless e.message.include?("already in use")
-
+      rescue PortInUseError
         kill_process_on_port(@options.port)
         attempt_start(binary_path)
       end
@@ -257,8 +255,8 @@ module Capybara
               end
 
               if output.match?(ADDRESS_IN_USE_PATTERN)
-                cleanup_failed_process
-                raise ProcessTimeoutError,
+                stop
+                raise PortInUseError,
                       "Lightpanda failed to start: port #{@options.port} is already in use"
               end
             rescue IO::WaitReadable
@@ -273,19 +271,6 @@ module Capybara
           raise ProcessTimeoutError,
                 "Lightpanda failed to start within #{@options.process_timeout} seconds.\nOutput: #{output}"
         end
-      end
-
-      def cleanup_failed_process
-        return unless @pid
-
-        begin
-          ::Process.wait(@pid, ::Process::WNOHANG)
-        rescue Errno::ECHILD
-          nil
-        end
-
-        cleanup_pipes
-        @pid = nil
       end
 
       # Auto-recover when a previous Lightpanda is still bound to our port.

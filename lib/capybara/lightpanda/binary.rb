@@ -270,7 +270,7 @@ module Capybara
         end
 
         def follow_redirects(uri, destination, limit = 10)
-          raise BinaryNotFoundError, "Too many redirects" if limit.zero?
+          raise BinaryError, "Too many redirects" if limit.zero?
 
           http_start(uri) do |http|
             request = Net::HTTP::Get.new(uri)
@@ -285,7 +285,7 @@ module Capybara
                 log("Redirected → #{response['location']}")
                 follow_redirects(URI.parse(response["location"]), destination, limit - 1)
               else
-                raise BinaryNotFoundError, "Failed to download binary: #{response.code} #{response.message}"
+                raise BinaryError, "Failed to download binary: #{response.code} #{response.message}"
               end
             end
           end
