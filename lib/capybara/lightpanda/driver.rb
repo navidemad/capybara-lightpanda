@@ -213,6 +213,29 @@ module Capybara
         nil
       end
 
+      # capybara-screenshot's fallback for unregistered drivers calls
+      # `driver.render(path)` (the Cuprite/Ferrum spelling). Without the alias
+      # every failed test in a capybara-screenshot suite logged
+      # "Screenshot could not be saved: undefined method 'render'".
+      alias render save_screenshot
+
+      # -- Headers (Cuprite-compatible driver surface) --
+      # Delegates to Network, which lazily enables the Network domain and
+      # remembers the headers across reset. Cuprite exposes these on the
+      # driver, and real suites call them there (page.driver.headers = ...).
+
+      def headers
+        browser.network.extra_headers
+      end
+
+      def headers=(headers)
+        browser.network.headers = headers
+      end
+
+      def add_headers(headers)
+        browser.network.add_headers(headers)
+      end
+
       # -- Lifecycle --
 
       # Thin Cuprite-style wrapper. The interesting work — disposing the

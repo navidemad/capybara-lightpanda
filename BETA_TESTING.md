@@ -30,6 +30,10 @@ config.before(:each, type: :system) do
 end
 ```
 
+If your test helpers call `Capybara.use_default_driver` (a common pattern in
+setup/teardown blocks), gate `Capybara.default_driver` the same way too —
+otherwise those blocks silently switch you back to your old driver mid-suite.
+
 **Binary install is optional.** By default the gem auto-downloads the nightly Lightpanda binary into `~/.cache/lightpanda/lightpanda` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
 
 ```bash
@@ -50,11 +54,13 @@ WebMock.disable_net_connect!(
   allow: ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"])
 ```
 
-or trigger the download once from an unstubbed process and the cached copy is used from then on:
+or provision the binary once from an unstubbed process and the cached copy is used from then on (the `remove` forces a refresh even when a too-old binary is already cached):
 
 ```bash
-bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'
+bundle exec ruby -r capybara-lightpanda -e 'Capybara::Lightpanda::Binary.remove; puts Capybara::Lightpanda::Binary.update'
 ```
+
+Heads-up for VCR users: VCR's request-blocking error is a `StandardError`, so a blocked download falls back to whatever binary is already cached (with a loud warning on stderr). If you later see a "Lightpanda … is too old" error, that warning is the reason — run the provision one-liner above.
 
 Run one suite:
 

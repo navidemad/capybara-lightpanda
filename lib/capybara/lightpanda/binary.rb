@@ -33,6 +33,13 @@ module Capybara
 
       DEFAULT_CACHE_TIME = 86_400
 
+      # One-liner that re-provisions the binary from a process with no
+      # HTTP-stubbing loaded (VCR/WebMock guard the test process itself).
+      # Referenced from the stale-fallback warning and BETA_TESTING.md.
+      PROVISION_HINT =
+        "bundle exec ruby -r capybara-lightpanda " \
+        "-e 'Capybara::Lightpanda::Binary.remove; puts Capybara::Lightpanda::Binary.update'"
+
       class << self
         # Set a specific release tag (e.g. "0.3.0") to pin downloads to that
         # release. When nil, the rolling "nightly" tag is used. The pin only
@@ -113,7 +120,17 @@ module Capybara
           rescue StandardError => e
             raise unless File.executable?(destination)
 
-            log("Download failed (#{e.class}: #{e.message}); using cached binary at #{destination}")
+            # Kernel.warn, not log: log() is silent unless LIGHTPANDA_DEBUG or
+            # an explicit logger is set, and this fallback is exactly the
+            # moment the user needs to hear about — a VCR-guarded suite (whose
+            # UnhandledHTTPRequestError is a StandardError, unlike raw
+            # WebMock's Exception) lands here silently, keeps a stale binary,
+            # and later hits a confusing MINIMUM_NIGHTLY_BUILD floor error
+            # with no trace of the blocked download.
+            warn("[capybara-lightpanda] Binary download failed (#{e.class}: #{e.message}); " \
+                 "falling back to the cached binary at #{destination}. " \
+                 "If your suite stubs HTTP (VCR/WebMock), pre-provision from an " \
+                 "unstubbed process: #{PROVISION_HINT}")
             destination
           end
         end
@@ -192,9 +209,15 @@ module Capybara
         #   suggest `brew update && brew upgrade lightpanda` (brew pins
         #   each user's binary at install time and doesn't refresh on its
         #   own when the tap publishes a newer nightly).
-        # - Path equals our own cache → suggest the gem's rake tasks; the
-        #   `remove` step is required because `update` honors `cache_time`
-        #   and would otherwise no-op on a too-old-but-not-yet-expired file.
+        # - Path equals our own cache → suggest the require-the-gem one-liner.
+        #   NOT the lightpanda:binary:* rake tasks: in a Rails app the gem
+        #   usually sits in the :test Gemfile group, so the tasks only exist
+        #   under RAILS_ENV=test (the Railtie can't help a plain `bundle exec
+        #   rake` in development), and outside Rails they're never loaded at
+        #   all. The one-liner requires the gem explicitly, so it works from
+        #   any environment. The `remove` step is required because `update`
+        #   honors `cache_time` and would otherwise no-op on a
+        #   too-old-but-not-yet-expired file.
         # - Anything else (user-managed install at a custom path) → keep
         #   the curl-overwrite suggestion, since we don't know how the file
         #   got there.
@@ -202,7 +225,7 @@ module Capybara
           if brew_managed?(binary_path)
             "brew update && brew upgrade lightpanda"
           elsif binary_path == install_path
-            "bundle exec rake lightpanda:binary:remove lightpanda:binary:update"
+            PROVISION_HINT
           else
             "curl -sL #{GITHUB_RELEASE_URL}/nightly/#{platform_binary} " \
               "-o #{binary_path} && chmod +x #{binary_path}"

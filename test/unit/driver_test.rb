@@ -46,5 +46,43 @@ describe Capybara::Lightpanda::Driver do
       browser.stubs(:screenshot).raises(RuntimeError, "unexpected")
       assert_raises(RuntimeError) { driver.save_screenshot("/tmp/x.png") }
     end
+
+    # capybara-screenshot's fallback for unregistered drivers calls
+    # `driver.render(path)` (Cuprite/Ferrum spelling). Without the alias every
+    # failing test in a capybara-screenshot suite logged a NoMethodError warn.
+    it "responds to render as an alias of save_screenshot" do
+      browser.expects(:screenshot).with(path: "/tmp/x.png")
+      driver.render("/tmp/x.png")
+    end
+  end
+
+  # Cuprite exposes header writers on the driver (`page.driver.headers = ...`);
+  # real suites call them there. The driver delegates to Network, which owns
+  # lazy Network-domain enablement and reset behavior.
+  describe "headers delegation" do
+    let(:driver) { Capybara::Lightpanda::Driver.allocate }
+    let(:browser) { mock("Browser") }
+    let(:network) { mock("Network") }
+
+    before do
+      driver.instance_variable_set(:@browser, browser)
+      driver.define_singleton_method(:browser) { @browser }
+      browser.stubs(:network).returns(network)
+    end
+
+    it "delegates headers= to network" do
+      network.expects(:headers=).with({ "User-Agent" => "test" })
+      driver.headers = { "User-Agent" => "test" }
+    end
+
+    it "delegates add_headers to network" do
+      network.expects(:add_headers).with({ "X-Custom" => "1" })
+      driver.add_headers({ "X-Custom" => "1" })
+    end
+
+    it "reads headers back from network" do
+      network.stubs(:extra_headers).returns({ "X-Custom" => "1" })
+      assert_equal({ "X-Custom" => "1" }, driver.headers)
+    end
   end
 end

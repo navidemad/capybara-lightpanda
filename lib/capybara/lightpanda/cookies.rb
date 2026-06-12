@@ -76,6 +76,8 @@ module Capybara
       def get(name)
         find { |cookie| cookie.name == name }
       end
+      # Ferrum/Cuprite spelling: `browser.cookies["session_id"]`.
+      alias [] get
 
       def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists
               same_site: nil, expires: nil)

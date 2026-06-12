@@ -55,6 +55,9 @@ module Capybara
         @enabled = false
       end
 
+      # Headers applied via headers= / add_headers. Backs Driver#headers.
+      def extra_headers = @extra_headers || {}
+
       # Setting extra headers also lazily enables the Network domain. Without
       # this, headers were silently ignored until the caller separately ran
       # `network.enable` (or `wait_for_network_idle`). Cuprite/Ferrum parity.

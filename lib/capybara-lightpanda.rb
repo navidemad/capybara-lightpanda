@@ -21,6 +21,7 @@ require_relative "capybara/lightpanda/auto_scripts"
 require_relative "capybara/lightpanda/node"
 require_relative "capybara/lightpanda/element_extension"
 require_relative "capybara/lightpanda/driver"
+require_relative "capybara/lightpanda/railtie" if defined?(Rails::Railtie)
 
 module Capybara
   module Lightpanda

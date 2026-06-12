@@ -4,6 +4,17 @@
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6736 (published 2026-06-12). The driver refuses to start against older binaries.
 
+### Added
+
+- `lightpanda:binary:*` rake tasks now load automatically inside Rails apps (via a Railtie), and the "Lightpanda is too old" error suggests a require-the-gem one-liner instead of those rake tasks. The old hint was a dead end: the tasks weren't loaded in Rails apps at all, and even with the Railtie they only exist under `RAILS_ENV=test` when the gem sits in the `:test` Gemfile group. (Found beta-testing a private Rails suite.)
+- `Driver#render` as an alias of `save_screenshot`. capybara-screenshot calls `driver.render(path)` for drivers it doesn't know, so every failing test in a capybara-screenshot suite logged "Screenshot could not be saved: undefined method 'render'" — once per failure.
+- `Driver#headers=` / `#add_headers` / `#headers`, delegating to the existing `Network` support. Cuprite exposes header writers on the driver and real suites call them there (`page.driver.headers = …`).
+- `Cookies#[]` as an alias of `#get` — the Ferrum/Cuprite spelling (`browser.cookies["session_id"]`).
+
+### Fixed
+
+- A failed binary download that falls back to a stale cached binary now warns loudly on stderr (with the original error and a re-provision one-liner) instead of logging only under `LIGHTPANDA_DEBUG`. VCR-guarded suites hit this path silently — VCR's blocking error is a `StandardError`, unlike raw WebMock's — and the only visible symptom was a confusing "Lightpanda is too old" error much later.
+
 ### Changed
 
 - The driver no longer re-dispatches `readystatechange` itself. Lightpanda fires the event natively as of nightly 6736 (lightpanda-io/browser#2708), so the shim added in 0.7.0 became redundant and was removed. Behavior is unchanged for Turbo/Hotwire apps — `turbo:load` still fires on every visit, now from the browser's own event.
