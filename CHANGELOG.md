@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- No-args `evaluate_script` / `execute_script` send the expression with `replMode: true` (DevTools-console REPL semantics) instead of wrapping it in an IIFE. Top-level `const`/`let` can now be redeclared across calls *and* state persists between calls, matching what users see in the Chrome console. The old IIFE existed for a misdiagnosed upstream bug: Chrome throws the exact same redeclaration `SyntaxError` without `replMode` — spec behavior, not a Lightpanda bug (UPSTREAM_BUGS.md Bug #10, retracted). JS exceptions still raise `JavaScriptError`.
+
+### Removed
+
+- UPSTREAM_BUGS.md Bug #9 (`requestSubmit()` threw when a listener canceled the SubmitEvent) retired: fixed upstream, verified on nightly 6736 — the build already required by this gem. Contract tests now pin both retired bugs in `test/features/upstream_bugs_test.rb`.
+
 ## [0.8.0] - 2026-06-12
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6736 (published 2026-06-12). The driver refuses to start against older binaries.

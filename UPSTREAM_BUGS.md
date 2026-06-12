@@ -4,41 +4,12 @@ Inventaire des limitations du binaire Lightpanda découvertes en exécutant des 
 
 Quand un bug est résolu upstream, le workaround correspondant côté gem peut être retiré.
 
-La numérotation démarre à #9 : les bugs #1–#8, résolus ou rétractés upstream, ont été retirés de ce fichier. Les numéros sont conservés (pas de renumérotation) car ils restent référencés depuis les tests (`test/features/upstream_bugs_test.rb`).
+La numérotation démarre à #11 : les bugs #1–#10, résolus ou rétractés upstream, ont été retirés de ce fichier. Les numéros sont conservés (pas de renumérotation) car ils restent référencés depuis les tests (`test/features/upstream_bugs_test.rb`).
 
----
+Derniers retraits (2026-06-12) :
 
-## Bug #9 — `requestSubmit()` jette quand un listener cancel le SubmitEvent
-
-Per HTML §4.10.21.5 step 5, si la soumission est cancellée (un listener du `submit` event a appelé `event.preventDefault()`), `requestSubmit()` doit retourner silencieusement. Lightpanda jette `JsException` à la place. Reproductible quand Turbo's `submitBubbled` cancel proprement le SubmitEvent et que le code appelant (`CLICK_JS` du gem ou code utilisateur) n'attrape pas l'exception → toute la chaîne click → form submit foire.
-
-### Workaround côté gem
-
-`node.rb` → `try { this.form.requestSubmit(this); } catch (e) {}` autour de l'appel dans `CLICK_JS`. Le listener qui a cancellé est responsable de la suite (par ex. Turbo Drive lance son propre `fetch` via le path `formSubmitted` → `Navigator.submitForm`).
-
----
-
-## Bug #10 — `Runtime.evaluate` retient les bindings `const` / `let` top-level entre appels CDP
-
-V8 spec : chaque `Runtime.evaluate` exécute son source dans un nouveau script, donc `const x = 1` au top-level n'a pas de scope partagé entre deux appels successifs. Lightpanda partage le scope → un second appel avec `const sel = ...` lève `SyntaxError: Identifier 'sel' has already been declared`.
-
-### Repro minimal (CDP brut)
-
-```bash
-# Connecté à une session Lightpanda via WebSocket :
-{"id":1,"method":"Runtime.evaluate","params":{"expression":"const sel = document.body"}}
-# → OK
-{"id":2,"method":"Runtime.evaluate","params":{"expression":"const sel = document.body"}}
-# → exceptionDetails: SyntaxError: Identifier 'sel' has already been declared
-```
-
-### Impact
-
-Tout test Capybara qui exécute deux `page.execute_script` ou `evaluate_script` partageant un nom de variable au top-level échoue silencieusement (le gem n'inspectait pas `exceptionDetails` sur la fast-path no-args de `execute`). Bloquant pour les helpers Capybara qui utilisent `const` (idiomatique en JS moderne).
-
-### Workaround côté gem
-
-`browser.rb` → wrap chaque expression de `evaluate(expression)` et `execute(expression)` no-args path dans une IIFE `(function(){return EXPR})()` / `(function(){EXPR})()`. La déclaration `const`/`let` se retrouve dans un function scope qui est jeté à la sortie de l'IIFE. Aligné avec ce que fait déjà la branche args via `Runtime.callFunctionOn`. **Aussi** : raise `JavaScriptError` quand `exceptionDetails` est présent dans la réponse de `execute`, sinon les exceptions JS étaient avalées silencieusement.
+- **Bug #9** (`requestSubmit()` jetait quand un listener cancel le SubmitEvent) — résolu upstream, vérifié par probe CDP pur sur nightly 6736 (très probablement PR upstream #2639). Le workaround `try/catch` de `CLICK_JS` avait déjà été retiré lors d'un refactor antérieur ; un contract test couvre désormais le chemin (`upstream_bugs_test.rb`, « Bug #9 »).
+- **Bug #10** (`Runtime.evaluate` retenait les `const`/`let` top-level entre appels) — rétracté : parité Chrome, pas un bug. Chrome lève la même `SyntaxError` sans `replMode` ; les déclarations lexicales top-level persistent entre classic scripts per spec. Fix gem : `browser.rb` passe `replMode: true` (sémantique console DevTools) au lieu du wrapping IIFE ; le raise sur `exceptionDetails` est conservé. Contract tests : `upstream_bugs_test.rb`, « Bug #10 ».
 
 ---
 

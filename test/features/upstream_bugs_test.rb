@@ -4,8 +4,9 @@ require_relative "../test_helper"
 
 # Tests d'intégration ciblés sur d'anciens bugs upstream du binaire
 # Lightpanda. Chaque exemple exerce le scénario qui crashait nativement ;
-# les bugs couverts ici (#1, #3, #4) sont désormais corrigés ou rétractés
-# upstream — UPSTREAM_BUGS.md ne liste plus que les bugs encore ouverts —
+# les bugs couverts ici (#1, #3, #4, #9, #10) sont désormais corrigés ou
+# rétractés upstream — UPSTREAM_BUGS.md ne liste plus que les bugs encore
+# ouverts —
 # mais certains restent doublés par un workaround côté gem (`CLICK_JS` dans
 # `node.rb`).
 #
@@ -101,6 +102,64 @@ describe "Upstream Lightpanda bug repros & workarounds" do
         })();
       JS
       assert_match(/InvalidStateError|already.+open/i, threw)
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Bug #9 — requestSubmit() threw when a listener canceled the SubmitEvent.
+  # Fixed upstream (verified nightly 6736, likely PR #2639); per HTML
+  # §4.10.21.5 step 5 a canceled submission must return silently. The gem
+  # no longer ships a try/catch for it — this contract test keeps the
+  # canceled-submit path from regressing.
+  # ───────────────────────────────────────────────
+
+  describe "Bug #9 — requestSubmit() with a canceling submit listener" do
+    it "returns silently instead of throwing when the SubmitEvent is canceled" do
+      session.visit("/lightpanda/upstream/click_target")
+      outcome = session.evaluate_script(<<~JS)
+        (function() {
+          var form = document.getElementById('submit-form');
+          form.addEventListener('submit', function(e) { e.preventDefault(); });
+          try { form.requestSubmit(); return 'returned-silently'; }
+          catch (e) { return 'threw: ' + e; }
+        })();
+      JS
+
+      assert_equal "returned-silently", outcome
+      assert_equal "/lightpanda/upstream/click_target", session.current_path,
+                   "canceled submission must not navigate"
+    end
+  end
+
+  # ───────────────────────────────────────────────
+  # Bug #10 (retracted — Chrome parity) — top-level const/let persist across
+  # Runtime.evaluate calls per spec; Chrome throws the same redeclaration
+  # SyntaxError without replMode. The gem passes `replMode: true` (DevTools
+  # console semantics) instead of the old IIFE wrap, so user scripts can
+  # redeclare across calls AND keep state between calls.
+  # ───────────────────────────────────────────────
+
+  describe "Bug #10 — top-level const/let across evaluate/execute calls" do
+    it "allows redeclaring a const in a second evaluate_script call" do
+      session.visit("/lightpanda/upstream/click_target")
+
+      assert_equal "BODY", session.evaluate_script("const sel = document.body; sel.tagName")
+      assert_equal "HEAD", session.evaluate_script("const sel = document.head; sel.tagName")
+    end
+
+    it "allows redeclaring across execute_script then evaluate_script" do
+      session.visit("/lightpanda/upstream/click_target")
+
+      session.execute_script("const marker = 'first'")
+      assert_equal "second", session.evaluate_script("const marker = 'second'; marker")
+    end
+
+    it "still surfaces JS exceptions from execute_script" do
+      session.visit("/lightpanda/upstream/click_target")
+
+      assert_raises(Capybara::Lightpanda::JavaScriptError) do
+        session.execute_script("throw new Error('exec boom')")
+      end
     end
   end
 

@@ -319,24 +319,20 @@ module Capybara
       # Both paths use `returnByValue: false` and unwrap so DOM-node returns
       # come back as `{ "__lightpanda_node__" => ... }` for the Driver to wrap.
       #
-      # Even the no-args path wraps the expression in an IIFE to isolate
-      # top-level `const`/`let` declarations. Upstream Lightpanda retains
-      # those bindings across `Runtime.evaluate` calls (V8 starts each call
-      # with fresh lexical scope per spec), so a second `const sel = ...`
-      # raises `SyntaxError: Identifier 'sel' has already been declared`.
-      # Wrapping pushes the declarations into a function scope that gets
-      # discarded when the IIFE returns.
-      #
-      # Use direct `eval` inside the IIFE so the user's text can be a bare
-      # expression (`'foo'`), a `throw` statement, OR a multi-statement
-      # script with `const`/`let`. `eval`'s completion-value semantics
-      # return the last expression's value in all cases. A naive
-      # `return EXPR;` wrap would syntax-error on `throw …` and on
-      # multi-statement scripts.
+      # The no-args path sends the user's text verbatim with `replMode: true`
+      # (V8's DevTools-console REPL mode — Lightpanda forwards Runtime.evaluate
+      # to the V8 inspector, which handles the flag natively). Without it,
+      # top-level `const`/`let` persist in the global lexical environment
+      # across classic scripts — per spec, and Chrome behaves identically —
+      # so a second `const sel = ...` raises `SyntaxError: Identifier 'sel'
+      # has already been declared`. REPL mode keeps the bindings (visible to
+      # later calls, like the DevTools console) but allows redeclaration.
+      # Completion-value semantics cover a bare expression (`'foo'`), a
+      # `throw` statement, and multi-statement scripts alike.
       def evaluate(expression, *args)
         if args.empty?
-          wrapped = "(function(){return eval(#{expression.to_json})})()"
-          response = page_command("Runtime.evaluate", expression: wrapped, returnByValue: false, awaitPromise: true)
+          response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true,
+                                                      replMode: true)
           if response["exceptionDetails"]
             debug_js_failure("evaluate", expression, response)
             raise JavaScriptError, response
@@ -351,15 +347,15 @@ module Capybara
 
       # Execute JS without returning a value.
       #
-      # Like `evaluate`, the no-args path wraps in an IIFE — same upstream
-      # `const`/`let` leak. Also raises on JS exceptions so silent
-      # failures don't mask test bugs (the previous fast path swallowed them
-      # because `awaitPromise: false` was checked but `exceptionDetails` was
-      # not).
+      # Like `evaluate`, the no-args path uses `replMode: true` so top-level
+      # `const`/`let` redeclarations across calls don't raise. Also raises
+      # on JS exceptions so silent failures don't mask test bugs (the
+      # previous fast path swallowed them because `awaitPromise: false` was
+      # checked but `exceptionDetails` was not).
       def execute(expression, *args)
         if args.empty?
-          wrapped = "(function(){#{expression}})()"
-          response = page_command("Runtime.evaluate", expression: wrapped, returnByValue: false, awaitPromise: false)
+          response = page_command("Runtime.evaluate", expression: expression, returnByValue: false,
+                                                      awaitPromise: false, replMode: true)
           if response["exceptionDetails"]
             debug_js_failure("execute", expression, response)
             raise JavaScriptError, response
