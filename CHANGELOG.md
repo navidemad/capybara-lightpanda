@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.0] - 2026-06-12
 
 > **Update Lightpanda before upgrading.** Requires a nightly build ≥ 6736 (published 2026-06-12). The driver refuses to start against older binaries.
 
@@ -12,16 +12,15 @@
 - `Cookies#[]` as an alias of `#get` — the Ferrum/Cuprite spelling (`browser.cookies["session_id"]`).
 - `Browser#console_logs` / `#clear_console_logs` — console messages captured since the last session reset, as `{type:, text:, timestamp:, args:}` hashes (driver-internal Turbo sentinels excluded, buffer capped at 1,000 entries). Suites that assert "no JS errors leaked" no longer need to wire a custom Ferrum-style logger: `page.driver.browser.console_logs.select { |m| m[:type] == "error" }`. Note that Lightpanda currently reports both `console.log` and `console.warn` as type `"info"` — filter on `text` when you need to distinguish them.
 
-### Fixed
-
-- A failed binary download that falls back to a stale cached binary now warns loudly on stderr (with the original error and a re-provision one-liner) instead of logging only under `LIGHTPANDA_DEBUG`. VCR-guarded suites hit this path silently — VCR's blocking error is a `StandardError`, unlike raw WebMock's — and the only visible symptom was a confusing "Lightpanda is too old" error much later.
-
 ### Changed
 
+- Modal assertions match dialogs by message text regardless of the alert/confirm/prompt type, like Selenium and Cuprite — `accept_alert` around a `data-confirm` delete button now works.
+- Clicks dispatch the full pointer sequence (mousedown → mouseup → click). Widgets that open on mousedown — select2 v3 dropdowns, for example — now react to `click` / `select_from`.
 - The driver no longer re-dispatches `readystatechange` itself. Lightpanda fires the event natively as of nightly 6736 (lightpanda-io/browser#2708), so the shim added in 0.7.0 became redundant and was removed. Behavior is unchanged for Turbo/Hotwire apps — `turbo:load` still fires on every visit, now from the browser's own event.
 
 ### Fixed
 
+- A failed binary download that falls back to a stale cached binary now warns loudly on stderr (with the original error and a re-provision one-liner) instead of logging only under `LIGHTPANDA_DEBUG`. VCR-guarded suites hit this path silently — VCR's blocking error is a `StandardError`, unlike raw WebMock's — and the only visible symptom was a confusing "Lightpanda is too old" error much later.
 - Turbo Streams over ActionCable now connect. Page-initiated WebSocket upgrades carry the document's `Origin` header as of nightly 6736 (lightpanda-io/browser#2710, guaranteed by the new minimum build), so ActionCable's request-forgery protection accepts the connection instead of rejecting it with `Request origin not allowed: nil`. `turbo-cable-stream-source` elements reach `[connected]` and `turbo_stream_for` broadcasts (solid_cable or any adapter) arrive in specs. If you had added `config.action_cable.disable_request_forgery_protection = true` to your test environment to work around this, you can remove it.
 
 ## [0.7.0] - 2026-06-12
