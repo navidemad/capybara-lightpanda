@@ -58,6 +58,8 @@ module Capybara
           end
         end
 
+        # Test seam: no production caller, but subscriber_test asserts
+        # unsubscribe/clear semantics through it.
         def subscribed?(event)
           @mutex.synchronize { @subscriptions.key?(event) && @subscriptions[event].any? }
         end

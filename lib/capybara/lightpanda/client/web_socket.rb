@@ -46,10 +46,6 @@ module Capybara
           @status == :closed || @status == :error
         end
 
-        def open?
-          @status == :open
-        end
-
         def write(data)
           @socket.write(data)
         rescue Errno::EPIPE, Errno::ECONNRESET, IOError

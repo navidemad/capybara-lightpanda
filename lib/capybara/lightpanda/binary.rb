@@ -9,20 +9,6 @@ require "uri"
 module Capybara
   module Lightpanda
     class Binary
-      Result = Struct.new(:stdout, :stderr, :status) do
-        def success?
-          status.success?
-        end
-
-        def exit_code
-          status.exitstatus
-        end
-
-        def output
-          stdout.empty? ? stderr : stdout
-        end
-      end
-
       GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download"
 
       PLATFORMS = {
@@ -69,10 +55,6 @@ module Capybara
 
         def configure
           yield self
-        end
-
-        def path
-          @path ||= update
         end
 
         # Canonical entrypoint: ensure the binary at install_path is current,
@@ -145,7 +127,6 @@ module Capybara
           end
 
           File.delete(path)
-          @path = nil
           log("Removed #{path}")
           path
         end
@@ -162,30 +143,6 @@ module Capybara
           nil
         end
 
-        def run(*)
-          stdout, stderr, status = Open3.capture3(path, *)
-
-          Result.new(stdout: stdout, stderr: stderr, status: status)
-        rescue Errno::ENOENT
-          raise BinaryNotFoundError, "Lightpanda binary not found"
-        end
-
-        def exec(*)
-          Kernel.exec(path, *)
-        end
-
-        def fetch(url)
-          result = run("fetch", "--dump", url)
-          raise BinaryError, result.stderr unless result.success?
-
-          result.stdout
-        end
-
-        def version
-          result = run("version")
-          result.output.strip
-        end
-
         def download
           binary_name = platform_binary
           tag = required_version || "nightly"
@@ -197,7 +154,6 @@ module Capybara
 
           download_file(url, destination)
           FileUtils.chmod(0o755, destination)
-          @path = destination
 
           destination
         end

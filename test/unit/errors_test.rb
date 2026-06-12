@@ -18,10 +18,7 @@ describe "Capybara::Lightpanda errors" do
         Capybara::Lightpanda::NodeNotFoundError,
         Capybara::Lightpanda::NoExecutionContextError,
         Capybara::Lightpanda::ObsoleteNode,
-        Capybara::Lightpanda::MouseEventFailed,
         Capybara::Lightpanda::InvalidSelector,
-        Capybara::Lightpanda::NoSuchPageError,
-        Capybara::Lightpanda::StatusError,
       ].each do |klass|
         assert_includes klass.ancestors, Capybara::Lightpanda::Error
       end
@@ -34,7 +31,6 @@ describe "Capybara::Lightpanda errors" do
         Capybara::Lightpanda::NodeNotFoundError,
         Capybara::Lightpanda::NoExecutionContextError,
         Capybara::Lightpanda::ObsoleteNode,
-        Capybara::Lightpanda::MouseEventFailed,
       ].each do |klass|
         assert_includes klass.ancestors, Capybara::Lightpanda::BrowserError
       end
@@ -163,15 +159,6 @@ describe "Capybara::Lightpanda errors" do
       node = mock("node")
       error = Capybara::Lightpanda::ObsoleteNode.new(node, "custom message")
       assert_equal "custom message", error.message
-    end
-  end
-
-  describe Capybara::Lightpanda::MouseEventFailed do
-    it "parses position and selector from message" do
-      node = mock("node")
-      error = Capybara::Lightpanda::MouseEventFailed.new(node, "at position (100, 200) selector: #btn")
-      assert_equal({ x: 100, y: 200 }, error.position)
-      assert_equal "#btn", error.selector
     end
   end
 end

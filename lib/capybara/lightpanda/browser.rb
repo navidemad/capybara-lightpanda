@@ -991,12 +991,6 @@ module Capybara
         end
       end
 
-      def document_node_id
-        result = page_command("DOM.getDocument")
-
-        result.dig("root", "nodeId")
-      end
-
       def handle_evaluate_response(response)
         if response["exceptionDetails"]
           debug_js_failure("handle_evaluate_response", "(unknown — already-issued call)", response)

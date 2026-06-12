@@ -56,7 +56,7 @@ Runtime.enable               Runtime.evaluate
 Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
 Runtime.consoleAPICalled (event)
-DOM.getDocument              DOM.querySelector           DOM.querySelectorAll
+DOM.querySelector            DOM.querySelectorAll
 DOM.describeNode             DOM.setFileInputFiles
 Network.getAllCookies        Network.setCookie
 Network.deleteCookies        Network.clearBrowserCookies
@@ -86,7 +86,8 @@ Page.createIsolatedWorld     Page.getFrameTree
 Page.removeScriptToEvaluateOnNewDocument
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
 Page.printToPDF (fake PDF)
-DOM.resolveNode              DOM.getBoxModel (returns real getBoundingClientRect geometry)
+DOM.getDocument              DOM.resolveNode
+DOM.getBoxModel (returns real getBoundingClientRect geometry)
 DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes

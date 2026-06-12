@@ -32,13 +32,15 @@ describe Capybara::Lightpanda::Driver do
     end
 
     it "provides invalid_element_errors for Capybara retry logic" do
-      errors = driver.invalid_element_errors
-      assert_includes errors, Capybara::Lightpanda::NodeNotFoundError
-      assert_includes errors, Capybara::Lightpanda::NoExecutionContextError
-      assert_includes errors, Capybara::Lightpanda::ObsoleteNode
-      refute_includes errors, Capybara::Lightpanda::MouseEventFailed,
-                      "Lightpanda has no rendering engine — coordinate-based mouse events never run, " \
-                      "so MouseEventFailed is unreachable and shouldn't be in the retry list"
+      # Exactly the errors the gem can raise — no MouseEventFailed/
+      # CoordinatesNotFoundError equivalents exist: Lightpanda has no rendering
+      # engine, clicks dispatch through JS, so no coordinate-based mouse path
+      # can fail. Capybara retrying on an error we never raise would mask bugs.
+      assert_equal [
+        Capybara::Lightpanda::NodeNotFoundError,
+        Capybara::Lightpanda::NoExecutionContextError,
+        Capybara::Lightpanda::ObsoleteNode,
+      ], driver.invalid_element_errors
     end
 
     it "exposes the browser object" do

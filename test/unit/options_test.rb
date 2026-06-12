@@ -27,14 +27,6 @@ describe Capybara::Lightpanda::Options do
       assert_equal 10, options.process_timeout
     end
 
-    it "uses default window_size" do
-      assert_equal [1024, 768], options.window_size
-    end
-
-    it "defaults headless to true" do
-      assert_equal true, options.headless
-    end
-
     it "defaults browser_path to nil" do
       assert_nil options.browser_path
     end
@@ -82,7 +74,7 @@ describe Capybara::Lightpanda::Options do
     it "includes all standard options" do
       options = Capybara::Lightpanda::Options.new
       hash = options.to_h
-      %i[host port timeout handshake_timeout process_timeout window_size browser_path headless].each do |key|
+      %i[host port timeout handshake_timeout process_timeout browser_path].each do |key|
         assert_includes hash.keys, key
       end
     end

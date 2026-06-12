@@ -9,10 +9,7 @@ require_relative "client/subscriber"
 module Capybara
   module Lightpanda
     class Client
-      attr_reader :ws_url, :options
-
       def initialize(ws_url, options)
-        @ws_url = ws_url
         @options = options
         @ws = WebSocket.new(ws_url, options)
         @command_id = 0

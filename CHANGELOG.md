@@ -8,6 +8,7 @@
 
 ### Removed
 
+- Dead public API swept (pre-1.0 cleanup; none of these had a caller or documented use): `Binary.run` / `.exec` / `.fetch` / `.version` / `.path` and the `Binary::Result` struct (rake tasks and `Process` only use `update` / `remove` / `current_version` / `install_path` / `update_hint`); `Options#window_size` / `#headless` (silent no-ops — Lightpanda has no rendering engine, so they never affected anything); error classes `MouseEventFailed` (unreachable — clicks dispatch through JS, no coordinate mouse path), `NoSuchPageError` and `StatusError` (never raised); `Browser#document_node_id`; `Client#ws_url` / `#options` readers; `WebSocket#open?`.
 - UPSTREAM_BUGS.md Bug #9 (`requestSubmit()` threw when a listener canceled the SubmitEvent) retired: fixed upstream, verified on nightly 6736 — the build already required by this gem. Contract tests now pin both retired bugs in `test/features/upstream_bugs_test.rb`.
 
 ## [0.8.0] - 2026-06-12

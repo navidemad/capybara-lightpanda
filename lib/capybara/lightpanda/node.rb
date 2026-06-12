@@ -682,14 +682,6 @@ module Capybara
         }
       JS
 
-      APPEND_KEYS_JS = <<~JS
-        function(key) {
-          this.focus();
-          this.value += key;
-          this.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-      JS
-
       EDITABLE_HOST_JS = "function() { return _lightpanda.isContentEditable(this); }"
 
       DISABLED_JS = "function() { return _lightpanda.isDisabled(this); }"

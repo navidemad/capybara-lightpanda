@@ -20,10 +20,9 @@ module Capybara
       # `Capybara::Lightpanda.configure { |c| c.port = 9222 }` when external
       # tooling needs a known address.
       DEFAULT_PORT = 0
-      DEFAULT_WINDOW_SIZE = [1024, 768].freeze
 
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,
-                    :window_size, :browser_path, :headless, :logger
+                    :browser_path, :logger
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -32,9 +31,7 @@ module Capybara
         @timeout = options.fetch(:timeout, DEFAULT_TIMEOUT)
         @handshake_timeout = options.fetch(:handshake_timeout, DEFAULT_HANDSHAKE_TIMEOUT)
         @process_timeout = options.fetch(:process_timeout, DEFAULT_PROCESS_TIMEOUT)
-        @window_size = options.fetch(:window_size, DEFAULT_WINDOW_SIZE)
         @browser_path = options[:browser_path]
-        @headless = options.fetch(:headless, true)
         @ws_url = options[:ws_url]
         @logger = parse_logger(options[:logger])
       end
@@ -54,9 +51,7 @@ module Capybara
           timeout: timeout,
           handshake_timeout: handshake_timeout,
           process_timeout: process_timeout,
-          window_size: window_size,
           browser_path: browser_path,
-          headless: headless,
           logger: logger,
         }
         h[:ws_url] = @ws_url if @ws_url

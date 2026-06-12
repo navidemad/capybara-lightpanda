@@ -7,7 +7,7 @@ require "capybara/lightpanda/binary"
 describe Capybara::Lightpanda::Binary do
   # Class-level config bleeds across tests; snapshot and restore.
   before do
-    @snapshot = %i[@required_version @cache_time @install_dir @logger @path
+    @snapshot = %i[@required_version @cache_time @install_dir @logger
                    @proxy_addr @proxy_port @proxy_user @proxy_pass].to_h do |ivar|
       [ivar, Capybara::Lightpanda::Binary.instance_variable_get(ivar)]
     end
