@@ -77,6 +77,8 @@ module Capybara
         @modal_messages = []
         @modal_messages_mutex = Mutex.new
         @modal_handler_installed = false
+        @console_logs = []
+        @console_logs_mutex = Mutex.new
         @frame_stack = []
         @turbo_event = Utils::Event.new
         @turbo_event.set
@@ -124,6 +126,7 @@ module Capybara
 
         @turbo_event.set
         subscribe_to_console_logs
+        subscribe_to_console_capture
         subscribe_to_execution_context
         subscribe_to_turbo_signals
         subscribe_to_navigation_response
@@ -172,6 +175,7 @@ module Capybara
         @page_events_enabled = false
         @modal_handler_installed = false
         @modal_messages_mutex.synchronize { @modal_messages.clear }
+        @console_logs_mutex.synchronize { @console_logs.clear }
         @last_navigation_response = nil
         @document_request_id = nil
         clear_frames
@@ -588,6 +592,22 @@ module Capybara
         @cookies ||= Cookies.new(self)
       end
 
+      # Console messages captured from `Runtime.consoleAPICalled` since the
+      # last `reset` (Turbo-tracker sentinels excluded). Loose hashes, like
+      # Network#traffic: `{type:, text:, timestamp:, args:}` where `type` is
+      # the console method name ("log", "error", "warning", ...), `text` joins
+      # the arguments' primitive values/descriptions, and `args` keeps the raw
+      # CDP RemoteObjects. Lets suites assert on JS console errors
+      # (`browser.console_logs.select { |m| m[:type] == "error" }`) the way
+      # peer drivers do via custom Ferrum loggers.
+      def console_logs
+        @console_logs_mutex.synchronize { @console_logs.dup }
+      end
+
+      def clear_console_logs
+        @console_logs_mutex.synchronize { @console_logs.clear }
+      end
+
       # -- Frame Support --
       # `frame_stack` (Array<Node>) is the Capybara `switch_to_frame` stack;
       # it drives where `find` resolves selectors. Stored as Nodes so
@@ -855,6 +875,35 @@ module Capybara
 
       TURBO_SENTINEL_PREFIX = "__lightpanda_turbo_"
       private_constant :TURBO_SENTINEL_PREFIX
+
+      # Oldest entries are dropped past this cap so a chatty page can't grow
+      # the buffer unbounded across a long session.
+      CONSOLE_LOGS_LIMIT = 1_000
+
+      # Ring-buffer every console.* call for `Browser#console_logs`. Separate
+      # from subscribe_to_console_logs (which streams to an optional IO logger)
+      # so capture works without any logger configured. Skips the Turbo
+      # activity-tracker sentinels — they're driver plumbing, not page output.
+      def subscribe_to_console_capture
+        on("Runtime.consoleAPICalled") do |params|
+          args = params["args"]
+          next unless args.is_a?(Array)
+
+          first = args.first&.dig("value")
+          next if first.is_a?(String) && first.start_with?(TURBO_SENTINEL_PREFIX)
+
+          entry = {
+            type: params["type"],
+            text: args.map { |a| a.fetch("value") { a["description"] }.to_s }.join(" "),
+            timestamp: params["timestamp"],
+            args: args,
+          }
+          @console_logs_mutex.synchronize do
+            @console_logs << entry
+            @console_logs.shift(@console_logs.size - CONSOLE_LOGS_LIMIT) if @console_logs.size > CONSOLE_LOGS_LIMIT
+          end
+        end
+      end
 
       # Wire @turbo_event to the JS-side _signalTurbo emissions. The JS calls
       # console.debug('__lightpanda_turbo_busy') / '_idle' on transitions across

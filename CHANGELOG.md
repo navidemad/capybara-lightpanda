@@ -10,6 +10,7 @@
 - `Driver#render` as an alias of `save_screenshot`. capybara-screenshot calls `driver.render(path)` for drivers it doesn't know, so every failing test in a capybara-screenshot suite logged "Screenshot could not be saved: undefined method 'render'" — once per failure.
 - `Driver#headers=` / `#add_headers` / `#headers`, delegating to the existing `Network` support. Cuprite exposes header writers on the driver and real suites call them there (`page.driver.headers = …`).
 - `Cookies#[]` as an alias of `#get` — the Ferrum/Cuprite spelling (`browser.cookies["session_id"]`).
+- `Browser#console_logs` / `#clear_console_logs` — console messages captured since the last session reset, as `{type:, text:, timestamp:, args:}` hashes (driver-internal Turbo sentinels excluded, buffer capped at 1,000 entries). Suites that assert "no JS errors leaked" no longer need to wire a custom Ferrum-style logger: `page.driver.browser.console_logs.select { |m| m[:type] == "error" }`. Note that Lightpanda currently reports both `console.log` and `console.warn` as type `"info"` — filter on `text` when you need to distinguish them.
 
 ### Fixed
 
