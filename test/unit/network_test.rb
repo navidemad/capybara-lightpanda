@@ -243,5 +243,15 @@ describe Capybara::Lightpanda::Network do
       assert_includes browser.commands, ["Network.enable", {}]
       assert_equal 1, browser.subscriber_count("Network.requestWillBeSent")
     end
+
+    it "clears extra_headers — the fresh BrowserContext never received them" do
+      network.headers = { "X-Stale" => "1" }
+
+      network.reset
+
+      # Keeping the cache would make Driver#headers report values the browser
+      # stopped sending the moment the context was disposed.
+      assert_empty network.extra_headers
+    end
   end
 end

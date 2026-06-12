@@ -10,8 +10,7 @@ module Capybara
         @traffic = []
         @traffic_mutex = Mutex.new
         @enabled = false
-        @request_handler = nil
-        @response_handler = nil
+        @request_handler = @response_handler = nil
       end
 
       def enable
@@ -51,8 +50,9 @@ module Capybara
       # cleared the Subscriber first.
       def reset
         unsubscribe
-        @traffic_mutex.synchronize { @traffic.clear }
+        clear
         @enabled = false
+        @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
       end
 
       # Headers applied via headers= / add_headers. Backs Driver#headers.
