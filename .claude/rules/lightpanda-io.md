@@ -193,7 +193,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`.
 - `MutationObserver` available; `window.postMessage` across frames works
 - No CORS enforcement (acknowledged in upstream README)
-- In-page `WebSocket` API implemented
+- In-page `WebSocket` API implemented; sends `Origin` on upgrade since build 6736 (PR #2710), so ActionCable's request-forgery check passes and `turbo_stream_for` / solid_cable streams connect without `disable_request_forgery_protection`
 - `window.open` partial support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively for login popups.
 - Web Workers: partial support — `URL`, `AbortController`, `AbortSignal`, `OffscreenCanvas`. Many Worker APIs still missing (#2017). Workers run in the same thread as the page and have a separate context.
 - No Service Workers, SharedArrayBuffer
