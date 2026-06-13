@@ -12,5 +12,5 @@
 ./spec/system/account_spec.rb # Account when on the account page when update password toggles old and new password fields
 ./spec/system/account_spec.rb # Account when on the account page when updating the user's nickname changes the user's nickname - 'nickname'
 ./spec/system/account_spec.rb # Account when on the account page when updating the user's nickname respects the maxlength attribute with a really long word - 'nicknamenicknamenickname'
-rspec ./spec/system/account_spec.rb[1:2:1:1] # Account when on the account page behaves like accessible page passes accessibility tests
-rspec ./spec/system/account_spec.rb[1:2:1:2] # Account when on the account page behaves like accessible page passes HTML validation
+target/decidim-dev/lib/decidim/dev/test/rspec_support/accessibility_examples.rb # Account when on the account page behaves like accessible page passes HTML validation
+target/decidim-dev/lib/decidim/dev/test/rspec_support/accessibility_examples.rb # Account when on the account page behaves like accessible page passes accessibility tests

@@ -5,7 +5,9 @@
 # Usage: ruby check_baseline.rb <target> <report.json>
 #
 # Baseline: .github/real-apps/baselines/<target>.txt (relative to this file),
-# one entry per line, sorted: "<file_path> # <full_description>".
+# one entry per line, sorted: "<file_path> # <full_description>". The file_path
+# is workspace-relative — examples from a shared group in a gem report an
+# absolute path that this script anchors on $GITHUB_WORKSPACE (see `normalize`).
 #
 # Exit 1 when:
 #   - the report is missing/unreadable (rspec crashed before writing it)
@@ -14,10 +16,11 @@
 #
 # Exit 0 otherwise. Baseline entries that now pass are reported as warnings —
 # refresh the baseline file to lock in the improvement. To refresh: download
-# the rspec-report-<target> artifact and run this script with REFRESH=1, or
-# regenerate the file from the report:
-#   jq -r '.examples[] | select(.status=="failed")
-#          | "\(.file_path) # \(.full_description)"' report.json | sort -u
+# the rspec-report-<target> artifact and re-run this script with REFRESH=1 and
+# GITHUB_WORKSPACE set to the path the report's absolute file_paths were written
+# under (the segment before `/target/…`). Don't hand-edit the file or pipe
+# rspec's console "Failed examples" list into it — that yields `rspec <path>[id]`
+# keys that never match the report.
 #
 # Targets are pinned to fixed SHAs in real-apps.yml, so file paths and
 # descriptions are stable until a deliberate target bump (which is exactly
@@ -27,6 +30,19 @@ require "json"
 
 target = ARGV[0] or abort "usage: check_baseline.rb <target> <report.json>"
 report_path = ARGV[1] or abort "usage: check_baseline.rb <target> <report.json>"
+
+# Specs run from `target/<spec_dir>`, so rspec reports a `./`-relative path for
+# examples defined under the dummy app but an ABSOLUTE path for examples pulled
+# in from a shared example group living in a gem (e.g. decidim-dev's
+# accessibility_examples.rb). Anchoring the absolute one on $GITHUB_WORKSPACE
+# keeps the baseline key runner-independent (the prefix is /home/runner/work/…
+# on hosted runners but differs elsewhere) and committable.
+workspace = ENV.fetch("GITHUB_WORKSPACE", nil)
+normalize = lambda do |path|
+  return path.delete_prefix("#{workspace}/") if workspace && !workspace.empty?
+
+  path
+end
 
 baseline_path = File.expand_path("baselines/#{target}.txt", __dir__)
 abort "No baseline for '#{target}' (expected #{baseline_path})" unless File.exist?(baseline_path)
@@ -45,12 +61,29 @@ abort "rspec ran 0 examples — suite did not start" if summary["example_count"]
 
 failed = report.fetch("examples")
                .select { |e| e["status"] == "failed" }
-               .map { |e| "#{e['file_path']} # #{e['full_description']}" }
+               .map { |e| "#{normalize.call(e['file_path'])} # #{e['full_description']}" }
                .sort.uniq
 baseline = File.readlines(baseline_path, chomp: true).reject(&:empty?).sort.uniq
 
 new_failures = failed - baseline
 fixed = baseline - failed
+
+# JSON mode: emit the comparison as one machine-readable object and skip the
+# human-readable / step-summary output. The cross-target aggregate job
+# (real-apps.yml) re-runs this per downloaded report so the roll-up shares this
+# script's comparison logic rather than re-deriving it. Exit code is unchanged
+# (1 on new failures) so the mode is also usable as a standalone gate.
+if ENV["CHECK_FORMAT"] == "json"
+  puts JSON.generate(
+    "target" => target,
+    "examples" => summary["example_count"].to_i,
+    "failed" => failed.size,
+    "baseline" => baseline.size,
+    "new" => new_failures,
+    "fixed" => fixed
+  )
+  exit(new_failures.empty? ? 0 : 1)
+end
 
 if ENV["REFRESH"] == "1"
   File.write(baseline_path, failed.empty? ? "" : "#{failed.join("\n")}\n")
