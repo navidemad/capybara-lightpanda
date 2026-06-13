@@ -460,3 +460,40 @@ jobs:
           path: |
             target/**/*.rej
           if-no-files-found: ignore
+
+  # Rolls every target's baseline comparison up into one job summary, so a
+  # single view shows whether the commit fixed (or regressed) any known
+  # failures across all real-app targets — without opening each matrix leg.
+  # `if: always()` so the roll-up still renders when a leg failed (which is
+  # exactly when you want to see what got fixed despite a regression elsewhere).
+  aggregate:
+    needs: smoke
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out capybara-lightpanda
+        uses: actions/checkout@v6
+        with:
+          path: capybara-lightpanda
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          working-directory: capybara-lightpanda
+
+      # Each matrix leg uploads rspec-report-<target>; pull them all into one
+      # dir, preserving the per-artifact subdirectory the aggregator globs for
+      # (rspec-report-<target>/rspec-report.json).
+      - name: Download rspec reports
+        uses: actions/download-artifact@v7
+        with:
+          pattern: rspec-report-*
+          path: reports
+
+      - name: Aggregate baselines
+        # GITHUB_WORKSPACE is set by Actions; the aggregator passes it through to
+        # check_baseline.rb so gem-sourced absolute file_paths normalize the same
+        # way they did in the matrix legs. Informational — non-zero exit here is
+        # redundant with the per-target gate, so don't fail the run on it.
+        run: ruby capybara-lightpanda/.github/real-apps/aggregate_baseline.rb reports || true
