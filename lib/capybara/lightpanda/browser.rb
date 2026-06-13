@@ -243,11 +243,11 @@ module Capybara
       #
       # Uses a single shared deadline so the worst-case wait is 1x timeout,
       # not 2x (lightpanda-io/browser#1849).
-      def go_to(url, wait: true, retried: false)
+      def go_to(url, wait: true)
         enable_page_events
 
         if wait
-          wait_for_page_load(url, retried: retried)
+          wait_for_page_load(url)
         else
           page_command("Page.navigate", url: url)
         end
@@ -710,6 +710,13 @@ module Capybara
         raise_modal_not_found(type, text, last_seen_message)
       end
 
+      # Internal lifecycle/plumbing steps defined above near their topical
+      # groups — calling them out of order corrupts session state, so they
+      # are not API. (Verified caller-free outside Browser.)
+      private :create_browser_context, :create_page, :clear_session_state,
+              :enable_page_events, :raise_on_js_error!, :debug_js_failure,
+              :get_object_properties, :prepare_modals
+
       private
 
       # Pop the first queued dialog whose message matches the requested
@@ -1127,7 +1134,7 @@ module Capybara
         result.dig("result", "objectId")
       end
 
-      def wait_for_page_load(url, retried:)
+      def wait_for_page_load(url, retried: false)
         deadline = await_navigation do
           @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
         end
@@ -1143,7 +1150,13 @@ module Capybara
           begin
             reconnect
             remaining = deadline - monotonic_time
-            go_to(url, wait: remaining.positive?, retried: true) if remaining.positive?
+            if remaining.positive?
+              # Equivalent of re-entering go_to without leaking the retry
+              # bookkeeping into its public signature. enable_page_events is
+              # needed again: reconnect's clear_session_state reset the flag.
+              enable_page_events
+              wait_for_page_load(url, retried: true)
+            end
           rescue DeadBrowserError
             raise
           rescue StandardError
