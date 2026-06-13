@@ -2,8 +2,8 @@
 name: release-rubygems
 description: Cut a new release of the capybara-lightpanda gem end-to-end — bump version.rb, prepend a CHANGELOG section drafted from commits since the last tag, run the same pre-flight as CI (rubocop + test:unit), commit the bump on a release branch, merge a release PR, tag the squash-merge SHA, push the tag, and surface the GitHub Actions URL so the user can approve the rubygems environment. Use this skill whenever the user says "cut a release", "release the gem", "ship the gem", "ship 0.2.0" / any specific version, "bump and release", "tag a new version of capybara-lightpanda", "publish to rubygems", or otherwise signals they want to push a new version of capybara-lightpanda to RubyGems via the Trusted Publishing workflow. Do NOT use for: editing CHANGELOG.md outside a release flow, bumping VERSION without releasing, releases of any other gem (this skill is hardcoded to capybara-lightpanda and refuses to run elsewhere), or fixing a release that already failed mid-flight (handle that manually — the steps here are not idempotent past the tag push).
 user_invocable: true
-model: fable
-effort: low
+model: opus
+effort: max
 ---
 
 # Release capybara-lightpanda

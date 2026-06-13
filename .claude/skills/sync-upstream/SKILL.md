@@ -2,8 +2,8 @@
 name: sync-upstream
 description: Audit upstream repos that affect the capybara-lightpanda gem — the Lightpanda browser (lightpanda-io/browser), and the peer Ruby CDP gems Ferrum (rubycdp/ferrum) and Cuprite (rubycdp/cuprite). Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, investigating a specific CDP behavior (Page.loadEventFired, Network.clearBrowserCookies, XPathResult, modal handling), or asks what's new in Ferrum or Cuprite, what patterns we should adopt from them, whether a Ferrum error class or retry helper is worth mirroring, or whether Cuprite's driver does X better. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation, or when they want a pre-release peer-gem comparison. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods — those are code tasks, not upstream investigations.
 user_invocable: true
-model: fable
-effort: high
+model: opus
+effort: max
 ---
 
 # Sync Upstream
