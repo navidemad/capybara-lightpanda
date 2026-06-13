@@ -217,12 +217,20 @@ module Capybara
       # Thin Cuprite-style wrapper. The interesting work — disposing the
       # BrowserContext (cookies, storage, all targets) and starting a fresh
       # one — happens in Browser#reset.
+      #
+      # Rescue is the gem hierarchy plus raw IO escapees only — NOT
+      # StandardError: reset! runs between every test, so a blanket rescue
+      # turns programmer errors (e.g. a NoMethodError in browser.rb) into a
+      # silent quit-and-respawn on every example with zero signal. The warn
+      # keeps repeated respawns visible.
       def reset!
         browser.reset
-        @started = false
-      rescue StandardError
+      rescue Error, SystemCallError, IOError => e
+        warn "[capybara-lightpanda] reset! failed (#{e.class}: #{e.message}); respawning browser"
         @browser&.quit
         @browser = nil
+      ensure
+        @started = false
       end
 
       def quit
