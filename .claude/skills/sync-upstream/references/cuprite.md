@@ -11,7 +11,7 @@ Activity baseline (verify each sync — these go stale): moderately active. ~8 c
 
 - `.claude/rules/ruby-cdp-peers.md` — Cuprite section
 - `lib/capybara/lightpanda/driver.rb` — particularly the `invalid_element_errors` list and Capybara error mapping
-- `lib/capybara/lightpanda/javascripts/index.js` — the JS bundle injected on every navigation
+- `lib/capybara/lightpanda/javascripts/{turbo,predicates,attach}.js` — the JS bundle (split by concern, assembled by `auto_scripts.rb`) injected on every navigation
 
 ### First sync? Discover existing adoptions before reconning
 
@@ -43,7 +43,7 @@ Cuprite is small — only ~7 files of interest. Direct file-by-file comparison i
 | `lib/capybara/cuprite/driver.rb` | `lib/capybara/lightpanda/driver.rb` | Error mapping (Ferrum errors → Capybara errors), `invalid_element_errors`, `wait_for_reload`, modal handling entrypoints |
 | `lib/capybara/cuprite/node.rb` | `lib/capybara/lightpanda/node.rb` | Capybara::Driver::Node API surface — what they implement vs us, especially `set` for various input types, `drag_to`, `hover`, `right_click` |
 | `lib/capybara/cuprite/errors.rb` | `lib/capybara/lightpanda/errors.rb` | Driver-level error classes (distinct from Ferrum's), what they catch and re-raise as Capybara errors |
-| `lib/capybara/cuprite/javascripts/index.js` | `lib/capybara/lightpanda/javascripts/index.js` | Polyfills/helpers injected per page. We have the XPath polyfill + #id rewriter + Turbo tracker; what do they ship that we don't? |
+| `lib/capybara/cuprite/javascripts/index.js` | `lib/capybara/lightpanda/javascripts/{turbo,predicates,attach}.js` (split by concern, assembled by `auto_scripts.rb`) | Polyfills/helpers injected per page. We ship the Turbo tracker (`turbo.js`) + DOM predicates (`predicates.js`); XPath is now native (`Document.evaluate`, PR #2305), not polyfilled. What do they ship that we don't? |
 
 ## Skip these — Chrome-specific or Lightpanda-incompatible
 

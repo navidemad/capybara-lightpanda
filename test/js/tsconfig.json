@@ -1,0 +1,15 @@
+{
+  "// ": "Dev-only config for the Bun predicate harness (test/js/). Editors/tsc",
+  "//  ": "use it to resolve `bun:test` and the .ts extension imports. Not part",
+  "//   ": "of the shipped gem — the gemspec packages lib/** only.",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "types": ["bun"]
+  }
+}

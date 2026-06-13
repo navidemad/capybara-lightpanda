@@ -54,7 +54,7 @@ These are the four files where divergence matters most. Fetch each, read against
 Bonus comparison candidates if time permits:
 
 - `lib/ferrum/client.rb` — WebSocket dispatcher, command timeout handling
-- `lib/ferrum/javascripts/index.js` — JS bundle organization (theirs is single-file, like ours)
+- `lib/ferrum/javascripts/index.js` — JS bundle organization (theirs is single-file; ours is split by concern into `javascripts/{turbo,predicates,attach}.js`, assembled by `auto_scripts.rb`)
 - `lib/ferrum/keyboard.rb` + `lib/ferrum/keyboard.json` — key-code table (copy verbatim if we ever need richer `Input.dispatchKeyEvent`)
 
 ## Skip these — Chrome-specific, not transferable

@@ -30,6 +30,13 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Pin to the same Bun the harness pins locally (test/js/.bun-version,
+          # mirrored by package.json's packageManager field). Keeps CI on the
+          # same post-Zig→Rust-rewrite build the predicate tests are validated
+          # against, so local and CI never drift to different Bun cores.
+          bun-version-file: test/js/.bun-version
       - name: Determine Lightpanda cache key
         id: lightpanda-cache-key
         # Fold the gem's minimum build into the key so a MINIMUM_NIGHTLY_BUILD
@@ -47,6 +54,11 @@ jobs:
             lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
       - name: Lint
         run: bundle exec rubocop
+      - name: JS predicate tests (Bun harness)
+        # Fast (~0.1s) unit tests for the injected _lightpanda predicate logic
+        # (visibleText whitespace/block rules, contenteditable/disabled walks).
+        # Dev-only harness under test/js/; not part of the shipped gem.
+        run: bundle exec rake test:js
       - name: Tests (unit + features)
         # test:all = test/**/*_test.rb — includes the per-fix regression files
         # under test/features/ (turbo_load, drop, teardown, upstream_bugs, …)

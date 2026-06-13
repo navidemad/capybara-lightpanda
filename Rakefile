@@ -76,6 +76,44 @@ namespace :test do
     t.warning = false
   end
 
+  desc "Run the Bun harness for the injected _lightpanda predicate logic (test/js/). " \
+       "Skips with a notice if Bun isn't installed — it's a dev-only tool, not a gem dependency."
+  task :js do
+    js_dir = File.expand_path("test/js", __dir__)
+    # Resolve bun with a pure-Ruby PATH scan rather than shelling out to
+    # `command -v` / `which`: `command` is a shell builtin, so Ruby's backticks
+    # try to exec a binary named "command" and raise Errno::ENOENT on runners
+    # where the default shell doesn't expose it as an external (seen on GitHub
+    # Actions). EXEEXT covers the .exe suffix on Windows.
+    exe = "bun#{RbConfig::CONFIG['EXEEXT']}"
+    bun = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR)
+             .map { |dir| File.join(dir, exe) }
+             .find { |path| File.file?(path) && File.executable?(path) }
+    if bun.nil?
+      warn "test:js: bun not found on PATH — skipping JS harness. " \
+           "Install bun (https://bun.com/install) to run the predicate unit tests."
+      next
+    end
+
+    # `bun install` is idempotent and fast; ensures happy-dom is present on a
+    # clean checkout before the first `bun test`. `--cwd` is the documented
+    # install flag; it also reads test/js/{package.json,bun.lock,.bun-version}.
+    sh("bun", "install", "--cwd", js_dir) { |ok, _| abort "test:js: bun install failed" unless ok }
+
+    # Scope discovery with a positional directory filter — the form the test
+    # docs show. Run from the repo root (Rake's cwd) so the filter resolves;
+    # bun loads test/js/{tsconfig.json,node_modules} relative to each test
+    # file. `bun test` exits 0 when it matches NO files, so a renamed/moved
+    # suite would pass silently with zero coverage; capture the output and
+    # require that tests actually ran.
+    Dir.chdir(__dir__) do
+      output = IO.popen(["bun", "test", "test/js"], err: %i[child out], &:read)
+      puts output
+      abort "test:js: JS predicate tests failed" unless $CHILD_STATUS.success?
+      abort "test:js: bun matched no test files (suite renamed or missing?)" unless output =~ /Ran \d+ tests?/
+    end
+  end
+
   desc "Run test files one at a time, recording pass/fail in tmp/test_progress.json. " \
        "Skips files already passing. Env: CLEAR=1 resets progress, FAIL_FAST=1 stops on first failure, " \
        "ONLY=<glob> restricts the file set."
@@ -252,4 +290,4 @@ namespace :examples do
   task all: %i[plain turbo]
 end
 
-task default: %i[test:unit rubocop]
+task default: %i[test:js test:unit rubocop]

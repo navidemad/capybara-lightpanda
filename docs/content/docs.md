@@ -203,7 +203,7 @@ External `<link rel="stylesheet">` files are fetched and parsed by default — t
 | `Capybara::Lightpanda::Driver` | The Capybara driver — registers as `:lightpanda`, exposes `set_cookie` / `clear_cookies` / `remove_cookie` |
 | `Capybara::Lightpanda::Node` | DOM operations via `Runtime.callFunctionOn` with object-id binding |
 | `Capybara::Lightpanda::Cookies` | Wraps `Network.getCookies` / `setCookie` / `deleteCookies` with safe fallbacks |
-| `javascripts/index.js` | Turbo activity tracking + DOM visibility/state predicates (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`) |
+| `javascripts/{turbo,predicates,attach}.js` | The injected `_lightpanda` bundle, split by concern — Turbo activity tracking + DOM visibility/state predicates (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`) — assembled into one script by `AutoScripts` |
 
 The driver speaks the same CDP dialect Cuprite and Ferrum use, so most patterns from those projects translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 
