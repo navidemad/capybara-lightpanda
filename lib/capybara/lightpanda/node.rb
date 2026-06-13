@@ -171,15 +171,9 @@ module Capybara
       end
 
       def unselect_option
-        unless call("function() {
-          var s = this.parentElement;
-          while (s && (s.tagName || '').toUpperCase() !== 'SELECT') s = s.parentElement;
-          return !!(s && s.multiple);
-        }")
-          raise Capybara::UnselectNotAllowed, "Cannot unselect option from single select box."
-        end
+        return unless call(UNSELECT_OPTION_JS) == "not_multiple"
 
-        call(UNSELECT_OPTION_JS)
+        raise Capybara::UnselectNotAllowed, "Cannot unselect option from single select box."
       end
 
       def send_keys(*)
@@ -447,12 +441,7 @@ module Capybara
           raise ObsoleteNode.new(self, "Node is no longer attached to the document")
         end
 
-        case e.class_name
-        when "InvalidSelector"
-          raise InvalidSelector.new(e.message, nil, args.first)
-        else
-          raise
-        end
+        raise
       end
 
       OBSOLETE_NODE_MARKER = "LIGHTPANDA_OBSOLETE_NODE"
@@ -665,11 +654,14 @@ module Capybara
         }
       JS
 
+      # Returns 'not_multiple' (without mutating) when the owning <select>
+      # isn't multiple — Ruby raises Capybara::UnselectNotAllowed. One CDP
+      # round-trip instead of a separate ancestor-walk precheck.
       UNSELECT_OPTION_JS = <<~JS
         function() {
           var sel = this.parentElement;
           while (sel && (sel.tagName || '').toUpperCase() !== 'SELECT') sel = sel.parentElement;
-          if (!sel || !sel.multiple) return;
+          if (!sel || !sel.multiple) return 'not_multiple';
           this.selected = false;
           sel.dispatchEvent(new Event('input', {bubbles: true}));
           sel.dispatchEvent(new Event('change', {bubbles: true}));
@@ -730,6 +722,14 @@ module Capybara
           return path.join(' > ');
         }
       JS
+
+      # Internal wire format, not API — aligned with browser.rb's convention
+      # of private_constant for its JS snippets.
+      private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :VISIBLE_JS, :VISIBLE_TEXT_JS,
+                       :PROPERTY_OR_ATTRIBUTE_JS, :GET_VALUE_JS, :SET_VALUE_JS,
+                       :IMPLICIT_SUBMIT_JS, :SELECT_OPTION_JS, :UNSELECT_OPTION_JS,
+                       :SET_CHECKBOX_JS, :EDITABLE_HOST_JS, :DISABLED_JS, :GET_STYLE_JS,
+                       :GET_RECT_JS, :OBSCURED_JS, :GET_PATH_JS
     end
   end
 end
