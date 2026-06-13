@@ -143,7 +143,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 5. **`HTMLElement.isContentEditable` IDL attribute always returns false**
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
-   - Gem polyfill at `javascripts/index.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
+   - Gem polyfill at `javascripts/predicates.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
 6. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (PR #2487, build ≥6353)
    - The gem passes `--enable-external-stylesheets` unconditionally (`Process#build_args`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct (PR #2498). Cost: one synchronous CSS fetch per `<link>`.

@@ -76,6 +76,30 @@ namespace :test do
     t.warning = false
   end
 
+  desc "Run the Bun harness for the injected _lightpanda predicate logic (test/js/). " \
+       "Skips with a notice if Bun isn't installed — it's a dev-only tool, not a gem dependency."
+  task :js do
+    js_dir = File.expand_path("test/js", __dir__)
+    bun = `command -v bun`.strip
+    if bun.empty?
+      warn "test:js: bun not found on PATH — skipping JS harness. " \
+           "Install bun (https://bun.sh) to run the predicate unit tests."
+      next
+    end
+
+    # `bun install` is idempotent and fast; ensures happy-dom is present on a
+    # clean checkout before the first `bun test`.
+    sh("bun", "install", "--cwd", js_dir) { |ok, _| abort "test:js: bun install failed" unless ok }
+
+    # `bun test` exits 0 when it matches NO files, so a renamed/moved suite
+    # would pass silently with zero coverage. Capture output and require that
+    # tests actually ran.
+    output = IO.popen(["bun", "test", "--cwd", js_dir], err: %i[child out], &:read)
+    puts output
+    abort "test:js: JS predicate tests failed" unless $CHILD_STATUS.success?
+    abort "test:js: bun matched no test files (suite renamed or missing?)" unless output =~ /Ran \d+ tests?/
+  end
+
   desc "Run test files one at a time, recording pass/fail in tmp/test_progress.json. " \
        "Skips files already passing. Env: CLEAR=1 resets progress, FAIL_FAST=1 stops on first failure, " \
        "ONLY=<glob> restricts the file set."
@@ -252,4 +276,4 @@ namespace :examples do
   task all: %i[plain turbo]
 end
 
-task default: %i[test:unit rubocop]
+task default: %i[test:js test:unit rubocop]
