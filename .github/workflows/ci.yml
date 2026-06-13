@@ -32,7 +32,11 @@ jobs:
           bundler-cache: true
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # Pin to the same Bun the harness pins locally (test/js/.bun-version,
+          # mirrored by package.json's packageManager field). Keeps CI on the
+          # same post-Zig→Rust-rewrite build the predicate tests are validated
+          # against, so local and CI never drift to different Bun cores.
+          bun-version-file: test/js/.bun-version
       - name: Determine Lightpanda cache key
         id: lightpanda-cache-key
         # Fold the gem's minimum build into the key so a MINIMUM_NIGHTLY_BUILD
