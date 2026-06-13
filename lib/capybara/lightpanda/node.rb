@@ -69,14 +69,12 @@ module Capybara
         previous
       end
 
+      # Routed through #call (not a bare call_function_on) so a detached
+      # host raises ObsoleteNode like every other node operation — Capybara's
+      # automatic_reload then re-finds the host instead of silently reading
+      # a stale shadowRoot.
       def shadow_root
-        result = driver.browser.with_default_context_wait do
-          driver.browser.call_function_on(
-            @remote_object_id,
-            "function() { return this.shadowRoot }",
-            return_by_value: false
-          )
-        end
+        result = call(SHADOW_ROOT_JS, return_by_value: false)
         return nil unless result.is_a?(Hash) && result["objectId"]
 
         self.class.new(driver, result["objectId"])
@@ -431,10 +429,11 @@ module Capybara
       # a DOM mutation like `replaceWith`, the cached objectId still resolves
       # to the detached node, so reads succeed quietly and Capybara's
       # automatic_reload never re-runs the original query.
-      def call(function_declaration, *args)
+      def call(function_declaration, *args, return_by_value: true)
         guarded = wrap_with_attached_guard(function_declaration)
         driver.browser.with_default_context_wait do
-          driver.browser.call_function_on(@remote_object_id, guarded, *args)
+          driver.browser.call_function_on(@remote_object_id, guarded, *args,
+                                          return_by_value: return_by_value)
         end
       rescue JavaScriptError => e
         if e.message.include?(OBSOLETE_NODE_MARKER)
@@ -674,6 +673,8 @@ module Capybara
         }
       JS
 
+      SHADOW_ROOT_JS = "function() { return this.shadowRoot }"
+
       EDITABLE_HOST_JS = "function() { return _lightpanda.isContentEditable(this); }"
 
       DISABLED_JS = "function() { return _lightpanda.isDisabled(this); }"
@@ -725,7 +726,7 @@ module Capybara
 
       # Internal wire format, not API — aligned with browser.rb's convention
       # of private_constant for its JS snippets.
-      private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :VISIBLE_JS, :VISIBLE_TEXT_JS,
+      private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :SHADOW_ROOT_JS, :VISIBLE_JS, :VISIBLE_TEXT_JS,
                        :PROPERTY_OR_ATTRIBUTE_JS, :GET_VALUE_JS, :SET_VALUE_JS,
                        :IMPLICIT_SUBMIT_JS, :SELECT_OPTION_JS, :UNSELECT_OPTION_JS,
                        :SET_CHECKBOX_JS, :EDITABLE_HOST_JS, :DISABLED_JS, :GET_STYLE_JS,
