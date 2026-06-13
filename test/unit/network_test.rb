@@ -305,4 +305,40 @@ describe Capybara::Lightpanda::Network do
       assert_nil network.last_navigation_response
     end
   end
+
+  describe "#enable failure rollback" do
+    it "unsubscribes the just-installed handlers when Network.enable fails" do
+      browser.expects(:command).with("Network.enable").raises(Capybara::Lightpanda::TimeoutError).once
+
+      assert_raises(Capybara::Lightpanda::TimeoutError) { network.enable }
+      # Orphaned handlers would double-count every request after the next
+      # successful enable, wedging pending_connections above zero forever.
+      assert_equal 0, browser.subscriber_count("Network.requestWillBeSent")
+
+      browser.unstub(:command)
+      network.enable
+      browser.fire("Network.requestWillBeSent", {
+                     "requestId" => "r1",
+                     "request" => { "url" => "https://example.test/", "method" => "GET" },
+                     "timestamp" => 1.0,
+                   })
+      assert_equal 1, network.traffic.size
+    end
+  end
+
+  describe "traffic cap" do
+    it "drops oldest entries past TRAFFIC_LIMIT — tracking is always on, the buffer must not grow unbounded" do
+      network.enable
+      (Capybara::Lightpanda::Network::TRAFFIC_LIMIT + 5).times do |i|
+        browser.fire("Network.requestWillBeSent", {
+                       "requestId" => "r#{i}",
+                       "request" => { "url" => "https://example.test/#{i}", "method" => "GET" },
+                       "timestamp" => i.to_f,
+                     })
+      end
+
+      assert_equal Capybara::Lightpanda::Network::TRAFFIC_LIMIT, network.traffic.size
+      assert_equal "r5", network.traffic.first[:request_id] # oldest five dropped
+    end
+  end
 end

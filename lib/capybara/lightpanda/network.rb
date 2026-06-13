@@ -3,6 +3,11 @@
 module Capybara
   module Lightpanda
     class Network
+      # Tracking is always on (create_page enables it), so the buffer needs
+      # the same unbounded-growth cap as Browser's console ring buffer —
+      # one very long session would otherwise grow @traffic indefinitely.
+      TRAFFIC_LIMIT = 1_000
+
       attr_reader :browser
 
       # Status/headers of the last top-level document navigation; nil before
@@ -29,9 +34,17 @@ module Capybara
 
         # Subscribe BEFORE flipping the wire toggle (mirror image of
         # #disable's ordering): events can't be emitted while the domain is
-        # off, so this order can never miss one.
+        # off, so this order can never miss one. If the command fails
+        # (Lightpanda can block commands mid-navigation), roll the handlers
+        # back — orphaned duplicates would double-count every request and
+        # wedge pending_connections above zero for the session.
         subscribe
-        browser.command("Network.enable")
+        begin
+          browser.command("Network.enable")
+        rescue StandardError
+          unsubscribe
+          raise
+        end
         @enabled = true
       end
 
@@ -161,7 +174,10 @@ module Capybara
             timestamp: params["timestamp"],
             response: nil,
           }
-          @traffic_mutex.synchronize { @traffic << entry }
+          @traffic_mutex.synchronize do
+            @traffic << entry
+            @traffic.shift(@traffic.size - TRAFFIC_LIMIT) if @traffic.size > TRAFFIC_LIMIT
+          end
         end
       end
 

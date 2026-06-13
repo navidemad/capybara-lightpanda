@@ -213,6 +213,13 @@ module Capybara
 
       def quit
         self.class.untrack(self)
+        # Flip Network back to disabled so a later #start re-installs its
+        # subscriptions — without this, quit→start reuse of the same
+        # instance leaves @enabled true and create_page's network.enable
+        # no-ops, silently killing status_code/traffic capture. Guarded on
+        # @client: with no client the handlers are already moot and
+        # unsubscribe would have nothing to detach from.
+        @network&.reset if @client
         begin
           @client&.close
         rescue StandardError
