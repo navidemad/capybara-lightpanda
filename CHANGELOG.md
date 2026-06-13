@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `send_keys(:ctrl, …)` (held or `[:ctrl, "a"]` array form) crashed with `NoMethodError` — `MODIFIERS` advertised `:ctrl` but `KEYS` lacked the entry. Both forms now dispatch Control correctly, and an unknown key symbol raises `ArgumentError` naming the key everywhere.
+- `Driver#headers` no longer reports phantom values after `reset!` — the cached `extra_headers` are cleared with the disposed BrowserContext.
+- A connection reset (RST) during the WebSocket handshake now raises `DeadBrowserError` like the FIN path instead of leaking a raw `Errno::ECONNRESET`.
+- A duplicate CDP response frame for an already-answered command id no longer kills the process (`IVar#try_set` on the message thread).
+
 ### Changed
+
+- `Browser` is now composed of include-modules (`Browser::Runtime` / `Finder` / `Navigation` / `Modals` / `Console` under `lib/capybara/lightpanda/browser/`) — pure code motion, public API unchanged (verified method-for-method by reflection).
+- The Network CDP domain has a single owner: `Network` captures the navigation response behind `Browser#status_code` / `#response_headers`, and traffic tracking is always on (cleared per `reset`, ferrum parity). `driver.network.disable` now visibly owns the caveat that it freezes status tracking.
+- Port-in-use recovery dispatches on a typed `PortInUseError` (subclass of `ProcessTimeoutError`, so existing rescues keep working) instead of matching the error message; HTTP download failures raise `BinaryError` instead of `BinaryNotFoundError`.
+- `Driver#reset!` rescues the gem's error hierarchy (plus `SystemCallError`/`IOError`) instead of `StandardError`, and warns on respawn — programmer errors no longer degrade into a silent browser restart per test.
+- `Node#shadow_root` routes through the guarded `#call` path: reading the shadow root of a detached host now raises `ObsoleteNode` (handled by Capybara's `automatic_reload`) instead of silently returning stale content.
+- Arrays without modifier symbols passed to `send_keys` now type via `insertText`, consistent with plain strings (previously synthesized per-char keyDown/keyUp).
 
 - No-args `evaluate_script` / `execute_script` send the expression with `replMode: true` (DevTools-console REPL semantics) instead of wrapping it in an IIFE. Top-level `const`/`let` can now be redeclared across calls *and* state persists between calls, matching what users see in the Chrome console. The old IIFE existed for a misdiagnosed upstream bug: Chrome throws the exact same redeclaration `SyntaxError` without `replMode` — spec behavior, not a Lightpanda bug (UPSTREAM_BUGS.md Bug #10, retracted). JS exceptions still raise `JavaScriptError`.
 

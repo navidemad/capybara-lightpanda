@@ -28,6 +28,12 @@ Style/OneClassPerFile:
 Layout/LineLength:
   Max: 120
 
+# The Browser modules are carved out of browser.rb (already excluded below);
+# same justification — cohesive CDP subsystems, not arbitrary growth.
+Metrics/ModuleLength:
+  Exclude:
+    - lib/capybara/lightpanda/browser/*.rb
+
 Metrics/ClassLength:
   Exclude:
     - lib/capybara/lightpanda/binary.rb
