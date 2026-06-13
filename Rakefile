@@ -80,8 +80,16 @@ namespace :test do
        "Skips with a notice if Bun isn't installed — it's a dev-only tool, not a gem dependency."
   task :js do
     js_dir = File.expand_path("test/js", __dir__)
-    bun = `command -v bun`.strip
-    if bun.empty?
+    # Resolve bun with a pure-Ruby PATH scan rather than shelling out to
+    # `command -v` / `which`: `command` is a shell builtin, so Ruby's backticks
+    # try to exec a binary named "command" and raise Errno::ENOENT on runners
+    # where the default shell doesn't expose it as an external (seen on GitHub
+    # Actions). EXEEXT covers the .exe suffix on Windows.
+    exe = "bun#{RbConfig::CONFIG['EXEEXT']}"
+    bun = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR)
+             .map { |dir| File.join(dir, exe) }
+             .find { |path| File.file?(path) && File.executable?(path) }
+    if bun.nil?
       warn "test:js: bun not found on PATH — skipping JS harness. " \
            "Install bun (https://bun.com/install) to run the predicate unit tests."
       next
