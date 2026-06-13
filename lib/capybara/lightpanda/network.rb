@@ -5,22 +5,39 @@ module Capybara
     class Network
       attr_reader :browser
 
+      # Status/headers of the last top-level document navigation; nil before
+      # the first navigation completes. Backs Browser#status_code /
+      # #response_headers. Captured by #subscribe's handlers.
+      attr_reader :last_navigation_response
+
       def initialize(browser)
         @browser = browser
         @traffic = []
         @traffic_mutex = Mutex.new
         @enabled = false
         @request_handler = @response_handler = nil
+        @last_navigation_response = nil
+        @document_request_id = nil
       end
 
+      # The domain toggle is connection-scoped (browser.command), while
+      # setExtraHTTPHeaders is session-scoped (browser.page_command) — see
+      # #headers=. Browser#create_page calls this, so tracking (traffic AND
+      # the navigation-response capture) is on for every page.
       def enable
         return if @enabled
 
-        browser.command("Network.enable")
+        # Subscribe BEFORE flipping the wire toggle (mirror image of
+        # #disable's ordering): events can't be emitted while the domain is
+        # off, so this order can never miss one.
         subscribe
+        browser.command("Network.enable")
         @enabled = true
       end
 
+      # Caveat: disabling the domain also stops the navigation-response
+      # capture, so Browser#status_code / #response_headers freeze at their
+      # last values until the next #enable.
       def disable
         return unless @enabled
 
@@ -53,6 +70,8 @@ module Capybara
         clear
         @enabled = false
         @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
+        @last_navigation_response = nil
+        @document_request_id = nil
       end
 
       # Headers applied via headers= / add_headers. Backs Driver#headers.
@@ -111,11 +130,30 @@ module Capybara
 
       private
 
+      # CDP events arrive on the message thread while wait_for_idle /
+      # pending_connections read from the main thread; serialize all
+      # @traffic mutations and reads through @traffic_mutex.
+      #
+      # The handlers also capture the last top-level navigation response
+      # (mirrors capybara-playwright-driver's navigation_request? hook). CDP
+      # normally marks the main-document response via
+      # `Network.responseReceived.type`, but Lightpanda omits that field on
+      # responses (only emits `type` on requestWillBeSent) — so match the
+      # long way: remember the document requestId, store the response whose
+      # requestId equals it.
       def subscribe
-        # CDP events arrive on the message thread while wait_for_idle /
-        # pending_connections read from the main thread; serialize all
-        # @traffic mutations and reads through @traffic_mutex.
-        @request_handler = lambda do |params|
+        @request_handler = build_request_handler
+        @response_handler = build_response_handler
+        browser.on("Network.requestWillBeSent", &@request_handler)
+        browser.on("Network.responseReceived", &@response_handler)
+      end
+
+      def build_request_handler
+        lambda do |params|
+          if params["type"] == "Document"
+            @document_request_id = params["requestId"]
+            @last_navigation_response = nil
+          end
           entry = {
             request_id: params["requestId"],
             url: params.dig("request", "url"),
@@ -125,8 +163,16 @@ module Capybara
           }
           @traffic_mutex.synchronize { @traffic << entry }
         end
+      end
 
-        @response_handler = lambda do |params|
+      def build_response_handler
+        lambda do |params|
+          if params["requestId"] == @document_request_id
+            @last_navigation_response = {
+              status: params.dig("response", "status"),
+              headers: params.dig("response", "headers") || {},
+            }
+          end
           @traffic_mutex.synchronize do
             request = @traffic.find { |t| t[:request_id] == params["requestId"] }
             next unless request
@@ -138,9 +184,6 @@ module Capybara
             }
           end
         end
-
-        browser.on("Network.requestWillBeSent", &@request_handler)
-        browser.on("Network.responseReceived", &@response_handler)
       end
 
       def unsubscribe

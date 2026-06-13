@@ -254,4 +254,55 @@ describe Capybara::Lightpanda::Network do
       assert_empty network.extra_headers
     end
   end
+
+  # Network owns the navigation-response capture behind Browser#status_code /
+  # #response_headers. Lightpanda omits `type` on responseReceived, so the
+  # match runs through the remembered document requestId.
+  describe "navigation response capture" do
+    def fire_request(id, type: nil)
+      params = {
+        "requestId" => id,
+        "request" => { "url" => "https://example.test/", "method" => "GET" },
+        "timestamp" => 1.0,
+      }
+      params["type"] = type if type
+      browser.fire("Network.requestWillBeSent", params)
+    end
+
+    def fire_response(id, status: 200)
+      browser.fire("Network.responseReceived", {
+                     "requestId" => id,
+                     "response" => { "status" => status, "headers" => { "content-type" => "text/html" } },
+                   })
+    end
+
+    it "remembers the last document response" do
+      network.enable
+      fire_request("doc1", type: "Document")
+      fire_response("doc1", status: 301)
+
+      assert_equal 301, network.last_navigation_response[:status]
+      assert_equal "text/html", network.last_navigation_response[:headers]["content-type"]
+    end
+
+    it "ignores subresource responses — only the document request counts" do
+      network.enable
+      fire_request("doc1", type: "Document")
+      fire_response("doc1", status: 200)
+      fire_request("img1")
+      fire_response("img1", status: 404)
+
+      assert_equal 200, network.last_navigation_response[:status]
+    end
+
+    it "clears on reset so the fresh context starts with no phantom status" do
+      network.enable
+      fire_request("doc1", type: "Document")
+      fire_response("doc1")
+
+      network.reset
+
+      assert_nil network.last_navigation_response
+    end
+  end
 end

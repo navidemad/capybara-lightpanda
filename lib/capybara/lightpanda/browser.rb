@@ -87,8 +87,6 @@ module Capybara
         @frame_stack = []
         @turbo_event = Utils::Event.new
         @turbo_event.set
-        @last_navigation_response = nil
-        @document_request_id = nil
 
         start
       end
@@ -134,7 +132,11 @@ module Capybara
         subscribe_to_console_capture
         subscribe_to_execution_context
         subscribe_to_turbo_signals
-        subscribe_to_navigation_response
+        # Network owns the Network.* domain: enabling installs traffic
+        # tracking AND the navigation-response capture behind status_code.
+        # clear_session_state's network.reset flipped @enabled back, so this
+        # re-subscribes on the fresh context.
+        network.enable
         register_auto_scripts
       end
 
@@ -181,8 +183,6 @@ module Capybara
         @modal_handler_installed = false
         @modal_messages_mutex.synchronize { @modal_messages.clear }
         @console_logs_mutex.synchronize { @console_logs.clear }
-        @last_navigation_response = nil
-        @document_request_id = nil
         clear_frames
         # Network#reset, not #clear: disposing the BrowserContext also
         # destroyed the Network domain and its subscriptions, so we must
@@ -312,17 +312,17 @@ module Capybara
       alias html body
 
       # HTTP status of the last document navigation; nil before the first
-      # navigation completes. Driven by the Network.responseReceived
-      # subscription installed in create_page.
+      # navigation completes. Captured by Network's subscription (installed
+      # via network.enable in create_page).
       def status_code
-        @last_navigation_response&.dig(:status)
+        network.last_navigation_response&.dig(:status)
       end
 
       # Response headers of the last document navigation, wrapped in a Headers
       # instance so `["Content-Type"]` works despite CDP lowercasing keys.
       # Returns an empty Headers (not nil) so callers can chain `[]` safely.
       def response_headers
-        raw = @last_navigation_response&.dig(:headers) || {}
+        raw = network.last_navigation_response&.dig(:headers) || {}
         Headers.new.tap { |h| raw.each { |k, v| h[k.to_s.downcase] = v } }
       end
 
@@ -968,43 +968,6 @@ module Capybara
         end
 
         on("Runtime.executionContextsCleared") { @turbo_event.set }
-      end
-
-      # Remember the latest top-level navigation response so
-      # `Driver#status_code` / `#response_headers` can answer it. Mirrors the
-      # capybara-playwright-driver page hook that captures
-      # `request.navigation_request?` (lib/capybara/playwright/page.rb#L33-L37);
-      # CDP normally signals "this is the main-document response" via
-      # `Network.responseReceived.type`, but Lightpanda omits that field on
-      # responses (only emits `type` on `Network.requestWillBeSent`). So we
-      # do the matching the long way: capture the document requestId from
-      # `requestWillBeSent {type: "Document"}`, then store the response whose
-      # `requestId` equals it. Re-installed per `create_page` so the new
-      # BrowserContext after `Driver#reset!` starts with a fresh slot.
-      #
-      # Caveat: sending `Network.disable` (e.g. through `driver.network.disable`)
-      # also silences this handler — they share the same CDP toggle.
-      def subscribe_to_navigation_response
-        @last_navigation_response = nil
-        @document_request_id = nil
-
-        on("Network.requestWillBeSent") do |params|
-          next unless params["type"] == "Document"
-
-          @document_request_id = params["requestId"]
-          @last_navigation_response = nil
-        end
-
-        on("Network.responseReceived") do |params|
-          next unless params["requestId"] == @document_request_id
-
-          @last_navigation_response = {
-            status: params.dig("response", "status"),
-            headers: params.dig("response", "headers") || {},
-          }
-        end
-
-        command("Network.enable")
       end
 
       # Track default-execution-context availability via Runtime events.
