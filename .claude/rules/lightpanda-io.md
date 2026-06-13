@@ -172,6 +172,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 ### Open Fix PRs (not yet merged)
 
 - **PR #2077**: `Target.attachToTarget` returns unique session id per call. Gem only calls `attachToTarget` once per page, so spec-compliance win only.
+- **PR #2739** (issue #2738, authored): implements `HTMLSelectElement.type` (`"select-one"`/`"select-multiple"`) and `HTMLOptionElement.label` — both returned `undefined`. `select.type === undefined` breaks Choices.js init (`_loadChoices` skips building `_presetChoices` → `_addPredefinedChoices(undefined).forEach` throws), failing 23 `<select>`-enhancement system tests in the real-app suite. Pure browser gap, no gem change; clears on publish. Repro + analysis: `script/real-app-coverage/findings/cluster-2-choices-js-select-type.md`.
 
 ### Upstream Open Issues That Affect This Gem
 
