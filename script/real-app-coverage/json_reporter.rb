@@ -19,7 +19,7 @@ require "minitest"
 require "json"
 
 module LightpandaCoverage
-  RESULTS = []
+  RESULTS = [] # rubocop:disable Style/MutableConstant -- the reporter accumulates into it across the run
   OUT = ENV.fetch("LIGHTPANDA_JSON_OUT", "lightpanda_results.json")
 
   def self.classify(result)
@@ -40,9 +40,9 @@ module LightpandaCoverage
   end
 end
 
-module Minitest
+module Minitest # rubocop:disable Style/OneClassPerFile -- deliberately reopens Minitest to hook the reporter
   class CompositeReporter
-    alias_method :__lightpanda_orig_record, :record
+    alias __lightpanda_orig_record record
 
     def record(result)
       LightpandaCoverage::RESULTS << {
@@ -70,8 +70,8 @@ Minitest.after_run do
       fail: counts["fail"],
       error: counts["error"],
       skip: counts["skip"],
-      browser_build: ENV["LIGHTPANDA_BUILD"],
-      gem_version: ENV["LIGHTPANDA_GEM_VERSION"],
+      browser_build: ENV.fetch("LIGHTPANDA_BUILD", nil),
+      gem_version: ENV.fetch("LIGHTPANDA_GEM_VERSION", nil),
     },
     results: LightpandaCoverage::RESULTS.sort_by { |r| [r[:klass], r[:name]] },
   }
