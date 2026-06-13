@@ -14,6 +14,7 @@ module Capybara
         enter: { key: "Enter", code: "Enter", keyCode: 13, text: "\r" },
         shift: { key: "Shift", code: "ShiftLeft", keyCode: 16 },
         control: { key: "Control", code: "ControlLeft", keyCode: 17 },
+        ctrl: { key: "Control", code: "ControlLeft", keyCode: 17 },
         alt: { key: "Alt", code: "AltLeft", keyCode: 18 },
         pause: { key: "Pause", code: "Pause", keyCode: 19 },
         escape: { key: "Escape", code: "Escape", keyCode: 27 },
@@ -120,12 +121,14 @@ module Capybara
       def press_modifier(mod, active_mods)
         return if active_mods.include?(mod)
 
-        send_key_event("keyDown", KEYS[mod])
+        # key_definition (not KEYS[mod]) so a MODIFIERS entry missing its
+        # KEYS counterpart fails as ArgumentError, not NoMethodError on nil.
+        send_key_event("keyDown", key_definition(mod))
         active_mods << mod
       end
 
       def release_modifiers(active_mods)
-        active_mods.reverse_each { |m| send_key_event("keyUp", KEYS[m]) }
+        active_mods.reverse_each { |m| send_key_event("keyUp", key_definition(m)) }
         active_mods.clear
       end
 
@@ -133,7 +136,7 @@ module Capybara
         return dispatch_key(key) if active_mods.empty?
 
         modifier_value = active_mods.sum { |m| MODIFIERS[m] }
-        dispatch_modified(key, modifier_value, active_mods)
+        raw_dispatch(key_definition(key), modifiers: modifier_value)
       end
 
       def dispatch_char_with_mods(char, active_mods)
@@ -144,37 +147,38 @@ module Capybara
       end
 
       def dispatch_key(key)
-        definition = KEYS.fetch(key) { raise ArgumentError, "Unknown key: #{key.inspect}" }
-        raw_dispatch(definition)
+        raw_dispatch(key_definition(key))
       end
 
       def dispatch_char(char)
         @browser.page_command("Input.insertText", text: char)
       end
 
+      # An array groups modifiers with the keys they modify —
+      # `send_keys([:ctrl, "a"])` — scoped to the array instead of the rest
+      # of the call. Same press/dispatch/release machinery as held modifiers.
       def type_with_modifiers(keys)
-        modifiers, chars = keys.partition { |k| k.is_a?(Symbol) && MODIFIERS.key?(k) }
-        modifier_value = modifiers.sum { |m| MODIFIERS[m] }
+        modifiers, rest = keys.partition { |k| k.is_a?(Symbol) && MODIFIERS.key?(k) }
 
-        modifiers.each { |m| send_key_event("keyDown", KEYS[m]) }
-        chars.each { |key| dispatch_modified(key, modifier_value, modifiers) }
-        modifiers.reverse_each { |m| send_key_event("keyUp", KEYS[m]) }
-      end
-
-      def dispatch_modified(key, modifier_value, modifiers)
-        case key
-        when Symbol
-          definition = KEYS.fetch(key) { raise ArgumentError, "Unknown key: #{key.inspect}" }
-          raw_dispatch(definition, modifiers: modifier_value)
-        when String
-          key.each_char { |char| dispatch_modified_char(char, modifier_value, modifiers) }
+        active_mods = []
+        modifiers.each { |m| press_modifier(m, active_mods) }
+        rest.each do |key|
+          case key
+          when Symbol then dispatch_key_with_mods(key, active_mods)
+          when String then key.each_char { |char| dispatch_char_with_mods(char, active_mods) }
+          end
         end
+        release_modifiers(active_mods)
       end
 
       def dispatch_modified_char(char, modifier_value, modifiers)
         text = modifiers.include?(:shift) ? self.class.shifted(char) : char
         send_key_event("keyDown", { key: text, text: text, unmodifiedText: char }, modifiers: modifier_value)
         send_key_event("keyUp", { key: text }, modifiers: modifier_value)
+      end
+
+      def key_definition(key)
+        KEYS.fetch(key) { raise ArgumentError, "Unknown key: #{key.inspect}" }
       end
 
       def raw_dispatch(definition, modifiers: 0)
