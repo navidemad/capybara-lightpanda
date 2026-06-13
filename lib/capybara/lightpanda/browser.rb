@@ -346,10 +346,7 @@ module Capybara
         if args.empty?
           response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true,
                                                       replMode: true)
-          if response["exceptionDetails"]
-            debug_js_failure("evaluate", expression, response)
-            raise JavaScriptError, response
-          end
+          raise_on_js_error!("evaluate", expression, response)
 
           return unwrap_call_result(response["result"])
         end
@@ -369,16 +366,22 @@ module Capybara
         if args.empty?
           response = page_command("Runtime.evaluate", expression: expression, returnByValue: false,
                                                       awaitPromise: false, replMode: true)
-          if response["exceptionDetails"]
-            debug_js_failure("execute", expression, response)
-            raise JavaScriptError, response
-          end
+          raise_on_js_error!("execute", expression, response)
           return nil
         end
 
         wrapped = "function() { #{expression} }"
         call_with_args(wrapped, args, return_by_value: false)
         nil
+      end
+
+      # Single home for the exceptionDetails check on Runtime responses:
+      # optional LIGHTPANDA_DEBUG dump, then JavaScriptError.
+      def raise_on_js_error!(site, expression, response)
+        return unless response["exceptionDetails"]
+
+        debug_js_failure(site, expression, response)
+        raise JavaScriptError, response
       end
 
       # When LIGHTPANDA_DEBUG=1 is set, log the JS expression and full CDP
@@ -414,10 +417,7 @@ module Capybara
       # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
       def evaluate_with_ref(expression)
         response = page_command("Runtime.evaluate", expression: expression, returnByValue: false, awaitPromise: true)
-        if response["exceptionDetails"]
-          debug_js_failure("evaluate_with_ref", expression, response)
-          raise JavaScriptError, response
-        end
+        raise_on_js_error!("evaluate_with_ref", expression, response)
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -437,10 +437,7 @@ module Capybara
         params[:arguments] = args.map { |a| serialize_argument(a) } unless args.empty?
 
         response = page_command("Runtime.callFunctionOn", **params)
-        if response["exceptionDetails"]
-          debug_js_failure("call_function_on", function_declaration, response)
-          raise JavaScriptError, response
-        end
+        raise_on_js_error!("call_function_on", function_declaration, response)
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -747,10 +744,13 @@ module Capybara
       # the same purpose; a plain prefixed string keeps our inline JS simple.
       INVALID_SELECTOR_MARKER = "LIGHTPANDA_INVALID_SELECTOR:"
 
-      # JS function for finding elements within a node.
-      # Works in any execution context (top frame or iframe). For CSS, any
-      # throw from querySelectorAll means the selector is malformed
-      # (re-throw with the marker prefix so Ruby converts to InvalidSelector).
+      # The find algorithms exist in three dispatch contexts — element-scoped
+      # (FIND_WITHIN_JS), iframe-scoped (FIND_IN_FRAME_JS), and document-scoped
+      # (find_in_document's Runtime.evaluate fast path) — that differ only in
+      # how the document/root/selector expressions are derived. Each algorithm
+      # is defined ONCE here and instantiated per context via format(), so a
+      # fix (e.g. a new XPath error case) can't silently miss a copy.
+      #
       # XPath routes through native `Document.evaluate` + `XPathResult`
       # (Lightpanda PR #2305, in nightly >=6109); on parse error we return
       # [] silently to match Capybara's internal XPath generator, which
@@ -759,18 +759,32 @@ module Capybara
       # as "not found" rather than raise InvalidSelector.
       # `XPathResult.ORDERED_NODE_SNAPSHOT_TYPE` is `7` in the spec — inlined
       # so the JS doesn't depend on the enum being defined as a constant.
+      XPATH_FIND_FRAGMENT = <<~JS
+        try {
+          var r = %<doc>s.evaluate(%<selector>s, %<root>s, null, 7, null);
+          var nodes = [];
+          for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
+          return nodes;
+        } catch(e) { return []; }
+      JS
+
+      # For CSS, any throw from querySelectorAll means the selector is
+      # malformed — re-throw with the marker prefix so Ruby converts to
+      # InvalidSelector.
+      CSS_FIND_FRAGMENT = <<~JS.freeze
+        try { return Array.from(%<target>s.querySelectorAll(%<selector>s)); }
+        catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + %<selector>s); }
+      JS
+      private_constant :XPATH_FIND_FRAGMENT, :CSS_FIND_FRAGMENT
+
+      # JS function for finding elements within a node.
+      # Works in any execution context (top frame or iframe).
       FIND_WITHIN_JS = <<~JS.freeze
         function(method, selector) {
           if (method === 'xpath') {
-            try {
-              var r = this.ownerDocument.evaluate(selector, this, null, 7, null);
-              var nodes = [];
-              for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
-              return nodes;
-            } catch(e) { return []; }
+            #{format(XPATH_FIND_FRAGMENT, doc: 'this.ownerDocument', root: 'this', selector: 'selector')}
           }
-          try { return Array.from(this.querySelectorAll(selector)); }
-          catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
+          #{format(CSS_FIND_FRAGMENT, target: 'this', selector: 'selector')}
         }
       JS
       private_constant :FIND_WITHIN_JS
@@ -782,15 +796,9 @@ module Capybara
           try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
           if (!doc) return [];
           if (method === 'xpath') {
-            try {
-              var r = doc.evaluate(selector, doc, null, 7, null);
-              var nodes = [];
-              for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
-              return nodes;
-            } catch(e) { return []; }
+            #{format(XPATH_FIND_FRAGMENT, doc: 'doc', root: 'doc', selector: 'selector')}
           }
-          try { return Array.from(doc.querySelectorAll(selector)); }
-          catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + selector); }
+          #{format(CSS_FIND_FRAGMENT, target: 'doc', selector: 'selector')}
         }
       JS
       private_constant :FIND_IN_FRAME_JS
@@ -817,28 +825,15 @@ module Capybara
           # through) to a string before quoting. Symbol#inspect returns `:p`,
           # which would inject a bare token into the JS source.
           selector_literal = selector.to_s.inspect
-          # XPath parse errors return [] silently to match Capybara's expected
-          # "not found" behavior (see FIND_WITHIN_JS comment above for why).
-          js = if method == "xpath"
-                 <<~XPATH_FIND
-                   (function() {
-                     try {
-                       var r = document.evaluate(#{selector_literal}, document, null, 7, null);
-                       var nodes = [];
-                       for (var i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
-                       return nodes;
-                     } catch(e) { return []; }
-                   })()
-                 XPATH_FIND
-               else
-                 <<~CSS_FIND
-                   (function() {
-                     try { return Array.from(document.querySelectorAll(#{selector_literal})); }
-                     catch(e) { throw new Error('#{INVALID_SELECTOR_MARKER}' + #{selector_literal}); }
-                   })()
-                 CSS_FIND
-               end
-          result = evaluate_with_ref(js)
+          # Same fragments as FIND_WITHIN_JS/FIND_IN_FRAME_JS, instantiated
+          # with the selector embedded as a literal: this hot path keeps its
+          # single Runtime.evaluate round-trip (no document-handle resolution).
+          fragment = if method == "xpath"
+                       format(XPATH_FIND_FRAGMENT, doc: "document", root: "document", selector: selector_literal)
+                     else
+                       format(CSS_FIND_FRAGMENT, target: "document", selector: selector_literal)
+                     end
+          result = evaluate_with_ref("(function() { #{fragment} })()")
           extract_node_object_ids(result)
         end
       rescue JavaScriptError => e
@@ -897,7 +892,7 @@ module Capybara
         on("Runtime.consoleAPICalled") do |params|
           params["args"]&.each do |r|
             value = r["value"]
-            next if value.is_a?(String) && value.start_with?(TURBO_SENTINEL_PREFIX)
+            next if turbo_sentinel?(value)
 
             logger.puts(value)
           end
@@ -906,6 +901,13 @@ module Capybara
 
       TURBO_SENTINEL_PREFIX = "__lightpanda_turbo_"
       private_constant :TURBO_SENTINEL_PREFIX
+
+      # The Turbo activity tracker signals busy/idle via console.debug
+      # sentinels (see subscribe_to_turbo_signals); every consoleAPICalled
+      # consumer must filter them out of user-facing output.
+      def turbo_sentinel?(value)
+        value.is_a?(String) && value.start_with?(TURBO_SENTINEL_PREFIX)
+      end
 
       # Oldest entries are dropped past this cap so a chatty page can't grow
       # the buffer unbounded across a long session.
@@ -921,7 +923,7 @@ module Capybara
           next unless args.is_a?(Array)
 
           first = args.first&.dig("value")
-          next if first.is_a?(String) && first.start_with?(TURBO_SENTINEL_PREFIX)
+          next if turbo_sentinel?(first)
 
           entry = {
             type: params["type"],
@@ -950,7 +952,7 @@ module Capybara
           next unless params["args"].is_a?(Array)
 
           marker = params["args"].first&.dig("value")
-          next unless marker.is_a?(String) && marker.start_with?(TURBO_SENTINEL_PREFIX)
+          next unless turbo_sentinel?(marker)
 
           case marker
           when "#{TURBO_SENTINEL_PREFIX}busy" then @turbo_event.reset
@@ -1026,11 +1028,9 @@ module Capybara
         end
       end
 
-      def handle_evaluate_response(response)
-        if response["exceptionDetails"]
-          debug_js_failure("handle_evaluate_response", "(unknown — already-issued call)", response)
-          raise JavaScriptError, response
-        end
+      # Extract the by-value result of an already-issued Runtime call.
+      def handle_evaluate_response(response, expression)
+        raise_on_js_error!("handle_evaluate_response", expression, response)
 
         result = response["result"]
         return nil if result["type"] == "undefined"
@@ -1056,12 +1056,11 @@ module Capybara
           arguments: args.map { |a| serialize_argument(a) },
         }
         response = page_command("Runtime.callFunctionOn", **params)
-        if response["exceptionDetails"]
-          debug_js_failure("call_with_args", function_declaration, response)
-          raise JavaScriptError, response
-        end
+        raise_on_js_error!("call_with_args", function_declaration, response)
 
-        return_by_value ? handle_evaluate_response(response) : unwrap_call_result(response["result"])
+        return unwrap_call_result(response["result"]) unless return_by_value
+
+        handle_evaluate_response(response, function_declaration)
       ensure
         release_object(doc_oid) if doc_oid
       end
@@ -1100,7 +1099,7 @@ module Capybara
           functionDeclaration: "function() { return this }",
           returnByValue: true
         )
-        handle_evaluate_response(json)
+        handle_evaluate_response(json, "function() { return this }")
       ensure
         release_object(object_id)
       end
