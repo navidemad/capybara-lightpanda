@@ -16,3 +16,5 @@
 .zig-cache/
 node_modules/
 .claude/skills/sync-upstream/state/last-sync.md
+# Real-app system-coverage run artifacts (scripts are tracked, results are not)
+/script/real-app-coverage/results/
