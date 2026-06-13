@@ -10,7 +10,7 @@ module Capybara
 
       attr_reader :app, :options
 
-      delegate %i[current_url title status_code response_headers] => :browser
+      delegate %i[current_url title status_code response_headers frame_url frame_title] => :browser
 
       def initialize(app, options = {})
         super()
@@ -26,9 +26,7 @@ module Capybara
       end
 
       def browser_alive?
-        @browser.client && !@browser.client.closed?
-      rescue StandardError
-        false
+        !@browser.nil? && @browser.alive?
       end
 
       # Escape hatch to the underlying Browser for callers that need raw CDP
@@ -160,42 +158,20 @@ module Capybara
         end
       end
 
-      # Capybara::Driver::Base falls back to running these via the top
-      # execution context, which always reports the parent document. Resolve
-      # them through the iframe element's contentWindow / contentDocument so
-      # they reflect the active frame.
-      def frame_url
-        frame = browser.frame_stack.last
-        return browser.current_url unless frame
-
-        browser.call_function_on(frame.remote_object_id,
-                                 "function() { return this.contentWindow.location.href }")
-      end
-
-      def frame_title
-        frame = browser.frame_stack.last
-        return browser.title unless frame
-
-        browser.call_function_on(frame.remote_object_id,
-                                 "function() { return this.contentDocument.title }")
-      end
-
       # -- Modal/Dialog Support --
 
+      # find_modal owns the wait default (browser.options.timeout) — pass
+      # wait only when the caller overrode it.
       def accept_modal(type, **options, &block)
         browser.accept_modal(type, text: options[:with])
         block&.call
-        browser.find_modal(type,
-                           text: options[:text],
-                           wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type, **{ text: options[:text], wait: options[:wait] }.compact)
       end
 
       def dismiss_modal(type, **options, &block)
         browser.dismiss_modal(type)
         block&.call
-        browser.find_modal(type,
-                           text: options[:text],
-                           wait: options.fetch(:wait, browser.options.timeout))
+        browser.find_modal(type, **{ text: options[:text], wait: options[:wait] }.compact)
       end
 
       # -- Screenshots --
@@ -315,14 +291,15 @@ module Capybara
       end
 
       # Walk through evaluate-script results turning DOM-node markers (the
-      # `{ "__lightpanda_node__" => "..." }` hashes produced by `Browser#unwrap_call_result`)
-      # into Lightpanda::Node instances so Capybara can wrap them as elements.
+      # `{ Browser::NODE_MARKER => "..." }` hashes produced by
+      # `Browser#unwrap_call_result`) into Lightpanda::Node instances so
+      # Capybara can wrap them as elements.
       def unwrap_script_result(value)
         case value
         when Array then value.map { |v| unwrap_script_result(v) }
         when Hash
-          if value.size == 1 && value.key?("__lightpanda_node__")
-            Node.new(self, value["__lightpanda_node__"])
+          if value.size == 1 && value.key?(Browser::NODE_MARKER)
+            Node.new(self, value[Browser::NODE_MARKER])
           else
             value.transform_values { |v| unwrap_script_result(v) }
           end

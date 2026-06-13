@@ -11,6 +11,11 @@ module Capybara
 
       delegate %i[on off] => :client
 
+      # Sentinel key marking a serialized DOM node in JS-result payloads.
+      # Produced by #unwrap_call_result / #serialize_remote_array, consumed by
+      # Driver#unwrap_script_result, which wraps the objectId in a Node.
+      NODE_MARKER = "__lightpanda_node__"
+
       # --- Live-browser registry: clean teardown at process exit --------------
       # Capybara's per-test reset (Driver#reset!) disposes only the
       # BrowserContext and keeps the process + CDP connection alive, so a
@@ -184,6 +189,14 @@ module Capybara
         # flip @enabled back to false — otherwise the next #enable
         # short-circuits and traffic tracking is silently dead.
         @network&.reset
+      end
+
+      # Liveness of the CDP transport. Driver#browser checks this to decide
+      # whether to respawn a dead browser.
+      def alive?
+        !client.nil? && !client.closed?
+      rescue StandardError
+        false
       end
 
       def quit
@@ -621,6 +634,28 @@ module Capybara
         @frame_stack.clear
       end
 
+      # Capybara::Driver::Base resolves frame_url/frame_title via the top
+      # execution context, which always reports the parent document. Resolve
+      # them through the iframe element's contentWindow / contentDocument so
+      # they reflect the active frame.
+      def frame_url
+        frame = frame_stack.last
+        return current_url unless frame
+
+        call_function_on(frame.remote_object_id, FRAME_URL_JS)
+      end
+
+      def frame_title
+        frame = frame_stack.last
+        return title unless frame
+
+        call_function_on(frame.remote_object_id, FRAME_TITLE_JS)
+      end
+
+      FRAME_URL_JS = "function() { return this.contentWindow.location.href }"
+      FRAME_TITLE_JS = "function() { return this.contentDocument.title }"
+      private_constant :FRAME_URL_JS, :FRAME_TITLE_JS
+
       # -- Modal/Dialog Support --
       # Lightpanda's JS dialogs (alert/confirm/prompt) are driven via the
       # `LP.handleJavaScriptDialog` pre-arm model (PR #2261, nightly ≥5900):
@@ -1045,7 +1080,7 @@ module Capybara
 
         object_id = result["objectId"]
         if object_id
-          return { "__lightpanda_node__" => object_id } if result["subtype"] == "node"
+          return { NODE_MARKER => object_id } if result["subtype"] == "node"
           return serialize_remote_array(object_id) if result["subtype"] == "array"
           return serialize_remote_object(object_id) if result["type"] == "object"
 
