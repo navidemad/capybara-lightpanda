@@ -172,7 +172,6 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 ### Open Fix PRs (not yet merged)
 
 - **PR #2077**: `Target.attachToTarget` returns unique session id per call. Gem only calls `attachToTarget` once per page, so spec-compliance win only.
-- **PR #2739** (issue #2738, authored): implements `HTMLSelectElement.type` (`"select-one"`/`"select-multiple"`) and `HTMLOptionElement.label` — both returned `undefined`. `select.type === undefined` breaks Choices.js init (`_loadChoices` skips building `_presetChoices` → `_addPredefinedChoices(undefined).forEach` throws), failing 23 `<select>`-enhancement system tests in the real-app suite. Pure browser gap, no gem change; clears on publish. Repro + analysis: `script/real-app-coverage/findings/cluster-2-choices-js-select-type.md`.
 
 ### Upstream Open Issues That Affect This Gem
 
@@ -184,6 +183,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 | #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed; SharedWorker still missing and many Worker APIs still unimplemented. |
 | #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only; trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect). Not gem-relevant — gem tests don't load Worker-heavy pages. Watch only. |
 | #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory. Not gem-relevant — `Driver#reset!` disposes the BrowserContext per spec. A very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. |
+| #2718 | Visibility | `@layer` block rules dropped from the cascade → `el.checkVisibility()` reports Tailwind v4 elements hidden via an `@layer` `display:none` as visible, so `_lightpanda.isVisible` (predicates.js, ends in `checkVisibility()`) false-positives and Capybara may act on unseen elements. Authored fix PR #2719 open. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.
 
