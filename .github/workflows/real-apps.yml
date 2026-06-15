@@ -486,7 +486,7 @@ jobs:
       # dir, preserving the per-artifact subdirectory the aggregator globs for
       # (rspec-report-<target>/rspec-report.json).
       - name: Download rspec reports
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: rspec-report-*
           path: reports
