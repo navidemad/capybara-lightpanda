@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.0] - 2026-06-18
 
 ### Fixed
 
@@ -11,19 +11,19 @@
 
 ### Changed
 
-- `Browser` is now composed of include-modules (`Browser::Runtime` / `Finder` / `Navigation` / `Modals` / `Console` under `lib/capybara/lightpanda/browser/`) — pure code motion, public API unchanged (verified method-for-method by reflection).
+- `Browser` is now composed of include-modules (`Browser::Runtime` / `Finder` / `Navigation` / `Modals` / `Console`) — pure code motion, public API unchanged (verified method-for-method by reflection).
 - The Network CDP domain has a single owner: `Network` captures the navigation response behind `Browser#status_code` / `#response_headers`, and traffic tracking is always on (cleared per `reset`, ferrum parity). `driver.network.disable` now visibly owns the caveat that it freezes status tracking.
 - Port-in-use recovery dispatches on a typed `PortInUseError` (subclass of `ProcessTimeoutError`, so existing rescues keep working) instead of matching the error message; HTTP download failures raise `BinaryError` instead of `BinaryNotFoundError`.
 - `Driver#reset!` rescues the gem's error hierarchy (plus `SystemCallError`/`IOError`) instead of `StandardError`, and warns on respawn — programmer errors no longer degrade into a silent browser restart per test.
 - `Node#shadow_root` routes through the guarded `#call` path: reading the shadow root of a detached host now raises `ObsoleteNode` (handled by Capybara's `automatic_reload`) instead of silently returning stale content.
 - Arrays without modifier symbols passed to `send_keys` now type via `insertText`, consistent with plain strings (previously synthesized per-char keyDown/keyUp).
 
-- No-args `evaluate_script` / `execute_script` send the expression with `replMode: true` (DevTools-console REPL semantics) instead of wrapping it in an IIFE. Top-level `const`/`let` can now be redeclared across calls *and* state persists between calls, matching what users see in the Chrome console. The old IIFE existed for a misdiagnosed upstream bug: Chrome throws the exact same redeclaration `SyntaxError` without `replMode` — spec behavior, not a Lightpanda bug (UPSTREAM_BUGS.md Bug #10, retracted). JS exceptions still raise `JavaScriptError`.
+- No-args `evaluate_script` / `execute_script` send the expression with `replMode: true` (DevTools-console REPL semantics) instead of wrapping it in an IIFE. Top-level `const`/`let` can now be redeclared across calls *and* state persists between calls, matching what users see in the Chrome console. JS exceptions still raise `JavaScriptError`.
 
 ### Removed
 
-- Dead internal API swept (pre-1.0 cleanup; none of these had a caller or documented use): `Binary.run` / `.exec` / `.fetch` / `.version` / `.path` and the `Binary::Result` struct (rake tasks and `Process` only use `update` / `remove` / `current_version` / `install_path` / `update_hint`); `Browser#document_node_id`; `Client#ws_url` / `#options` readers; `WebSocket#open?`. Cuprite/Ferrum drop-in surface is deliberately KEPT and now documented as such: `Options#window_size` / `#headless` (accepted, inert — no rendering engine) and the never-raised error classes `MouseEventFailed` / `NoSuchPageError` / `StatusError` (peer-taxonomy mirrors so migrated rescue lists keep loading).
-- UPSTREAM_BUGS.md Bug #9 (`requestSubmit()` threw when a listener canceled the SubmitEvent) retired: fixed upstream, verified on nightly 6736 — the build already required by this gem. Contract tests now pin both retired bugs in `test/features/upstream_bugs_test.rb`.
+- Dead internal API swept (pre-1.0 cleanup; none had a caller or documented use): `Binary.run` / `.exec` / `.fetch` / `.version` / `.path` and the `Binary::Result` struct; `Browser#document_node_id`; `Client#ws_url` / `#options` readers; `WebSocket#open?`. Cuprite/Ferrum drop-in surface is deliberately KEPT and documented: `Options#window_size` / `#headless` (accepted, inert) and the never-raised `MouseEventFailed` / `NoSuchPageError` / `StatusError` (peer-taxonomy mirrors so migrated rescue lists keep loading).
+- UPSTREAM_BUGS.md Bug #9 (`requestSubmit()` threw when a listener canceled the SubmitEvent) retired: fixed upstream, verified on the nightly this gem already requires. Contract tests pin both retired bugs in `test/features/upstream_bugs_test.rb`.
 
 ## [0.8.0] - 2026-06-12
 
