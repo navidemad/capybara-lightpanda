@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-06-14 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `e0e532ce` — no new commits since the 2026-06-13 review; HEAD is still #587, a Chrome-specific `Node#click` refactor our click deliberately diverges from. Outstanding/Diverged entries below stay valid.
+**Last reviewed**: 2026-06-17 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `e0e532ce` — no new commits since the 2026-06-14 review; HEAD is still #587, a Chrome-specific `Node#click` refactor our click deliberately diverges from. Outstanding/Diverged entries below stay valid.
 
 ### Adopted
 
@@ -49,7 +49,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-06-14 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — no new commits since the 2026-06-13 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted; `drag_to`/`drag_by` stay Diverged (Lightpanda has no coordinates) and the gem's own `Node#drop` is recorded under Diverged on purpose.
+**Last reviewed**: 2026-06-17 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — no new commits since the 2026-06-14 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted; `drag_to`/`drag_by` stay Diverged (Lightpanda has no coordinates) and the gem's own `Node#drop` is recorded under Diverged on purpose.
 
 ### Adopted
 
