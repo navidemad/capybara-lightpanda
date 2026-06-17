@@ -24,12 +24,13 @@ describe "Capybara::Lightpanda::Browser#console_logs" do
   it "captures type, joined text, and timestamp per console call" do
     visit_fixture_and_wait
 
-    # Lightpanda reports console.log AND console.warn as type "info"
-    # (webapi/Console.zig dispatches both as .info; Chrome's CDP would say
-    # "log" / "warning"). Assert the actual contract — entries keyed by text.
+    # Lightpanda reports each console.* call with its own CDP type since
+    # upstream #2731 (console.log → "log"); older nightlies collapsed
+    # console.log/console.warn to "info". Assert the actual contract —
+    # entries keyed by text.
     log = browser.console_logs.find { |m| m[:text].start_with?("hello") }
     refute_nil log, "console.log entry not captured: #{browser.console_logs.inspect}"
-    assert_equal "info", log[:type]
+    assert_equal "log", log[:type]
     # Falsy args must survive the text join (no `||` short-circuit).
     assert_equal "hello 42 false", log[:text]
     assert_kind_of Numeric, log[:timestamp]
