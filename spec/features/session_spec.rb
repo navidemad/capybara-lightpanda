@@ -20,7 +20,12 @@ Capybara::SpecHelper.run_specs(
   #   :hover             — no real layout for hover positioning.
   #   :spatial           — `find(above:|below:|near:)` needs real geometry.
   #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
-  #   :download          — no file download support.
+  #   :download          — downloads ARE supported (Browser.setDownloadBehavior,
+  #                        PR #2722), but only for `Content-Disposition: attachment`
+  #                        responses. Capybara's fixture serves text/csv with no
+  #                        such header (MIME-triggered), which Lightpanda renders
+  #                        rather than downloads — so this spec can't pass. The
+  #                        real path is covered by test/features/download_test.rb.
   #   :active_element    — Tab-key focus traversal isn't implemented, and
   #                        `el.click()` doesn't focus form controls the way
   #                        a native mouse click does, so `:focused` filters

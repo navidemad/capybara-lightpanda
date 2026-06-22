@@ -97,9 +97,19 @@ module Capybara
       # merged 2026-06-12) made the index.js readystatechange re-dispatch
       # shim redundant, so it was removed — on builds without #2708 Turbo's
       # PageObserver never reaches pageLoaded() and turbo:load never fires.
-      # Build 6736 = first published nightly carrying the #2708 merge — now
-      # the binding floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("6736")
+      # Build 6736 carried the #2708 merge.
+      # PR #2722 (Browser.setDownloadBehavior streams Content-Disposition:
+      # attachment responses to disk under downloadPath + emits
+      # Browser.downloadWillBegin / downloadProgress, merged 2026-06-19) backs
+      # the Downloads tracker (downloads.rb) wired in Browser#create_page. On
+      # builds < 7545 setDownloadBehavior is a bare success no-op — every
+      # download would silently never be written to disk — so the floor MUST
+      # include it. Note Lightpanda triggers downloads on Content-Disposition:
+      # attachment, NOT by MIME type (a text/csv response without that header
+      # is rendered as a normal navigation), which is why Capybara's
+      # MIME-triggered :download shared spec stays in capybara_skip.
+      # Build 7545 = the #2722 merge (a808386c) — now the binding floor.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("7545")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

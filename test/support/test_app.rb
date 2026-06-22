@@ -804,4 +804,27 @@ class TestApp
       </html>
     HTML
   end
+
+  # -- Download page --
+  # A link to an attachment response. Unlike Capybara's own /download.csv
+  # (text/csv with NO Content-Disposition, which Lightpanda renders rather than
+  # downloads), /lightpanda/report.csv sends `Content-Disposition: attachment`,
+  # which is what Lightpanda's Browser.setDownloadBehavior keys off (PR #2722).
+  get "/lightpanda/download_page" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Download Page</title></head>
+        <body>
+          <a id="dl" href="/lightpanda/report.csv" download>Download report</a>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/report.csv" do
+    content_type "text/csv"
+    attachment "report.csv"
+    "name,score\nlightpanda,100\n"
+  end
 end
