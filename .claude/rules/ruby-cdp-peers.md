@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-06-17 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `e0e532ce` — no new commits since the 2026-06-14 review; HEAD is still #587, a Chrome-specific `Node#click` refactor our click deliberately diverges from. Outstanding/Diverged entries below stay valid.
+**Last reviewed**: 2026-06-22 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `e0e532ce` — unchanged since the 2026-06-17 review (still #587, the Chrome-specific `Node#click` refactor our click deliberately diverges from). Outstanding/Diverged entries below stay valid.
 
 ### Adopted
 
@@ -26,11 +26,12 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 - **`Cookies` includes `Enumerable`** — `lib/ferrum/cookies.rb` ↔ `lib/capybara/lightpanda/cookies.rb`. `each` yields `Cookie` objects so callers can do `cookies.find`, `cookies.select`, `cookies.to_a` without going through `#all` first. We deliberately keep `#all` returning `Array<Cookie>` rather than ferrum's Hash-by-name shape.
 - **`Subscriber` callback isolation** — informal ferrum convention (its `Frame::DOM` callbacks rescue locally to keep the message thread alive) ↔ `lib/capybara/lightpanda/client/subscriber.rb#dispatch`. Per-callback rescue + `on_error:` hook. Critical because `Client#start_message_thread` sets `Thread.current.abort_on_exception = true` — a single raising handler would otherwise tear down the entire CDP connection.
 - **`Network#idle?` / `pending_connections` / `wait_for_idle!`** — `lib/ferrum/network.rb` ↔ `lib/capybara/lightpanda/network.rb`. Predicate (`idle?(connections = 0)`), public pending count, and bang-version of `wait_for_idle` that raises `Capybara::Lightpanda::TimeoutError` on timeout. All thin wrappers over the existing `@traffic` array so callers can express idle-as-precondition without a manual `or raise` dance. Refactored `wait_for_idle` to use `idle?` internally for consistency.
+- **Promise-aware `evaluate` / `execute` / `evaluate_async` family** — `lib/ferrum/frame/runtime.rb` ↔ `lib/capybara/lightpanda/browser/runtime.rb`. Ferrum's split — raw-expression vs. function-declaration wrapping, plus `awaitPromise: true` for async — is mirrored: `evaluate`/`call_function_on`/`call_with_args` all pass `awaitPromise: true`, and `evaluate_async` wraps the user script in a `Promise` with a `setTimeout` reject so Capybara's `evaluate_async_script` contract works. We deliberately DON'T pass `Node` args through `DOM.resolveNode` (Ferrum's step c) — `serialize_argument` binds them as raw `{objectId:}` instead (simpler; same effect for callFunctionOn).
+- **`Downloads` tracker** — `lib/ferrum/downloads.rb` ↔ `lib/capybara/lightpanda/downloads.rb`. `set_behavior(save_path:, behavior:)` → `enable(save_path)` (`Browser.setDownloadBehavior`), `files`, and a blocking `wait`. Lightpanda streams `Content-Disposition: attachment` responses to disk (PR #2722, build ≥7545); we mirror Network's subscribe/reset lifecycle (downloadWillBegin/downloadProgress) and expose `Driver#downloads` / `#wait_for_download`. Our `wait` adds a begin-grace the ferrum version doesn't need (the triggering click's wait_for_idle returns before downloadWillBegin is processed).
 
 ### Outstanding adoption candidates
 
 - **[tiny] `Node#exists?` predicate** — `lib/ferrum/node.rb` ↔ our `Node`. We raise `ObsoleteNode` from `ensure_connected`; a quiet `exists?` check (returns boolean instead of raising) is a small ergonomic win.
-- **[medium] Frame `Runtime#evaluate` / `evaluate_async` / `execute` / `evaluate_func` / `evaluate_on` family** — `lib/ferrum/frame/runtime.rb` ↔ our `Node#call` + ad-hoc `Browser#call_function_on`. Ferrum's split (a) wraps raw expressions vs. function declarations consistently, (b) supports `awaitPromise: true` for async evaluation, (c) passes `Node` arguments through `DOM.resolveNode`. Worth at least pulling the `evaluate_async` shape — we don't currently have Promise-aware evaluation. Caveat: Lightpanda's `Runtime.evaluate` is shaky after navigation (issue #2187), so any async path needs the retry helper above.
 - **[tiny] `Network::Exchange` typed wrapper** — `lib/ferrum/network/exchange.rb` ↔ would replace the loose `{request_id:, url:, method:, response: …}` hashes in our `Network#traffic`. Ferrum exposes `request`, `response`, `finished?`, `blob?`, `loader_id`, `unknown` predicates. Useful when callers want to inspect failed/pending requests; currently they have to peek into the raw hash shape.
 
 ### Diverged on purpose
@@ -49,7 +50,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-06-17 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — no new commits since the 2026-06-14 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted; `drag_to`/`drag_by` stay Diverged (Lightpanda has no coordinates) and the gem's own `Node#drop` is recorded under Diverged on purpose.
+**Last reviewed**: 2026-06-22 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `88456ed1` (2026-05-08, #295) — unchanged since the 2026-06-17 review. Recent Cuprite features (rect, shadow_root, time inputs, focus-before-value, obscured?, datetime-local, month/week, parents) all remain adopted; `drag_to`/`drag_by` stay Diverged (Lightpanda has no coordinates) and the gem's own `Node#drop` is recorded under Diverged on purpose.
 
 ### Adopted
 

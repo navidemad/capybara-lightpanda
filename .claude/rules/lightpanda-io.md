@@ -27,13 +27,13 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
-| **Emulation** | emulation.zig | Viewport/device emulation stubs; `setUserAgentOverride` works |
+| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` sets `window.innerWidth`/`innerHeight` since PR #2664 (merged 2026-06-22, first nightly after); other device-emulation params still stubbed |
 | **Fetch** | fetch.zig | Network interception: `enable`, `disable`, `continueRequest`, `failRequest`, `fulfillRequest`, `continueWithAuth`; events: `requestPaused`, `authRequired` |
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe and/or worker loading; params `{subFrame, worker}`) |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. A custom `User-Agent` set via `setExtraHTTPHeaders` (the gem's `Network#headers=` path) is honored since PR #2735 — but `validateUserAgent` still rejects `Mozilla`-containing UAs, so realistic browser-UA spoofing stays blocked on every path. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. |
 | **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
@@ -63,6 +63,8 @@ Network.deleteCookies        Network.clearBrowserCookies
 Network.enable               Network.disable
 Network.setExtraHTTPHeaders  Network.requestWillBeSent (event)
 Network.responseReceived (event)
+Browser.setDownloadBehavior  Browser.downloadWillBegin (event)
+Browser.downloadProgress (event)
 LP.handleJavaScriptDialog
 ```
 
@@ -105,6 +107,9 @@ Target.closeTarget           Target.getBrowserContexts
 Target.getTargets            Target.getTargetInfo        Target.setAutoAttach
 Target.setDiscoverTargets (stub)  Target.activateTarget (stub)
 Target.attachToBrowserTarget Target.detachFromTarget     Target.sendMessageToTarget
+Browser.grantPermissions / setPermission / resetPermissions (#2727)
+Emulation.setDeviceMetricsOverride (sets window.innerWidth/innerHeight, #2664)
+Emulation.clearDeviceMetricsOverride
 LP.getSemanticTree           LP.getInteractiveElements
 LP.getStructuredData         LP.waitForSelector
 LP.getMarkdown               LP.getNodeDetails
@@ -128,8 +133,8 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
    - `getComputedStyle` works for many properties via CSSOM; `checkVisibility` matches all active stylesheets
    - No scroll/resize, no visual regression testing
-   - `Page.getLayoutMetrics` returns hardcoded 1920x1080 values
-   - `window.innerWidth`/`innerHeight` may not reflect emulation settings
+   - `Page.getLayoutMetrics`, `getBoundingClientRect`, and screenshots stay hardcoded 1920x1080 (no real layout/geometry)
+   - `window.innerWidth`/`innerHeight` DO honor `Emulation.setDeviceMetricsOverride` since PR #2664 (JS-visible viewport only — drives `matchMedia`/responsive branches, NOT real layout). The gem's `window_size` option is still inert (not wired to `setDeviceMetricsOverride`); revisit if a real-app spec needs a non-1920×1080 JS viewport.
 
 3. **Cookies on redirects not sent on follow-up request**
    - Cookies set via `Set-Cookie` on a 302 response are stored in the cookie jar
@@ -201,6 +206,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions
 - File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are required — on builds 6625–6671 the file attaches but the form submits empty — and the gem floor guarantees them. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
+- File **download** — **SUPPORTED since build 7545** (PR #2722, in the floor). `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled}` streams a navigation response carrying `Content-Disposition: attachment` to disk (on the Lightpanda host) and emits `Browser.downloadWillBegin`/`downloadProgress`. The gem's `Downloads` tracker (`downloads.rb`) wires this in `Browser#create_page` whenever a destination exists (`:save_path` option, else `Capybara.save_path`); `Driver#downloads` / `#wait_for_download` expose the completed-file list. **Trigger is `Content-Disposition: attachment`, NOT MIME type** — a `text/csv` (or any) response WITHOUT that header is rendered as a normal (empty) navigation, not downloaded. That's why Capybara's `:download` shared spec (its `/download.csv` fixture is MIME-triggered, no Content-Disposition) stays in `capybara_skip`; the real attachment path is covered by `test/features/download_test.rb`. `<a download>` clicks navigate to the attachment URL (Lightpanda commits an empty doc afterward) rather than staying on the page.
 - Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). The drop payload rides one `Runtime.callFunctionOn` over the CDP WebSocket, whose inbound cap is 1 MB by default (tunable via `--cdp-max-message-size`; PR #2760, build ≥7468 — 512 KB on older builds), so a single dropped file's base64 must stay under ~700 KB unless the cap is raised. Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
 
 ## CLI Reference
