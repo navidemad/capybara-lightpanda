@@ -26,8 +26,11 @@ module Capybara
       # compatibility (standard options at driver registration) but are
       # inert: Lightpanda has no rendering engine, so there is nothing to
       # resize, and headless is the only mode it runs in.
+      # save_path: directory for downloaded files (Cuprite parity). nil falls
+      # back to Capybara.save_path at create_page time; downloads stay off when
+      # both are nil (Browser#create_page only opts in when a path exists).
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,
-                    :window_size, :browser_path, :headless, :logger
+                    :window_size, :browser_path, :headless, :logger, :save_path
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -39,6 +42,7 @@ module Capybara
         @window_size = options.fetch(:window_size, DEFAULT_WINDOW_SIZE)
         @browser_path = options[:browser_path]
         @headless = options.fetch(:headless, true)
+        @save_path = options[:save_path]
         @ws_url = options[:ws_url]
         @logger = parse_logger(options[:logger])
       end
@@ -62,6 +66,7 @@ module Capybara
           browser_path: browser_path,
           headless: headless,
           logger: logger,
+          save_path: save_path,
         }
         h[:ws_url] = @ws_url if @ws_url
         h

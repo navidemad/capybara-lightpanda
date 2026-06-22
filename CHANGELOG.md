@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 7545 (the `Browser.setDownloadBehavior` merge, upstream PR #2722). The driver refuses to start against older binaries.
+
+### Added
+
+- File **downloads**. When a response carries `Content-Disposition: attachment`, Lightpanda streams the body to disk via `Browser.setDownloadBehavior` (upstream PR #2722); the gem opts in automatically whenever a destination exists — the `:save_path` driver option, else `Capybara.save_path`. `page.driver.downloads` returns the completed files (absolute paths) and `page.driver.wait_for_download` blocks until in-flight downloads finish. The trigger is `Content-Disposition: attachment`, NOT MIME type, so real `send_file`/`send_data` downloads work while Capybara's MIME-triggered `:download` shared spec stays skipped (its `/download.csv` fixture sends `text/csv` with no such header). Covered by `test/features/download_test.rb`.
+- `:save_path` driver option (Cuprite parity) — directory for downloaded files; defaults to `Capybara.save_path`.
+
 ## [0.9.0] - 2026-06-18
 
 ### Fixed

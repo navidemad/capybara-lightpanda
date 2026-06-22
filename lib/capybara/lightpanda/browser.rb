@@ -149,7 +149,18 @@ module Capybara
         # clear_session_state's network.reset flipped @enabled back, so this
         # re-subscribes on the fresh context.
         network.enable
+        # Opt into file downloads when a destination exists (driver :save_path
+        # or Capybara.save_path). No-op otherwise. Must run after the context
+        # is loaded — Browser.setDownloadBehavior is a no-op without one.
+        downloads.enable(configured_download_path)
         register_auto_scripts
+      end
+
+      # Download destination: explicit :save_path option wins, else
+      # Capybara.save_path (Cuprite parity). nil => downloads stay off.
+      def configured_download_path
+        @options.save_path ||
+          (defined?(Capybara) && Capybara.respond_to?(:save_path) ? Capybara.save_path : nil)
       end
 
       # Wipe per-session state — cookies, storage, all targets — and start
@@ -201,6 +212,10 @@ module Capybara
         # flip @enabled back to false — otherwise the next #enable
         # short-circuits and traffic tracking is silently dead.
         @network&.reset
+        # Same contract for Downloads: the disposed context drops the
+        # download config + subscriptions, so reset re-arms create_page's
+        # downloads.enable on the fresh context.
+        @downloads&.reset
       end
 
       # Liveness of the CDP transport. Driver#browser checks this to decide
@@ -218,8 +233,12 @@ module Capybara
         # instance leaves @enabled true and create_page's network.enable
         # no-ops, silently killing status_code/traffic capture. Guarded on
         # @client: with no client the handlers are already moot and
-        # unsubscribe would have nothing to detach from.
-        @network&.reset if @client
+        # unsubscribe would have nothing to detach from. Downloads carries the
+        # same subscription contract, so it resets under the same guard.
+        if @client
+          @network&.reset
+          @downloads&.reset
+        end
         begin
           @client&.close
         rescue StandardError
@@ -399,6 +418,10 @@ module Capybara
 
       def network
         @network ||= Network.new(self)
+      end
+
+      def downloads
+        @downloads ||= Downloads.new(self)
       end
 
       def cookies

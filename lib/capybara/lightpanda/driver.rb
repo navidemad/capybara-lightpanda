@@ -117,6 +117,22 @@ module Capybara
         network.wait_for_idle(timeout: timeout, connections: connections)
       end
 
+      # -- Downloads --
+      # Files downloaded since the session started (absolute paths). Capture is
+      # on whenever a destination exists (the :save_path driver option, else
+      # Capybara.save_path) and the server sends `Content-Disposition:
+      # attachment`. Ferrum/Cuprite expose downloads on the driver too.
+
+      def downloads
+        browser.downloads.files
+      end
+
+      # Block until in-flight downloads finish (or timeout); returns the file
+      # list. Click the download trigger first, then call this.
+      def wait_for_download(timeout: 5)
+        browser.downloads.wait(timeout: timeout)
+      end
+
       # -- Cookie Management --
 
       def set_cookie(name, value, **options)
