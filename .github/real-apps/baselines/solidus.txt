@@ -1,6 +1,3 @@
-./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source displays message when changing preference source
-./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source displays message when changing type
-./spec/features/admin/configuration/payment_methods_spec.rb # Payment Methods changing type and payment_source updates successfully and keeps secrets
 ./spec/features/admin/configuration/shipping_methods_spec.rb # Shipping Methods update can change the calculator
 ./spec/features/admin/configuration/stock_locations_spec.rb # Stock Locations can delete an existing stock location
 ./spec/features/admin/configuration/store_spec.rb # Store editing general store settings should be able to update the default cart tax country
@@ -25,16 +22,7 @@
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when customers have same country but different state changes the bill address state accordingly
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when one customer address have only textual state changes the bill address state accordingly
 ./spec/features/admin/orders/new_order_spec.rb # New Order without a delivery step can still see line items
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page can add tracking information
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page should allow me to edit order details
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant doesn't track inventory adds variant to order just fine
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant out of stock and not backorderable doesn't display the out of stock variant in the search results
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the item can be added to the existing shipment adds the item to the existing shipment
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the items cannot be added to the existing shipment adds an item creating a new shipment and changes the payment status
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page with a completed order can change the shipping method
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page with a completed order can use admin-only shipping methods
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location multiple items in cart should have no problem splitting if multiple items are in the from shipment
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location should warn you if you have not selected a location or shipment
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a split
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a transfer via splitting off all stock
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should not allow less than or equal to zero qty
@@ -42,12 +30,15 @@
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is not enough stock at the other location and it cannot backorder should not allow me to split stock
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is not enough stock at the other location but it can backorder should allow me to split and backorder the stock
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can backorder should add more to the backorder
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should not allow a shipment to split stock to itself
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should not allow a split if the receiving shipment qty plus the incoming is greater than the count_on_hand
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment receiving shipment can not backorder should split fine if more than one line_item is in the receiving shipment
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment should delete the old shipment if enough are split off
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment when inventory levels are not being tracked allows to ship an order's items
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Fakedispatch can change the shipping method
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page should allow me to edit order details
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant doesn't track inventory adds variant to order just fine
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant out of stock and not backorderable doesn't display the out of stock variant in the search results
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the item can be added to the existing shipment adds the item to the existing shipment
+./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the items cannot be added to the existing shipment adds an item creating a new shipment and changes the payment status
 ./spec/features/admin/orders/payments_spec.rb # Payments with an differently named payment method is able to create a new payment
 ./spec/features/admin/orders/payments_spec.rb # Payments with no prior payments with a credit card payment method is able to create a new credit card payment with valid information
 ./spec/features/admin/orders/return_authorizations_spec.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows

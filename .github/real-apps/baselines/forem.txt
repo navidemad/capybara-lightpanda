@@ -4,6 +4,7 @@
 ./spec/system/articles/user_discussion_locks_spec.rb # User discussion locks when an Article has a discussion lock shows the unlock discussion lock button in manage
 ./spec/system/articles/user_edits_an_article_spec.rb # Editing with an editor user previews their changes
 ./spec/system/articles/user_edits_an_article_spec.rb # Editing with an editor user unpublishes their post
+./spec/system/articles/user_edits_an_article_spec.rb # Editing with an editor user updates their post
 ./spec/system/articles/user_visits_an_article_spec.rb # Views an article shows non-negative comments
 ./spec/system/articles/user_visits_an_article_spec.rb # Views an article when an article is not published with the article password, and the logged-in user is authorized to update the article shows the article edit link
 ./spec/system/articles/user_visits_an_article_spec.rb # Views an article when an article is scheduled shows the article edit link for the author
