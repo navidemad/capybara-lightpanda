@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 6736`. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
+Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 7571` (PR #2795 native innerText rendered-text collection; subsumes #2722 download streaming at 7545). See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
-| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` sets `window.innerWidth`/`innerHeight` since PR #2664 (merged 2026-06-22, first nightly after); other device-emulation params still stubbed |
+| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` sets `window.innerWidth`/`innerHeight` since PR #2664 (in nightly since build 7556); other device-emulation params still stubbed |
 | **Fetch** | fetch.zig | Network interception: `enable`, `disable`, `continueRequest`, `failRequest`, `fulfillRequest`, `continueWithAuth`; events: `requestPaused`, `authRequired` |
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
@@ -196,6 +196,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
+- Same-document navigations (`history.pushState`/`replaceState`, fragment, history traversal) update in-page `window.location` but emit **no** CDP `Page.navigatedWithinDocument` event (#2829, open). The gem is immune — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
 - `window.getComputedStyle()` works via CSSOM for many properties; `checkVisibility` matches all active stylesheets
 - `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`.
 - `MutationObserver` available; `window.postMessage` across frames works
@@ -207,7 +208,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - No `localStorage`/`sessionStorage` persistence across sessions
 - File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are required — on builds 6625–6671 the file attaches but the form submits empty — and the gem floor guarantees them. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
 - File **download** — **SUPPORTED since build 7545** (PR #2722, in the floor). `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled}` streams a navigation response carrying `Content-Disposition: attachment` to disk (on the Lightpanda host) and emits `Browser.downloadWillBegin`/`downloadProgress`. The gem's `Downloads` tracker (`downloads.rb`) wires this in `Browser#create_page` whenever a destination exists (`:save_path` option, else `Capybara.save_path`); `Driver#downloads` / `#wait_for_download` expose the completed-file list. **Trigger is `Content-Disposition: attachment`, NOT MIME type** — a `text/csv` (or any) response WITHOUT that header is rendered as a normal (empty) navigation, not downloaded. That's why Capybara's `:download` shared spec (its `/download.csv` fixture is MIME-triggered, no Content-Disposition) stays in `capybara_skip`; the real attachment path is covered by `test/features/download_test.rb`. `<a download>` clicks navigate to the attachment URL (Lightpanda commits an empty doc afterward) rather than staying on the page.
-- Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). The drop payload rides one `Runtime.callFunctionOn` over the CDP WebSocket, whose inbound cap is 1 MB by default (tunable via `--cdp-max-message-size`; PR #2760, build ≥7468 — 512 KB on older builds), so a single dropped file's base64 must stay under ~700 KB unless the cap is raised. Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
+- Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). The drop payload rides one `Runtime.callFunctionOn` over the CDP WebSocket, whose inbound cap is 1 MB by default (tunable via `--cdp-max-message-size`, PR #2760 — now floor-guaranteed), so a single dropped file's base64 must stay under ~700 KB unless the cap is raised. Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
 
 ## CLI Reference
 
@@ -242,7 +243,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.3.1 (2026-05-26). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+- Latest release: 0.3.3 (2026-06-23). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 ## Differences from Chrome/Chromium CDP
 

@@ -108,8 +108,18 @@ module Capybara
       # attachment, NOT by MIME type (a text/csv response without that header
       # is rendered as a normal navigation), which is why Capybara's
       # MIME-triggered :download shared spec stays in capybara_skip.
-      # Build 7545 = the #2722 merge (a808386c) — now the binding floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("7545")
+      # Build 7545 = the #2722 merge (a808386c).
+      # PR #2785 (build 7550, improve innerText + outerText) AND PR #2795
+      # (build 7571, innerText uses StyleManager visibility) make native
+      # Element.innerText implement the HTML rendered-text collection steps —
+      # block line breaks + skipping display:none descendants. The
+      # _lightpanda.visibleText predicate (predicates.js) now delegates the
+      # rendered-text collection to native innerText (keeping only a visibility
+      # gate + ShadowRoot fragment walk), so the floor MUST include #2795; on
+      # builds < 7571 innerText returns textContent verbatim (no block breaks,
+      # leaks display:none text).
+      # Build 7571 = the #2795 merge (48ed689c) — now the binding floor.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("7571")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

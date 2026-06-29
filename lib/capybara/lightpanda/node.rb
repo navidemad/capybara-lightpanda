@@ -21,10 +21,11 @@ module Capybara
         filter_text(call("function() { return this.textContent }"))
       end
 
-      # Lightpanda's innerText returns textContent verbatim (no rendering, so no
-      # hidden-descendant filtering). Walk descendants ourselves, skipping nodes
-      # that fail VISIBLE_JS, and emit newlines around block-display elements
-      # (the part of innerText behavior we still need).
+      # Delegates to _lightpanda.visibleText, which gates on visibility (a
+      # not-visible element reads as "" — WebDriver semantics) and otherwise
+      # hands the rendered-text collection (block line breaks + display:none
+      # descendant skipping) to native innerText (#2785/#2795). We normalize the
+      # whitespace here to match Capybara's expected Chrome semantics.
       def visible_text
         call(VISIBLE_TEXT_JS).to_s
                              .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
