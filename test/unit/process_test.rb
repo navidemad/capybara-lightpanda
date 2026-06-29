@@ -103,8 +103,9 @@ describe Capybara::Lightpanda::Process do
       end
     end
 
-    it "builds the full serve command line, stylesheets flag included" do
-      assert_equal %w[serve --host 127.0.0.1 --port 0 --log_level info --enable-external-stylesheets],
+    it "builds the full serve command line, stylesheets + message-size flags included" do
+      assert_equal %w[serve --host 127.0.0.1 --port 0 --log_level info --enable-external-stylesheets
+                      --cdp-max-message-size 104857600],
                    process.send(:build_args)
     end
 
@@ -112,7 +113,8 @@ describe Capybara::Lightpanda::Process do
       let(:options) { Capybara::Lightpanda::Options.new(host: "0.0.0.0", port: 9333) }
 
       it "passes them through" do
-        assert_equal %w[serve --host 0.0.0.0 --port 9333 --log_level info --enable-external-stylesheets],
+        assert_equal %w[serve --host 0.0.0.0 --port 9333 --log_level info --enable-external-stylesheets
+                        --cdp-max-message-size 104857600],
                      process.send(:build_args)
       end
     end

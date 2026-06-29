@@ -250,6 +250,18 @@ module Capybara
           # floor). Always on so linked CSS contributes to checkVisibility /
           # getComputedStyle; see .claude/rules/lightpanda-io.md limitation #6.
           "--enable-external-stylesheets",
+          # Raise the inbound CDP WebSocket message cap from Lightpanda's 1 MiB
+          # default (Config.zig `cdp_max_message_size`) to 100 MiB, matching
+          # Chrome's inbound DevTools buffer. An inbound message over the cap is
+          # dropped with WS close 1009 and NO JSON-RPC error — the whole CDP
+          # connection dies (wishlist A44). The 1 MiB default already covers
+          # axe-core (~553 KB), but larger injected bundles (jQuery + plugins,
+          # instrumentation) via execute_script, and base64 drag-drop payloads in
+          # Node#drop, exceed it. The reader buffer grows lazily (16 KB at init),
+          # so a high cap costs nothing until a big message actually arrives.
+          # Flag added in PR #2760 (build 7441) — below the floor, so guaranteed.
+          "--cdp-max-message-size",
+          (100 * 1024 * 1024).to_s,
         ]
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
