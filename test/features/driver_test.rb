@@ -772,6 +772,24 @@ describe Capybara::Lightpanda::Driver do
       session.find(:css, "#hoverable").hover
       assert_equal "hovered", session.find(:css, "#result").text
     end
+
+    # Clicking a non-interactive wrapper must reach a handler bound on an inner
+    # node — the select2 pattern (helpers click the .select2-container, but the
+    # open handler is on the inner .select2-choice). Without layout the gem
+    # can't hit-test coordinates, so CLICK_JS descends to the first visible
+    # child. The offscreen #s2-focusser sibling ensures a naive "single visible
+    # child" rule would miss it; first-visible-child lands on #s2-trigger.
+    it "descends a wrapper click to an inner element's handler" do
+      session.find(:css, "#s2-wrapper").click
+      assert_equal "inner:s2-trigger", session.find(:css, "#result").text
+    end
+
+    # The descent must STOP at an element that carries its own click handler
+    # (role=button / onclick), so the event lands there — not on a deeper child.
+    it "does not descend past a handler-bearing wrapper" do
+      session.find(:css, "#rb-wrapper").click
+      assert_equal "rb:rb-wrapper:rb-wrapper", session.find(:css, "#result").text
+    end
   end
 
   # ───────────────────────────────────────────────
