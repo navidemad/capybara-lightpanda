@@ -474,25 +474,57 @@ module Capybara
       CLICK_JS = <<~JS
         function() {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
+          // Emulate coordinate hit-testing without a layout engine. In a real
+          // browser a pointer click on a container lands on its frontmost
+          // descendant: THAT element is the event target, and the sequence
+          // bubbles UP from there (so the container's own handlers still fire).
+          // Lightpanda has no geometry — every rect is a hardcoded ~5x5, so
+          // document.elementFromPoint(center) just returns the container — so
+          // when `this` is a plain non-interactive wrapper we walk DOWN to the
+          // first visible child, repeatedly, stopping at the first element that
+          // is itself interactive or carries a click handler (onclick /
+          // role=button). That lands on the element a centered pointer would
+          // hit, so widgets that bind their handlers on an inner node fire:
+          // select2 v3 binds its open handler on the inner .select2-choice
+          // (single, mousedown) / .select2-choices (multi, click), the FIRST
+          // child of the .select2-container that Capybara helpers click. We
+          // can't use "single visible child" as a guard — select2 keeps an
+          // offscreen .select2-focusser <input> sibling that has no geometry to
+          // distinguish, so it reads as a second visible child. The descent
+          // never starts from an interactive element, so a normal
+          // button/link/input click still lands exactly on `this`.
+          var INTERACTIVE = { A: 1, BUTTON: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1,
+                              OPTION: 1, LABEL: 1, SUMMARY: 1 };
+          var hit = this;
+          while (!INTERACTIVE[hit.tagName] &&
+                 !hit.hasAttribute('onclick') &&
+                 hit.getAttribute('role') !== 'button') {
+            var next = null, ch = hit.children;
+            for (var i = 0; i < ch.length; i++) {
+              if (!window._lightpanda || _lightpanda.isVisible(ch[i])) { next = ch[i]; break; }
+            }
+            if (!next) break;
+            hit = next;
+          }
           // Real pointer clicks are a mousedown -> mouseup -> click sequence,
           // and widgets like select2 open on `mousedown`, not `click`.
           // Cancelling mousedown suppresses focus/text-selection in a real
           // browser but never the click, so the click below is dispatched
           // unconditionally.
-          this.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
-          this.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
+          hit.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
-          var notCancelled = this.dispatchEvent(clickEvt);
+          var notCancelled = hit.dispatchEvent(clickEvt);
           if (!notCancelled || clickEvt.defaultPrevented) return;
-          var tag = this.tagName;
-          if (tag === 'A' && this.href && this.target !== '_blank') {
+          var tag = hit.tagName;
+          if (tag === 'A' && hit.href && hit.target !== '_blank') {
             // Same-document fragment-only navigation: just update hash (or do
             // nothing if identical). Mirrors Chrome — assigning location.href
             // to a same-document URL on Lightpanda triggers a real navigation
             // tick that cancels pending setTimeout callbacks and clears form
             // values, which breaks any test driving DOM updates from a click
             // handler on `<a href="#...">`.
-            var dest = new URL(this.href, document.baseURI);
+            var dest = new URL(hit.href, document.baseURI);
             var here = new URL(window.location.href);
             if (dest.origin === here.origin && dest.pathname === here.pathname &&
                 dest.search === here.search) {
@@ -500,7 +532,7 @@ module Capybara
                 window.location.hash = dest.hash;
               }
             } else {
-              window.location.href = this.href;
+              window.location.href = hit.href;
             }
           }
         }

@@ -83,7 +83,24 @@ class TestApp
           <button id="dbl-click" ondblclick="document.getElementById('result').textContent = 'double-clicked'">Double Click</button>
           <button id="ctx-menu" oncontextmenu="document.getElementById('result').textContent = 'context-menu'; return false;">Right Click</button>
           <div id="hoverable" onmouseover="document.getElementById('result').textContent = 'hovered'">Hover me</div>
+          <!-- select2-style: a helper clicks the outer wrapper, but the handler
+               lives on an inner node; an offscreen-but-not-display:none sibling
+               (like select2's .select2-focusser) sits next to the trigger. -->
+          <div id="s2-wrapper">
+            <a id="s2-trigger" href="javascript:void(0)"><span>Picked</span><span>v</span></a>
+            <input id="s2-focusser" style="position:absolute;width:1px;height:1px;clip:rect(0 0 0 0)">
+            <div id="s2-drop" style="display:none">drop</div>
+          </div>
+          <!-- a wrapper that carries its OWN click handler (role=button): the
+               click must land here, not descend into the inner span. -->
+          <div id="rb-wrapper" role="button"><span id="rb-inner">Press</span></div>
           <script>
+            document.getElementById('s2-trigger').addEventListener('mousedown', function(e) {
+              document.getElementById('result').textContent = 'inner:' + e.target.closest('a').id;
+            });
+            document.getElementById('rb-wrapper').addEventListener('click', function(e) {
+              document.getElementById('result').textContent = 'rb:' + e.currentTarget.id + ':' + e.target.id;
+            });
             window.testValue = 42;
             window.asyncValue = function() {
               return new Promise(function(resolve) {
