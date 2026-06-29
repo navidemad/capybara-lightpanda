@@ -234,13 +234,13 @@ jobs:
 
       - name: Check out capybara-lightpanda
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: capybara-lightpanda
 
       - name: Check out ${{ matrix.repo }} @ ${{ matrix.sha }}
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.repo }}
           ref: ${{ matrix.sha }}
@@ -472,7 +472,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out capybara-lightpanda
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: capybara-lightpanda
 

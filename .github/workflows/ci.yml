@@ -25,7 +25,7 @@ jobs:
       matrix:
         ruby: ["3.3", "4.0"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
@@ -85,7 +85,7 @@ jobs:
       matrix:
         ruby: ["3.3", "4.0"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
