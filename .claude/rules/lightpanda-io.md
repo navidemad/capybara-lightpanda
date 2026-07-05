@@ -21,7 +21,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 
 | Domain | File | Notes |
 |---|---|---|
-| **Accessibility** | accessibility.zig | AXNode support; aria snapshots noisier than Chrome (#1813) |
+| **Accessibility** | accessibility.zig | AXNode support. Not used by this gem. |
 | **Audits** | audits.zig | `enable` / `disable` stubs only. Not used by this gem. |
 | **Browser** | browser.zig | Basic browser-level commands |
 | **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
@@ -56,7 +56,6 @@ Runtime.enable               Runtime.evaluate
 Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
 Runtime.consoleAPICalled (event)
-DOM.querySelector            DOM.querySelectorAll
 DOM.describeNode             DOM.setFileInputFiles
 Network.getAllCookies        Network.setCookie
 Network.deleteCookies        Network.clearBrowserCookies
@@ -86,6 +85,7 @@ Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS but DELIBERATELY ALWAYS
 ```
 Page.createIsolatedWorld     Page.getFrameTree
 Page.removeScriptToEvaluateOnNewDocument
+DOM.querySelector            DOM.querySelectorAll (finds go through JS in Runtime.callFunctionOn)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
 Page.printToPDF (fake PDF)
 DOM.getDocument              DOM.resolveNode
@@ -128,10 +128,11 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - May never fire on complex JS pages, Wikipedia, certain French real estate sites
    - This gem works around it with `document.readyState` polling fallback in `Browser#go_to`
    - DO NOT remove the readyState fallback — `Page.loadEventFired` itself is still unreliable
+   - One family member fixed: readyState stuck at `"loading"` after a synchronous external-stylesheet fetch (forem homepage, wishlist A10) — PR #2843, build ≥7692 (above the floor, so not guaranteed for gem users)
 
 2. **No rendering engine (CSS much improved)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
-   - `getComputedStyle` works for many properties via CSSOM; `checkVisibility` matches all active stylesheets
+   - `getComputedStyle` resolves inline `style=` declarations + `display`/`visibility` (#2733 fixed by #2836, build ≥7687 — above the floor); stylesheet-cascade property lookups still return `""`. `checkVisibility` matches all active stylesheets
    - No scroll/resize, no visual regression testing
    - `Page.getLayoutMetrics`, `getBoundingClientRect`, and screenshots stay hardcoded 1920x1080 (no real layout/geometry)
    - `window.innerWidth`/`innerHeight` DO honor `Emulation.setDeviceMetricsOverride` since PR #2664 (JS-visible viewport only — drives `matchMedia`/responsive branches, NOT real layout). The gem's `window_size` option is still inert (not wired to `setDeviceMetricsOverride`); revisit if a real-app spec needs a non-1920×1080 JS viewport.
@@ -150,29 +151,18 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    - Native getter ALWAYS returns `false` and logs `.not_implemented` when the spec walk would have returned true. Rationale: Lightpanda has no caret/keyboard editing pipeline.
    - Gem polyfill at `javascripts/predicates.js` (`_lightpanda.isContentEditable`) MUST stay — it walks ancestors itself.
 
-6. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (PR #2487, build ≥6353)
-   - The gem passes `--enable-external-stylesheets` unconditionally (`Process#build_args`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct (PR #2498). Cost: one synchronous CSS fetch per `<link>`.
+6. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (build ≥6353)
+   - The gem passes `--enable-external-stylesheets` unconditionally (`Process#build_args`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct. Cost: one synchronous CSS fetch per `<link>`.
    - The flag is a fatal `UnknownOption` on builds <6353. (Per-session `LP.configureLoading {externalStylesheets: true}` also exists; the gem uses the CLI flag.)
    - Inline `<style>` `@media` + `matchMedia` evaluate against the hardcoded 1920×1080 viewport.
    - **Capybara impact**: responsive CTA variants gated by an external stylesheet now resolve to a single variant (no more `Capybara::Ambiguous`); externally-loaded responsive specs that previously needed cuprite/Selenium work on lightpanda.
 
-7. **SIGTERM after a live CDP connection — fixed upstream, gem keeps its own teardown**
-
-   Two SIGTERM-hang causes, both fixed upstream; the gem keeps its teardown regardless
-   (crash / GC-abandon paths still need it):
-   - **(A)** Telemetry curl-multi hang (#2507, fixed #2509). The gem never hits it — it spawns
-     with `LIGHTPANDA_DISABLE_TELEMETRY=true`, so no curl `multi` exists.
-   - **(B)** Live-CDP-connection hang — the gem's actual 45-min teardown hang (#2510, fixed
-     #2511, build ≥6371, in the floor). A single SIGTERM was absorbed while a CDP connection
-     was live; the gem hit it because `Driver#reset!` leaves the process + client alive between
-     tests and teardown fell to the GC finalizer, which can't close the WS.
-
-   - **Gem handling (keep both layers — #2511 only fixes the browser side):**
-     1. **Primary** — `Browser.track`/`quit_all` closes the CDP WS from a single `at_exit`
-        *before* SIGTERM, so teardown is instant. Regression-tested by
-        `test/features/teardown_test.rb` (at-exit < 2s = clean SIGTERM, not the 3s SIGKILL fallback).
-     2. **Backstop** — `Process#stop` + the `weak_kill` finalizer escalate `TERM` → 3s grace →
-        `SIGKILL` → reap, for the crash / GC-abandon paths the `at_exit` can't reach.
+7. **SIGTERM after a live CDP connection — hangs fixed upstream (#2509 telemetry, #2511 live-WS, both ≤ floor), gem keeps both teardown layers regardless** (crash / GC-abandon paths still need them):
+   1. **Primary** — `Browser.track`/`quit_all` closes the CDP WS from a single `at_exit`
+      *before* SIGTERM, so teardown is instant. Regression-tested by
+      `test/features/teardown_test.rb` (at-exit < 2s = clean SIGTERM, not the 3s SIGKILL fallback).
+   2. **Backstop** — `Process#stop` + the `weak_kill` finalizer escalate `TERM` → 3s grace →
+      `SIGKILL` → reap, for the crash / GC-abandon paths the `at_exit` can't reach.
 
 ### Open Fix PRs (not yet merged)
 
@@ -197,7 +187,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
 - Same-document navigations (`history.pushState`/`replaceState`, fragment, history traversal) update in-page `window.location` but emit **no** CDP `Page.navigatedWithinDocument` event (#2829, open). The gem is immune — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
-- `window.getComputedStyle()` works via CSSOM for many properties; `checkVisibility` matches all active stylesheets
+- `window.getComputedStyle()` resolves inline `style=` + `display`/`visibility` only (#2836); stylesheet-cascade lookups return `""`. `checkVisibility` matches all active stylesheets
 - `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`.
 - `MutationObserver` available; `window.postMessage` across frames works
 - No CORS enforcement (acknowledged in upstream README)
@@ -243,7 +233,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.3.3 (2026-06-23). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+- Latest release: 0.3.4 (2026-07-01). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 ## Differences from Chrome/Chromium CDP
 
@@ -253,7 +243,6 @@ When writing CDP interactions, be aware of these divergences:
 2. **Error responses**: Error messages/codes differ from Chrome's (e.g., `InvalidParams` instead of specific error codes)
 3. **Missing methods**: Not all methods within a domain are implemented; unsupported methods return errors
 4. **Parameter rejection**: `Network.deleteCookies` silently ignores `partitionKey`
-5. **Accessibility**: ARIA snapshots are more verbose than Chrome's (#1813)
 
 ## Development Tips
 
