@@ -46,7 +46,7 @@ jobs:
           echo "floor=$(grep 'MINIMUM_NIGHTLY_BUILD = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+')" >> "$GITHUB_OUTPUT"
           echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: Cache Lightpanda nightly binary
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda
           key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
@@ -65,7 +65,7 @@ jobs:
         # that previously never ran in CI.
         run: bundle exec rake test:all
       - name: Cache examples' inline-bundle gems
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/example-bundles
           key: example-bundles-${{ runner.os }}-${{ matrix.ruby }}-${{ hashFiles('examples/**/*.rb') }}
@@ -99,7 +99,7 @@ jobs:
           echo "floor=$(grep 'MINIMUM_NIGHTLY_BUILD = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+')" >> "$GITHUB_OUTPUT"
           echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: Cache Lightpanda nightly binary
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda
           key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
