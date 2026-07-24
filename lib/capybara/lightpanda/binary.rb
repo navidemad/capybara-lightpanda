@@ -174,12 +174,20 @@ module Capybara
         #   any environment. The `remove` step is required because `update`
         #   honors `cache_time` and would otherwise no-op on a
         #   too-old-but-not-yet-expired file.
+        # - Path equals our cache AND a pin is set → the version is a deliberate
+        #   choice, so tell the user to raise the pin. The re-provision one-liner
+        #   would be a dead end here: it re-downloads the same pinned release and
+        #   lands on the identical "too old" error.
         # - Anything else (user-managed install at a custom path) → keep
         #   the curl-overwrite suggestion, since we don't know how the file
         #   got there.
         def update_hint(binary_path)
           if brew_managed?(binary_path)
             "brew update && brew upgrade lightpanda"
+          elsif binary_path == install_path && required_version
+            "Capybara::Lightpanda::Binary.required_version is pinned to " \
+              "#{required_version} — raise the pin to a newer release, " \
+              "or unset it to track the rolling nightly."
           elsif binary_path == install_path
             PROVISION_HINT
           else
@@ -203,12 +211,20 @@ module Capybara
 
         # Path the gem writes the downloaded binary to. Honors a
         # user-configured install_dir; otherwise falls back to default_binary_path.
+        #
+        # A pin gets its own filename (`lightpanda-0.3.5`) rather than sharing
+        # the rolling-nightly one. `update` only checks that a file EXISTS at
+        # this path, not which version it holds, so on a shared path a nightly
+        # left over from an earlier run would be accepted as "the pin" — setting
+        # required_version on any machine with a warm cache (every CI runner
+        # restoring a cache, every existing dev checkout) would silently keep
+        # running the nightly it was meant to replace. Version-scoping makes the
+        # pin self-verifying and lets several pins coexist in one cache dir.
         def install_path
-          if @install_dir
-            File.join(@install_dir, "lightpanda")
-          else
-            default_binary_path
-          end
+          dir = @install_dir || File.dirname(default_binary_path)
+          basename = required_version ? "lightpanda-#{required_version}" : "lightpanda"
+
+          File.join(dir, basename)
         end
 
         private
