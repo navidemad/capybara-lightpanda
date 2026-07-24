@@ -34,6 +34,14 @@ If your test helpers call `Capybara.use_default_driver` (a common pattern in
 setup/teardown blocks), gate `Capybara.default_driver` the same way too —
 otherwise those blocks silently switch you back to your old driver mid-suite.
 
+**Pin the browser before you trust a CI signal.** Unpinned, the gem tracks Lightpanda's rolling `nightly` tag and refreshes it daily — so a suite can turn red without a single line changing, and since nightlies aren't archived you can't go back to the build that was green. One line makes the browser reproducible:
+
+```ruby
+Capybara::Lightpanda::Binary.required_version = "0.3.5"  # a tag from lightpanda-io/browser/releases
+```
+
+Pins download once into a version-scoped file (`~/.cache/lightpanda/lightpanda-0.3.5`), are never age-refreshed, and are never satisfied by a leftover nightly. Cache that directory in CI. If you hit a bug, the pinned version is the single most useful thing to put in the report — `page.driver.browser.version` prints exactly what ran.
+
 **Binary install is optional.** By default the gem auto-downloads the nightly Lightpanda binary into `~/.cache/lightpanda/lightpanda` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
 
 ```bash
@@ -95,7 +103,7 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. T
 
 - **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` returns a hardcoded 1920×1080 PNG.
 - **Visual regression / pixel tests** — same reason; keep these on Cuprite.
-- **Scroll, resize, full `getComputedStyle`** — no layout engine.
+- **Scroll, pixel geometry, full `getComputedStyle`** — no layout engine. `@media` / `matchMedia` *do* work and evaluate against the `window_size` you configure; what's missing is reflow, so `getBoundingClientRect` stays synthetic.
 - **Service Workers, SharedWorker** — not implemented; Web Worker support is partial ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
 - **WebAuthn / passkeys** — not implemented.
 - **Coordinate-based `drag_to` / `drag_by`** — no layout engine, no coordinates. HTML5 `Element#drop` (dropping files or data onto a dropzone) works since `0.6.0`.

@@ -245,6 +245,19 @@ Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
 - Latest release: 0.3.5 (2026-07-17). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
+**Two version-string shapes, two gem floors** (verified 2026-07-24): `build.zig`'s
+`resolveVersion` enriches a version with `git rev-list --count HEAD` + short hash
+*only* when it carries a pre-release tag. The release workflow passes
+`-Dversion=<tag>`, which parses as a full semver with no pre-release — so a
+tagged release prints a bare `0.3.5` with **no build counter**, while nightlies
+print `1.0.0-nightly.8285+de85a51d`. `Process#check_minimum_version` therefore
+gates two channels: `MINIMUM_NIGHTLY_BUILD` (build counter) and
+`MINIMUM_RELEASE` (semver). Keep them in lockstep — a release is acceptable
+exactly when its own commit count clears the nightly floor
+(`git rev-list --count <tag>`; 0.3.5 = 8165, 0.3.4 = 7708, 0.3.3 = 7562).
+Only the rolling `nightly` tag is re-published, so **releases are the only
+reproducible pin** — nightlies are not archived.
+
 ## Differences from Chrome/Chromium CDP
 
 When writing CDP interactions, be aware of these divergences:
