@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 7571` (PR #2795 native innerText rendered-text collection; subsumes #2722 download streaming at 7545). See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
+Current floors enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 8160` (PR #2719 `@layer` block rules in the cascade; subsumes #2795 innerText at 7571 and #2722 download streaming at 7545) **or** `Process::MINIMUM_RELEASE = 0.3.5` for tagged releases, which is build 8165. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor, and "Binary Distribution" below for why the two floors exist.
 
 ## Architecture
 
