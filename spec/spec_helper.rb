@@ -84,15 +84,15 @@ RSpec.configure do |config|
       /node #right_click should allow to adjust the offset/,
       /node #right_click offset/,
       /node #right_click delay/,
-      # Computed style — only inline styles round-trip through CSSOM;
-      # property lookups against the cascade don't.
-      /node #style/,
+      # Computed style. Narrowed 2026-07-24 (AUDIT_SKIPS run against nightly
+      # 8285): getComputedStyle now resolves cascade-aware display/visibility,
+      # synthetic width/height, and CSS initial values for
+      # color/opacity/background-color, so `node #style`, `#matches_style?` and
+      # the counting `#has_css?` spec all pass and their patterns were dropped.
+      # These two still fail because they need genuine cascade resolution for
+      # arbitrary properties, which Lightpanda does not do (it returns "").
       /#assert_matches_style should raise error if the elements style/,
-      /#assert_matches_style should wait for style/,
-      /#matches_style\? should be true if the element has the given style/,
-      /#matches_style\? should be false if the element does not have the given style/,
       /#has_css\? :style option should support Hash/,
-      /#has_css\? with count should be true if the content occurs the given number of times in CSS processing drivers/,
       # Node #obscured? sub-tests requiring viewport / overlap detection.
       /node #obscured\? should see elements outside the viewport as obscured/,
       /node #obscured\? should see overlapped elements as obscured/,
@@ -102,11 +102,6 @@ RSpec.configure do |config|
       # doesn't move the input caret on ArrowLeft/Home/End, so `:left` doesn't
       # reposition the cursor mid-string. Upstream gap, not yet filed.
       /node #send_keys should send special characters/,
-      # `node #send_keys should generate key events` — PR #2292 implements
-      # KeyboardEvent.keyCode/charCode but gates on `isTrusted: true`, so
-      # the keyCode values aren't visible to assertions made on synthetic
-      # events. Upstream follow-up needed.
-      /node #send_keys should generate key events/,
       # `Node#path` canonical XPath generation — Lightpanda's DOM
       # serialization differs from Chrome's expected output.
       /node #path returns xpath which points to itself/,
