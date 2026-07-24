@@ -79,7 +79,7 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
 - **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
 - **Branching off a stale `main`.** Every session that enters `/Users/navid/code/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
-- **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.15.2 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. The prebuilt-V8 `-Dprebuilt_v8_path=…` flag is auto-injected by the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`). Just write `zig build check` / `zig build test` — the hook substitutes the literal `$V8` with the resolved flag if you include it, or appends the flag if you forget. See "Local build & test commands" below.
+- **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.16.0 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. The prebuilt-V8 `-Dprebuilt_v8_path=…` flag is auto-injected by the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`). Just write `zig build check` / `zig build test` — the hook substitutes the literal `$V8` with the resolved flag if you include it, or appends the flag if you forget. See "Local build & test commands" below.
 - **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `zig build check` / `zig build test` directly.
 
 ### Step 0c: Pivot policy when verification surfaces an adjacent bug
@@ -110,7 +110,7 @@ Run these checks in order. Each one cross-references an existing Step in this fi
 
 1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `repro/`, no editor config).
 2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
-3. **Toolchain pin.** `zig version` prints `0.15.2` — see Step 2's pin block.
+3. **Toolchain pin.** `zig version` prints `0.16.0` — see Step 2's pin block.
 4. **Compile clean.** `zig build check` is clean — see Step 4a.
 5. **Targeted test passes.** Run the new test with the right `TEST_FILTER` form (see "Local build & test commands" — `<test-name>#<html-basename>` for fixtures). Confirm it passes.
 6. **Toggle-off proves the test exercises the fix.** `git checkout main -- <production-file>`, re-run the targeted test, confirm it fails. Restore with `git checkout HEAD -- <production-file>`. See Step 4a's two-pattern bullet.
@@ -125,7 +125,7 @@ If any of 1–8 fail, surface the specific failure to the user with a fix propos
 
 The recipes below are bare `zig build …`. Two layers do the right thing automatically so the recipe stays minimal:
 
-1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.15.2"` and `zls = "0.15.1"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.15.2 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.15.2`.
+1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.16.0"` and `zls = "0.16.0"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.16.0 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.16.0`.
 2. **V8 prebuilt flag** — the `lp-zig-build-rewrite.sh` PreToolUse hook (`~/.claude/hooks/`) intercepts every `zig build` command targeting `/Users/navid/code/browser*` and injects `-Dprebuilt_v8_path=/Users/navid/code/browser/.lp-cache/prebuilt-v8/libc_v8_<version>_macos_aarch64.a` if missing. Writing `zig build $V8 check` is also fine — the hook substitutes the literal `$V8` with the resolved flag. Without the hook, plain `zig build` would rebuild V8 from source (~20+ min). The hook stderr-logs every rewrite so you can audit it in the tool output.
 
 | Command                                                    | When to use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -136,7 +136,14 @@ The recipes below are bare `zig build …`. Two layers do the right thing automa
 | `zig build`                                                | When you need a debug binary at `./zig-out/bin/lightpanda` (e.g., to re-run the Step 6 reproducer post-fix).                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `zig build run -- <args>`                                  | Build & run the binary in one step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-Sanity-check the toolchain once per session before the first build: `zig version` must print `0.15.2`. If it prints `0.16.x` (system Homebrew install), the global mise pin in `~/.config/mise/config.toml` isn't reaching this shell's PATH — restart Claude Code so the snapshot regenerates, then retry. If `zig` isn't installed at all, `mise install zig@0.15.2 zls@0.15.1` from anywhere does it.
+Sanity-check the toolchain once per session before the first build. **`build.zig.zon`'s `minimum_zig_version` is the authority, not the number written here** — upstream CI derives its Zig version from that field (`.github/workflows/zig-test.yml` feeds it to `mlugg/setup-zig`), so when upstream bumps it, the repo is right and this skill is stale. Check both and trust the repo:
+
+```bash
+grep minimum_zig_version /Users/navid/code/browser/build.zig.zon   # the authority
+zig version                                                        # must match it
+```
+
+As of 2026-07-24 both say `0.16.0`. If `zig version` disagrees with `build.zig.zon`, fix the global mise pin (`~/.config/mise/config.toml`) to match the repo and restart Claude Code so the PATH snapshot regenerates — then update the numbers in this skill. If `zig` resolves to something outside `~/.local/share/mise/installs/zig/` (e.g. a Homebrew install), mise isn't reaching this shell's PATH. If `zig` isn't installed at all, `mise install zig@<version> zls@<version>` from anywhere does it.
 
 Performance notes:
 
@@ -231,10 +238,10 @@ If `git status` is dirty (uncommitted work from a previous session, stray repro 
 
 **Remote naming**: this clone uses two remotes — `origin = lightpanda-io/browser` (upstream, where `git pull` reads from) and a personal fork (e.g. `fork = navidemad/browser`, where pushes go). Run `git remote -v` to confirm. The pull above targets `origin`; **the push at Step 8a targets the fork** (`git push -u fork ...`) and `gh pr create` needs `--head <fork-owner>:<branch> --repo lightpanda-io/browser` since the source branch lives on the fork. If `git remote -v` shows only `origin` pointing at your fork, the convention collapses to plain `origin` — but verify before assuming.
 
-Sanity-check the Zig toolchain. The repo's `build.zig.zon` declares `minimum_zig_version = "0.15.2"` but does not commit a `.zig-version` / `.tool-versions` file. The pin lives in `~/.config/mise/config.toml` globally (`zig = "0.15.2"`, `zls = "0.15.1"`), so any shell resolves `zig` to the right version without per-project setup:
+Sanity-check the Zig toolchain. The repo's `build.zig.zon` declares `minimum_zig_version = "0.16.0"` but does not commit a `.zig-version` / `.tool-versions` file. The pin lives in `~/.config/mise/config.toml` globally (`zig = "0.16.0"`, `zls = "0.16.0"`), so any shell resolves `zig` to the right version without per-project setup:
 
 ```bash
-zig version   # MUST print 0.15.2 — see "Local build & test commands" if not
+zig version   # MUST print 0.16.0 — see "Local build & test commands" if not
 ```
 
 If it prints anything else, restart Claude Code so the snapshot picks up the global mise pin. Building with the wrong Zig produces stdlib errors that look like real bugs and burn debugging time.
@@ -255,7 +262,7 @@ Work TDD: failing test → confirm it fails → implement → confirm it passes 
 
 Use the local commands from "Local build & test commands" — fast enough that all of these gates are cheap:
 
-- `zig version` prints `0.15.2`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
+- `zig version` prints `0.16.0`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
 - `zig build check` is clean. No compile errors anywhere in the project (not just the file you edited).
 - A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> zig build test` and confirm it passes.
 - Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. Two patterns by where the test lives:

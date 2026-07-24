@@ -25,7 +25,7 @@ Either way, fill in the `<...>` placeholders before applying — the prompt assu
 
 ````
 **Context**: Working in `/Users/navid/code/browser`, the Lightpanda browser
-(Zig 0.15.2 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from the
+(Zig 0.16.0 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from the
 gem's upstream wishlist: `<one-line description>`.
 
 **Today's behavior**: `<copy from wishlist>`
@@ -36,7 +36,7 @@ gem's upstream wishlist: `<one-line description>`.
 - Primary: `<file from file-mapping.md>`
 - Related: `<any test fixtures or sibling files>`
 
-**TDD steps** (local builds are fast — global mise pin handles Zig 0.15.2, the PreToolUse hook injects the prebuilt-V8 `-D` flag, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
+**TDD steps** (local builds are fast — global mise pin handles Zig 0.16.0, the PreToolUse hook injects the prebuilt-V8 `-D` flag, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
 
 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes
    use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file
