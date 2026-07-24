@@ -3,11 +3,7 @@
   "permissions": {
     "allow": [
       "Edit(.claude/rules/**)",
-      "Edit(.claude/skills/**)",
-      "Write(.claude/rules/**)",
-      "Write(.claude/skills/**)",
-      "MultiEdit(.claude/rules/**)",
-      "MultiEdit(.claude/skills/**)"
+      "Edit(.claude/skills/**)"
     ]
   }
 }
