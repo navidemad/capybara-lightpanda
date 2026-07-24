@@ -12,7 +12,6 @@
 ./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order should be able to update customer details for an existing order
 ./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order should show validation errors
 ./spec/features/admin/orders/line_items_spec.rb # Order Line Items can edit a line item's quantity
-./spec/features/admin/orders/listing_spec.rb # Orders Listing searching orders when there's a single store should be able to filter on variant_id
 ./spec/features/admin/orders/new_order_spec.rb # New Order adding new item to the order inventory items show up just fine and are also registered as shipments
 ./spec/features/admin/orders/new_order_spec.rb # New Order can create split payments
 ./spec/features/admin/orders/new_order_spec.rb # New Order completes new order succesfully without using the cart
@@ -21,7 +20,6 @@
 ./spec/features/admin/orders/new_order_spec.rb # New Order start by customer address completes order fine
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when customers have same country but different state changes the bill address state accordingly
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when one customer address have only textual state changes the bill address state accordingly
-./spec/features/admin/orders/new_order_spec.rb # New Order without a delivery step can still see line items
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location multiple items in cart should have no problem splitting if multiple items are in the from shipment
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a split
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to location there is enough stock at the other location should allow me to make a transfer via splitting off all stock
@@ -35,9 +33,6 @@
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment should delete the old shipment if enough are split off
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin Shipment edit page splitting to shipment when inventory levels are not being tracked allows to ship an order's items
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page should allow me to edit order details
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant doesn't track inventory adds variant to order just fine
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page variant out of stock and not backorderable doesn't display the out of stock variant in the search results
-./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the item can be added to the existing shipment adds the item to the existing shipment
 ./spec/features/admin/orders/order_details_spec.rb # Order Details as Admin cart edit page when adding an item when the items cannot be added to the existing shipment adds an item creating a new shipment and changes the payment status
 ./spec/features/admin/orders/payments_spec.rb # Payments with an differently named payment method is able to create a new payment
 ./spec/features/admin/orders/payments_spec.rb # Payments with no prior payments with a credit card payment method is able to create a new credit card payment with valid information

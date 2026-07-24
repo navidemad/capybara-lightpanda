@@ -159,11 +159,14 @@ jobs:
             # Mozilla-styled overrides, so PreventAbuse flags it as a bot.
             # audiowaveform (PPA package in alonetone's own CI) is only invoked
             # when processing uploaded audio — not needed for this subset.
-            # account_requests is pinned to :4 (error-render example): the
-            # success path renders 'thank_you' with status 303 and no Location
-            # header, which Lightpanda's HTTP client aborts instead of
-            # rendering (wishlist A43). Widen to the whole file on fix.
-            spec: "spec/features/pages_spec.rb spec/features/account_requests_spec.rb:4 spec/features/users_spec.rb"
+            # account_requests runs whole again: A43 (a 303 carrying a body but
+            # no Location header was routed into the redirect path and aborted,
+            # leaving an empty document) was fixed upstream by PR #2714 at build
+            # 6741, below MINIMUM_NIGHTLY_BUILD, so the success path that renders
+            # 'thank_you' with status 303 can render. Verified browser-side
+            # against a bare 303-without-Location; this run is what confirms it
+            # end-to-end through alonetone's own submit path.
+            spec: "spec/features/pages_spec.rb spec/features/account_requests_spec.rb spec/features/users_spec.rb"
 
     name: ${{ matrix.name }}
 
