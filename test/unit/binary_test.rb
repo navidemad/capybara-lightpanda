@@ -102,6 +102,26 @@ describe Capybara::Lightpanda::Binary do
       Capybara::Lightpanda::Binary.install_dir = "/opt/bin"
       assert_equal "/opt/bin/lightpanda", Capybara::Lightpanda::Binary.install_path
     end
+
+    # A pin must not share the rolling nightly's filename: `update` only tests
+    # that a file exists at install_path, so a leftover nightly there would be
+    # served as "the pin" and the pinned version would never be downloaded.
+    it "scopes the filename by version when pinned" do
+      Capybara::Lightpanda::Binary.install_dir = "/opt/bin"
+      Capybara::Lightpanda::Binary.required_version = "0.3.5"
+
+      assert_equal "/opt/bin/lightpanda-0.3.5", Capybara::Lightpanda::Binary.install_path
+    end
+
+    it "keeps distinct paths per pin so pins never collide" do
+      Capybara::Lightpanda::Binary.install_dir = "/opt/bin"
+
+      Capybara::Lightpanda::Binary.required_version = "0.3.5"
+      pinned = Capybara::Lightpanda::Binary.install_path
+      Capybara::Lightpanda::Binary.required_version = "0.3.4"
+
+      refute_equal pinned, Capybara::Lightpanda::Binary.install_path
+    end
   end
 
   describe ".remove" do
@@ -135,12 +155,31 @@ describe Capybara::Lightpanda::Binary do
       Capybara::Lightpanda::Binary.install_dir = dir
       Capybara::Lightpanda::Binary.required_version = "0.3.0"
 
-      path = File.join(dir, "lightpanda")
+      path = File.join(dir, "lightpanda-0.3.0")
       File.write(path, "fake")
       File.chmod(0o755, path)
 
       Capybara::Lightpanda::Binary.expects(:download).never
       assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+
+    # The regression that motivated version-scoped pin paths: a cache warmed by
+    # an earlier unpinned run (every CI runner restoring a cache) used to satisfy
+    # the pin, so the pinned release was never fetched and the suite silently
+    # kept running the nightly.
+    it "ignores a cached rolling-nightly binary and downloads the pin" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+
+      nightly = File.join(dir, "lightpanda")
+      File.write(nightly, "rolling nightly from a previous run")
+      File.chmod(0o755, nightly)
+
+      Capybara::Lightpanda::Binary.required_version = "0.3.5"
+      sentinel = File.join(dir, "lightpanda-0.3.5")
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(sentinel)
+
+      assert_equal sentinel, Capybara::Lightpanda::Binary.update
     end
 
     it "delegates to download when pinned binary missing" do
@@ -341,6 +380,20 @@ describe Capybara::Lightpanda::Binary do
       # "Don't know how to build task". The one-liner works from any env.
       assert_equal Capybara::Lightpanda::Binary::PROVISION_HINT,
                    Capybara::Lightpanda::Binary.update_hint(path)
+    end
+
+    # Re-provisioning a pinned binary re-downloads the same release and lands on
+    # the identical "too old" error, so a pinned user must be told to move the
+    # pin rather than sent around that loop.
+    it "tells a pinned user to raise the pin instead of re-provisioning" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.required_version = "0.3.0"
+
+      hint = Capybara::Lightpanda::Binary.update_hint(Capybara::Lightpanda::Binary.install_path)
+
+      assert_includes hint, "pinned to 0.3.0"
+      refute_equal Capybara::Lightpanda::Binary::PROVISION_HINT, hint
     end
 
     it "falls back to a curl command for paths the gem doesn't recognize" do

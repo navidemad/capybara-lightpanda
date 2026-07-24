@@ -72,6 +72,45 @@ end
 | `timeout` | `15` | Per-CDP-command timeout, also covers navigation polling |
 | `process_timeout` | `10` | Wait this long for `lightpanda serve` to start before failing |
 | `browser_path` | `nil` | If `nil`, the driver searches `PATH` and common Homebrew paths |
+| `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
+| `save_path` | `Capybara.save_path` | Where downloaded files land |
+
+### Pinning the browser version { #pinning }
+
+By default the driver tracks Lightpanda's rolling `nightly` tag and refreshes it
+once every 24 hours. That is convenient for local exploration and wrong for CI:
+the browser can change under a suite that didn't change a single line, and
+nightly builds are not archived, so you cannot go back to the one that was green
+yesterday.
+
+For any shared or CI environment, pin a tagged release:
+
+```ruby
+# spec/support/capybara.rb · or test/support/capybara.rb
+Capybara::Lightpanda::Binary.configure do |binary|
+  binary.required_version = "0.3.5"   # a tag from lightpanda-io/browser/releases
+end
+```
+
+A pin is downloaded once into its own version-scoped file
+(`~/.cache/lightpanda/lightpanda-0.3.5`), is never refreshed on age, and is
+never satisfied by a nightly left over from an earlier run. Cache that directory
+in CI and the browser becomes as reproducible as your `Gemfile.lock`.
+
+The driver enforces a floor on both channels and refuses to start below it —
+nightly build ≥ 8160, or release ≥ 0.3.5. The error names the version it found
+and how to move off it.
+
+Two supporting knobs:
+
+| Knob | Use |
+|---|---|
+| `browser_path` (driver option) | You manage the binary yourself — a Docker layer, a vendored artifact. The gem never downloads |
+| `LIGHTPANDA_CACHE_TIME=0` (env) | Treat whatever is already cached as fresh forever. Pair with a pre-provisioning step when the suite blocks outbound HTTP (VCR/WebMock) |
+
+> Suites that stub HTTP need the binary fetched **before** the stubs load, from a
+> process with no WebMock/VCR in it:
+> `bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'`
 
 ### Dynamic port for parallel tests
 
@@ -177,7 +216,7 @@ The driver handles Turbo-enabled Rails apps transparently.
 | **Turbo Frames** | Native | Lazy-load (`src=`) and scoped link navigation use Turbo's existing `fetch` + `innerHTML` swap |
 | **Turbo Drive** | Native | Lightpanda's `body.replaceWith` works since v0.2.9; `#id` lookups survive the snapshot+swap pattern natively |
 | **Form submission** | Auto-handled | `fetch()` + `document.write()` shim bypasses Turbo's interception when needed |
-| **Turbo Streams** | Not supported | Lightpanda lacks the rendering pipeline Streams depend on |
+| **Turbo Streams** | Works | Page-initiated WebSockets send `Origin`, so ActionCable's forgery check passes and `turbo-cable-stream-source` reaches `[connected]`; `<template>` + `DOMParser` + `importNode` back the stream-application path. Covered by API probes and real-app beta testing, not yet by an end-to-end Stream spec in this gem's CI |
 
 ## Known limitations { #limits }
 
@@ -186,13 +225,14 @@ These are upstream Lightpanda limits, not driver bugs:
 | Surface | Status |
 |---|---|
 | Screenshots | Not supported — no rendering engine |
-| `scroll_to`, `resize` | No layout engine — no real scroll/resize; the viewport is fixed at 1920×1080 |
+| `scroll_to`, `resize` | No layout engine — `scroll_to` is a no-op, and `resize` mid-session isn't wired. Set the viewport up front with `window_size` |
+| Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
-| CSS: external `<link>`, `@media`, `matchMedia` | Now fetched, parsed, and evaluated — but against the fixed 1920×1080 viewport, so responsive variants always resolve at desktop width (no resize to other breakpoints) |
+| CSS: external `<link>`, `@media`, `matchMedia` | Fetched, parsed, and evaluated against the configured `window_size` — responsive variants resolve at the width you set. What's absent is reflow, not the media query |
 | User agent | `Lightpanda/1.0` — no Chrome/Safari token, and Mozilla-styled UA overrides are rejected by design. App-side UA bot detection flags the driver as a bot; allowlist `Lightpanda` in your test environment |
 | Complex Stimulus controllers | Some may not execute fully |
 
-External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. The catch is the viewport is fixed at 1920×1080 with no real layout, so everything resolves at desktop width. If a spec needs to switch breakpoints (resize to a mobile width) or asserts on pixel-level layout, keep it on Cuprite — that's what the dual-driver pattern above is for.
+External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. Breakpoints resolve at whatever `window_size` you configure, so a suite that runs mobile-width specs can register a second driver at `[375, 812]`. The catch is that the viewport is JS-visible only: nothing reflows, so a spec that asserts on pixel-level layout, scrolling, or that an element is visually obscured still belongs on Cuprite — that's what the dual-driver pattern above is for.
 
 ## How it works { #internals }
 

@@ -3,7 +3,7 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 7571` (PR #2795 native innerText rendered-text collection; subsumes #2722 download streaming at 7545). See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor.
+Current floors enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 8160` (PR #2719 `@layer` block rules in the cascade; subsumes #2795 innerText at 7571 and #2722 download streaming at 7545) **or** `Process::MINIMUM_RELEASE = 0.3.5` for tagged releases, which is build 8165. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor, and "Binary Distribution" below for why the two floors exist.
 
 ## Architecture
 
@@ -244,6 +244,19 @@ Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
 - Latest release: 0.3.5 (2026-07-17). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+
+**Two version-string shapes, two gem floors** (verified 2026-07-24): `build.zig`'s
+`resolveVersion` enriches a version with `git rev-list --count HEAD` + short hash
+*only* when it carries a pre-release tag. The release workflow passes
+`-Dversion=<tag>`, which parses as a full semver with no pre-release — so a
+tagged release prints a bare `0.3.5` with **no build counter**, while nightlies
+print `1.0.0-nightly.8285+de85a51d`. `Process#check_minimum_version` therefore
+gates two channels: `MINIMUM_NIGHTLY_BUILD` (build counter) and
+`MINIMUM_RELEASE` (semver). Keep them in lockstep — a release is acceptable
+exactly when its own commit count clears the nightly floor
+(`git rev-list --count <tag>`; 0.3.5 = 8165, 0.3.4 = 7708, 0.3.3 = 7562).
+Only the rolling `nightly` tag is re-published, so **releases are the only
+reproducible pin** — nightlies are not archived.
 
 ## Differences from Chrome/Chromium CDP
 

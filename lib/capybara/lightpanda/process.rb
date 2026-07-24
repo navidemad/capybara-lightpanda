@@ -137,7 +137,23 @@ module Capybara
       # that half, so it is NOT part of the floor.
       MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8160")
 
-      attr_reader :pid, :ws_url, :version, :nightly_build
+      # Second, equivalent floor for the *release* channel.
+      #
+      # Tagged releases are built with `-Dversion=<tag>`, which resolves to a
+      # plain semver with no pre-release tag — so `lightpanda version` prints a
+      # bare "0.3.5" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
+      # has nothing to compare against. Releases are cut from the same trunk, so
+      # a release is acceptable exactly when its own commit count clears the
+      # nightly floor: 0.3.5 is build 8165, five commits past the #2719 merge
+      # this floor exists for.
+      #
+      # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
+      # first release containing that build (`git rev-list --count <tag>` in the
+      # browser repo tells you). Leaving it behind would let the release channel
+      # silently accept a binary the nightly channel rejects.
+      MINIMUM_RELEASE = Gem::Version.new("0.3.5")
+
+      attr_reader :pid, :ws_url, :version, :nightly_build, :release
 
       def initialize(options)
         @options = options
@@ -145,6 +161,7 @@ module Capybara
         @ws_url = nil
         @version = nil
         @nightly_build = nil
+        @release = nil
         @stdout_r = nil
         @stdout_w = nil
         @stderr_r = nil
@@ -183,20 +200,37 @@ module Capybara
 
       private
 
+      # `lightpanda version` prints one of two shapes, and the gem supports both
+      # so a suite can either track nightly or pin a reproducible release:
+      #
+      #   "1.0.0-nightly.8285+de85a51d"  rolling nightly (also "dev.NNNN" for a
+      #                                  locally compiled tree — same
+      #                                  `git rev-list --count HEAD` counter,
+      #                                  different label). Checked against
+      #                                  MINIMUM_NIGHTLY_BUILD.
+      #   "0.3.5"                        a tagged release: bare semver, no build
+      #                                  metadata. Checked against MINIMUM_RELEASE.
+      #
+      # The release form is matched anchored — a bare semver and nothing else —
+      # so a stray "1.2.3" inside some other string can never be mistaken for a
+      # release. Anything that matches neither shape stays a hard failure: a
+      # binary we cannot identify is never assumed to be new enough.
       def check_minimum_version(binary_path)
         stdout, = Open3.capture3(binary_path, "version")
         @version = stdout.strip
-        # Accept either `nightly.NNNN` (publicly distributed builds) or
-        # `dev.NNNN` (locally compiled trees) — the build number is the same
-        # `git rev-list --count HEAD` counter, just labelled differently.
-        build = @version[/(?:nightly|dev)\.(\d+)/, 1]
-        @nightly_build = Gem::Version.new(build) if build
 
-        return if @nightly_build && @nightly_build >= MINIMUM_NIGHTLY_BUILD
+        if (build = @version[/(?:nightly|dev)\.(\d+)/, 1])
+          @nightly_build = Gem::Version.new(build)
+          return if @nightly_build >= MINIMUM_NIGHTLY_BUILD
+        elsif (tag = @version[/\A\d+\.\d+\.\d+\z/])
+          @release = Gem::Version.new(tag)
+          return if @release >= MINIMUM_RELEASE
+        end
 
         raise BinaryError,
               "Lightpanda #{@version} is too old. " \
-              "This gem requires build >= #{MINIMUM_NIGHTLY_BUILD}. " \
+              "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
+              "or release >= #{MINIMUM_RELEASE}. " \
               "Update: #{Binary.update_hint(binary_path)}"
       rescue Errno::ENOENT
         # Binary not runnable — let attempt_start handle it

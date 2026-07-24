@@ -10,6 +10,7 @@ describe Capybara::Lightpanda::Process do
   let(:options) { Capybara::Lightpanda::Options.new }
   let(:process) { Capybara::Lightpanda::Process.new(options) }
   let(:floor) { Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD }
+  let(:release_floor) { Capybara::Lightpanda::Process::MINIMUM_RELEASE }
 
   describe "READY_PATTERN" do
     it "captures the bound address from the server-ready log line" do
@@ -152,8 +153,54 @@ describe Capybara::Lightpanda::Process do
         process.send(:check_minimum_version, "/bin/lp")
       end
       assert_includes error.message, "too old"
-      assert_includes error.message, "requires build >= #{floor}"
+      assert_includes error.message, "nightly build >= #{floor}"
       assert_includes error.message, "brew update && brew upgrade lightpanda"
+    end
+
+    # Release channel. Tagged builds print a bare semver with no commit
+    # counter, so they're gated on MINIMUM_RELEASE instead. Without this the
+    # gem rejected every stable release — including ones strictly newer than
+    # the nightly floor — leaving the rolling `nightly` tag as the only
+    # installable version and making reproducible CI impossible.
+    it "accepts a tagged release at the floor" do
+      Open3.stubs(:capture3).returns(["#{release_floor}\n", "", nil])
+
+      process.send(:check_minimum_version, "/bin/lp")
+
+      assert_equal release_floor, process.release
+      assert_nil process.nightly_build, "a release carries no build counter"
+    end
+
+    it "accepts a tagged release above the floor" do
+      Open3.stubs(:capture3).returns(["9.9.9\n", "", nil])
+
+      process.send(:check_minimum_version, "/bin/lp")
+
+      assert_equal Gem::Version.new("9.9.9"), process.release
+    end
+
+    it "rejects a tagged release below the floor" do
+      Open3.stubs(:capture3).returns(["0.3.4\n", "", nil])
+      Capybara::Lightpanda::Binary.stubs(:update_hint).returns("hint")
+
+      error = assert_raises(Capybara::Lightpanda::BinaryError) do
+        process.send(:check_minimum_version, "/bin/lp")
+      end
+      assert_includes error.message, "release >= #{release_floor}"
+    end
+
+    # The two floors gate the same trunk, so they must stay in lockstep: a
+    # release is acceptable precisely because its own commit count clears
+    # MINIMUM_NIGHTLY_BUILD. If a floor bump moves one without the other, the
+    # release channel starts accepting binaries the nightly channel rejects.
+    it "keeps the release floor at or above the nightly floor" do
+      release_builds = { Gem::Version.new("0.3.5") => Gem::Version.new("8165") }
+      build = release_builds[release_floor]
+
+      refute_nil build, "MINIMUM_RELEASE #{release_floor} has no recorded build number — " \
+                        "add it here (git rev-list --count <tag>) when bumping the pin"
+      assert_operator build, :>=, floor,
+                      "MINIMUM_RELEASE #{release_floor} is build #{build}, below the nightly floor #{floor}"
     end
 
     it "rejects versions it cannot parse — never assume an unknown build is new enough" do

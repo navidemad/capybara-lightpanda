@@ -76,6 +76,59 @@ jobs:
           EXAMPLES_BUNDLE_PATH: ~/.cache/example-bundles
         run: bundle exec rake examples:all
 
+  # Guards the *release* channel, which every other job leaves untested: they all
+  # run the rolling nightly. Tagged releases print a bare "0.3.5" with no commit
+  # counter, so they take a different branch of check_minimum_version — and when
+  # that branch was missing, the gem rejected every stable release for months
+  # without any CI noticing. Boot the pinned release the gem claims to support
+  # and run the driver suite against it.
+  release-channel:
+    if: ${{ !contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.title, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+      - name: Resolve the supported release floor
+        id: floor
+        run: |
+          echo "release=$(grep 'MINIMUM_RELEASE = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')" >> "$GITHUB_OUTPUT"
+      - name: Cache the pinned release binary
+        uses: actions/cache@v6
+        with:
+          # Keyed by version alone — a tagged release is immutable, so unlike the
+          # nightly cache this never needs a date component.
+          path: ~/.cache/lightpanda-release
+          key: lightpanda-release-${{ runner.os }}-${{ steps.floor.outputs.release }}
+      - name: Download the pinned release
+        env:
+          RELEASE: ${{ steps.floor.outputs.release }}
+        run: |
+          set -euo pipefail
+          BIN="$HOME/.cache/lightpanda-release/lightpanda-$RELEASE"
+          if [ -x "$BIN" ]; then
+            echo "Cached $RELEASE already present."
+          else
+            mkdir -p "$(dirname "$BIN")"
+            curl -fsSL --retry 3 --retry-delay 5 \
+              "https://github.com/lightpanda-io/browser/releases/download/$RELEASE/lightpanda-x86_64-linux" \
+              -o "$BIN"
+            chmod +x "$BIN"
+          fi
+          echo "LIGHTPANDA_BIN=$BIN" >> "$GITHUB_ENV"
+      - name: Assert the binary reports the pinned release
+        # Catches a mis-tagged or redirected asset before the suite blames the driver.
+        run: |
+          set -euo pipefail
+          actual="$("$LIGHTPANDA_BIN" version)"
+          echo "lightpanda version → $actual"
+          [ "$actual" = "${{ steps.floor.outputs.release }}" ] || {
+            echo "Expected ${{ steps.floor.outputs.release }}, got $actual" >&2; exit 1; }
+      - name: Driver suite against the pinned release
+        run: bundle exec rake test
+
   capybara-specs:
     if: github.event_name == 'push'
     needs: check
