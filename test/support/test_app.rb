@@ -844,4 +844,32 @@ class TestApp
     attachment "report.csv"
     "name,score\nlightpanda,100\n"
   end
+
+  # -- Viewport / responsive page --
+  # Two mutually exclusive CTAs gated by a `@media` width breakpoint, which is
+  # the shape `window_size` -> Emulation.setDeviceMetricsOverride has to get
+  # right: at a desktop viewport only #desktop-cta is visible, at a narrow one
+  # only #mobile-cta. Both carry the same text so a driver that ignores the
+  # media query surfaces as Capybara::Ambiguous rather than a silent pass.
+  get "/lightpanda/viewport" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Viewport Page</title>
+          <style>
+            #mobile-cta { display: none; }
+            @media (max-width: 500px) {
+              #desktop-cta { display: none; }
+              #mobile-cta { display: block; }
+            }
+          </style>
+        </head>
+        <body>
+          <a id="desktop-cta" href="/lightpanda/other">Get started</a>
+          <a id="mobile-cta" href="/lightpanda/other">Get started</a>
+        </body>
+      </html>
+    HTML
+  end
 end

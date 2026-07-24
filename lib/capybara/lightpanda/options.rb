@@ -20,12 +20,24 @@ module Capybara
       # `Capybara::Lightpanda.configure { |c| c.port = 9222 }` when external
       # tooling needs a known address.
       DEFAULT_PORT = 0
-      DEFAULT_WINDOW_SIZE = [1024, 768].freeze
+      # Mirrors Lightpanda's own `Viewport.default` (1920x1080) rather than
+      # Cuprite's 1024x768. window_size is applied for real now (see below), so
+      # a 1024x768 default would silently shrink the viewport of every existing
+      # suite and flip `@media` branches under them. Matching the browser's
+      # native default keeps `window_size` truthful AND leaves default
+      # behavior byte-identical to before it was wired up.
+      DEFAULT_WINDOW_SIZE = [1920, 1080].freeze
 
-      # window_size and headless are accepted for Cuprite drop-in
-      # compatibility (standard options at driver registration) but are
-      # inert: Lightpanda has no rendering engine, so there is nothing to
-      # resize, and headless is the only mode it runs in.
+      # window_size drives Emulation.setDeviceMetricsOverride via
+      # Browser#set_viewport on every create_page. This is a JS-visible
+      # viewport only — it sets window.innerWidth/innerHeight and the viewport
+      # that `matchMedia` / `@media` evaluate against, so responsive branches
+      # resolve at the size you ask for. It is NOT real layout: Lightpanda has
+      # no rendering engine, so getBoundingClientRect stays synthetic and
+      # nothing reflows. Sizing down will not make an off-viewport element
+      # report as obscured.
+      # headless is accepted for Cuprite drop-in compatibility but inert —
+      # headless is the only mode Lightpanda runs in.
       # save_path: directory for downloaded files (Cuprite parity). nil falls
       # back to Capybara.save_path at create_page time; downloads stay off when
       # both are nil (Browser#create_page only opts in when a path exists).
@@ -39,7 +51,7 @@ module Capybara
         @timeout = options.fetch(:timeout, DEFAULT_TIMEOUT)
         @handshake_timeout = options.fetch(:handshake_timeout, DEFAULT_HANDSHAKE_TIMEOUT)
         @process_timeout = options.fetch(:process_timeout, DEFAULT_PROCESS_TIMEOUT)
-        @window_size = options.fetch(:window_size, DEFAULT_WINDOW_SIZE)
+        @window_size = validate_window_size(options.fetch(:window_size, DEFAULT_WINDOW_SIZE))
         @browser_path = options[:browser_path]
         @headless = options.fetch(:headless, true)
         @save_path = options[:save_path]
@@ -73,6 +85,17 @@ module Capybara
       end
 
       private
+
+      # Validated here rather than at apply time so a bad value fails before
+      # Browser#initialize spawns a Lightpanda process — raising later would
+      # orphan it. Upstream reads a 0 dimension as "keep the current one", so
+      # forwarding junk would half-apply a viewport instead of failing.
+      def validate_window_size(size)
+        width, height = size
+        return size if width.is_a?(Integer) && height.is_a?(Integer) && width.positive? && height.positive?
+
+        raise ArgumentError, "window_size must be [width, height] of positive Integers, got #{size.inspect}"
+      end
 
       def parse_logger(logger)
         return logger if logger.is_a?(Capybara::Lightpanda::Logger)

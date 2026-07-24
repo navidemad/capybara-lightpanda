@@ -118,8 +118,24 @@ module Capybara
       # gate + ShadowRoot fragment walk), so the floor MUST include #2795; on
       # builds < 7571 innerText returns textContent verbatim (no block breaks,
       # leaks display:none text).
-      # Build 7571 = the #2795 merge (48ed689c) — now the binding floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("7571")
+      # Build 7571 = the #2795 merge (48ed689c).
+      # PR #2719 (css: apply @layer block rules to the cascade, merged
+      # 2026-07-17) makes StyleManager rank `@layer` rules correctly. Before it,
+      # a rule inside an `@layer` block was dropped from the cascade entirely,
+      # so an element hidden by an `@layer` `display: none` — the default shape
+      # of Tailwind v4's generated CSS — reported `checkVisibility() === true`.
+      # `_lightpanda.isVisible` (predicates.js) terminates in checkVisibility(),
+      # so on builds < 8160 Capybara believes such elements are visible and acts
+      # on them: clicks land on hidden nodes and `assert_no_selector` passes for
+      # visible ones. That is a wrong-answer bug rather than an exception, which
+      # is exactly the kind users can't diagnose, so the floor MUST include it.
+      # Build 8160 = the #2719 merge (b19b5725) — now the binding floor.
+      # PR #2664 (Emulation.setDeviceMetricsOverride, build 7556) is subsumed:
+      # Browser#set_viewport calls it on every create_page to honor the
+      # `window_size` option. Note the override only reached
+      # Page.getLayoutMetrics later (~build 8300); the gem does not depend on
+      # that half, so it is NOT part of the floor.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8160")
 
       attr_reader :pid, :ws_url, :version, :nightly_build
 

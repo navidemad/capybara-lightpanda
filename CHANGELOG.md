@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
-> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 7545 (the `Browser.setDownloadBehavior` merge, upstream PR #2722). The driver refuses to start against older binaries.
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 8160 (the `@layer` cascade merge, upstream PR #2719). The driver refuses to start against older binaries.
 
 ### Added
 
 - File **downloads**. When a response carries `Content-Disposition: attachment`, Lightpanda streams the body to disk via `Browser.setDownloadBehavior` (upstream PR #2722); the gem opts in automatically whenever a destination exists — the `:save_path` driver option, else `Capybara.save_path`. `page.driver.downloads` returns the completed files (absolute paths) and `page.driver.wait_for_download` blocks until in-flight downloads finish. The trigger is `Content-Disposition: attachment`, NOT MIME type, so real `send_file`/`send_data` downloads work while Capybara's MIME-triggered `:download` shared spec stays skipped (its `/download.csv` fixture sends `text/csv` with no such header). Covered by `test/features/download_test.rb`.
 - `:save_path` driver option (Cuprite parity) — directory for downloaded files; defaults to `Capybara.save_path`.
+- The `:window_size` driver option is **no longer inert**. It is applied via `Emulation.setDeviceMetricsOverride` (upstream PR #2664) on every page creation, so it drives `window.innerWidth`/`innerHeight` and the viewport `matchMedia` / `@media` rules evaluate against — responsive branches now resolve at the size you ask for, and a `@media`-gated element can be found and clicked. This is a **JS-visible viewport only**: Lightpanda has no rendering engine, so nothing reflows, `getBoundingClientRect` stays synthetic, and sizing down will not make an off-viewport element report as obscured. Covered by `test/features/viewport_test.rb`.
+
+### Changed
+
+- **Minimum Lightpanda build is now 8160** (was 7571), for upstream PR #2719 (`@layer` block rules participate in the cascade). Below it, an element hidden by an `@layer` `display: none` — the default shape of Tailwind v4's generated CSS — was reported *visible* by `checkVisibility()`, so `visible?` returned the wrong answer: Capybara would click hidden nodes and `assert_no_selector` would pass for visible ones. A wrong answer rather than an exception, hence the floor bump.
+- `Options::DEFAULT_WINDOW_SIZE` is now `[1920, 1080]` (was `[1024, 768]`). It mirrors Lightpanda's own `Viewport.default`, so wiring `:window_size` up leaves default behavior byte-identical instead of silently shrinking every existing suite's viewport and flipping `@media` branches under it. Suites that want Cuprite's old default must now pass `window_size: [1024, 768]` explicitly.
+- An invalid `:window_size` now raises `ArgumentError` from `Options#initialize` instead of being ignored. It is validated at construction rather than at apply time because `Browser#initialize` spawns the browser process before the viewport is applied — raising later would leave an orphaned Lightpanda behind.
+- **7 previously-skipped Capybara shared specs now run and pass**, un-skipped after auditing `spec/spec_helper.rb` against nightly 8285: `node #style` (both examples), `#matches_style?` (both), `#assert_matches_style should wait for style`, the counting `#has_css? ... in CSS processing drivers`, and `node #send_keys should generate key events`. Upstream's `getComputedStyle` now resolves cascade-aware `display`/`visibility`, synthetic `width`/`height`, and CSS initial values for `color`/`opacity`/`background-color`. Session-spec pending count drops 47 → 40. Still skipped, because they need real cascade resolution for arbitrary properties: `#assert_matches_style should raise error …` and `#has_css? :style option should support Hash`.
 
 ## [0.9.0] - 2026-06-18
 

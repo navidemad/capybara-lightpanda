@@ -7,10 +7,10 @@ Current nightly floor enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 757
 
 ## Architecture
 
-- Written in **Zig 0.15.2**, JS execution via **V8**
+- Written in **Zig 0.16.0**, JS execution via **V8**
 - HTML parsing: **html5ever** (standards-compliant, handles malformed HTML)
 - HTTP: **libcurl** (custom headers, proxies, TLS control)
-- CSS: **CSSOM** — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets; no full layout/paint/compositing
+- CSS: **CSSOM** — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets, `@layer` priority respected in the cascade (#2719, build ≥8160); no full layout/paint/compositing
 - Platforms: Linux x86_64, macOS aarch64, Windows via WSL2
 
 ## CDP Server
@@ -27,14 +27,14 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
 | **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
 | **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
-| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` sets `window.innerWidth`/`innerHeight` since PR #2664 (in nightly since build 7556); other device-emulation params still stubbed |
+| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` drives `window.innerWidth`/`innerHeight`, `matchMedia`/`@media` evaluation, and `Page.getLayoutMetrics` — a JS-visible viewport, still no real layout. `deviceScaleFactor`/`mobile`/`scale` accepted-and-warned. Also `setEmulatedMedia`, `setFocusEmulationEnabled`, `setTouchEmulationEnabled` |
 | **Fetch** | fetch.zig | Network interception: `enable`, `disable`, `continueRequest`, `failRequest`, `fulfillRequest`, `continueWithAuth`; events: `requestPaused`, `authRequired` |
 | **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
-| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe and/or worker loading; params `{subFrame, worker}`) |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`. A custom `User-Agent` set via `setExtraHTTPHeaders` (the gem's `Network#headers=` path) is honored since PR #2735 — but `validateUserAgent` still rejects `Mozilla`-containing UAs, so realistic browser-UA spoofing stays blocked on every path. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. |
-| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` event. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. |
+| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `getContentSignal`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe and/or worker loading; params `{subFrame, worker}`), `configureCDP`, `version` |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, `setBlockedURLs` (url-pattern request blocking). A custom `User-Agent` set via `setExtraHTTPHeaders` (the gem's `Network#headers=` path) is honored since PR #2735 — but `validateUserAgent` still rejects `Mozilla`-containing UAs, so realistic browser-UA spoofing stays blocked on every path. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. |
+| **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` + `lifecycleEvent` + `navigatedWithinDocument` events. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
 | **Security** | security.zig | Security state |
@@ -95,7 +95,7 @@ DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResult
 DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
-Network.setCookies (batch)   Network.getResponseBody
+Network.setCookies (batch)   Network.getResponseBody     Network.setBlockedURLs
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
 Network.requestServedFromCache (event)
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
@@ -108,8 +108,11 @@ Target.getTargets            Target.getTargetInfo        Target.setAutoAttach
 Target.setDiscoverTargets (stub)  Target.activateTarget (stub)
 Target.attachToBrowserTarget Target.detachFromTarget     Target.sendMessageToTarget
 Browser.grantPermissions / setPermission / resetPermissions (#2727)
-Emulation.setDeviceMetricsOverride (sets window.innerWidth/innerHeight, #2664)
-Emulation.clearDeviceMetricsOverride
+Browser.setWindowBounds (noop)  Browser.getWindowForTarget (fixed windowId)
+Emulation.setDeviceMetricsOverride (window.innerWidth/innerHeight + matchMedia +
+                              Page.getLayoutMetrics, #2664)
+Emulation.clearDeviceMetricsOverride  Emulation.setEmulatedMedia
+Emulation.setFocusEmulationEnabled    Emulation.setTouchEmulationEnabled
 LP.getSemanticTree           LP.getInteractiveElements
 LP.getStructuredData         LP.waitForSelector
 LP.getMarkdown               LP.getNodeDetails
@@ -118,6 +121,7 @@ LP.fillNode                  LP.scrollNode
 LP.configureLoading          (per-session opt-out for iframe and/or worker loading,
                               params {subFrame, worker}; NOT applicable to this gem —
                               disabling subframes breaks switch_to_frame/within_frame.)
+LP.configureCDP              LP.getContentSignal         LP.version
 ```
 
 ## Known Bugs and Limitations
@@ -132,10 +136,10 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 2. **No rendering engine (CSS much improved)**
    - Screenshots return a 1920x1080 PNG (hardcoded dimensions, no actual rendering)
-   - `getComputedStyle` resolves inline `style=` declarations + `display`/`visibility` (#2733 fixed by #2836, build ≥7687 — above the floor); stylesheet-cascade property lookups still return `""`. `checkVisibility` matches all active stylesheets
+   - `getComputedStyle` resolves inline `style=` declarations, cascade-aware `display`/`visibility` (via StyleManager, so author stylesheets and `@layer` count), synthetic `width`/`height` matching `getBoundingClientRect`, and CSS **initial** values for `color`/`opacity`/`background-color`. Every other property returns `""` — there is still no cascade resolution for arbitrary properties. `checkVisibility` matches all active stylesheets
    - No scroll/resize, no visual regression testing
-   - `Page.getLayoutMetrics`, `getBoundingClientRect`, and screenshots stay hardcoded 1920x1080 (no real layout/geometry)
-   - `window.innerWidth`/`innerHeight` DO honor `Emulation.setDeviceMetricsOverride` since PR #2664 (JS-visible viewport only — drives `matchMedia`/responsive branches, NOT real layout). The gem's `window_size` option is still inert (not wired to `setDeviceMetricsOverride`); revisit if a real-app spec needs a non-1920×1080 JS viewport.
+   - `getBoundingClientRect` and screenshots have no real layout: rects are synthesized from document/sibling position and return all-zero for non-visible elements
+   - **Viewport IS emulatable**: `Emulation.setDeviceMetricsOverride` drives `window.innerWidth`/`innerHeight`, `matchMedia`/`@media` evaluation, AND `Page.getLayoutMetrics` (no longer hardcoded 1920×1080). This is a JS-visible viewport only — element geometry stays synthetic, so `obscured?`-outside-viewport still can't work. The gem wires its `window_size` option to it in `Browser#set_viewport` (called from `create_page`); `Options::DEFAULT_WINDOW_SIZE` mirrors the browser's native 1920×1080 so the default is a no-op.
 
 3. **Cookies on redirects not sent on follow-up request**
    - Cookies set via `Set-Cookie` on a 302 response are stored in the cookie jar
@@ -154,7 +158,7 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 6. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (build ≥6353)
    - The gem passes `--enable-external-stylesheets` unconditionally (`Process#build_args`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct. Cost: one synchronous CSS fetch per `<link>`.
    - The flag is a fatal `UnknownOption` on builds <6353. (Per-session `LP.configureLoading {externalStylesheets: true}` also exists; the gem uses the CLI flag.)
-   - Inline `<style>` `@media` + `matchMedia` evaluate against the hardcoded 1920×1080 viewport.
+   - `@media` + `matchMedia` evaluate against the current viewport, which defaults to 1920×1080 but honors `Emulation.setDeviceMetricsOverride` (see limitation #2).
    - **Capybara impact**: responsive CTA variants gated by an external stylesheet now resolve to a single variant (no more `Capybara::Ambiguous`); externally-loaded responsive specs that previously needed cuprite/Selenium work on lightpanda.
 
 7. **SIGTERM after a live CDP connection — hangs fixed upstream (#2509 telemetry, #2511 live-WS, both ≤ floor), gem keeps both teardown layers regardless** (crash / GC-abandon paths still need them):
@@ -164,10 +168,6 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
    2. **Backstop** — `Process#stop` + the `weak_kill` finalizer escalate `TERM` → 3s grace →
       `SIGKILL` → reap, for the crash / GC-abandon paths the `at_exit` can't reach.
 
-### Open Fix PRs (not yet merged)
-
-- **PR #2077**: `Target.attachToTarget` returns unique session id per call. Gem only calls `attachToTarget` once per page, so spec-compliance win only.
-
 ### Upstream Open Issues That Affect This Gem
 
 | Issue | Impact | Description |
@@ -175,10 +175,8 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 | #2173 | Crash | `TargetClosedError` navigating to React apps via CDP — browser crashes. Our `handle_navigation_crash` reconnect logic covers this, but would appear as `DeadBrowserError` after retry. |
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
-| #2017 | JS | Implement Worker and SharedWorker. Partial Worker support landed; SharedWorker still missing and many Worker APIs still unimplemented. |
-| #2407 | Stability | V8 fatal `AllowHeapAllocation::IsAllowed()` during GC weak callback under CDP load (debug builds only; trigger: Worker `importScripts` + iframe-heavy page + repeated CDP connect/disconnect). Not gem-relevant — gem tests don't load Worker-heavy pages. Watch only. |
+| #2400 | JS context | Child iframe navigation invalidates the main frame's `executionContextId`. Covered by `with_default_context_wait` + `NoExecutionContextError` in `invalid_element_errors`. |
 | #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory. Not gem-relevant — `Driver#reset!` disposes the BrowserContext per spec. A very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. |
-| #2718 | Visibility | `@layer` block rules dropped from the cascade → `el.checkVisibility()` reports Tailwind v4 elements hidden via an `@layer` `display:none` as visible, so `_lightpanda.isVisible` (predicates.js, ends in `checkVisibility()`) false-positives and Capybara may act on unseen elements. Authored fix PR #2719 open. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.
 
@@ -186,16 +184,17 @@ LP.configureLoading          (per-session opt-out for iframe and/or worker loadi
 
 - Many Web APIs not yet implemented (hundreds remain)
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
-- Same-document navigations (`history.pushState`/`replaceState`, fragment, history traversal) update in-page `window.location` but emit **no** CDP `Page.navigatedWithinDocument` event (#2829, open). The gem is immune — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
-- `window.getComputedStyle()` resolves inline `style=` + `display`/`visibility` only (#2836); stylesheet-cascade lookups return `""`. `checkVisibility` matches all active stylesheets
+- Same-document navigations: `Page.navigatedWithinDocument` IS emitted for `history.pushState`/`replaceState` (#2964, build ≥8143, `navigationType: historyApi`); fragment navigation and history traversal still emit nothing (#2829, open). The gem is immune either way — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
+- `window.getComputedStyle()`: cascade-aware for `display`/`visibility` only; synthetic `width`/`height`; CSS initial values for `color`/`opacity`/`background-color`; every other property returns `""` (see limitation #2). `checkVisibility` matches all active stylesheets including `@layer`
 - `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT there's no content-height clamping (`scrollHeight`/`clientHeight` are a hardcoded 1e8), element scroll is decoupled from window scroll, and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`.
 - `MutationObserver` available; `window.postMessage` across frames works
 - No CORS enforcement (acknowledged in upstream README)
 - In-page `WebSocket` API implemented; sends `Origin` on upgrade since build 6736 (PR #2710), so ActionCable's request-forgery check passes and `turbo_stream_for` / solid_cable streams connect without `disable_request_forgery_protection`
 - `window.open` partial support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively for login popups.
-- Web Workers: partial support — `URL`, `AbortController`, `AbortSignal`, `OffscreenCanvas`. Many Worker APIs still missing (#2017). Workers run in the same thread as the page and have a separate context.
+- Workers: dedicated + **SharedWorker** implemented (#2017). Workers run in the same thread as the page with a separate context; individual Worker-scope APIs may still be missing. `--disable-workers` opts out.
+- Landed between builds 7776 and 8300: **IndexedDB** (#2732; in-memory unless `--storage-engine sqlite`), **EventSource/SSE** (#2879), `CookieStore`, `ResizeObserver`, the Navigation API, `BroadcastChannel`, `StorageEvent`, `BeforeUnloadEvent`, `TouchEvent`, SVG geometry/animated-value interfaces, `DOMMatrix`/`DOMPoint`.
 - No Service Workers, SharedArrayBuffer
-- No `localStorage`/`sessionStorage` persistence across sessions
+- No `localStorage`/`sessionStorage` persistence across sessions (in-memory only; `--storage-engine` backs IndexedDB, not Web Storage)
 - File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are required — on builds 6625–6671 the file attaches but the form submits empty — and the gem floor guarantees them. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
 - File **download** — **SUPPORTED since build 7545** (PR #2722, in the floor). `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled}` streams a navigation response carrying `Content-Disposition: attachment` to disk (on the Lightpanda host) and emits `Browser.downloadWillBegin`/`downloadProgress`. The gem's `Downloads` tracker (`downloads.rb`) wires this in `Browser#create_page` whenever a destination exists (`:save_path` option, else `Capybara.save_path`); `Driver#downloads` / `#wait_for_download` expose the completed-file list. **Trigger is `Content-Disposition: attachment`, NOT MIME type** — a `text/csv` (or any) response WITHOUT that header is rendered as a normal (empty) navigation, not downloaded. That's why Capybara's `:download` shared spec (its `/download.csv` fixture is MIME-triggered, no Content-Disposition) stays in `capybara_skip`; the real attachment path is covered by `test/features/download_test.rb`. `<a download>` clicks navigate to the attachment URL (Lightpanda commits an empty doc afterward) rather than staying on the page.
 - Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). The drop payload rides one `Runtime.callFunctionOn` over the CDP WebSocket, whose inbound cap the gem raises to 100 MiB via `--cdp-max-message-size` (`Process#build_args`; flag from PR #2760, build 7441 ≤ floor, default 1 MiB) — so a dropped file's base64 must stay under ~70 MB (was ~700 KB at the 1 MiB default). Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
@@ -209,12 +208,23 @@ lightpanda fetch [--obey_robots] [--log_format pretty|json] [--log_level info|de
 # CDP server mode
 lightpanda serve --host 127.0.0.1 --port 9222 [--log_format json]
 
-# Flags
---obey_robots                              # Respect robots.txt
---insecure_disable_tls_host_verification   # Skip TLS verification (dev only)
---disable-subframes                        # Skip child iframe document loading (NOT useful for this gem)
---log_format pretty|json                   # Log output format
---log_level info|debug                     # Verbosity
+# Flags — canonical spelling is kebab-case; the parser also accepts the
+# snake_case form of every name (cli.zig toKebabCase), so the gem's
+# `--log_level` keeps working.
+--obey-robots                              # Respect robots.txt
+--insecure-disable-tls-host-verification   # Skip TLS verification (dev only)
+--enable-external-stylesheets              # Fetch <link rel=stylesheet> (gem passes this)
+--cdp-max-message-size <BYTES>             # Inbound CDP WS cap, default 1 MiB (gem: 100 MiB)
+--disable-subframes                        # Skip child iframe loading (NOT useful for this gem)
+--disable-workers                          # Skip worker loading
+--storage-engine none|sqlite               # IndexedDB persistence backend
+--storage-sqlite-path <PATH>               # SQLite file (":memory:" allowed)
+--user-agent / --user-agent-suffix         # UA control (Mozilla-containing values still rejected)
+--block-urls / --block-cidrs / --block-private-networks
+--http-cache-dir <PATH>                    # On-disk HTTP cache
+--inject-script / --inject-script-file     # CLI-side equivalent of addScriptToEvaluateOnNewDocument
+--log-format pretty|json                   # Log output format
+--log-level info|debug                     # Verbosity
 
 # Environment
 LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
@@ -233,7 +243,7 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
 - Linux x86_64: `lightpanda-x86_64-linux` (ELF)
 - macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
-- Latest release: 0.3.4 (2026-07-01). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+- Latest release: 0.3.5 (2026-07-17). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 ## Differences from Chrome/Chromium CDP
 

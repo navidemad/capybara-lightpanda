@@ -27,11 +27,34 @@ describe Capybara::Lightpanda::Options do
       assert_equal 10, options.process_timeout
     end
 
-    # window_size/headless are cuprite drop-in options: accepted and readable
-    # so migrating driver registrations keep working, inert at runtime
-    # (no rendering engine to resize; headless is the only mode).
-    it "accepts window_size for cuprite compatibility" do
-      assert_equal [1024, 768], options.window_size
+    # window_size is applied for real (Browser#set_viewport ->
+    # Emulation.setDeviceMetricsOverride), so the default deliberately mirrors
+    # Lightpanda's own Viewport.default rather than Cuprite's 1024x768 —
+    # otherwise wiring the option up would have silently shrunk the viewport of
+    # every existing suite and flipped `@media` branches under it.
+    it "defaults window_size to Lightpanda's native viewport" do
+      assert_equal [1920, 1080], options.window_size
+    end
+
+    it "accepts an explicit window_size" do
+      assert_equal [375, 667], Capybara::Lightpanda::Options.new(window_size: [375, 667]).window_size
+    end
+
+    # Validated at construction, not at apply time: Browser#initialize spawns
+    # the process before create_page runs, so raising later would orphan a
+    # Lightpanda. Upstream also reads a 0 dimension as "keep the current one",
+    # so a silently-forwarded bad value would half-apply a viewport.
+    [
+      ["a zero dimension", [0, 768]],
+      ["a negative dimension", [1024, -1]],
+      ["non-integer dimensions", %w[1024 768]],
+      ["a single dimension", [1024]],
+      ["nil", nil],
+    ].each do |label, value|
+      it "rejects #{label} for window_size" do
+        error = assert_raises(ArgumentError) { Capybara::Lightpanda::Options.new(window_size: value) }
+        assert_match(/window_size/, error.message)
+      end
     end
 
     it "accepts headless for cuprite compatibility" do

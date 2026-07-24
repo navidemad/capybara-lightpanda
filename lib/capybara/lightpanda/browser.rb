@@ -154,6 +154,7 @@ module Capybara
         # is loaded — Browser.setDownloadBehavior is a no-op without one.
         downloads.enable(configured_download_path)
         register_auto_scripts
+        set_viewport
       end
 
       # Download destination: explicit :save_path option wins, else
@@ -476,6 +477,27 @@ module Capybara
 
       def register_auto_scripts
         page_command("Page.addScriptToEvaluateOnNewDocument", source: AutoScripts::JS)
+      end
+
+      # Apply the `window_size` option as a JS-visible viewport: it drives
+      # window.innerWidth/innerHeight and the viewport `matchMedia` / `@media`
+      # evaluate against, so responsive branches resolve at the requested size.
+      # It is NOT layout — Lightpanda has no rendering engine, so nothing
+      # reflows and getBoundingClientRect stays synthetic.
+      #
+      # Re-applied on every create_page rather than once at connect. The
+      # override lives on the CDP-connection-scoped Browser upstream, so it
+      # already survives Driver#reset!'s disposeBrowserContext; re-sending is
+      # one idempotent call that also covers the reconnect path, where the
+      # connection (and therefore the override) is genuinely new.
+      #
+      # window_size is validated in Options#initialize, which runs before the
+      # process is spawned — a bad value must not leave an orphaned browser
+      # behind, and raising from here would (Browser#initialize starts the
+      # process before create_page ever runs).
+      def set_viewport
+        width, height = @options.window_size
+        page_command("Emulation.setDeviceMetricsOverride", width: width, height: height)
       end
 
       # Track default-execution-context availability via Runtime events.
