@@ -1,5 +1,3 @@
-./spec/features/spree/admin/customers_spec.rb # Customers update when user bill address is not editable creates a new one
-./spec/features/spree/admin/customers_spec.rb # Customers update when user bill address is not editable when updating an existing bill address switches the customer bill address to the existing address
 ./spec/features/spree/admin/products/option_types_spec.rb # Option Types manaing option values allows an admin to manage option values
 ./spec/features/spree/admin/settings/shipping_categories_spec.rb # Shipping categories can delete shipping category
 ./spec/features/spree/admin/settings/shipping_methods_spec.rb # Shipping methods allows Store Owner to delete shipping method

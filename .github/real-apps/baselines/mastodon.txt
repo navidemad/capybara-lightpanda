@@ -1,3 +1,0 @@
-./spec/system/home_spec.rb # Home page when not signed in when the landing page is set to about visits the root path and is redirected to the about page
-./spec/system/home_spec.rb # Home page when not signed in when the landing page is set to local_feed visits the root path and is redirected to the local live feed page
-./spec/system/home_spec.rb # Home page when not signed in when the landing page is set to trends visits the root path and is redirected to the trends page
