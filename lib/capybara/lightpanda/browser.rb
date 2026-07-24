@@ -7,6 +7,7 @@ require_relative "browser/finder"
 require_relative "browser/navigation"
 require_relative "browser/modals"
 require_relative "browser/console"
+require_relative "browser/selenium_compat"
 
 module Capybara
   module Lightpanda
@@ -18,6 +19,7 @@ module Capybara
       include Navigation
       include Modals
       include Console
+      include SeleniumCompat
 
       attr_reader :options, :process, :client, :target_id, :session_id, :browser_context_id, :frame_stack
 
