@@ -52,11 +52,21 @@ describe Capybara::Lightpanda::Driver do
       assert_nil fresh_driver.instance_variable_get(:@browser)
     end
 
-    it "captures the Lightpanda version and nightly build after start" do
+    # Both channels are supported, so assert on whichever one this run is
+    # using rather than assuming a build counter exists — a tagged release
+    # (LIGHTPANDA_BIN pointing at e.g. 0.3.5) reports `release` and leaves
+    # `nightly_build` nil.
+    it "captures the Lightpanda version and its channel floor after start" do
       assert_kind_of String, browser.version
       assert_match(/\d+\.\d+\.\d+/, browser.version)
-      assert_kind_of Gem::Version, browser.nightly_build
-      assert_operator browser.nightly_build, :>=, Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD
+
+      if browser.nightly_build
+        assert_nil browser.release, "a build is either a nightly or a release, never both"
+        assert_operator browser.nightly_build, :>=, Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD
+      else
+        assert_kind_of Gem::Version, browser.release
+        assert_operator browser.release, :>=, Capybara::Lightpanda::Process::MINIMUM_RELEASE
+      end
     end
   end
 

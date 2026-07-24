@@ -78,8 +78,15 @@ module Capybara
         @process&.version
       end
 
+      # Set on the nightly/dev channel only; nil for a tagged release, which
+      # carries no build counter. `release` is its mirror image — exactly one of
+      # the two is non-nil once the process has started.
       def nightly_build
         @process&.nightly_build
+      end
+
+      def release
+        @process&.release
       end
 
       def initialize(options = {})
