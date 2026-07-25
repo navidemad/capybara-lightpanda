@@ -61,6 +61,8 @@ These are browser-level limitations, not fixable in this gem:
 
 To test against a real Rails app, add `gem "capybara-lightpanda", path: "../capybara-lightpanda"` to the app's Gemfile and run with `BROWSER=lightpanda bundle exec rails test test/system/`.
 
+To reproduce a real-apps CI failure locally, use the boot harness rather than setting the app up by hand: `script/real-app/boot.sh <target>` then `script/real-app/spec.sh <target> <spec> -e "<example>"`. It ports `.github/workflows/real-apps.yml` step for step (reading the matrix out of it, so it can't drift), captures `console_logs` + `network.traffic` per failing example, and names the `causes.yml` entry the failure matches. See `script/real-app/README.md`.
+
 ## Reference: Ferrum Gem
 
 When implementing new CDP features or improving existing ones, refer to [Ferrum](https://github.com/rubycdp/ferrum) (Ruby CDP client for Chrome) for design inspiration — especially for API patterns, error handling, and Capybara driver conventions. However, always adapt for Lightpanda's constraints: missing CDP methods, unreliable events, async navigation, and crash recovery. Never blindly copy Ferrum patterns that assume Chrome behavior (e.g., synchronous `Page.navigate`, `Page.reload`, `getAllCookies`).
