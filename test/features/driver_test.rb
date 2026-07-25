@@ -754,6 +754,25 @@ describe Capybara::Lightpanda::Driver do
         assert_equal "Hello World", input.value
       end
     end
+
+    # Capybara's contract (covered by its own `node #path returns xpath which
+    # points to itself`) is only that the path re-finds the node. These pin the
+    # shape too, because the previous implementation emitted a CSS-ish
+    # `html > body > form > input` that satisfied nothing and silently made
+    # `#path` useless in failure output.
+    describe "#path" do
+      it "emits an absolute XPath of uppercase, indexed steps" do
+        assert_equal "/HTML[1]/BODY[1]/FORM[1]/INPUT[1]", session.find(:css, "#name").path
+      end
+
+      it "counts only same-tag preceding siblings" do
+        node = session.find(:css, "#readonly-input")
+        path = node.path
+
+        assert_match(%r{\A/HTML\[1\]/BODY\[1\]/FORM\[1\]/INPUT\[\d+\]\z}, path)
+        assert_equal node, session.find(:xpath, path)
+      end
+    end
   end
 
   # ───────────────────────────────────────────────
@@ -1043,19 +1062,25 @@ describe Capybara::Lightpanda::Driver do
   # Node path
   # ───────────────────────────────────────────────
 
+  # These used to assert a CSS-ish path (`html > body > div#content`), which
+  # was the bug: Capybara's contract is an XPath that re-finds the same node,
+  # and an id-bearing element got a `#content` shortcut that stops pointing at
+  # *this* node the moment the document has a duplicate id. Assert the
+  # round-trip now, not the string shape.
   describe "node path" do
-    it "returns a CSS path for elements with ids" do
+    it "returns an XPath that re-finds an element carrying an id" do
       session.visit("/lightpanda/simple")
       el = session.find(:css, "#content")
-      path = el.path
-      assert_includes path, "#content"
+
+      assert_equal el, session.find(:xpath, el.path)
+      refute_includes el.path, "#content"
     end
 
-    it "returns a path for deeply nested elements" do
+    it "returns an XPath that re-finds a deeply nested element" do
       session.visit("/lightpanda/elements")
       el = session.find(:css, ".item", match: :first)
-      path = el.path
-      refute_empty path
+
+      assert_equal el, session.find(:xpath, el.path)
     end
   end
 

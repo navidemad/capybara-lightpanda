@@ -102,9 +102,6 @@ RSpec.configure do |config|
       # doesn't move the input caret on ArrowLeft/Home/End, so `:left` doesn't
       # reposition the cursor mid-string. Upstream gap, not yet filed.
       /node #send_keys should send special characters/,
-      # `Node#path` canonical XPath generation — Lightpanda's DOM
-      # serialization differs from Chrome's expected output.
-      /node #path returns xpath which points to itself/,
       # CSS text-transform / case sensitivity for invisible text — depends
       # on getComputedStyle returning cascade-resolved `text-transform`,
       # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.

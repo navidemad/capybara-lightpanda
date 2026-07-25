@@ -504,9 +504,35 @@ module Capybara
       # process is spawned — a bad value must not leave an orphaned browser
       # behind, and raising from here would (Browser#initialize starts the
       # process before create_page ever runs).
-      def set_viewport
-        width, height = @options.window_size
+      #
+      # Public (declared below the private section via `public :set_viewport`)
+      # because Driver#resize_window_to drives it mid-test: with no arguments
+      # it re-applies the configured size, which is what create_page wants.
+      # SHARP EDGE, verified 2026-07-25 on nightly 8285: this updates
+      # window.innerWidth/innerHeight and what `matchMedia` reports
+      # immediately, but it does NOT re-resolve `@media` rules for the document
+      # already loaded. Lightpanda fixes the cascade when a document is parsed
+      # and nothing invalidates it on a metrics change, so a page loaded at
+      # 1920 keeps rendering its desktop branch even while `matchMedia`
+      # ("(max-width: 500px)") reports true. Navigating (Driver#visit) parses
+      # under the new metrics and resolves correctly.
+      #
+      # No workaround shipped on purpose. DOM/CSSOM mutations look like they
+      # force a re-cascade but don't survive scrutiny (the probe that suggested
+      # otherwise had been contaminated by the previous iteration's viewport),
+      # so anything here would be a guess dressed up as a fix. Driver's window
+      # methods document the resize-then-visit shape instead.
+      def set_viewport(width = nil, height = nil)
+        width, height = @options.window_size if width.nil? || height.nil?
         page_command("Emulation.setDeviceMetricsOverride", width: width, height: height)
+        [width, height]
+      end
+
+      # The viewport as the page currently sees it. Read back from JS rather
+      # than echoing what we last set, so it stays truthful if a page (or a
+      # direct Emulation call through #execute_cdp) moved it behind our back.
+      def viewport_size
+        evaluate("[window.innerWidth, window.innerHeight]")
       end
 
       # Track default-execution-context availability via Runtime events.
@@ -564,6 +590,12 @@ module Capybara
       def monotonic_time
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
+
+      # Viewport control is API, not lifecycle: Driver#resize_window_to and
+      # #window_size call it mid-test. It lives up in the private section
+      # beside register_auto_scripts because create_page is its other caller
+      # and the two read together.
+      public :set_viewport, :viewport_size
     end
   end
 end

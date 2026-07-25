@@ -174,6 +174,83 @@ module Capybara
         end
       end
 
+      # -- Window Support --
+      # Single-window driver. Lightpanda's BrowserContext is 1:1:1 with
+      # Session/Page/target and rejects a second Target.createTarget with
+      # TargetAlreadyLoaded (upstream #1962, maintainer-owned), so there is
+      # exactly one window and its handle is the CDP target id.
+      #
+      # Resizing drives Emulation.setDeviceMetricsOverride, so it is real for
+      # window.innerWidth/innerHeight and for what `matchMedia` reports. Two
+      # limits worth knowing before writing a responsive spec:
+      #
+      #   1. It is not layout. Element geometry stays synthetic, so a resize
+      #      changes which CSS branch applies, never where anything sits.
+      #   2. `@media` rules do NOT re-resolve for the document already on
+      #      screen — Lightpanda fixes the cascade at parse time and a metrics
+      #      change doesn't invalidate it. So resize, THEN visit:
+      #
+      #        page.current_window.resize_to(375, 667)
+      #        visit "/pricing"   # parses under the new metrics
+      #        assert_selector "#mobile-cta"
+      #
+      #      Resizing without re-visiting leaves `matchMedia` and the rendered
+      #      branch disagreeing. See Browser#set_viewport for the verification.
+
+      def current_window_handle
+        browser.target_id
+      end
+
+      def window_handles
+        [browser.target_id]
+      end
+
+      def switch_to_window(handle)
+        return if handle == browser.target_id
+
+        raise NoSuchPageError, "Window #{handle.inspect} does not exist. " \
+                               "Lightpanda supports a single window per session."
+      end
+
+      # Capybara's Window#current? rescues this to decide whether a handle is
+      # still live, so it must be a class, not a raise.
+      def no_such_window_error
+        NoSuchPageError
+      end
+
+      def window_size(handle)
+        assert_current_window!(handle)
+        browser.viewport_size
+      end
+
+      def resize_window_to(handle, width, height)
+        assert_current_window!(handle)
+        browser.set_viewport(width, height)
+      end
+
+      # No window manager and no layout, so "as large as the screen" has no
+      # meaning beyond the configured size. Both reset to it rather than
+      # raising, because suites call maximize defensively in setup and a
+      # raise there would take out the example before it starts.
+      def maximize_window(handle)
+        assert_current_window!(handle)
+        browser.set_viewport
+      end
+
+      alias fullscreen_window maximize_window
+
+      def open_new_window(_kind = :tab)
+        raise Capybara::NotSupportedByDriverError,
+              "Lightpanda serves a single target per CDP connection (upstream lightpanda-io/browser#1962), " \
+              "so a second window cannot be opened. Drive the second page in its own Capybara session instead."
+      end
+
+      def close_window(_handle)
+        raise Capybara::NotSupportedByDriverError,
+              "Lightpanda has a single window per session; closing it would end the session. " \
+              "Use Driver#reset! to start a fresh one."
+      end
+
       # -- Modal/Dialog Support --
 
       # find_modal owns the wait default (browser.options.timeout) — pass
@@ -288,6 +365,17 @@ module Capybara
       end
 
       private
+
+      # Every window method takes a handle because Capybara's Window objects
+      # carry one; with a single window the only valid value is the current
+      # target id. Reject anything else rather than silently operating on the
+      # wrong window.
+      def assert_current_window!(handle)
+        return if handle.nil? || handle == browser.target_id
+
+        raise NoSuchPageError, "Window #{handle.inspect} does not exist. " \
+                               "Lightpanda supports a single window per session."
+      end
 
       # Unwrap arguments before sending to the browser. Capybara::Node::Element wraps
       # our Lightpanda::Node — pull `.base` out so `serialize_argument` can build

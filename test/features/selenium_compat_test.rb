@@ -83,6 +83,35 @@ describe "Capybara::Lightpanda selenium compatibility" do
     end
   end
 
+  describe "Browser#execute_cdp" do
+    before { session.visit("/lightpanda/form_test") }
+
+    it "sends a raw CDP command against the page session" do
+      result = browser.execute_cdp("Runtime.evaluate", expression: "6 * 7", returnByValue: true)
+
+      assert_equal 42, result.dig("result", "value")
+    end
+
+    # The point of an escape hatch is reaching surface the gem hasn't wrapped.
+    # Emulation is a good witness: nothing else in the driver routes through it
+    # except set_viewport.
+    it "reaches CDP domains the driver does not otherwise expose" do
+      browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 640, height: 480)
+
+      assert_equal 640, session.evaluate_script("window.innerWidth")
+    ensure
+      browser.set_viewport
+    end
+
+    # Unknown methods must surface Lightpanda's own error, not a wrapper of
+    # ours — otherwise the hatch lies about what the browser supports.
+    it "propagates the browser's error for an unknown method" do
+      assert_raises(Capybara::Lightpanda::BrowserError) do
+        browser.execute_cdp("Nonexistent.method")
+      end
+    end
+  end
+
   describe "Browser#switch_to" do
     # Can't be honored (responses are pre-armed, see Modals), so the value here
     # is failing with the migration instead of NoMethodError.

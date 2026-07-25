@@ -90,6 +90,20 @@ module Capybara
           evaluate_async(script.to_s.strip, *)
         end
 
+        # Selenium's raw-CDP escape hatch, as used by
+        # `page.driver.browser.execute_cdp("Network.setBlockedURLs", urls: [...])`.
+        # Scoped to the page session, matching Selenium — that covers the
+        # Page / Runtime / DOM / Network / Emulation domains a suite would
+        # reach for. Browser-scoped commands (Target.*, Browser.*) still go
+        # through Browser#command.
+        #
+        # Deliberately unvalidated: the point is to reach CDP surface the gem
+        # has not wrapped yet, so an unknown method should fail with
+        # Lightpanda's own error rather than one of ours.
+        def execute_cdp(method, **params)
+          page_command(method.to_s, **params)
+        end
+
         # Selenium's post-hoc `switch_to.alert` cannot be honored: Lightpanda
         # requires the accept/dismiss response to be armed BEFORE the action
         # that opens the dialog (LP.handleJavaScriptDialog, upstream #2261 —
