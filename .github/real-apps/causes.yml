@@ -34,9 +34,11 @@ backbone-model-race-on-click:
     0 <li>, one render later it held 1, and the traffic shows the ?set=nested
     GET returning 200 with no POST following it. A spec-side race that this
     driver loses because visit returns at load rather than at network idle,
-    which is what Cuprite and Ferrum do too. Note the TypeError is invisible to
-    browser.console_logs: Lightpanda implements no Runtime.exceptionThrown, so
-    it took a page-side window error listener to see it.
+    which is what Cuprite and Ferrum do too. The TypeError took a hand-injected
+    window error listener to see, because Lightpanda implements no
+    Runtime.exceptionThrown and console_logs only ever holds console.* calls;
+    that listener now ships in javascripts/errors.js, so re-running this one
+    reports the TypeError in browser.page_errors directly.
   reference: "wishlist B: Runtime.exceptionThrown"
   patterns:
     - 'admin/taxons_spec\.rb # Taxonomies and taxons can view and add to taxon tree'

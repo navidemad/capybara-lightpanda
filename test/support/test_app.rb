@@ -619,6 +619,36 @@ class TestApp
     HTML
   end
 
+  # Uncaught page errors, for Browser#page_errors. The whole point is that none
+  # of these go through console.* — they're thrown, not logged, which is exactly
+  # what console_logs cannot see (Lightpanda emits no Runtime.exceptionThrown).
+  # A click triggers the throw so the test can assert the buffer was empty
+  # beforehand, mirroring how a real handler dies mid-interaction.
+  get "/lightpanda/page_errors" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head><title>page errors</title></head>
+      <body>
+        <button id="thrower">throw</button>
+        <button id="rejecter">reject</button>
+        <p id="marker">page errors fixture</p>
+        <script>
+          document.getElementById('thrower').addEventListener('click', function() {
+            var absent;
+            // Same shape as the solidus taxon-tree failure: a handler reading a
+            // property off undefined, with nothing logged anywhere.
+            absent.id.toString();
+          });
+          document.getElementById('rejecter').addEventListener('click', function() {
+            Promise.reject(new Error("rejected on purpose"));
+          });
+        </script>
+      </body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/probe/lifecycle" do
     <<~HTML
       <!DOCTYPE html>
