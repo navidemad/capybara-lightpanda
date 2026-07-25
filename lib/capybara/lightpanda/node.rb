@@ -124,8 +124,15 @@ module Capybara
         call("function() { this.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true})) }")
       end
 
+      # A real pointer entering an element fires `mouseover` (bubbling) AND
+      # `mouseenter` (non-bubbling), in that order. Dispatching only `mouseover`
+      # silently no-ops the `mouseenter->menu#open` Stimulus idiom and the
+      # Floating UI / tippy-style menus built on it — the dominant hover-menu
+      # pattern in Rails apps — so fire both. CSS `:hover` still reveals nothing
+      # (upstream tracks no pointer state); test/features/hover_test.rb pins
+      # both halves.
       def hover
-        call("function() { this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true})) }")
+        call(HOVER_JS)
       end
 
       # Kept as a deliberate no-op despite upstream now tracking scroll position
@@ -471,6 +478,18 @@ module Capybara
           }
         JS
       end
+
+      # `mouseenter` carries `bubbles: false` per spec — it is dispatched on the
+      # target only, not walked up the ancestor chain the way a real pointer
+      # would. That covers the handler-on-the-hovered-element case (every
+      # Stimulus `mouseenter->` action) and stops short of emulating pointer
+      # geometry we don't have.
+      HOVER_JS = <<~JS
+        function() {
+          this.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, cancelable: true}));
+          this.dispatchEvent(new MouseEvent('mouseenter', {bubbles: false, cancelable: true}));
+        }
+      JS
 
       # We dispatch a `MouseEvent` (not a generic `Event`) because Turbo's link
       # and form interceptors guard with `event instanceof MouseEvent` before
