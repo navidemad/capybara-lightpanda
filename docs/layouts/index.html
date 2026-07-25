@@ -482,11 +482,11 @@
             </tr>
             <tr class="matrix__row--accent">
               <th scope="row">Memory per session</th>
-              <td>~250&nbsp;MB</td>
-              <td><strong>~10&nbsp;MB</strong></td>
+              <td>~280&nbsp;MB</td>
+              <td><strong>~17&nbsp;MB</strong></td>
               <td>
-                <span class="matrix__win">25× less</span>
-                the whole point
+                <span class="matrix__win">16× less</span>
+                measured, chapter 03
               </td>
             </tr>
             <tr class="matrix__row--accent">
@@ -549,6 +549,17 @@
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><code>attach_file</code> · build ≥6672</td>
             </tr>
+            <tr>
+              <th scope="row">
+                File downloads
+                <span class="muted">(<code>send_file</code>)</span>
+              </th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>
+                streamed on <code>Content-Disposition</code> · build ≥7545
+              </td>
+            </tr>
 
             <tr class="matrix__group">
               <td colspan="4">
@@ -561,12 +572,24 @@
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="partial" aria-label="partial">~</span></td>
               <td>
-                <code>accept_modal :alert</code>, <code>dismiss_modal</code>
+                <code>accept_modal</code> / <code>dismiss_modal</code> incl.
+                prompt text; matched by message, not type
               </td>
             </tr>
             <tr>
               <th scope="row">
-                Scroll, resize, full <code>getComputedStyle</code>
+                Viewport &amp; <code>@media</code>, resize
+              </th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td>
+                <code>window_size</code> / <code>resize_to</code> — resize, then
+                visit
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">
+                Scroll, full <code>getComputedStyle</code>
               </th>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="partial" aria-label="partial">~</span></td>
@@ -738,7 +761,7 @@ end` "ruby" "" }}
             Maintainer pact · I triage beta-tagged issues within 48&nbsp;h. If a
             workaround exists, you'll get it the same day. If we don't support
             something, the driver raises
-            <code>Capybara::NotImplementedError</code> so you can
+            <code>Capybara::NotSupportedByDriverError</code> so you can
             <code>skip</code> it cleanly and keep moving.
           </p>
         </aside>
