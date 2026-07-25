@@ -100,9 +100,9 @@ If your specs already call into `page.driver` (cookies, network, debug, headers)
 ```ruby
 # Cookies — same names, same shape
 page.driver.set_cookie("session_id", value, domain: "127.0.0.1", httpOnly: true)
-page.driver.cookies                       # Hash of cookies on the current page
 page.driver.clear_cookies
 page.driver.remove_cookie("session_id")
+page.driver.browser.cookies["session_id"]  # Enumerable of typed Cookie objects
 
 # Navigation
 page.driver.go_back

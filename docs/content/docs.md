@@ -5,25 +5,7 @@ description: "Install, configure, and run capybara-lightpanda — the Capybara d
 
 ## Quick start { #install }
 
-### 1. Install the Lightpanda browser
-
-```bash
-# macOS
-brew install lightpanda-io/lightpanda/lightpanda
-
-# Linux — download the static binary from the release page
-curl -L https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-x86_64-linux \
-  -o /usr/local/bin/lightpanda
-chmod +x /usr/local/bin/lightpanda
-```
-
-Verify the install:
-
-```bash
-lightpanda --version
-```
-
-### 2. Add the gem
+### 1. Add the gem
 
 ```ruby
 # Gemfile
@@ -36,7 +18,7 @@ end
 bundle install
 ```
 
-### 3. Register the driver
+### 2. Register the driver
 
 ```ruby
 # spec/support/capybara.rb (or test/support/capybara.rb)
@@ -51,7 +33,20 @@ Capybara.default_driver = :lightpanda
 Capybara.javascript_driver = :lightpanda
 ```
 
-That's it. Run your suite and the driver will boot a Lightpanda process and connect over CDP.
+Rails system tests don't read `Capybara.javascript_driver` — use `driven_by :lightpanda`.
+
+That's it. There is **no separate browser install step**: on first use the gem
+downloads the Lightpanda binary into `~/.cache/lightpanda/`
+(`$XDG_CACHE_HOME/lightpanda/` when set), boots `lightpanda serve` on an
+ephemeral port, and connects over CDP.
+
+Two things follow from that, and both surprise people:
+
+- A `lightpanda` on your `PATH` — from Homebrew, or a binary you dropped in
+  `/usr/local/bin` — is **not** used. Point `browser_path` at it if you want the
+  gem to run your copy instead of its own.
+- The download tracks the rolling `nightly` tag and refreshes every 24 h. Fine
+  locally, wrong for CI — [pin a release](#pinning).
 
 ## Configuration { #configuration }
 
@@ -61,7 +56,7 @@ Capybara::Lightpanda.configure do |config|
   config.port = 0             # CDP port; 0 = OS-assigned ephemeral (pin e.g. 9222 for external tooling)
   config.timeout = 15         # navigation/command timeout (seconds)
   config.process_timeout = 10 # browser startup timeout
-  config.browser_path = nil   # path to lightpanda binary; nil = auto-detect
+  config.browser_path = nil   # path to your own lightpanda binary; nil = the gem manages one
 end
 ```
 
@@ -71,9 +66,12 @@ end
 | `port` | `0` | `0` = OS-assigned ephemeral port per worker — parallel suites work with zero config. Pin a fixed port for external tooling |
 | `timeout` | `15` | Per-CDP-command timeout, also covers navigation polling |
 | `process_timeout` | `10` | Wait this long for `lightpanda serve` to start before failing |
-| `browser_path` | `nil` | If `nil`, the driver searches `PATH` and common Homebrew paths |
+| `handshake_timeout` | `5` | Budget for the WebSocket TCP + Upgrade handshake alone. Separate from `timeout` because a handshake either lands in a few hundred ms or never |
+| `browser_path` | `nil` | Path to a binary **you** manage. When `nil` the gem downloads and refreshes its own copy under `~/.cache/lightpanda/` — it does not look at `PATH` |
 | `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
-| `save_path` | `Capybara.save_path` | Where downloaded files land |
+| `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
+| `logger` | `nil` | An IO (or `Capybara::Lightpanda::Logger`) that receives raw CDP traffic. `LIGHTPANDA_DEBUG=1` wires `$stdout` |
+| `headless` | `true` | Accepted for Cuprite drop-in compatibility, and inert — headless is the only mode Lightpanda has |
 
 ### Pinning the browser version { #pinning }
 
@@ -206,6 +204,73 @@ end
 | HTTP response — `status_code`, `response_headers` | ✓ — from `Network.responseReceived` |
 | Frames — `within_frame`, scoped finding | ✓ |
 | Keyboard — `send_keys` with modifiers | ✓ |
+| Downloads — `Content-Disposition: attachment` responses | ✓ — streamed to `save_path` (build ≥7545) |
+| Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Coordinate `drag_to` / `drag_by` are not supported |
+| Windows — `current_window`, `resize_to`, `maximize` | ✓ single window — see [limitations](#limits) |
+
+## Beyond the Capybara DSL { #driver-api }
+
+Everything below hangs off `page.driver` and mirrors the Cuprite/Ferrum spelling
+where one exists.
+
+### Downloads
+
+Capture is on automatically whenever a destination exists — the `save_path`
+driver option, else `Capybara.save_path`. The trigger is the
+`Content-Disposition: attachment` header, **not** the MIME type, so a
+`send_file` / `send_data` action downloads while a bare `text/csv` response
+renders as an ordinary (empty) navigation.
+
+```ruby
+click_link "Export CSV"
+page.driver.wait_for_download(timeout: 10)   # blocks, returns the file list
+page.driver.downloads                        # => ["/…/tmp/downloads/export.csv"]
+```
+
+### Network inspection
+
+```ruby
+page.driver.wait_for_network_idle(timeout: 5)  # true, or false on timeout
+page.driver.network.traffic                    # [{request_id:, url:, method:, response: …}, …]
+page.driver.network.pending_connections        # in-flight count
+page.driver.network.clear
+
+page.driver.headers = { "X-Tenant" => "acme" } # survives reset!
+page.driver.add_headers("Accept-Language" => "fr")
+```
+
+Header overrides ride `Network.setExtraHTTPHeaders`. A `User-Agent` set this way
+is honored, but Lightpanda rejects any value containing `Mozilla` by design — so
+you can label the driver, not disguise it as Chrome.
+
+### Console logs
+
+No custom logger class needed. Messages are ring-buffered (cap 1,000, cleared on
+reset, driver-internal Turbo sentinels excluded):
+
+```ruby
+errors = page.driver.browser.console_logs.select { |m| m[:type] == "error" }
+assert_empty errors
+```
+
+Lightpanda reports both `console.log` and `console.warn` as type `"info"` —
+filter on `:text` when you need to tell them apart. Selenium-shaped helpers that
+shared Rails suites copy around work too: `browser.logs.get(:browser)` returns
+`LogEntry` structs with Selenium severity strings, and
+`browser.execute_async_script` is accepted (the axe-core matchers call it).
+
+### Raw CDP escape hatch
+
+For Lightpanda's `LP.*` extensions and anything else not worth a DSL method:
+
+```ruby
+markdown = page.driver.with_lightpanda_browser do |browser|
+  browser.page_command("LP.getMarkdown")
+end
+
+# Same idea one level down, on an element:
+id = find("#widget").with_lightpanda_node { |node| node.remote_object_id }
+```
 
 ## Turbo Rails { #turbo }
 
@@ -215,7 +280,7 @@ The driver handles Turbo-enabled Rails apps transparently.
 |---|---|---|
 | **Turbo Frames** | Native | Lazy-load (`src=`) and scoped link navigation use Turbo's existing `fetch` + `innerHTML` swap |
 | **Turbo Drive** | Native | Lightpanda's `body.replaceWith` works since v0.2.9; `#id` lookups survive the snapshot+swap pattern natively |
-| **Form submission** | Auto-handled | `fetch()` + `document.write()` shim bypasses Turbo's interception when needed |
+| **Form submission** | Native | Clicks dispatch a real `MouseEvent` (Turbo's interceptors guard on `instanceof MouseEvent`), and Lightpanda runs the submission default action itself. The `fetch()` + `document.write()` swap the driver used to need was retired once upstream landed native form submission |
 | **Turbo Streams** | Works | Page-initiated WebSockets send `Origin`, so ActionCable's forgery check passes and `turbo-cable-stream-source` reaches `[connected]`; `<template>` + `DOMParser` + `importNode` back the stream-application path. Covered by API probes and real-app beta testing, not yet by an end-to-end Stream spec in this gem's CI |
 
 ## Known limitations { #limits }
@@ -224,8 +289,9 @@ These are upstream Lightpanda limits, not driver bugs:
 
 | Surface | Status |
 |---|---|
-| Screenshots | Not supported — no rendering engine |
-| `scroll_to`, `resize` | No layout engine — `scroll_to` is a no-op, and `resize` mid-session isn't wired. Set the viewport up front with `window_size` |
+| Screenshots | No compositor, so there is nothing to capture. `save_screenshot` (and its `render` alias) is accepted and writes a blank image rather than raising, so Rails' screenshot-on-failure teardown doesn't bury the real failure |
+| `scroll_to` | No-op. Lightpanda tracks a scroll position but `getBoundingClientRect` isn't scroll-aware, so `:top` / `:center` / element-relative alignment have no meaning |
+| `resize` | Wired — `page.current_window.resize_to(w, h)` drives the same viewport `window_size` does. **Resize, then visit**: the cascade is fixed at parse time, so `@media` rules don't re-resolve for a document already on screen |
 | Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
 | CSS: external `<link>`, `@media`, `matchMedia` | Fetched, parsed, and evaluated against the configured `window_size` — responsive variants resolve at the width you set. What's absent is reflow, not the media query |
@@ -242,8 +308,9 @@ External `<link rel="stylesheet">` files are fetched and parsed by default — t
 | `Capybara::Lightpanda::Client` | CDP command dispatch over WebSocket with timeouts and event subscription |
 | `Capybara::Lightpanda::Driver` | The Capybara driver — registers as `:lightpanda`, exposes `set_cookie` / `clear_cookies` / `remove_cookie` |
 | `Capybara::Lightpanda::Node` | DOM operations via `Runtime.callFunctionOn` with object-id binding |
-| `Capybara::Lightpanda::Cookies` | Wraps `Network.getCookies` / `setCookie` / `deleteCookies` with safe fallbacks |
-| `javascripts/{turbo,predicates,attach}.js` | The injected `_lightpanda` bundle, split by concern — Turbo activity tracking + DOM visibility/state predicates (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`) — assembled into one script by `AutoScripts` |
+| `Capybara::Lightpanda::Cookies` | `Enumerable` over `Network.getAllCookies` (every origin in the context), plus `setCookie` / `deleteCookies` / bulk `clearBrowserCookies`, and a YAML `store` / `load` round-trip |
+| `Capybara::Lightpanda::Network` | Counts in-flight requests from `Network.requestWillBeSent` / `responseReceived` — backs `status_code`, `response_headers`, `wait_for_network_idle`, and the header overrides |
+| `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
 
 The driver speaks the same CDP dialect Cuprite and Ferrum use, so most patterns from those projects translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 
