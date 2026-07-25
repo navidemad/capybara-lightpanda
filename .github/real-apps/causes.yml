@@ -20,6 +20,27 @@
 #
 # Order matters: the first matching cause wins, so put narrow patterns first.
 
+backbone-model-race-on-click:
+  confidence: confirmed
+  summary: >-
+    Solidus's taxonomy tree renders from a Backbone model fetched over XHR
+    (GET /api/taxonomies/:id?set=nested), and the spec's own precondition,
+    have_content("Brand"), is satisfied by the breadcrumb "Brand 1" before that
+    fetch lands. click_on("Add taxon") then runs handle_create, which reads
+    this.model.get("root").id on a still-empty model and throws "TypeError:
+    Cannot read properties of undefined (reading 'id')" right after its
+    preventDefault — so no POST is issued and no "New node" ever appears.
+    Reproduced with script/real-app on nightly 8314: at click time the tree held
+    0 <li>, one render later it held 1, and the traffic shows the ?set=nested
+    GET returning 200 with no POST following it. A spec-side race that this
+    driver loses because visit returns at load rather than at network idle,
+    which is what Cuprite and Ferrum do too. Note the TypeError is invisible to
+    browser.console_logs: Lightpanda implements no Runtime.exceptionThrown, so
+    it took a page-side window error listener to see it.
+  reference: "wishlist B: Runtime.exceptionThrown"
+  patterns:
+    - 'admin/taxons_spec\.rb # Taxonomies and taxons can view and add to taxon tree'
+
 layout-measuring-js:
   confidence: confirmed
   summary: >-
