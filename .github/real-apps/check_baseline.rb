@@ -118,6 +118,10 @@ if ENV["CHECK_FORMAT"] == "json"
     "new" => new_failures,
     "fixed" => fixed,
     "attributed" => attributed.transform_values(&:size),
+    # Per-key attribution, so a caller looking at ONE failing example can name
+    # its cause without re-implementing the matcher (script/real-app/spec.sh).
+    # The aggregate job reads only the counts above; this is additive.
+    "attributions" => attributed.each_with_object({}) { |(slug, keys), acc| keys.each { |k| acc[k] = slug } },
     "unattributed" => unattributed
   )
   exit(new_failures.empty? ? 0 : 1)

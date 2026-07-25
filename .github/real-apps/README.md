@@ -58,24 +58,26 @@ The number to drive down is the unattributed count, then the `unknown` and
 
 ## Running locally
 
-Make sure Postgres + Redis are reachable, then:
+Use the boot harness — it is this workflow ported step for step, reading the
+matrix out of `real-apps.yml` so it can never drift from CI:
 
 ```bash
-# clone a target alongside capybara-lightpanda
-cd ..
-git clone --depth 1 https://github.com/forem/forem
-cd forem
-
-# substitute the placeholder and apply
-sed "s|__CAPYBARA_LIGHTPANDA_PATH__|$(pwd)/../capybara-lightpanda|g" \
-    ../capybara-lightpanda/.github/real-apps/patches/forem.patch | git apply
-
-# from here, follow the project's normal setup
-bundle install
-yarn install
-bin/rails db:create db:schema:load RAILS_ENV=test
-bundle exec rspec spec/system/user_views_logo_spec.rb
+script/real-app/boot.sh solidus                    # checkout, patch, bundle, dummy app, binary
+script/real-app/spec.sh solidus \
+  spec/features/admin/orders/order_details_spec.rb \
+  -e "should allow me to make a split"
 ```
+
+`spec.sh` attaches the gem's instruments (`console_logs`, `network.traffic`) to
+every failing example and then reports whether the failure is in this target's
+baseline and which `causes.yml` entry it matches. See
+[`script/real-app/README.md`](../../script/real-app/README.md).
+
+Doing it by hand is still four commands — clone the pinned SHA, substitute
+`__CAPYBARA_LIGHTPANDA_PATH__` into the patch, `git apply`, then follow the
+project's own setup — but the traps (per-target Ruby, `work_dir` vs `spec_dir`,
+pre-provisioning the binary before WebMock loads) are what the harness exists to
+carry.
 
 ## Refreshing a patch when upstream moves
 

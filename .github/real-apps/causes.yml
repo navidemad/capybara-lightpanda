@@ -32,26 +32,43 @@ layout-measuring-js:
   patterns:
     - 'Unable to find visible (link|link or button) "(Customer|Product Stock|Images|Product Properties|Variants|Prices|Shipments|Adjustments|Store Credit|RMA|Stock Locations)"'
 
-select2-v3-flow:
-  confidence: likely
+select-optgroup-invisible:
+  confidence: confirmed
   summary: >-
-    Solidus's shipment split and variant-move UI drives select2 v3 through
-    complete_split_to -> select2_no_label (backend/spec/support/feature/
-    order_feature_helper.rb), which clicks a placeholder link and then picks
-    from .select2-drop. The gem's CLICK_JS wrapper descent (wishlist C13) fixed
-    the container-click half; this helper takes a different path and the
-    dropdown result is never selected, so the split never completes and every
-    downstream assertion about shipments fails.
-  reference: "wishlist C13"
-  next_step: >-
-    Boot solidus locally, run order_details_spec.rb with console capture, and
-    check whether .select2-drop ever gets populated. Resolves 14 entries at once.
+    Lightpanda's HTMLSelectElement accessors walk direct children only, so
+    <option>s nested in an <optgroup> are invisible to options / value /
+    selectedIndex / selectedOptions and to form submission. Solidus's split
+    select groups every destination, so select2's onSelect calls
+    $(el).val("stock_location:2"), jQuery iterates elem.options (which holds
+    only the empty placeholder), finds no match, sets selectedIndex = -1, and
+    the getter then returns null — completeItemSplit dies on null.split(':')
+    before it can POST. Proven in the booted app AND with a Ruby-free
+    flat-vs-grouped reproducer; not gem-fixable, every read path is
+    browser-side.
+  reference: >-
+    upstream lightpanda-io/browser#3057, PR #3058; wishlist A52;
+    findings/cluster-3-select-optgroup-options.md
   patterns:
     - 'order_details_spec\.rb # Order Details as Admin Shipment edit page splitting'
     - 'shipments_spec\.rb # Shipments moving variants between shipments'
     - 'shipments_spec\.rb # Shipments when split shipment'
-    # Any spec that ends up hunting for select2's own DOM, whichever helper
-    # got it there (taxons' display-order picker takes a third path again).
+
+select2-v3-flow:
+  confidence: likely
+  summary: >-
+    A spec ends up hunting for select2's own DOM (input.select2-input.
+    select2-focused, .select2-drop) and never finds it, so the dropdown never
+    opened for that helper's click path. The gem's CLICK_JS wrapper descent
+    (wishlist C13) fixed the container-click path into select2; the taxons
+    display-order picker takes a third path again. Distinct from
+    select-optgroup-invisible above, where the dropdown DOES open and the
+    selection is lost afterwards.
+  reference: "wishlist C13"
+  next_step: >-
+    Boot solidus, run products/edit/taxons_spec.rb with console capture, and
+    find which element the helper clicks and where select2 v3 binds the open
+    handler for that widget. One entry.
+  patterns:
     - 'select2-input|select2-focused|select2-drop'
 
 multipart-content-loss:
