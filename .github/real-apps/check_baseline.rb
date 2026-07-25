@@ -27,6 +27,7 @@
 # when the baseline should be regenerated anyway).
 
 require "json"
+require "yaml"
 
 target = ARGV[0] or abort "usage: check_baseline.rb <target> <report.json>"
 report_path = ARGV[1] or abort "usage: check_baseline.rb <target> <report.json>"
@@ -68,6 +69,41 @@ baseline = File.readlines(baseline_path, chomp: true).reject(&:empty?).sort.uniq
 new_failures = failed - baseline
 fixed = baseline - failed
 
+# Why each baseline entry fails. Kept out of the baseline files themselves
+# because REFRESH=1 rewrites those wholesale; see causes.yml for the format.
+# An entry matching no cause is one nobody has diagnosed — surfaced below so a
+# baseline of understood limitations stays distinguishable from a baseline of
+# shrugs.
+causes_path = File.expand_path("causes.yml", __dir__)
+causes = File.exist?(causes_path) ? YAML.safe_load_file(causes_path) : {}
+
+# Patterns match against the baseline key AND this run's failure message,
+# joined. Some causes are only identifiable from the key (which spec file), and
+# some only from the message (which exception) — the most discriminating signal
+# differs per cause, so both are on the table.
+messages = report.fetch("examples").each_with_object({}) do |e, acc|
+  next unless e["status"] == "failed"
+
+  acc["#{normalize.call(e['file_path'])} # #{e['full_description']}"] =
+    e.dig("exception", "message").to_s.gsub(/\s+/, " ")
+end
+
+cause_for = lambda do |key|
+  haystack = "#{key}\n#{messages[key]}"
+  causes.each do |slug, spec|
+    patterns = spec["patterns"] || []
+    return slug if patterns.any? { |p| haystack.match?(Regexp.new(p)) }
+  end
+  nil
+end
+
+attributed = Hash.new { |h, k| h[k] = [] }
+unattributed = []
+(baseline & failed).each do |key|
+  slug = cause_for.call(key)
+  slug ? attributed[slug] << key : unattributed << key
+end
+
 # JSON mode: emit the comparison as one machine-readable object and skip the
 # human-readable / step-summary output. The cross-target aggregate job
 # (real-apps.yml) re-runs this per downloaded report so the roll-up shares this
@@ -80,7 +116,9 @@ if ENV["CHECK_FORMAT"] == "json"
     "failed" => failed.size,
     "baseline" => baseline.size,
     "new" => new_failures,
-    "fixed" => fixed
+    "fixed" => fixed,
+    "attributed" => attributed.transform_values(&:size),
+    "unattributed" => unattributed
   )
   exit(new_failures.empty? ? 0 : 1)
 end
@@ -96,6 +134,27 @@ puts "#{target}: #{summary['example_count']} examples, #{failed.size} failed " \
 
 step_summary = []
 step_summary << "## #{target}: #{failed.size} failed / baseline #{baseline.size}"
+
+unless attributed.empty? && unattributed.empty?
+  puts "\nKnown failures by cause:"
+  attributed.sort_by { |_, keys| -keys.size }.each do |slug, keys|
+    confidence = causes.dig(slug, "confidence") || "?"
+    puts "  #{slug.ljust(28)} #{keys.size.to_s.rjust(3)}  (#{confidence})"
+  end
+  puts "  #{'UNATTRIBUTED'.ljust(28)} #{unattributed.size.to_s.rjust(3)}" unless unattributed.empty?
+
+  step_summary << "\n**Known failures by cause:**"
+  attributed.sort_by { |_, keys| -keys.size }.each do |slug, keys|
+    step_summary << "- `#{slug}` — #{keys.size} (#{causes.dig(slug, 'confidence') || '?'})"
+  end
+end
+
+unless unattributed.empty?
+  puts "\nNo cause on file (add one to causes.yml):"
+  unattributed.each { |k| puts "  ???  #{k}" }
+  step_summary << "\n**#{unattributed.size} with no cause on file** (add to `causes.yml`):"
+  unattributed.each { |k| step_summary << "- :grey_question: #{k}" }
+end
 
 unless fixed.empty?
   puts "\nFixed since baseline (refresh #{File.basename(baseline_path)} to lock in):"
