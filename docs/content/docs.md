@@ -349,23 +349,39 @@ assert_empty errors
 `"warning"` (not `"warn"`), `"error"`, `"debug"` — so filtering by severity works
 directly on every build this gem supports.
 
-One gap to know about before you write "assert no JS errors" on top of this: the
-buffer captures explicit `console.*` calls only. An **uncaught** exception in page
-JS produces no entry, because Lightpanda doesn't implement
-`Runtime.exceptionThrown` (Chrome's channel for it). A handler that dies on a
-`TypeError` therefore leaves `console_logs` empty while the page quietly does
-nothing — the failure surfaces later as `ElementNotFound` on whatever the handler
-was supposed to produce. Until upstream emits the event, catching those needs a
-page-side listener of your own:
+The buffer holds explicit `console.*` calls only. An **uncaught** exception is a
+different thing and lands in its own buffer.
+
+### Page errors
+
+An exception that escapes page JS never reaches `console_logs`, and on most CDP
+stacks it wouldn't: Chrome reports it as `Runtime.exceptionThrown`, and
+Playwright and Puppeteer surface it as `pageerror`, separate from `console`. So
+the driver keeps them apart too:
 
 ```ruby
-page.execute_script(<<~JS)
-  window.__errors = [];
-  window.addEventListener("error", (e) => window.__errors.push(e.message));
-JS
-# … the interaction …
-expect(page.evaluate_script("window.__errors")).to be_empty
+page.driver.browser.page_errors
+# => [{kind: "error", message: "Cannot read properties of undefined (reading 'id')",
+#      url: "http://app.test/assets/taxonomy.js", line: 94, column: 22,
+#      stack: "TypeError: …", timestamp: 1753449600.0}]
 ```
+
+`kind` is `"error"` or `"unhandledrejection"`. Same lifecycle as `console_logs`:
+capped at 1,000, cleared on reset, and `clear_page_errors` empties it mid-test.
+
+This matters more here than on other drivers, because Lightpanda implements no
+`Runtime.exceptionThrown` at all — without this the exception reaches *nothing*.
+A handler dying on a `TypeError` leaves every buffer empty while the page quietly
+stops doing what it was going to do, and the failure surfaces somewhere else
+entirely as `ElementNotFound` on whatever the handler was supposed to produce.
+That is a genuinely expensive hour when you don't know to look for it.
+
+The capture is a passive `window` listener injected with the driver's own
+bundle, so know what it can't see: an exception a framework catches itself never
+reaches `window` (Stimulus routes action errors through its own `handleError`),
+and a cross-origin script collapses to `"Script error."` with no detail. Partial,
+but the alternative is nothing at all. It disappears the day upstream emits the
+event, without the API changing.
 
 Selenium-shaped helpers that
 shared Rails suites copy around work too: `browser.logs.get(:browser)` returns
@@ -481,7 +497,7 @@ covers what to include.
 | `Capybara::Lightpanda::Node` | DOM operations via `Runtime.callFunctionOn` with object-id binding |
 | `Capybara::Lightpanda::Cookies` | `Enumerable` over `Network.getAllCookies` (every origin in the context), plus `setCookie` / `deleteCookies` / bulk `clearBrowserCookies`, and a YAML `store` / `load` round-trip |
 | `Capybara::Lightpanda::Network` | Counts in-flight requests from `Network.requestWillBeSent` / `responseReceived` — backs `status_code`, `response_headers`, `wait_for_network_idle`, and the header overrides |
-| `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
+| `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking), `errors.js` (uncaught-exception capture behind `page_errors`) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
 
 The driver speaks the same CDP dialect Cuprite and Ferrum use, so most patterns from those projects translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 

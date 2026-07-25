@@ -105,6 +105,8 @@ module Capybara
         @modal_handler_installed = false
         @console_logs = []
         @console_logs_mutex = Mutex.new
+        @page_errors = []
+        @page_errors_mutex = Mutex.new
         @frame_stack = []
         @turbo_event = Utils::Event.new
         @turbo_event.set
@@ -216,6 +218,7 @@ module Capybara
         @modal_handler_installed = false
         @modal_messages_mutex.synchronize { @modal_messages.clear }
         @console_logs_mutex.synchronize { @console_logs.clear }
+        @page_errors_mutex.synchronize { @page_errors.clear }
         clear_frames
         # Network#reset, not #clear: disposing the BrowserContext also
         # destroyed the Network domain and its subscriptions, so we must

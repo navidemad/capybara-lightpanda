@@ -17,7 +17,9 @@ module Capybara
 
       # Order matters: declarations (turbo, predicates) before the wiring
       # (attach) that reads their names. banner is a leading comment block.
-      PARTS = %w[banner.js turbo.js predicates.js attach.js].freeze
+      # turbo.js and errors.js register their listeners at top level and expose
+      # nothing through attach.js, so they only need to run inside the IIFE.
+      PARTS = %w[banner.js turbo.js errors.js predicates.js attach.js].freeze
 
       # The guard short-circuits a repeat run before turbo.js can register its
       # listeners a second time (double-registration would double-count
