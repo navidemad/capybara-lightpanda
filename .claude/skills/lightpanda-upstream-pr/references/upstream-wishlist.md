@@ -278,6 +278,14 @@ Three independent issues:
 - **Gem workaround**: none possible — same reasoning as C10 (can't rebuild the cascade in JS).
 - **Drop-on-fix**: nothing gem-side to remove; unblocks Tailwind v4 apps (spree admin delete specs et al.). Add a `@layer`-wrapped visibility regression test once `MINIMUM_NIGHTLY_BUILD` covers the fix.
 
+### B19. `Runtime.exceptionThrown` never emitted — uncaught page exceptions are invisible to any CDP client
+
+- **Today (verified 2026-07-25 against nightly 8314, macOS aarch64)**: `rg -n 'exceptionThrown' src/` on `main` returns nothing — the event is not implemented on any path. `Runtime.consoleAPICalled` covers explicit `console.*` calls only, so an uncaught `TypeError` in a page handler reaches no CDP client at all. Chrome emits `Runtime.exceptionThrown` with the full `exceptionDetails` (message, stack trace, line/column, and the thrown value as a RemoteObject).
+- **Real-world impact**: this is the difference between a diagnosable failure and a silent one. Found while root-causing the solidus `taxons_spec` real-apps failure (`backbone-model-race-on-click` in `causes.yml`): the spec fails because `handle_create` throws `TypeError: Cannot read properties of undefined (reading 'id')`, and `browser.console_logs` was **empty** — 0 messages, 0 errors. The mechanism only became visible after injecting a page-side `window.addEventListener('error', …)` by hand. Every `likely`/`unknown` cause in `causes.yml` that hinges on "did the page JS blow up?" is stuck behind this.
+- **Want**: emit `Runtime.exceptionThrown` for uncaught exceptions and unhandled promise rejections when `Runtime.enable` is on, carrying at minimum `exceptionDetails.text`, `.lineNumber`, `.columnNumber`, `.url` and `.exception.description`. The gem already parses that exact shape — `JavaScriptError` in `lib/capybara/lightpanda/errors.rb` reads `exceptionDetails` off command responses — so a faithful payload needs no new client-side parsing.
+- **Gem workaround**: none shipped yet. Possible without upstream: have the injected `_lightpanda` bundle attach a passive `window.addEventListener('error')` + `unhandledrejection` listener that re-emits through `console.error`, so the existing `consoleAPICalled` capture picks it up. Passive (no `preventDefault`), so it can't swallow anything the page would otherwise see, but it does synthesize a console entry the real browser wouldn't have — decide whether `console_logs` should mark those as synthetic before shipping.
+- **Drop-on-fix**: drop the synthesized listener if it ships, and subscribe `Browser::Console` to `Runtime.exceptionThrown` instead, folding entries into the same ring buffer with `type: "error"`.
+
 ---
 
 ## C. Inherent limitations (out of scope — keep cuprite for these)

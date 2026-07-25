@@ -347,7 +347,27 @@ assert_empty errors
 
 `:type` is the CDP wire name of the console method — `"log"`, `"info"`,
 `"warning"` (not `"warn"`), `"error"`, `"debug"` — so filtering by severity works
-directly on every build this gem supports. Selenium-shaped helpers that
+directly on every build this gem supports.
+
+One gap to know about before you write "assert no JS errors" on top of this: the
+buffer captures explicit `console.*` calls only. An **uncaught** exception in page
+JS produces no entry, because Lightpanda doesn't implement
+`Runtime.exceptionThrown` (Chrome's channel for it). A handler that dies on a
+`TypeError` therefore leaves `console_logs` empty while the page quietly does
+nothing — the failure surfaces later as `ElementNotFound` on whatever the handler
+was supposed to produce. Until upstream emits the event, catching those needs a
+page-side listener of your own:
+
+```ruby
+page.execute_script(<<~JS)
+  window.__errors = [];
+  window.addEventListener("error", (e) => window.__errors.push(e.message));
+JS
+# … the interaction …
+expect(page.evaluate_script("window.__errors")).to be_empty
+```
+
+Selenium-shaped helpers that
 shared Rails suites copy around work too: `browser.logs.get(:browser)` returns
 `LogEntry` structs with Selenium severity strings, and
 `browser.execute_async_script` is accepted (the axe-core matchers call it).

@@ -66,3 +66,4 @@
 ./spec/features/admin/products/stock_management_spec.rb # Product Stock given a product with a variant and a stock location with two variants, one of which tracks inventory while the other doesn't allows modifying the count on hand only on the variant which tracks inventory
 ./spec/features/admin/stock_items_spec.rb # Stock Items Management searching by variant
 ./spec/features/admin/store_credits_spec.rb # Store credits admin displaying a store credit details page lets edit store credit's memo
+./spec/features/admin/taxons_spec.rb # Taxonomies and taxons can view and add to taxon tree
