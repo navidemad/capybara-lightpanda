@@ -11,8 +11,19 @@ module Capybara
     class Binary
       GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download"
 
+      # Upstream publishes all four arch/OS combinations on every channel —
+      # verified 2026-07-25 against the `nightly` tag and release 0.3.5 (the
+      # MINIMUM_RELEASE floor, so any acceptable pin carries them too). Intel
+      # macOS and arm64 Linux were absent here and raised
+      # UnsupportedPlatformError on machines upstream ships a binary for: Intel
+      # MacBooks, and Graviton / arm64 CI runners. normalize_arch folds arm64 ->
+      # aarch64, so the arm64 rows are unreachable defensive duplicates kept for
+      # symmetry with the pre-existing arm64-darwin one.
       PLATFORMS = {
         %w[x86_64 linux] => "lightpanda-x86_64-linux",
+        %w[aarch64 linux] => "lightpanda-aarch64-linux",
+        %w[arm64 linux] => "lightpanda-aarch64-linux",
+        %w[x86_64 darwin] => "lightpanda-x86_64-macos",
         %w[aarch64 darwin] => "lightpanda-aarch64-macos",
         %w[arm64 darwin] => "lightpanda-aarch64-macos",
       }.freeze

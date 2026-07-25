@@ -23,7 +23,7 @@ describe Capybara::Lightpanda::Binary do
   describe ".platform_binary" do
     it "returns the correct binary name for the current platform" do
       name = Capybara::Lightpanda::Binary.platform_binary
-      assert_match(/\Alightpanda-(x86_64-linux|aarch64-macos)\z/, name)
+      assert_match(/\Alightpanda-(x86_64|aarch64)-(linux|macos)\z/, name)
     end
   end
 
@@ -47,10 +47,24 @@ describe Capybara::Lightpanda::Binary do
   end
 
   describe "PLATFORMS" do
-    it "maps known architectures" do
+    # Every combination upstream publishes must be mapped. Intel macOS and
+    # arm64 Linux were missing until 2026-07-25, which hard-blocked Intel
+    # MacBooks and Graviton runners with UnsupportedPlatformError even though
+    # the release carried a binary for them. Names must match the release asset
+    # names exactly — they're interpolated straight into the download URL.
+    it "maps every architecture upstream ships a binary for" do
       assert_equal "lightpanda-x86_64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[x86_64 linux]]
+      assert_equal "lightpanda-aarch64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[aarch64 linux]]
+      assert_equal "lightpanda-x86_64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[x86_64 darwin]]
       assert_equal "lightpanda-aarch64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[aarch64 darwin]]
+    end
+
+    # normalize_arch folds arm64 -> aarch64 before the lookup, so these rows are
+    # unreachable in practice; assert them so a future normalize_arch change
+    # can't silently strand arm64 hosts.
+    it "keeps the defensive arm64 aliases" do
       assert_equal "lightpanda-aarch64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[arm64 darwin]]
+      assert_equal "lightpanda-aarch64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[arm64 linux]]
     end
 
     it "is frozen" do
@@ -364,15 +378,37 @@ describe Capybara::Lightpanda::Binary do
     # connection — SO_LINGER(on, 0) makes close send RST, so the client's
     # read_body raises Errno::ECONNRESET mid-transfer. Same technique as
     # web_socket_test.rb.
+    #
+    # Serving in a loop, rather than accepting once, is load-bearing.
+    # Net::HTTP sets max_retries = 1 and GET is idempotent, so an RST that
+    # lands before any response is transparently retried on a NEW connection.
+    # A one-shot accept left that retry unanswered until the 60s read timeout,
+    # so the test saw Net::ReadTimeout instead of ECONNRESET and the job grew
+    # by two minutes. That is what reddened check (3.3) on main after #109
+    # while check (4.0) stayed green: on 4.0 the headers won the race, the
+    # failure landed mid-body, and mid-body failures aren't retried.
     def serve_truncated_download(server)
       Thread.new do
-        sock = server.accept
-        sock.readpartial(4096) # consume the GET
-        sock.write("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
-        sock.write("PARTIAL")
-        sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
-        sock.close
+        loop { serve_one_truncated(server.accept) }
+      rescue IOError, Errno::EBADF, Errno::EINVAL
+        nil # with_download_server closed the listener; nothing left to serve
       end
+    end
+
+    def serve_one_truncated(sock)
+      sock.readpartial(4096) # consume the GET
+      sock.write("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
+      sock.write("PARTIAL")
+      sock.flush
+      # SO_LINGER(0) discards whatever is still in the send buffer, so closing
+      # immediately can leave the client with no response at all. Pause so the
+      # headers land first: the interruption under test is mid-body.
+      sleep 0.05
+      sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
+    rescue IOError, SystemCallError
+      nil # client hung up first
+    ensure
+      sock.close
     end
 
     def with_download_server
@@ -383,8 +419,10 @@ describe Capybara::Lightpanda::Binary do
                                   .returns("http://127.0.0.1:#{server.addr[1]}")
       yield
     ensure
-      accepter&.join
+      # Close the listener first: it's what unblocks the accept loop. Joining
+      # before closing would wait on a thread that never returns.
       server&.close
+      accepter&.join
     end
 
     it "leaves the existing binary intact when the transfer is interrupted" do

@@ -20,6 +20,16 @@ Self-contained — built-in CDP client, no external browser-client gem required.
 
 </div>
 
+## Requirements
+
+| | |
+|---|---|
+| **Ruby** | ≥ 3.3 — CI covers 3.3 and 4.0 |
+| **Capybara** | ≥ 3.0, < 5 |
+| **Platforms** | Linux `x86_64` · Linux `aarch64` · macOS Apple Silicon · macOS Intel · Windows through WSL2 (no native Windows build upstream) |
+
+An unsupported host raises `UnsupportedPlatformError` at boot, naming what it detected — it never fails halfway through a suite.
+
 ## Install
 
 Add this to your `Gemfile` and run `bundle install`:
@@ -44,7 +54,7 @@ driven_by :lightpanda
 > The Lightpanda binary is auto-downloaded on first use — no separate install step needed.
 
 > [!IMPORTANT]
-> Lightpanda is a headless agentic browser, not a layout engine. External `<link rel="stylesheet">` **are** fetched and applied (the gem enables this by default), and `@media` / `window.matchMedia()` evaluate against the `window_size` you configure — so a mobile-only CTA gated by `@media (max-width: …)` resolves at the width you ask for. What's missing is *layout*: nothing reflows, `getBoundingClientRect` stays synthetic, and there is no real scroll. Specs that assert on pixel geometry, scrolling, or screenshots should stay on Cuprite (or whichever full-browser driver you were already using). The [dual-driver setup](https://navidemad.github.io/capybara-lightpanda/docs/#setup) routes that minority to Cuprite and the structural majority to Lightpanda for speed.
+> Lightpanda is a headless agentic browser, not a layout engine. External `<link rel="stylesheet">` **are** fetched and applied (the gem enables this by default), and `@media` / `window.matchMedia()` evaluate against the `window_size` you configure — so a mobile-only CTA gated by `@media (max-width: …)` resolves at the width you ask for. What's missing is *layout*: nothing reflows, `getBoundingClientRect` stays synthetic, and there is no real scroll. Specs that assert on pixel geometry, scrolling, or screenshots — plus the two that catch people out, a second browser tab and a menu revealed purely by CSS `:hover` — should stay on Cuprite (or whichever full-browser driver you were already using). The [per-spec dual-driver setup](https://navidemad.github.io/capybara-lightpanda/docs/#dual-per-spec) routes that minority to Cuprite and the structural majority to Lightpanda for speed.
 
 > [!TIP]
 > For reproducible CI, pin the browser: `Capybara::Lightpanda::Binary.required_version = "0.3.5"`. Without a pin the driver tracks Lightpanda's rolling `nightly` tag, which moves under you. See [Pinning the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).

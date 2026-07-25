@@ -760,9 +760,15 @@ class TestApp
         <body>
           <div id="box" class="box"><span id="reveal" class="reveal">revealed</span></div>
           <div id="log"></div>
+          <div id="enter_log"></div>
           <script>
             document.getElementById('box').addEventListener('mouseover', function() {
               document.getElementById('log').textContent = 'mouseover-fired';
+            });
+            // The `mouseenter->controller#open` idiom: a non-bubbling listener
+            // on the hovered element itself, which mouseover alone never reaches.
+            document.getElementById('box').addEventListener('mouseenter', function() {
+              document.getElementById('enter_log').textContent = 'mouseenter-fired';
             });
           </script>
         </body>

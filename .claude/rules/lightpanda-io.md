@@ -243,8 +243,13 @@ LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
 ## Binary Distribution
 
 Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
-- Linux x86_64: `lightpanda-x86_64-linux` (ELF)
-- macOS aarch64: `lightpanda-aarch64-macos` (Mach-O)
+- **All four arch/OS pairs are published on every channel** (verified 2026-07-25
+  against `nightly` and 0.3.5): `lightpanda-x86_64-linux`,
+  `lightpanda-aarch64-linux`, `lightpanda-x86_64-macos`,
+  `lightpanda-aarch64-macos`. `Binary::PLATFORMS` maps all four — it used to list
+  only x86_64-linux and aarch64-macos, which raised `UnsupportedPlatformError` on
+  Intel Macs and arm64/Graviton runners that upstream ships a binary for. Don't
+  re-narrow it.
 - Latest release: 0.3.5 (2026-07-17). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 **Two version-string shapes, two gem floors** (verified 2026-07-24): `build.zig`'s

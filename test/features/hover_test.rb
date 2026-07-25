@@ -10,11 +10,10 @@ require_relative "../test_helper"
 # driven by a real pointer position, which a headless/layout-free engine has no
 # notion of. So the reveal half stays unsupported.
 #
-# But the gem's `Node#hover` dispatches a real `mouseover` event
-# (`node.rb` -> `dispatchEvent(new MouseEvent('mouseover', {bubbles: true}))`),
-# and JS `mouseover` listeners DO fire. That half has no shared-spec coverage
-# (the whole describe block is skipped on the unreachable CSS-reveal case), so
-# we lock the event-dispatch behavior in here.
+# But the gem's `Node#hover` dispatches real `mouseover` + `mouseenter` events
+# (`node.rb` -> HOVER_JS), and JS listeners for both DO fire. That half has no
+# shared-spec coverage (the whole describe block is skipped on the unreachable
+# CSS-reveal case), so we lock the event-dispatch behavior in here.
 describe "Capybara::Lightpanda::Node#hover" do
   let(:session) { TestSessions::Lightpanda }
 
@@ -27,6 +26,19 @@ describe "Capybara::Lightpanda::Node#hover" do
     session.find(:css, "#box").hover
 
     assert_equal "mouseover-fired", session.find(:css, "#log").text
+  end
+
+  # Regression guard: hover used to dispatch `mouseover` only. `mouseenter`
+  # doesn't bubble, so a `mouseenter->menu#open` Stimulus action (the dominant
+  # hover-menu idiom, and what Floating UI / tippy bind) never fired and the
+  # menu stayed closed with no error — the failure surfaced far away, as
+  # ElementNotFound on the menu item.
+  it "also fires a mouseenter event, which does not bubble" do
+    assert_empty session.find(:css, "#enter_log").text
+
+    session.find(:css, "#box").hover
+
+    assert_equal "mouseenter-fired", session.find(:css, "#enter_log").text
   end
 
   it "does NOT trigger CSS :hover reveal (no pointer state in Lightpanda)" do
