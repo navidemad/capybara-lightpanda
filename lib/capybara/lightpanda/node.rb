@@ -13,6 +13,22 @@ module Capybara
         @remote_object_id = remote_object_id
       end
 
+      # Capybara::Driver::Node#native returns the constructor's second argument,
+      # which here is the raw CDP objectId — a String. So the Selenium/Cuprite
+      # idiom `element.native.send_keys(...)` (solidus's
+      # return_authorizations_spec.rb does exactly that) died with
+      # "undefined method 'send_keys' for an instance of String". This driver
+      # has no lower-level node object behind the Capybara one — the CDP handle
+      # IS this Node (see #remote_object_id) — so `native` is self.
+      #
+      # Safe against Capybara::Driver::Node#==, which compares `native ==
+      # other.native` and would recurse forever on a self-returning `native`:
+      # #== and #eql? below are full overrides that never call super and never
+      # read #native.
+      def native
+        self
+      end
+
       def text
         call("function() { return this.textContent }")
       end
