@@ -748,28 +748,36 @@ module Capybara
 
       OBSCURED_JS = "function() { return _lightpanda.isObscured(this); }"
 
+      # Capybara's contract for Element#path is an XPath that re-finds the very
+      # same node (`node #path returns xpath which points to itself`), so this
+      # emits `/HTML/BODY/DIV[2]/P[1]` rather than the CSS-ish
+      # `html > body > div:nth-of-type(2) > p` it used to. Chrome exposes no
+      # native equivalent either; Cuprite hand-rolls the same walk.
+      #
+      # Every step is indexed, including single children: `P[1]` and `P` select
+      # the same node, but the explicit index keeps the output stable if a
+      # sibling appears later, and it is what Chrome DevTools' "Copy XPath"
+      # produces. Positions count same-tag preceding siblings, which is exactly
+      # XPath's own positional semantics.
+      #
+      # No `id`-based shortcut: an `//*[@id="x"]` prefix is shorter but stops
+      # pointing at *this* node the moment the document has a duplicate id,
+      # which malformed real-world pages routinely do.
       GET_PATH_JS = <<~JS
         function() {
           var el = this;
-          var path = [];
+          var steps = [];
           while (el && el.nodeType === Node.ELEMENT_NODE) {
-            var selector = el.nodeName.toLowerCase();
-            if (el.id) {
-              selector += '#' + el.id;
-              path.unshift(selector);
-              break;
-            } else {
-              var sibling = el;
-              var nth = 1;
-              while (sibling = sibling.previousElementSibling) {
-                if (sibling.nodeName.toLowerCase() === el.nodeName.toLowerCase()) nth++;
-              }
-              if (nth > 1) selector += ':nth-of-type(' + nth + ')';
+            var name = el.nodeName.toUpperCase();
+            var index = 1;
+            var sibling = el;
+            while (sibling = sibling.previousElementSibling) {
+              if (sibling.nodeName.toUpperCase() === name) index++;
             }
-            path.unshift(selector);
-            el = el.parentNode;
+            steps.unshift(name + '[' + index + ']');
+            el = el.parentElement;
           }
-          return path.join(' > ');
+          return '/' + steps.join('/');
         }
       JS
 
