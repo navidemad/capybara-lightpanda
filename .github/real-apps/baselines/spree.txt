@@ -1,6 +1,1 @@
 ./spec/features/spree/admin/products/option_types_spec.rb # Option Types manaing option values allows an admin to manage option values
-./spec/features/spree/admin/settings/shipping_categories_spec.rb # Shipping categories can delete shipping category
-./spec/features/spree/admin/settings/shipping_methods_spec.rb # Shipping methods allows Store Owner to delete shipping method
-./spec/features/spree/admin/settings/stock_locations_spec.rb # Stock Locations allows to delete a stock location
-./spec/features/spree/admin/settings/tax_categories_spec.rb # Tax categories allows to delete tax category
-./spec/features/spree/admin/settings/tax_rates_spec.rb # Tax Rates allows Store Owner to delete tax rate
