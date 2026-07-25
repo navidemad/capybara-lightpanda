@@ -422,13 +422,14 @@ with its mechanism, a confidence level (`confirmed` / `likely` / `unknown`) and 
 link to the upstream gap. A failure matching *no* recorded cause fails the job,
 so an unexplained regression can't hide inside an accepted baseline.
 
-Read the table as a shape rather than a score. Solidus's count is dominated by a
-single mechanism: its admin Tabs component measures `offsetWidth` to decide
-whether to collapse tabs into a `:hover` dropdown, and against synthetic geometry
-it always concludes "overflowed", hiding most tabs behind a menu that `:hover`
-can't open. One missing capability, dozens of failures. That's the profile to
-expect — failures cluster onto a few root causes instead of scattering, which is
-also why triaging your own suite goes faster than the raw count suggests.
+Read the table as a shape rather than a score. 38 of Solidus's 68 come from one
+mechanism: its admin Tabs component measures `offsetWidth` to decide whether to
+collapse tabs into a `:hover` dropdown, and against synthetic geometry it always
+concludes "overflowed", hiding most tabs behind a menu that `:hover` can't open.
+One missing capability, 38 failures. The rest of the count is four more causes,
+none larger than 16. That's the profile to expect: failures cluster onto a few
+root causes instead of scattering, which is why triaging your own suite goes
+faster than the raw number suggests.
 
 ## Troubleshooting { #troubleshooting }
 
