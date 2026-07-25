@@ -1,0 +1,169 @@
+# Why each baseline failure fails.
+#
+# Baselines (baselines/<target>.txt) are regenerated mechanically by
+# `REFRESH=1 check_baseline.rb`, so a cause can't live inside them without
+# being wiped on every refresh. It lives here instead, matched by regexp
+# against the same "<file_path> # <full_description>" key.
+#
+# check_baseline.rb reports, per run, how many baseline entries each cause
+# covers and which entries match none. An unattributed entry means "nobody has
+# diagnosed this yet" — that is the number to drive down, because a baseline
+# full of unexplained lines looks identical to a baseline full of understood
+# limitations, and only one of those is acceptable to ship on.
+#
+# `confidence` is deliberately part of the record:
+#   confirmed — reproduced in isolation, or the shared code path was read and
+#               leaves no other possibility
+#   likely    — the spec's own source makes the mechanism plain, but it has not
+#               been reproduced against a booted app
+#   unknown   — grouped by symptom only; needs a local boot to resolve
+#
+# Order matters: the first matching cause wins, so put narrow patterns first.
+
+layout-measuring-js:
+  confidence: confirmed
+  summary: >-
+    Page JS reads offsetWidth/getBoundingClientRect to make layout decisions.
+    Lightpanda has no layout, so every element reports a synthetic 5x5 rect and
+    a parent ends up narrower than the sum of its children. Solidus's Tabs
+    component concludes "overflowed" and moves every tab but the first into a
+    hover dropdown that :hover never opens.
+  reference: "wishlist C12"
+  patterns:
+    - 'Unable to find visible (link|link or button) "(Customer|Product Stock|Images|Product Properties|Variants|Prices|Shipments|Adjustments|Store Credit|RMA|Stock Locations)"'
+
+select2-v3-flow:
+  confidence: likely
+  summary: >-
+    Solidus's shipment split and variant-move UI drives select2 v3 through
+    complete_split_to -> select2_no_label (backend/spec/support/feature/
+    order_feature_helper.rb), which clicks a placeholder link and then picks
+    from .select2-drop. The gem's CLICK_JS wrapper descent (wishlist C13) fixed
+    the container-click half; this helper takes a different path and the
+    dropdown result is never selected, so the split never completes and every
+    downstream assertion about shipments fails.
+  reference: "wishlist C13"
+  next_step: >-
+    Boot solidus locally, run order_details_spec.rb with console capture, and
+    check whether .select2-drop ever gets populated. Resolves 14 entries at once.
+  patterns:
+    - 'order_details_spec\.rb # Order Details as Admin Shipment edit page splitting'
+    - 'shipments_spec\.rb # Shipments moving variants between shipments'
+    - 'shipments_spec\.rb # Shipments when split shipment'
+    # Any spec that ends up hunting for select2's own DOM, whichever helper
+    # got it there (taxons' display-order picker takes a third path again).
+    - 'select2-input|select2-focused|select2-drop'
+
+multipart-content-loss:
+  confidence: confirmed
+  summary: >-
+    Multipart form submissions reach Rack with a body it cannot parse
+    (EOFError / EmptyContentError), which Rails turns into
+    ActionController::BadRequest and the error page replaces the document.
+    Root cause still unidentified — every synthetic probe encodes correctly on
+    both platforms.
+  reference: "wishlist A45"
+  next_step: >-
+    Run one real failing spec behind a raw-capturing proxy in front of the
+    app's Puma, to capture the actual bytes and the submit mechanism.
+  patterns:
+    - 'Invalid request parameters'
+    - 'ActionController::BadRequest'
+
+selenium-only-api:
+  confidence: confirmed
+  summary: >-
+    The spec reaches for a Selenium-shaped API. browser.logs,
+    browser.execute_async_script and element.native.send_keys now work (#104);
+    switch_to.alert cannot, because Lightpanda arms a dialog response before
+    the action that opens it, so there is nothing to accept afterwards.
+  patterns:
+    - "undefined method [`']switch_to"
+    # Fixed in #104; kept so pre-#104 reports still attribute cleanly and so a
+    # regression lands back under this cause rather than as a fresh mystery.
+    - "undefined method [`'](logs|execute_async_script)"
+    - "undefined method [`']send_keys' for an instance of String"
+
+form-method-dialog:
+  confidence: confirmed
+  summary: >-
+    Submitting a <form method="dialog"> navigates instead of closing its
+    ancestor <dialog>, so Turbo's confirm promise never resolves and the DELETE
+    is never issued. Spree 5's admin uses that markup for every destroy
+    confirmation.
+  reference: "upstream lightpanda-io/browser#3053, PR #3054"
+  patterns:
+    - 'settings/(shipping_categories|shipping_methods|stock_locations|tax_categories|tax_rates)_spec\.rb'
+
+ajax-partial-not-applied:
+  confidence: likely
+  summary: >-
+    A control changes (a select, an inline edit save) and the server-rendered
+    partial that should replace part of the page never lands, so the page keeps
+    its pre-change content. Seen on solidus's line-item total, cart edit,
+    calculator fields, tax-country select and the new-credit-card form. The
+    gem does dispatch bubbling input/change events (SELECT_OPTION_JS), so the
+    event dispatch itself is not the gap.
+  next_step: >-
+    Boot solidus, drive one of these by hand and watch Network#traffic plus
+    console_logs — the question is whether the request is issued, whether it
+    responds, and whether the response handler runs.
+  patterns:
+    - 'line_items_spec\.rb # Order Line Items can edit'
+    - 'order_details_spec\.rb # Order Details as Admin cart edit page'
+    - 'payments_spec\.rb # Payments'
+    - 'configuration/shipping_methods_spec\.rb # Shipping Methods update can change the calculator'
+    - 'configuration/store_spec\.rb # Store editing general store settings'
+    - 'return_authorizations_spec\.rb # ReturnAuthorizations'
+    - 'return_payment_state_spec\.rb # Return payment state'
+
+search-returns-nothing:
+  confidence: unknown
+  summary: >-
+    A search or filter form is submitted and the results page comes back
+    without the expected row. Grouped by symptom only — not yet established
+    whether the submission carries its parameters, or whether the results
+    render and the assertion misses them.
+  patterns:
+    - 'products_spec\.rb # Products as admin user searching products'
+    - 'stock_items_spec\.rb # Stock Items Management searching'
+    - 'products/option_types_spec\.rb # Option Types'
+
+js-component-not-rendering:
+  confidence: likely
+  summary: >-
+    Forem's article editor, comment editor and article-management panels are
+    Preact components. The containers exist but their contents never appear
+    (#section-delete, #section-discussion, "Editing comment", the previewed
+    body), so the component tree is not mounting or not updating. Same family
+    as the readyState stall that took out the forem homepage, but on article
+    pages.
+  reference: "wishlist A10"
+  patterns:
+    - 'spec/system/articles/'
+    - 'spec/system/comments/'
+    - 'spec/system/authentication/user_logs_in_with_email_spec\.rb'
+
+decidim-account-js:
+  confidence: likely
+  summary: >-
+    Decidim's account form reveals and hides password/email fields in JS. The
+    fields stay in whichever state the page loaded with, so "Current password"
+    is never findable and the toggle assertions fail. The two Ambiguous
+    "Remove" matches are the avatar widget showing both its states at once,
+    which is a visibility question rather than a toggle one.
+  patterns:
+    - 'account_spec\.rb # Account when on the account page when update (password|email)'
+    - 'account_spec\.rb # Account when on the account page update avatar'
+    - 'account_spec\.rb # Account navigation'
+
+axe-and-html-validation:
+  confidence: confirmed
+  summary: >-
+    Decidim's shared "accessible page" examples. The axe-core injection path
+    works again now that browser.execute_async_script exists (#104); what these
+    report is whatever axe and the HTML validator actually find on the page,
+    which may be genuine app findings rather than driver gaps.
+  patterns:
+    - 'accessibility_examples\.rb'
+    - 'behaves like accessible page'

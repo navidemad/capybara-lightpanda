@@ -9,6 +9,7 @@ against actual production-shape codebases.
 ```
 .github/real-apps/
 ├── README.md                   # this file
+├── causes.yml                  # why each baseline failure fails
 └── patches/
     ├── forem.patch             # was on Cuprite
     ├── solidus.patch           # was on Selenium
@@ -28,6 +29,32 @@ Each patch is a `git diff HEAD` against the upstream SHA pinned in
 through the placeholder `__CAPYBARA_LIGHTPANDA_PATH__`; the workflow substitutes
 it with `$GITHUB_WORKSPACE/capybara-lightpanda` at apply time so the `path:`
 Gemfile entry resolves to the runner-side checkout.
+
+## Why the failures fail
+
+A baseline records *that* something fails, never *why*, and a file of
+undiagnosed lines looks exactly like a file of understood limitations. Only one
+of those is safe to ship on.
+
+`causes.yml` closes that gap: each cause carries a summary, a confidence
+(`confirmed` / `likely` / `unknown`), an optional reference to the wishlist or
+an upstream issue, and the regexps that match it against the baseline key and
+the run's failure message. `check_baseline.rb` prints the per-cause tally and
+lists anything matching no cause:
+
+```
+Known failures by cause:
+  layout-measuring-js           38  (confirmed)
+  select2-v3-flow               16  (likely)
+  ajax-partial-not-applied       6  (likely)
+  multipart-content-loss         5  (confirmed)
+  search-returns-nothing         2  (unknown)
+  selenium-only-api              1  (confirmed)
+```
+
+The number to drive down is the unattributed count, then the `unknown` and
+`likely` confidences. Causes live here rather than in the baselines because
+`REFRESH=1` rewrites those wholesale.
 
 ## Running locally
 
