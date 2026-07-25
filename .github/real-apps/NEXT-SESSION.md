@@ -13,17 +13,25 @@ of work:
 | Lot | N | Reality |
 | --- | --- | --- |
 | `layout-measuring-js` | 38 | Never fixable. Needs a layout engine. Document it, stop counting it as debt. |
+| `select-optgroup-invisible` | 15 | Root-caused 2026-07-25 (wishlist A52, `findings/cluster-3-…`). Browser-side, not gem-fixable; needs an upstream fix then a floor bump. |
 | `form-method-dialog` | 5 | Already fixed. Waiting on upstream lightpanda-io/browser#3054, then a `MINIMUM_NIGHTLY_BUILD` bump. |
 | `selenium-only-api` | 2 | Already fixed by #104; drops at the next scheduled run. |
 | `selenium-only-api` (`switch_to`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
-| Everything else | **55** | Genuinely open, mechanism not identified. |
+| Everything else | **40** | Genuinely open, mechanism not identified. |
 
 Targeting "101" rewards gaming the baseline and makes 38 inherent limitations
-look like a lack of effort. The honest target is 55.
+look like a lack of effort. The honest target is 40.
 
 ---
 
-## Prompt 1 — build the local boot harness
+## Prompt 1 — build the local boot harness — DONE (2026-07-25)
+
+Shipped as `script/real-app/` (`boot.sh`, `spec.sh`, `probe.rb`, `targets.rb`);
+see its README. `boot.sh solidus` takes a clean machine to a runnable suite,
+`spec.sh <target> <spec> -e "<example>"` runs one example with `console_logs` +
+`network.traffic` captured per failure and tells you which `causes.yml` entry the
+failure matches. Warm re-runs are ~1 s. The original prompt is kept below for
+provenance.
 
 > Build `script/real-app/boot.sh <target>`: bring up one real-apps matrix target
 > locally so a single failing spec can be run and instrumented.
@@ -120,8 +128,17 @@ oldest open item, and it can be settled without the new harness — the finding
 came from the private app that `APP_DIR` already drives. If it revives a
 confirmed root cause, it changes what the harness needs to capture.
 
-**Then `select2-v3-flow`** (16 entries), the largest addressable cluster, all
-funnelling through one helper: `complete_split_to` → `select2_no_label`, which
-clicks a placeholder link and picks from `.select2-drop`. The gem's wrapper-click
-descent (wishlist C13) fixed the container-click path into select2; this helper
-takes a different one.
+**~~Then `select2-v3-flow`~~ — DONE 2026-07-25.** The premise was wrong: the
+helper reaches select2 fine and the pick registers. 15 of the 16 entries are
+`select-optgroup-invisible` (wishlist A52) — Lightpanda's `HTMLSelectElement`
+walks direct children only, so the destination `<option>`s inside `<optgroup>`
+are invisible to `options`/`value`/`selectedIndex`/`selectedOptions` and to form
+submission; jQuery's `.val()` setter then drives `selectedIndex` to -1 and the
+getter returns `null`, and solidus's handler throws before it can POST. Confirmed
+in the booted app and with a Ruby-free flat-vs-grouped reproducer; not
+gem-fixable. See `findings/cluster-3-select-optgroup-options.md`. The 16th entry
+(`products/edit/taxons_spec.rb`) is still `select2-v3-flow` and still open.
+
+**Next largest addressable cluster**: `ajax-partial-not-applied` (7, likely).
+Same harness, same method — the question there is whether the request is issued
+at all, which `network.traffic` answers in one run.
