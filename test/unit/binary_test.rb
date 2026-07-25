@@ -23,7 +23,7 @@ describe Capybara::Lightpanda::Binary do
   describe ".platform_binary" do
     it "returns the correct binary name for the current platform" do
       name = Capybara::Lightpanda::Binary.platform_binary
-      assert_match(/\Alightpanda-(x86_64-linux|aarch64-macos)\z/, name)
+      assert_match(/\Alightpanda-(x86_64|aarch64)-(linux|macos)\z/, name)
     end
   end
 
@@ -47,10 +47,24 @@ describe Capybara::Lightpanda::Binary do
   end
 
   describe "PLATFORMS" do
-    it "maps known architectures" do
+    # Every combination upstream publishes must be mapped. Intel macOS and
+    # arm64 Linux were missing until 2026-07-25, which hard-blocked Intel
+    # MacBooks and Graviton runners with UnsupportedPlatformError even though
+    # the release carried a binary for them. Names must match the release asset
+    # names exactly — they're interpolated straight into the download URL.
+    it "maps every architecture upstream ships a binary for" do
       assert_equal "lightpanda-x86_64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[x86_64 linux]]
+      assert_equal "lightpanda-aarch64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[aarch64 linux]]
+      assert_equal "lightpanda-x86_64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[x86_64 darwin]]
       assert_equal "lightpanda-aarch64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[aarch64 darwin]]
+    end
+
+    # normalize_arch folds arm64 -> aarch64 before the lookup, so these rows are
+    # unreachable in practice; assert them so a future normalize_arch change
+    # can't silently strand arm64 hosts.
+    it "keeps the defensive arm64 aliases" do
       assert_equal "lightpanda-aarch64-macos", Capybara::Lightpanda::Binary::PLATFORMS[%w[arm64 darwin]]
+      assert_equal "lightpanda-aarch64-linux", Capybara::Lightpanda::Binary::PLATFORMS[%w[arm64 linux]]
     end
 
     it "is frozen" do
