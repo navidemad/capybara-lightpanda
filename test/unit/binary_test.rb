@@ -378,15 +378,37 @@ describe Capybara::Lightpanda::Binary do
     # connection — SO_LINGER(on, 0) makes close send RST, so the client's
     # read_body raises Errno::ECONNRESET mid-transfer. Same technique as
     # web_socket_test.rb.
+    #
+    # Serving in a loop, rather than accepting once, is load-bearing.
+    # Net::HTTP sets max_retries = 1 and GET is idempotent, so an RST that
+    # lands before any response is transparently retried on a NEW connection.
+    # A one-shot accept left that retry unanswered until the 60s read timeout,
+    # so the test saw Net::ReadTimeout instead of ECONNRESET and the job grew
+    # by two minutes. That is what reddened check (3.3) on main after #109
+    # while check (4.0) stayed green: on 4.0 the headers won the race, the
+    # failure landed mid-body, and mid-body failures aren't retried.
     def serve_truncated_download(server)
       Thread.new do
-        sock = server.accept
-        sock.readpartial(4096) # consume the GET
-        sock.write("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
-        sock.write("PARTIAL")
-        sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
-        sock.close
+        loop { serve_one_truncated(server.accept) }
+      rescue IOError, Errno::EBADF, Errno::EINVAL
+        nil # with_download_server closed the listener; nothing left to serve
       end
+    end
+
+    def serve_one_truncated(sock)
+      sock.readpartial(4096) # consume the GET
+      sock.write("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
+      sock.write("PARTIAL")
+      sock.flush
+      # SO_LINGER(0) discards whatever is still in the send buffer, so closing
+      # immediately can leave the client with no response at all. Pause so the
+      # headers land first: the interruption under test is mid-body.
+      sleep 0.05
+      sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
+    rescue IOError, SystemCallError
+      nil # client hung up first
+    ensure
+      sock.close
     end
 
     def with_download_server
@@ -397,8 +419,10 @@ describe Capybara::Lightpanda::Binary do
                                   .returns("http://127.0.0.1:#{server.addr[1]}")
       yield
     ensure
-      accepter&.join
+      # Close the listener first: it's what unblocks the accept loop. Joining
+      # before closing would wait on a thread that never returns.
       server&.close
+      accepter&.join
     end
 
     it "leaves the existing binary intact when the transfer is interrupted" do
