@@ -289,8 +289,11 @@ module Capybara
       alias render save_screenshot
 
       # -- Headers (Cuprite-compatible driver surface) --
-      # Delegates to Network, which lazily enables the Network domain and
-      # remembers the headers across reset. Cuprite exposes these on the
+      # Delegates to Network, which lazily enables the Network domain. The
+      # overrides do NOT survive reset!: disposing the BrowserContext takes
+      # setExtraHTTPHeaders with it, so Network#reset drops its cached copy
+      # rather than report headers the browser stopped sending (pinned by
+      # network_test.rb "clears extra_headers"). Cuprite exposes these on the
       # driver, and real suites call them there (page.driver.headers = ...).
 
       def headers

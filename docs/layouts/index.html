@@ -596,6 +596,24 @@
               <td>CSSOM landed; no layout</td>
             </tr>
             <tr>
+              <th scope="row">Hover menus</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="partial" aria-label="partial">~</span></td>
+              <td>
+                <code>mouseover</code> + <code>mouseenter</code> fire, so JS menus
+                open; CSS <code>:hover</code> reveals don't
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Second tab or window</th>
+              <td><span class="check" aria-label="yes">✓</span></td>
+              <td><span class="dash" aria-label="not supported">—</span></td>
+              <td>
+                one target per connection — drive a second Capybara session
+                instead
+              </td>
+            </tr>
+            <tr>
               <th scope="row">Web Workers</th>
               <td><span class="check" aria-label="yes">✓</span></td>
               <td><span class="partial" aria-label="partial">~</span></td>
