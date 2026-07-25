@@ -27,6 +27,36 @@ gh api repos/rubycdp/cuprite/commits \
   | head -30
 ```
 
+### Open PRs — mandatory here, because Cuprite barely merges
+
+**Run this every sync, before the commit scan.** Cuprite is the slowest-merging
+target: no release since v0.17 (2025-05-11), and `main` HEAD went untouched
+across the 2026-07-24 → 2026-07-25 window. Its 10 open PRs are where the
+driver-layer thinking actually shows up.
+
+```bash
+gh pr list --repo rubycdp/cuprite --state open --limit 30 \
+  --json number,title,createdAt,isDraft \
+  --jq '.[] | "\(.number)\t\(.createdAt[0:10])\tdraft=\(.isDraft)\t\(.title)"'
+```
+
+Grade each against `ruby-cdp-peers.md`, and note that an open PR can **invalidate
+a Diverged entry** — that is the failure mode this check exists to catch:
+
+- **#316 "Support `Element#drop` for files and strings"** (open 2026-07-09) directly
+  contradicts our recorded divergence, which asserts Cuprite has *no* `drop` and
+  that ours therefore exceeds it. Still true of their `main`, no longer true of
+  their intent. When it merges, re-read our `DROP_JS` against theirs and rewrite
+  the entry — the interesting axis is that theirs may assume coordinates while
+  ours is deliberately geometry-free.
+- **#320 `raise_on_unhandled_modal`**, **#313 empty/nil keys in `Node#send_keys`** —
+  both land in areas we implement (pre-armed modals, `send_keys`), so they are
+  adoption candidates or risks depending on what the body says.
+
+Do not promote an open PR to an "Adopted"/"Diverged" edit in the rules file — it
+has not landed. Record it as a watch item in `state/last-sync.md` with its number
+and what it would change, and re-check its state next sync.
+
 ### Releases and CHANGELOG
 
 ```bash

@@ -104,11 +104,16 @@ selenium-only-api:
 form-method-dialog:
   confidence: confirmed
   summary: >-
-    Submitting a <form method="dialog"> navigates instead of closing its
-    ancestor <dialog>, so Turbo's confirm promise never resolves and the DELETE
-    is never issued. Spree 5's admin uses that markup for every destroy
-    confirmation.
-  reference: "upstream lightpanda-io/browser#3053, PR #3054"
+    FIXED UPSTREAM at build 8311 — above MINIMUM_NIGHTLY_BUILD (8160), so a run
+    on a binary between the floor and 8311 still hits it. Submitting a
+    <form method="dialog"> navigated instead of closing its ancestor <dialog>,
+    so Turbo's confirm promise never resolved and the DELETE was never issued.
+    Spree 5's admin uses that markup for every destroy confirmation.
+    The 5 spree entries were dropped from the baseline on 2026-07-25 after all
+    of them passed twice on nightly 8314. Entry kept, not deleted: it is the
+    only thing that would attribute these specs cleanly on a sub-8311 binary,
+    and a regression should land back here rather than as a fresh mystery.
+  reference: "upstream lightpanda-io/browser#3053, PR #3054 (merged 2026-07-25, build 8311)"
   patterns:
     - 'settings/(shipping_categories|shipping_methods|stock_locations|tax_categories|tax_rates)_spec\.rb'
 

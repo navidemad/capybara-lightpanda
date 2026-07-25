@@ -1,6 +1,6 @@
 ---
 name: sync-upstream
-description: Audit upstream repos that affect the capybara-lightpanda gem — the Lightpanda browser (lightpanda-io/browser), and the peer Ruby CDP gems Ferrum (rubycdp/ferrum) and Cuprite (rubycdp/cuprite). Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, investigating a specific CDP behavior (Page.loadEventFired, Network.clearBrowserCookies, XPathResult, modal handling), or asks what's new in Ferrum or Cuprite, what patterns we should adopt from them, whether a Ferrum error class or retry helper is worth mirroring, or whether Cuprite's driver does X better. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation, or when they want a pre-release peer-gem comparison. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods — those are code tasks, not upstream investigations.
+description: Audit upstream repos that affect the capybara-lightpanda gem — the Lightpanda browser (lightpanda-io/browser), and the peer Ruby CDP gems Ferrum (rubycdp/ferrum) and Cuprite (rubycdp/cuprite). Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, investigating a specific CDP behavior (Page.loadEventFired, Network.clearBrowserCookies, XPathResult, modal handling), or asks what's new in Ferrum or Cuprite, what patterns we should adopt from them, whether a Ferrum error class or retry helper is worth mirroring, or whether Cuprite's driver does X better, or what is sitting unmerged in a peer gem's open PR queue. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation, when they want a pre-release peer-gem comparison, or when a shared Rails helper hits a Selenium-named method (browser.logs, execute_async_script, execute_cdp, switch_to) and the compat surface in selenium_compat.rb may have drifted. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods — those are code tasks, not upstream investigations.
 user_invocable: true
 model: opus
 effort: xhigh
@@ -15,17 +15,23 @@ Audit upstream repos for changes that affect `capybara-lightpanda`. This skill i
 | **Lightpanda** | lightpanda-io/browser | Backend (Zig browser)    | Workaround removal, new CDP capabilities, new risks                |
 | **Ferrum**     | rubycdp/ferrum        | Peer Ruby CDP client     | Idiomatic adoption candidates (errors, retry, frame/runtime split) |
 | **Cuprite**    | rubycdp/cuprite       | Peer Capybara CDP driver | Driver-layer adoption candidates (error mapping, JS polyfills)     |
+| **Selenium**   | SeleniumHQ/selenium   | API we imitate (`rb/` only) | Drift in the Selenium-named compat surface. **On demand only** — see below |
 
 Lightpanda defines what's _possible_. Ferrum and Cuprite define what's _idiomatic_ for a Ruby gem doing the same job. Different questions, different rules-file destinations, but a shared workflow worth running together — especially before a release.
+
+Selenium is deliberately not in that set. It is not a peer — no CDP, no shared architecture — and it is checked for one narrow reason: `browser/selenium_compat.rb` answers four Selenium-named methods that shared Rails helpers call, and drift there breaks whole spec files. It is a **conformance** check, never an adoption one, and it is **excluded from "all three"/"sync upstream"**. Run it only on the triggers in `references/selenium.md`.
+
+**Scan open PRs, not just merged commits.** For Ferrum and Cuprite this is mandatory every run and belongs *before* the commit scan. Both merge slowly — across the 2026-07-24 → 2026-07-25 window neither `main` moved at all, while their queues held 18 and 10 open PRs including a CDP thread-safety fix and an `Element#drop` implementation that contradicts one of our recorded divergences. A commits-only recon reports "nothing new" precisely when the queue holds the information. Per-target commands and grading rules live in each reference file.
 
 ## Step 0: Pick targets
 
 Read the user's prompt and pick which targets to run:
 
-- **All three** — phrases like "sync upstream", "pre-release audit", "check what's new", "general upstream check"
+- **All three** — phrases like "sync upstream", "pre-release audit", "check what's new", "general upstream check". This means Lightpanda + Ferrum + Cuprite; it does **not** pull in Selenium.
 - **Lightpanda only** — Lightpanda-specific symptoms (CDP method behavior, browser bug, navigation issue, BrowserError, "is this a Lightpanda limitation?")
 - **Ferrum only** — "what's new in Ferrum?", "did Ferrum add X?", "should we adopt their retry/error/frame pattern?"
 - **Cuprite only** — "how does Cuprite handle Y?", "is our driver error mapping behind Cuprite?"
+- **Selenium (add-on)** — only when `selenium_compat.rb` changed since the last sync, a real-app failure shows a shared helper calling a Selenium-named method, or the user asks. Never on its own initiative; see `references/selenium.md` for why a broad Selenium recon is nearly always empty.
 - **Targeted investigation** — a single specific question (e.g., "has Page.loadEventFired been fixed?"). Run only the relevant target and skip unrelated checks. Still read the rules files for context, but go deep on the question.
 
 Tell the user which targets you've picked and why before starting recon. They can redirect.
@@ -59,10 +65,13 @@ Then read the gem source surfaces relevant to the targets you picked:
 Each target has a per-target reference with concrete recon commands, source-tree pointers, and what to skip:
 
 - `references/lightpanda.md` — CDP method existence checks, gh queries, lightpanda-io.md update rules
-- `references/ferrum.md` — Ferrum source tree, file-by-file comparisons against our gem, what's Chrome-specific to skip
-- `references/cuprite.md` — Cuprite driver/error/JS comparisons
+- `references/ferrum.md` — open-PR scan, Ferrum source tree, file-by-file comparisons against our gem, what's Chrome-specific to skip
+- `references/cuprite.md` — open-PR scan, Cuprite driver/error/JS comparisons
+- `references/selenium.md` — the four-method compat surface, and when NOT to run it
 
 Run target recons in parallel where possible (each `gh api` or WebFetch is independent).
+
+**A closed, unmerged PR is not proof of rejected work** — on any target. Verified 2026-07-25: our own lightpanda PR #3051 reported `CLOSED` with no merge, while the identical commit had landed under a maintainer's own PR number days later. Before recording "upstream rejected this", confirm against the tree (`git log --oneline -- <path>`), not against PR state alone.
 
 ## Step 3: Categorize findings
 
@@ -75,6 +84,12 @@ Use this taxonomy across all targets — every finding lands in exactly one buck
 - **Already adopted** — patterns we mirror from a previous sync. Note when the peer has since diverged (do we re-mirror?).
 - **Diverged on purpose** — places we deliberately differ because Lightpanda's constraints require it. Don't flag as adoption candidates again.
 - **New risks** — open issues / regressions that could break our gem, or bugs the peers fixed that may also affect us.
+
+Open PRs feed the last three buckets, never the first two, because nothing has landed yet:
+
+- A peer PR describing a **bug in a design we share** is a **New risk** and a cheap audit — check whether we have the same defect, then record the verdict (including "immune, and here's the line that makes us immune") so the next sync doesn't repeat the work.
+- A peer PR **building something we listed as Diverged or Outstanding** invalidates that entry's premise. Don't rewrite the rules file yet — the claim about their `main` is still true. Log it as a watch item with what it would change.
+- Never promote an unmerged PR into an "Adopted" or "Diverged" edit. Rules files describe shipped code.
 
 ## Step 4: Prune-and-densify pass
 
@@ -152,6 +167,8 @@ Targets run: [Lightpanda / Ferrum / Cuprite / subset]
 ### Ferrum
 **Adoption candidates**
 - [ ] [tiny/medium/large] pattern → ferrum_file ↔ our_file ↔ why
+**Open PRs (not landed — watch items)**
+- [ ] #N title — what it would change for us; if it names a bug in shared design, the audit verdict on our side
 **Diverged (revisit?)**
 - [ ] ...
 **New risks**
@@ -160,8 +177,15 @@ Targets run: [Lightpanda / Ferrum / Cuprite / subset]
 ### Cuprite
 **Adoption candidates**
 - [ ] ...
+**Open PRs (not landed — watch items)**
+- [ ] ...
 **New risks**
 - [ ] ...
+
+### Selenium
+(Only when the compat-surface triggers fired. State "skipped — no trigger" otherwise.)
+**Compat drift**
+- [ ] method ↔ selenium file ↔ what changed shape
 
 ### Rules files updated
 - lightpanda-io.md: ...

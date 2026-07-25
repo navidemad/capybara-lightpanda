@@ -143,17 +143,45 @@ module Capybara
           nil
         end
 
+        # Downloads into a sibling temp file and renames it into place only
+        # once the transfer finished.
+        #
+        # Writing straight to `destination` corrupted a working binary on any
+        # interrupted transfer: File.open(_, "wb") truncates the existing file
+        # the moment the request starts, and truncation KEEPS the mode bits —
+        # so a dropped connection left a partial file that still answered
+        # File.executable? => true. #update's "fall back to the cached binary"
+        # rescue then handed that corpse back as if it were the usable stale
+        # binary, warning as though nothing was wrong. That is the common path,
+        # not an edge case: past cache_time, #update calls #download precisely
+        # when a good binary is already sitting at `destination`.
+        #
+        # rename(2) within one directory is atomic, so a concurrent reader sees
+        # either the old binary or the new one, never a half-written one. The
+        # temp file is a sibling (not Dir.tmpdir) so the rename never crosses a
+        # filesystem, and chmod happens before it so the binary is never
+        # visible non-executable. Two racing downloads get distinct temp names
+        # and both rename a complete file — last writer wins, both are valid.
         def download
           binary_name = platform_binary
           tag = required_version || "nightly"
-          url = "#{GITHUB_RELEASE_URL}/#{tag}/#{binary_name}"
+          url = "#{release_url}/#{tag}/#{binary_name}"
           destination = install_path
 
           log("Downloading #{binary_name} (#{tag}) → #{destination}")
           FileUtils.mkdir_p(File.dirname(destination))
 
-          download_file(url, destination)
-          FileUtils.chmod(0o755, destination)
+          # ::Process, not Process — Capybara::Lightpanda::Process would win.
+          temp = "#{destination}.download-#{::Process.pid}"
+          begin
+            download_file(url, temp)
+            FileUtils.chmod(0o755, temp)
+            File.rename(temp, destination)
+          ensure
+            # No-op on success (rename consumed it). ensure, not rescue, so an
+            # Interrupt mid-download cleans up too; rm_f ignores a missing file.
+            FileUtils.rm_f(temp)
+          end
 
           destination
         end
@@ -228,6 +256,13 @@ module Capybara
         end
 
         private
+
+        # Release host, as its own method so tests can point #download at a
+        # local socket and exercise the real streaming writer (which is where
+        # the truncation bug lived) instead of stubbing it out.
+        def release_url
+          GITHUB_RELEASE_URL
+        end
 
         # Detects a Homebrew-managed binary by checking whether `path` is a
         # symlink that resolves into a `/Cellar/` directory — the convention

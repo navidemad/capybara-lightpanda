@@ -33,6 +33,43 @@ gh api 'repos/rubycdp/ferrum/commits?per_page=40' \
   --jq '.[] | {sha: .sha[0:8], date: .commit.author.date[0:10], msg: (.commit.message | split("\n")[0])} | select((.msg | ascii_downcase) | test("error|retry|attempt|frame|runtime|cookie|node|callfunctionon|evaluate|context|target|dialog|polyfill")) | select((.msg | ascii_downcase) | test("screenshot|pdf|xvfb|proxy|download|tracing") | not)'
 ```
 
+### Open PRs — the signal merged commits can't give you
+
+**Run this every sync, before the commit scan.** Ferrum merges slowly: `main` HEAD
+sat unmoved for the whole 2026-07-24 → 2026-07-25 window while the PR queue held
+18 open PRs, several of them gem-relevant. A commits-only recon reports "nothing
+new" on exactly the syncs where the queue is where the information is.
+
+```bash
+gh pr list --repo rubycdp/ferrum --state open --limit 30 \
+  --json number,title,createdAt,isDraft \
+  --jq '.[] | "\(.number)\t\(.createdAt[0:10])\tdraft=\(.isDraft)\t\(.title)"'
+```
+
+An open PR is worth reading for two things a merged commit never tells you:
+
+- **A bug they found in a design we share** → **New risks**, and often the cheapest
+  audit we can run. Ferrum #602 ("make the CDP send path thread-safe") names two
+  concrete races: an unlocked `@command_id` increment handing two threads the same
+  id, and `websocket-driver` called from the caller and reader threads at once,
+  interleaving frame bytes. Both apply verbatim to our hand-rolled client, so both
+  got checked: `client.rb#next_command_id` locks with `@mutex`, and
+  `client/web_socket.rb` guards `text` / `close` / `parse` with `@driver_mutex`
+  (the one unguarded `@driver.parse` is in `read_handshake_response`, which runs
+  before the reader thread exists). Verified immune 2026-07-25 — record the
+  verdict either way, so the next sync doesn't re-audit it.
+- **A capability arriving that would invalidate a Diverged or Outstanding entry** →
+  re-read that entry now rather than after it merges.
+
+Read the PR body, not just the title — the bug description is the transferable
+part, and it is usually far more precise than the eventual commit message.
+
+**A closed, unmerged PR does not mean rejected work.** Verify before concluding
+anything from state alone: our own lightpanda PR #3051 shows `CLOSED` with no
+merge, yet the identical commit landed days later on a maintainer's branch under
+a different PR number. Check whether the change is in the tree
+(`git log --oneline -- <path>`) before recording a rejection.
+
 ### Releases and CHANGELOG
 
 ```bash

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../test_helper"
+require "socket"
 require "capybara/lightpanda/errors"
 require "capybara/lightpanda/binary"
 
@@ -348,6 +349,122 @@ describe Capybara::Lightpanda::Binary do
       end
     ensure
       ENV["PATH"] = original_path
+    end
+  end
+
+  # #download writes to a sibling temp file and renames it into place. These
+  # drive the real HTTP path against a local socket rather than stubbing
+  # download_file, because the bug lived in the file writing itself: writing
+  # straight to the final path truncated the working binary the moment the
+  # request started, and truncation preserves the mode bits, so the wreckage
+  # still answered File.executable? => true. #update's stale-binary fallback
+  # then returned that partial file and warned as if it were usable.
+  describe ".download atomicity" do
+    # Serves a response promising more bytes than it sends, then resets the
+    # connection — SO_LINGER(on, 0) makes close send RST, so the client's
+    # read_body raises Errno::ECONNRESET mid-transfer. Same technique as
+    # web_socket_test.rb.
+    def serve_truncated_download(server)
+      Thread.new do
+        sock = server.accept
+        sock.readpartial(4096) # consume the GET
+        sock.write("HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
+        sock.write("PARTIAL")
+        sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
+        sock.close
+      end
+    end
+
+    def with_download_server
+      server = TCPServer.new("127.0.0.1", 0)
+      accepter = serve_truncated_download(server)
+      Capybara::Lightpanda::Binary.stubs(:platform_binary).returns("lightpanda-test")
+      Capybara::Lightpanda::Binary.stubs(:release_url)
+                                  .returns("http://127.0.0.1:#{server.addr[1]}")
+      yield
+    ensure
+      accepter&.join
+      server&.close
+    end
+
+    it "leaves the existing binary intact when the transfer is interrupted" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      path = File.join(dir, "lightpanda")
+      File.write(path, "GOOD-COMPLETE-BINARY")
+      File.chmod(0o755, path)
+
+      with_download_server do
+        assert_raises(Errno::ECONNRESET, EOFError) { Capybara::Lightpanda::Binary.download }
+      end
+
+      # Pre-fix this read returned "PARTIAL" — the working binary was gone.
+      assert_equal "GOOD-COMPLETE-BINARY", File.read(path)
+      assert File.executable?(path)
+    end
+
+    it "removes the partial temp file so it can never be mistaken for a binary" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+
+      with_download_server do
+        assert_raises(Errno::ECONNRESET, EOFError) { Capybara::Lightpanda::Binary.download }
+      end
+
+      assert_empty Dir.children(dir)
+    end
+
+    # The point of the rescue in #update is to serve a *usable* stale binary.
+    # Pre-fix it could serve a truncated one, so assert the end-to-end
+    # contract, not just #download in isolation.
+    it "keeps update's stale-binary fallback usable after an interrupted refresh" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 60
+
+      path = File.join(dir, "lightpanda")
+      File.write(path, "GOOD-COMPLETE-BINARY")
+      File.chmod(0o755, path)
+      File.utime(Time.now - 3600, Time.now - 3600, path)
+
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
+
+      result = nil
+      err = nil
+      with_download_server do
+        _out, err = capture_io { result = Capybara::Lightpanda::Binary.update }
+      end
+
+      assert_equal path, result
+      assert_includes err, "Binary download failed"
+      # The fallback handed back the intact binary, not a 7-byte stump.
+      assert_equal "GOOD-COMPLETE-BINARY", File.read(result)
+    end
+
+    it "renames a completed download into place as an executable" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      server = TCPServer.new("127.0.0.1", 0)
+      accepter = Thread.new do
+        sock = server.accept
+        sock.readpartial(4096)
+        sock.write("HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nFRESH-BINARY")
+        sock.close
+      end
+      Capybara::Lightpanda::Binary.stubs(:platform_binary).returns("lightpanda-test")
+      Capybara::Lightpanda::Binary.stubs(:release_url)
+                                  .returns("http://127.0.0.1:#{server.addr[1]}")
+
+      result = Capybara::Lightpanda::Binary.download
+
+      assert_equal File.join(dir, "lightpanda"), result
+      assert_equal "FRESH-BINARY", File.read(result)
+      assert File.executable?(result)
+      # No .download-<pid> sibling left behind.
+      assert_equal ["lightpanda"], Dir.children(dir)
+    ensure
+      accepter&.join
+      server&.close
     end
   end
 
