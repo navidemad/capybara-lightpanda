@@ -3,20 +3,20 @@ name: sync-upstream
 description: Audit upstream repos that affect the capybara-lightpanda gem — the Lightpanda browser (lightpanda-io/browser), and the peer Ruby CDP gems Ferrum (rubycdp/ferrum) and Cuprite (rubycdp/cuprite). Use this skill whenever the user mentions syncing upstream, checking Lightpanda changes, auditing whether workarounds are still needed, preparing a gem release, verifying CDP methods exist upstream, investigating a specific CDP behavior (Page.loadEventFired, Network.clearBrowserCookies, XPathResult, modal handling), or asks what's new in Ferrum or Cuprite, what patterns we should adopt from them, whether a Ferrum error class or retry helper is worth mirroring, or whether Cuprite's driver does X better. Also use when the user reports a BrowserError or CDP failure and wants to know if it's a Lightpanda limitation, or when they want a pre-release peer-gem comparison. Do NOT use for implementing code changes, fixing the XPath polyfill JS, setting up CI, or refactoring driver methods — those are code tasks, not upstream investigations.
 user_invocable: true
 model: opus
-effort: max
+effort: xhigh
 ---
 
 # Sync Upstream
 
 Audit upstream repos for changes that affect `capybara-lightpanda`. This skill is **reconnaissance and planning**, not implementation. Three sync targets, two different categories of finding:
 
-| Target | Repo | Role | Findings unlock |
-|---|---|---|---|
-| **Lightpanda** | lightpanda-io/browser | Backend (Zig browser) | Workaround removal, new CDP capabilities, new risks |
-| **Ferrum** | rubycdp/ferrum | Peer Ruby CDP client | Idiomatic adoption candidates (errors, retry, frame/runtime split) |
-| **Cuprite** | rubycdp/cuprite | Peer Capybara CDP driver | Driver-layer adoption candidates (error mapping, JS polyfills) |
+| Target         | Repo                  | Role                     | Findings unlock                                                    |
+| -------------- | --------------------- | ------------------------ | ------------------------------------------------------------------ |
+| **Lightpanda** | lightpanda-io/browser | Backend (Zig browser)    | Workaround removal, new CDP capabilities, new risks                |
+| **Ferrum**     | rubycdp/ferrum        | Peer Ruby CDP client     | Idiomatic adoption candidates (errors, retry, frame/runtime split) |
+| **Cuprite**    | rubycdp/cuprite       | Peer Capybara CDP driver | Driver-layer adoption candidates (error mapping, JS polyfills)     |
 
-Lightpanda defines what's *possible*. Ferrum and Cuprite define what's *idiomatic* for a Ruby gem doing the same job. Different questions, different rules-file destinations, but a shared workflow worth running together — especially before a release.
+Lightpanda defines what's _possible_. Ferrum and Cuprite define what's _idiomatic_ for a Ruby gem doing the same job. Different questions, different rules-file destinations, but a shared workflow worth running together — especially before a release.
 
 ## Step 0: Pick targets
 
@@ -42,6 +42,7 @@ Also read the **previous run's state** if it exists:
 - `.claude/skills/sync-upstream/state/last-sync.md` — open recommendations and watch items carried forward from the prior run.
 
 The state file is how the skill remembers what was outstanding last time. Treat each entry as a question for this run:
+
 - **Recommendations**: is the underlying state still the same (still pending), or has the user done it / has it been invalidated? Verify by checking the gem source (does the code change still need to happen?) or the upstream issue/PR. Don't trust the state file blindly — it's a snapshot from the prior run.
 - **Watch items**: did the upstream PR/issue move? Check the linked PR/issue state. If merged → promote to a finding in this run's report. If closed without merge → drop it.
 
@@ -100,6 +101,7 @@ For each entry in `lightpanda-io.md` and `ruby-cdp-peers.md`, ask three question
    - If an entry has multiple paragraphs of historical narrative ("originally we did X, then PR #N landed, then we tried Y, …"), keep the current behavior in one sentence and delete the history. `git log` is the changelog.
 
 Mechanical rules:
+
 - **Delete, don't archive.** No "Recently Merged Fixes", no "Historical Notes", no commented-out lines. If you need the old text, `git log -p` has it.
 - **Don't preserve numbering for missing entries.** If a list had A1–A9 and A4 becomes obsolete, renumber (or convert to bullets). The rules files aren't the upstream-wishlist's stable-cross-ref doc.
 - **One pass per file per sync run.** Don't loop — diminishing returns and risk of over-pruning.
@@ -212,8 +214,9 @@ Upstream PRs / issues to recheck next sync. Promote to findings if they move.
 ```
 
 Rules:
+
 - **One entry per slug** — slugs are short kebab-case identifiers (e.g. `htmldialog-polyfill-cleanup`, `pr-2431-frame-context-fix`). Stable across runs so reconciliation is trivial.
-- **No duplicates from the rules files.** Anything fully described in `lightpanda-io.md` (open issues table) or `ruby-cdp-peers.md` (outstanding adoption candidates) doesn't need to be in the state file — the rules files are the source of truth for those. State file is specifically for *follow-up actions* (cleanup, validation, gem-side code changes) and *watch items* (upstream PRs we expect to land soon).
+- **No duplicates from the rules files.** Anything fully described in `lightpanda-io.md` (open issues table) or `ruby-cdp-peers.md` (outstanding adoption candidates) doesn't need to be in the state file — the rules files are the source of truth for those. State file is specifically for _follow-up actions_ (cleanup, validation, gem-side code changes) and _watch items_ (upstream PRs we expect to land soon).
 - **Always overwrite the whole file.** Don't append — Step 6's report is the authoritative source for what's still open after this run.
 - **If there's nothing open**, write the headers + an explicit `(none)` under each section so future runs know the file is current, not abandoned.
 
