@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-07-24 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `0a492ef4` (2026-07-06). One code commit since the 2026-07-05 review: #597/#583 — `Frame#loader_id`, `Frame#lifecycle_events`, `Frame#idle?`, a `:canceled` frame state, and a `Page#idling?` fix so Chrome's never-loaded `loading="lazy"` iframes don't hang the wait. Frame-lifecycle idling is a different axis from our network-traffic `wait_for_idle`; recorded as an Outstanding candidate below. The `PendingConnectionsError` message tweak in the same PR is cosmetic and N/A (we don't raise it). Outstanding/Diverged entries below stay valid.
+**Last reviewed**: 2026-07-25 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `0a492ef4` (2026-07-06) — HEAD unmoved since the 2026-07-24 review, nothing new to assess. Newest code commit remains #597/#583 — `Frame#loader_id`, `Frame#lifecycle_events`, `Frame#idle?`, a `:canceled` frame state, and a `Page#idling?` fix so Chrome's never-loaded `loading="lazy"` iframes don't hang the wait. Frame-lifecycle idling is a different axis from our network-traffic `wait_for_idle`; recorded as an Outstanding candidate below. The `PendingConnectionsError` message tweak in the same PR is cosmetic and N/A (we don't raise it). Outstanding/Diverged entries below stay valid.
 
 ### Adopted
 
@@ -52,7 +52,7 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-07-24 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `b64f03d3` (2026-07-09). Two code commits since the 2026-07-05 review, both already satisfied on our side:
+**Last reviewed**: 2026-07-25 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `b64f03d3` (2026-07-09) — HEAD unmoved since the 2026-07-24 review. Newest two code commits, both already satisfied on our side:
 - **#317** (closed `<details>`: non-`summary` descendants are non-visible) — Cuprite had to hand-roll the `DETAILS`/`:scope > summary` check into its JS `isVisible` walk. We need nothing: Lightpanda's UA stylesheet implements `details:not([open]) > *:not(summary) { display: none }` (`StyleManager.zig`), so `el.checkVisibility()` already returns false. Neither `<details>` spec is in our `spec_helper.rb` skip list.
 - **#318** (`tag_name` reports `"ShadowRoot"` for shadow roots) — our `Node#tag_name` already returns `'ShadowRoot'` for `nodeType === 11`, predating theirs.
 
