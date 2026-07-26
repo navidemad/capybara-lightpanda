@@ -12,7 +12,7 @@ module Capybara
       GITHUB_RELEASE_URL = "https://github.com/lightpanda-io/browser/releases/download"
 
       # Upstream publishes all four arch/OS combinations on every channel —
-      # verified 2026-07-25 against the `nightly` tag and release 0.3.5 (the
+      # verified 2026-07-26 against the `nightly` tag and release 0.3.6 (the
       # MINIMUM_RELEASE floor, so any acceptable pin carries them too). Intel
       # macOS and arm64 Linux were absent here and raised
       # UnsupportedPlatformError on machines upstream ships a binary for: Intel

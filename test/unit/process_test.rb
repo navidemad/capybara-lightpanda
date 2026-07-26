@@ -194,7 +194,10 @@ describe Capybara::Lightpanda::Process do
     # MINIMUM_NIGHTLY_BUILD. If a floor bump moves one without the other, the
     # release channel starts accepting binaries the nightly channel rejects.
     it "keeps the release floor at or above the nightly floor" do
-      release_builds = { Gem::Version.new("0.3.5") => Gem::Version.new("8165") }
+      release_builds = {
+        Gem::Version.new("0.3.5") => Gem::Version.new("8165"),
+        Gem::Version.new("0.3.6") => Gem::Version.new("8318"),
+      }
       build = release_builds[release_floor]
 
       refute_nil build, "MINIMUM_RELEASE #{release_floor} has no recorded build number — " \

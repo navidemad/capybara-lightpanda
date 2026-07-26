@@ -357,7 +357,7 @@ module Capybara
       # objectId, replaces input.files with a real FileList, and fires
       # `input`/`change`. The submitted form then carries the bytes as
       # multipart/form-data (PR #2654, build ≥6672) — both halves are needed,
-      # which is why MINIMUM_NIGHTLY_BUILD sits at the 6672 floor. Paths are
+      # and both are guaranteed by the MINIMUM_NIGHTLY_BUILD floor. Paths are
       # read off the machine running Lightpanda (local for the spawned process).
       def set_file_input_files(remote_object_id, paths)
         page_command("DOM.setFileInputFiles", objectId: remote_object_id, files: paths)

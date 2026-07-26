@@ -3,14 +3,14 @@
 Upstream repo: https://github.com/lightpanda-io/browser
 License: AGPL-3.0 | Status: Beta (stability and coverage improving)
 
-Current floors enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 8160` (PR #2719 `@layer` block rules in the cascade; subsumes #2795 innerText at 7571 and #2722 download streaming at 7545) **or** `Process::MINIMUM_RELEASE = 0.3.5` for tagged releases, which is build 8165. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor, and "Binary Distribution" below for why the two floors exist.
+Current floors enforced by the gem: `Process::MINIMUM_NIGHTLY_BUILD = 8311` (PR #3054 `<form method="dialog">`; subsumes #3015 UTF-8 `suggestedFilename` at 8283, #2983 `@layer` priority at 8281, #2719 `@layer` participation at 8160, #2795 innerText at 7571 and #2722 download streaming at 7545) **or** `Process::MINIMUM_RELEASE = 0.3.6` for tagged releases, which is build 8318. See `lib/capybara/lightpanda/process.rb` for the per-PR rationale of every bump in this floor, and "Binary Distribution" below for why the two floors exist.
 
 ## Architecture
 
 - Written in **Zig 0.16.0**, JS execution via **V8**
 - HTML parsing: **html5ever** (standards-compliant, handles malformed HTML)
 - HTTP: **libcurl** (custom headers, proxies, TLS control)
-- CSS: **CSSOM** — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets, `@layer` priority respected in the cascade (#2719, build ≥8160); no full layout/paint/compositing
+- CSS: **CSSOM** — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets. `@layer` support came in two halves — rules inside an `@layer` block *participate* in the cascade from #2719 (build ≥8160), and their *layer rank* is honored from #2983 (build ≥8281). Both are in the floor; don't cite 8160 alone as "`@layer` works". No full layout/paint/compositing
 - Platforms: Linux x86_64, macOS aarch64, Windows via WSL2
 
 ## CDP Server
@@ -33,7 +33,7 @@ Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect v
 | **Inspector** | inspector.zig | Inspector lifecycle |
 | **Log** | log.zig | Console/log message forwarding |
 | **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `getContentSignal`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session opt-out for iframe and/or worker loading; params `{subFrame, worker}`), `configureCDP`, `version` |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, `setBlockedURLs` (url-pattern request blocking). A custom `User-Agent` set via `setExtraHTTPHeaders` (the gem's `Network#headers=` path) is honored since PR #2735 — but `validateUserAgent` still rejects `Mozilla`-containing UAs, so realistic browser-UA spoofing stays blocked on every path. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. Event payloads completed in #3037 (build ≥8318): `responseReceived` now carries `type` (`"Document"` for the main document), and `loadingFinished`/`loadingFailed` carry `timestamp`. Both **above the floor** — `Network#build_response_handler` still identifies the navigation response by matching the remembered document `requestId`, which works on every build. |
+| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, `setBlockedURLs` (url-pattern request blocking). A custom `User-Agent` set via `setExtraHTTPHeaders` (the gem's `Network#headers=` path) is honored since PR #2735 — but `validateUserAgent` still rejects `Mozilla`-containing UAs, so realistic browser-UA spoofing stays blocked on every path. Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache` event, `fromDiskCache` on Response) is implemented but not used by the gem — `Driver#reset!` disposes the BrowserContext, wiping cache implicitly. Event payloads completed in #3037 (build ≥8318): `responseReceived` now carries `type` (`"Document"` for the main document), and `loadingFinished`/`loadingFailed` carry `timestamp`. Both sit above the nightly floor (8311) but inside the release floor (0.3.6 = 8318), so a nightly user can be below them — `Network#build_response_handler` therefore still identifies the navigation response by matching the remembered document `requestId`, which works on every build. Don't simplify it to read `response.type` until the nightly floor itself clears 8318. The same build also began emitting **worker** requests on the page session (previously dropped when the worker's frame id was absent from the document frame tree) — so on ≥8318 a worker's in-flight fetch counts toward `Network#pending_connections`. |
 | **Page** | page.zig | Navigation, events, screenshots (1920x1080 PNG), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` + `lifecycleEvent` + `navigatedWithinDocument` events. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. |
 | **Performance** | performance.zig | Performance metrics |
 | **Runtime** | runtime.zig | JS evaluation, object inspection |
@@ -57,6 +57,7 @@ Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
 Runtime.consoleAPICalled (event)
 DOM.describeNode             DOM.setFileInputFiles
+Input.dispatchKeyEvent       Input.insertText
 Network.getAllCookies        Network.setCookie
 Network.deleteCookies        Network.clearBrowserCookies
 Network.enable               Network.disable
@@ -94,7 +95,7 @@ DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
-Input.dispatchMouseEvent     Input.dispatchKeyEvent      Input.insertText
+Input.dispatchMouseEvent
 Network.setCookies (batch)   Network.getResponseBody     Network.setBlockedURLs
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
 Network.requestServedFromCache (event)
@@ -177,9 +178,10 @@ LP.configureCDP              LP.getContentSignal         LP.version
 | #1801 | Navigation | `Page.navigate` never completes for Wikipedia. Drives our readyState polling fallback. |
 | #2400 | JS context | Child iframe navigation invalidates the main frame's `executionContextId`. Covered by `with_default_context_wait` + `NoExecutionContextError` in `invalid_element_errors`. |
 | #2460 | Memory | `Frame.removeNode` unlinks but never frees `Node`/`Element` memory. Not gem-relevant — `Driver#reset!` disposes the BrowserContext per spec. A very long single-session spec doing heavy DOM churn could accumulate RSS. Watch only. |
-| #3057 | Forms | `<option>`s inside `<optgroup>` are invisible to `HTMLSelectElement` (`options`, `value`, `selectedIndex`, `selectedOptions`, submission) — Capybara's `select` can't reach grouped options. PR #3058 open. |
 
 **Gem-side defenses we keep regardless of upstream**: `Browser#with_default_context_wait` retries on `Runtime.executionContextCreated`, and `Driver#invalid_element_errors` includes `NoExecutionContextError` so Capybara's `automatic_reload` keeps working. Cheap defense-in-depth.
+
+**Audited immune, do not re-audit**: `Network.enable` was not idempotent before build 8298 (now under the floor, so moot for supported binaries) — `Notification.register` appended the same listener on every call, so a second enable double-delivered every network event. The gem never reached it anyway: the `Notification` is created *per BrowserContext* (`CDP.zig` BrowserContext init) and freed on `Target.disposeBrowserContext`, and `Network#enable`'s `@enabled` guard plus `Network#reset` (which only clears the flag *after* the context is already disposed) mean we enable exactly once per context. Keep that ordering.
 
 ### General Limitations
 
@@ -187,8 +189,9 @@ LP.configureCDP              LP.getContentSignal         LP.version
 - Complex JS frameworks may not work (React SSR hydration, heavy SPA)
 - Same-document navigations: `Page.navigatedWithinDocument` IS emitted for `history.pushState`/`replaceState` (#2964, build ≥8143, `navigationType: historyApi`); fragment navigation and history traversal still emit nothing (#2829, open). The gem is immune either way — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
 - `window.getComputedStyle()`: cascade-aware for `display`/`visibility` only; synthetic `width`/`height`; CSS initial values for `color`/`opacity`/`background-color`; every other property returns `""` (see limitation #2). `checkVisibility` matches all active stylesheets including `@layer`
-- `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT element scroll is decoupled from window scroll and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`. Since #3048 (build ≥8305, **above the floor**) an inner element's `scrollWidth`/`scrollHeight` is `max(clientSize, sum of direct *element* children)` instead of aliasing `clientSize` — enough that measure-then-mutate loops (the infinite-marquee idiom) terminate. Text children are not measured and layout mode is not detected, so the numbers bound content extent rather than describe a layout; `<html>`/`<body>` keep the synthetic 1920/1e8 defaults, so page-level overflow and infinite-scroll checks read the same as before.
-- `<form method="dialog">` closes its nearest ancestor `<dialog>` (sets `returnValue` from the submitter's IDL `value`, fires `close`) and performs no navigation — #3053/PR #3054, build ≥8311, **above the floor**. Below 8311 it falls through to a GET navigation, leaving the dialog open forever; that is the `<dialog>`+Turbo-confirm idiom Spree 5's admin uses for every destroy confirmation. No gem-side workaround was ever shipped — nothing to remove, but real-apps runs on a sub-8311 binary still fail this cluster.
+- `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT element scroll is decoupled from window scroll and no layout means `getBoundingClientRect` isn't scroll-aware. So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`. Since #3048 (build ≥8305, in the floor) an inner element's `scrollWidth`/`scrollHeight` is `max(clientSize, sum of direct *element* children)` instead of aliasing `clientSize` — enough that measure-then-mutate loops (the infinite-marquee idiom) terminate. Text children are not measured and layout mode is not detected, so the numbers bound content extent rather than describe a layout; `<html>`/`<body>` keep the synthetic 1920/1e8 defaults, so page-level overflow and infinite-scroll checks read the same as before.
+- `<option>`s inside an `<optgroup>` are visible to `HTMLSelectElement` (`options`, `value`, `selectedIndex`, `selectedOptions`, submission) — #3057/PR #3058, build ≥8328, **above the floor and above the newest release** (0.3.6 = 8318). Below it, Capybara's `select` cannot reach a grouped option at all. No gem-side workaround exists; release-channel users stay broken until 0.3.7.
+- `<form method="dialog">` closes its nearest ancestor `<dialog>` (sets `returnValue` from the submitter's IDL `value`, fires `close`) and performs no navigation — #3053/PR #3054, build ≥8311, **which is exactly the floor**. Below it the submission fell through to a GET navigation and left the dialog open forever — the `<dialog>`+Turbo-confirm idiom Spree 5's admin uses for every destroy confirmation. There was never a gem-side workaround; the floor is the only defense, which is why it sits here.
 - `MutationObserver` available; `window.postMessage` across frames works
 - No CORS enforcement (acknowledged in upstream README)
 - In-page `WebSocket` API implemented; sends `Origin` on upgrade since build 6736 (PR #2710), so ActionCable's request-forgery check passes and `turbo_stream_for` / solid_cable streams connect without `disable_request_forgery_protection`
@@ -198,7 +201,7 @@ LP.configureCDP              LP.getContentSignal         LP.version
 - No Service Workers, SharedArrayBuffer
 - No `localStorage`/`sessionStorage` persistence across sessions (in-memory only; `--storage-engine` backs IndexedDB, not Web Storage)
 - File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are required — on builds 6625–6671 the file attaches but the form submits empty — and the gem floor guarantees them. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
-- File **download** — **SUPPORTED since build 7545** (PR #2722, in the floor). `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled}` streams a navigation response carrying `Content-Disposition: attachment` to disk (on the Lightpanda host) and emits `Browser.downloadWillBegin`/`downloadProgress`. The gem's `Downloads` tracker (`downloads.rb`) wires this in `Browser#create_page` whenever a destination exists (`:save_path` option, else `Capybara.save_path`); `Driver#downloads` / `#wait_for_download` expose the completed-file list. **Trigger is `Content-Disposition: attachment`, NOT MIME type** — a `text/csv` (or any) response WITHOUT that header is rendered as a normal (empty) navigation, not downloaded. That's why Capybara's `:download` shared spec (its `/download.csv` fixture is MIME-triggered, no Content-Disposition) stays in `capybara_skip`; the real attachment path is covered by `test/features/download_test.rb`. `<a download>` clicks navigate to the attachment URL (Lightpanda commits an empty doc afterward) rather than staying on the page.
+- File **download** — **SUPPORTED since build 7545** (PR #2722, in the floor). `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled}` streams a navigation response carrying `Content-Disposition: attachment` to disk (on the Lightpanda host) and emits `Browser.downloadWillBegin`/`downloadProgress`. The gem's `Downloads` tracker (`downloads.rb`) wires this in `Browser#create_page` whenever a destination exists (`:save_path` option, else `Capybara.save_path`); `Driver#downloads` / `#wait_for_download` expose the completed-file list. **Trigger is `Content-Disposition: attachment`, NOT MIME type** — a `text/csv` (or any) response WITHOUT that header is rendered as a normal (empty) navigation, not downloaded. That's why Capybara's `:download` shared spec (its `/download.csv` fixture is MIME-triggered, no Content-Disposition) stays in `capybara_skip`; the real attachment path is covered by `test/features/download_test.rb`. `<a download>` clicks navigate to the attachment URL (Lightpanda commits an empty doc afterward) rather than staying on the page. Non-UTF-8 `Content-Disposition` filenames (legacy encodings — Shift_JIS et al.) used to serialize as a JSON *byte array*, making `Downloads#build_will_handler`'s `File.basename(params["suggestedFilename"].to_s)` produce a `"[130, 160, …]"` basename; fixed by #3015, build ≥8283, **in the floor**.
 - Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) assembles a `DataTransfer` — file paths base64'd over CDP, `{mime => data}` hashes as typed items — then fires `dragenter`→`dragover`→`drop` (`DROP_JS` in `node.rb`). Geometry-free, so it needs no layout; the 6699 floor guarantees the APIs (on builds <6699 the drop JS raises "DataTransfer is not defined"). The drop payload rides one `Runtime.callFunctionOn` over the CDP WebSocket, whose inbound cap the gem raises to 100 MiB via `--cdp-max-message-size` (`Process#build_args`; flag from PR #2760, build 7441 ≤ floor, default 1 MiB) — so a dropped file's base64 must stay under ~70 MB (was ~700 KB at the 1 MiB default). Coordinate-based `drag_to`/`drag_by` remain unsupported (no layout).
 
 ## CLI Reference
@@ -223,6 +226,8 @@ lightpanda serve --host 127.0.0.1 --port 9222 [--log_format json]
 --storage-sqlite-path <PATH>               # SQLite file (":memory:" allowed)
 --user-agent / --user-agent-suffix         # UA control (Mozilla-containing values still rejected)
 --block-urls / --block-cidrs / --block-private-networks
+--ca-cert <PATH> / --ca-path <PATH>        # TLS roots from a PEM file / directory;
+                                           # either one REPLACES the system trust store
 --http-cache-dir <PATH>                    # On-disk HTTP cache
 --inject-script / --inject-script-file     # CLI-side equivalent of addScriptToEvaluateOnNewDocument
 --log-format pretty|json                   # Log output format
@@ -250,7 +255,7 @@ Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download
   only x86_64-linux and aarch64-macos, which raised `UnsupportedPlatformError` on
   Intel Macs and arm64/Graviton runners that upstream ships a binary for. Don't
   re-narrow it.
-- Latest release: 0.3.5 (2026-07-17). Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
+- Latest release: 0.3.6 (2026-07-25) = build 8318. Tags drop the `v` prefix since 2026-04. Per release: `lightpanda-{aarch64,x86_64}-{linux,macos}` + `.deb` packages.
 
 **Two version-string shapes, two gem floors** (verified 2026-07-24): `build.zig`'s
 `resolveVersion` enriches a version with `git rev-list --count HEAD` + short hash
@@ -261,7 +266,7 @@ print `1.0.0-nightly.8285+de85a51d`. `Process#check_minimum_version` therefore
 gates two channels: `MINIMUM_NIGHTLY_BUILD` (build counter) and
 `MINIMUM_RELEASE` (semver). Keep them in lockstep — a release is acceptable
 exactly when its own commit count clears the nightly floor
-(`git rev-list --count <tag>`; 0.3.5 = 8165, 0.3.4 = 7708, 0.3.3 = 7562).
+(`git rev-list --count <tag>`; 0.3.6 = 8318, 0.3.5 = 8165, 0.3.4 = 7708, 0.3.3 = 7562).
 Only the rolling `nightly` tag is re-published, so **releases are the only
 reproducible pin** — nightlies are not archived.
 

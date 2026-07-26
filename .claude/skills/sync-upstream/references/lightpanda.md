@@ -122,7 +122,9 @@ Record the HEAD sha in the report's **Workarounds to re-evaluate** entries so th
 
 After workaround removal, also audit `spec/spec_helper.rb`'s skip patterns — Lightpanda fixes browser-side gaps independently of the workarounds we file PRs for, so patterns can quietly become obsolete or over-broad without anyone noticing.
 
-The gem has a built-in audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* the previously-skipped specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
+**`AUDIT_SKIPS` covers only half the skips — verified 2026-07-26, don't re-derive.** It audits `browser_limitation_patterns` and nothing else. The `capybara_skip:` feature list in `session_spec.rb` is enforced by *Capybara itself*: `Capybara::SpecHelper.configure` sets `config.filter_run_excluding requires: method(:filter).to_proc`, which **excludes** those examples from the run. Excluded examples never execute, so tagging them `:skip_audit` cannot pull them back in — an inclusion filter does not override an exclusion filter. (The `metadata[:skip] = "Lightpanda doesn't support: …"` branch in our `spec_helper.rb` is dead code shadowed by that filter; harmless, but don't read it as the mechanism.) To audit a *feature*, re-run the battery with a reduced `capybara_skip` instead — a throwaway spec file calling `run_specs(..., capybara_skip: [])` works, then diff its example list against the normal run's to isolate the gated ones. That is how the 2026-07-26 run found `html5_drag` was hiding 5 passing `Element#drop` specs.
+
+The gem's audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` in `browser_limitation_patterns` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* those specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
 
 ```bash
 AUDIT_SKIPS=1 LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda \

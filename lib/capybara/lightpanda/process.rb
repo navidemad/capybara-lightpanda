@@ -129,29 +129,65 @@ module Capybara
       # on them: clicks land on hidden nodes and `assert_no_selector` passes for
       # visible ones. That is a wrong-answer bug rather than an exception, which
       # is exactly the kind users can't diagnose, so the floor MUST include it.
-      # Build 8160 = the #2719 merge (b19b5725) — now the binding floor.
+      # Build 8160 = the #2719 merge (b19b5725).
+      # PR #2983 (css: respect @layer priority, merged 2026-07-24) is the second
+      # half of that same fix and the reason 8160 is NOT sufficient. #2719 only
+      # made rules inside an `@layer` block *participate* in the cascade; it
+      # ranked them by specificity + document order alone. #2983 widened
+      # VisibilityRule.priority to carry a 12-bit layer rank, so layer order
+      # finally beats specificity as the spec requires. On builds 8160–8280 a
+      # page whose layers disagree about `display` resolves to the wrong rule —
+      # Tailwind v4's `@layer utilities` losing to `@layer base` is the common
+      # shape — and `_lightpanda.isVisible` (predicates.js) terminates in
+      # checkVisibility(), so Capybara again believes hidden elements are
+      # visible. Same undiagnosable wrong-answer class as #2719 itself, so the
+      # floor MUST include it.
+      # Build 8281 = the #2983 merge (76e2e7e6).
+      # PR #3015 (cdp: sanitize non-UTF-8 values, merged 2026-07-24) fixes
+      # issue #2992: a legacy-encoded Content-Disposition filename made
+      # Browser.downloadWillBegin emit `suggestedFilename` as a JSON array of
+      # bytes instead of a string. Downloads#build_will_handler does
+      # File.basename(params["suggestedFilename"].to_s), so below this build it
+      # records a "[130, 160, ...]" basename and Driver#downloads hands back a
+      # path that does not exist.
+      # Build 8283 = the #3015 merge (8fbcc7e5).
+      # PR #3054 (forms: close the ancestor dialog on method=dialog submission,
+      # merged 2026-07-25) makes `<form method="dialog">` close its nearest
+      # ancestor <dialog>, set returnValue from the submitter's IDL value, fire
+      # close, and perform no navigation. Below it the submission falls through
+      # to a GET navigation and the dialog stays open forever — which is the
+      # <dialog>+Turbo-confirm idiom Spree 5's admin uses for every destroy
+      # confirmation. There is no gem-side workaround to guard this: the only
+      # defense is the floor.
+      # Build 8311 = the #3054 merge (c917cadc) — now the binding floor.
+      # Subsumed by 8311, recorded so they are not re-derived: build 8298 made
+      # Network.enable idempotent (the gem never hit it — the Notification is
+      # per-BrowserContext and Network#enable's @enabled guard means one enable
+      # per context), and build 8305 (#3048) derives scrollWidth/scrollHeight
+      # from element content (the gem keeps scroll as a no-op either way).
       # PR #2664 (Emulation.setDeviceMetricsOverride, build 7556) is subsumed:
       # Browser#set_viewport calls it on every create_page to honor the
       # `window_size` option. Note the override only reached
       # Page.getLayoutMetrics later (~build 8300); the gem does not depend on
       # that half, so it is NOT part of the floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8160")
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8311")
 
       # Second, equivalent floor for the *release* channel.
       #
       # Tagged releases are built with `-Dversion=<tag>`, which resolves to a
       # plain semver with no pre-release tag — so `lightpanda version` prints a
-      # bare "0.3.5" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
+      # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor: 0.3.5 is build 8165, five commits past the #2719 merge
-      # this floor exists for.
+      # nightly floor: 0.3.6 is build 8318, seven commits past the #3054 merge
+      # this floor exists for. (0.3.5 is only 8165 — it predates every fix in
+      # the 8311 floor, which is why this pin had to move with it.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("0.3.5")
+      MINIMUM_RELEASE = Gem::Version.new("0.3.6")
 
       attr_reader :pid, :ws_url, :version, :nightly_build, :release
 

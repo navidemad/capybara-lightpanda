@@ -13,8 +13,8 @@ of work:
 | Lot | N | Reality |
 | --- | --- | --- |
 | `layout-measuring-js` | 38 | Never fixable. Needs a layout engine. Document it, stop counting it as debt. |
-| `select-optgroup-invisible` | 15 | Root-caused 2026-07-25 (wishlist A52, `findings/cluster-3-…`). Browser-side, not gem-fixable; needs an upstream fix then a floor bump. |
-| `form-method-dialog` | 5 | Already fixed. Waiting on upstream lightpanda-io/browser#3054, then a `MINIMUM_NIGHTLY_BUILD` bump. |
+| `select-optgroup-invisible` | 15 | Fixed upstream: PR #3058 merged 2026-07-26 at build **8328**. Above both the 8311 floor and the newest release (0.3.6 = 8318), so it only clears once a release ≥8328 ships and the floor moves again. |
+| `form-method-dialog` | 5 | Closed out. #3054 merged at build 8311, and `MINIMUM_NIGHTLY_BUILD` was bumped to 8311 (with `MINIMUM_RELEASE` = 0.3.6) on 2026-07-26. |
 | `selenium-only-api` | 2 | Already fixed by #104; drops at the next scheduled run. |
 | `selenium-only-api` (`switch_to`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
 | Everything else | **40** | Genuinely open, mechanism not identified. |
