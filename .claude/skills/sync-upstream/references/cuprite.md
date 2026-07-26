@@ -46,9 +46,14 @@ a Diverged entry** — that is the failure mode this check exists to catch:
 - **#316 "Support `Element#drop` for files and strings"** (open 2026-07-09) directly
   contradicts our recorded divergence, which asserts Cuprite has *no* `drop` and
   that ours therefore exceeds it. Still true of their `main`, no longer true of
-  their intent. When it merges, re-read our `DROP_JS` against theirs and rewrite
-  the entry — the interesting axis is that theirs may assume coordinates while
-  ours is deliberately geometry-free.
+  their intent. Body read 2026-07-26: theirs is **also geometry-free** (ported from
+  Capybara's Selenium `html5_drag.rb`), so the predicted "theirs assumes
+  coordinates" axis is wrong — the real difference is how files reach the page.
+  Cuprite synthesizes a hidden `<input type=file>` and attaches via
+  `DOM.setFileInputFiles`, so the browser reads bytes off disk; our `DROP_JS`
+  base64s them over the CDP WebSocket and needs `--cdp-max-message-size` raised
+  to 100 MiB for a ~70 MB ceiling. When it merges, weigh their approach on that
+  axis and rewrite the entry.
 - **#320 `raise_on_unhandled_modal`**, **#313 empty/nil keys in `Node#send_keys`** —
   both land in areas we implement (pre-armed modals, `send_keys`), so they are
   adoption candidates or risks depending on what the body says.

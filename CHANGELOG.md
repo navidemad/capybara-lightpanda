@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 8160 (the `@layer` cascade merge, upstream PR #2719) **or a tagged release ≥ 0.3.5**, which is the first release containing that build. The driver refuses to start below either floor.
+> **Update Lightpanda before upgrading.** Requires a nightly build ≥ 8311 (the `<form method="dialog">` fix, upstream PR #3054) **or a tagged release ≥ 0.3.6**, which is the first release containing that build. The driver refuses to start below either floor.
 
 ### Added
 
@@ -18,7 +18,11 @@
 
 ### Changed
 
-- **Minimum Lightpanda build is now 8160** (was 7571), for upstream PR #2719 (`@layer` block rules participate in the cascade). Below it, an element hidden by an `@layer` `display: none` — the default shape of Tailwind v4's generated CSS — was reported *visible* by `checkVisibility()`, so `visible?` returned the wrong answer: Capybara would click hidden nodes and `assert_no_selector` would pass for visible ones. A wrong answer rather than an exception, hence the floor bump.
+- **Minimum Lightpanda build is now 8311** (was 8160), and the release floor moves with it to **0.3.6** (was 0.3.5, which is only build 8165 and predates all of the below). Three fixes justify it, each a wrong answer rather than an exception:
+  - **PR #2983, build 8281 — `@layer` *priority*.** The 8160 floor was set for PR #2719, which made rules inside an `@layer` block participate in the cascade. It did not rank them: layered rules were still ordered by specificity and document order alone, so `@layer utilities` could lose to `@layer base`. Tailwind v4 emits exactly that shape, and `visible?` terminates in `checkVisibility()` — so between 8160 and 8280 the same class of bug the 8160 floor was raised to fix survived in a narrower form.
+  - **PR #3054, build 8311 — `<form method="dialog">`.** Submitting one navigated instead of closing its ancestor `<dialog>`, leaving the dialog open forever. That is the `<dialog>` + Turbo-confirm idiom Spree 5's admin uses for every destroy confirmation, and there is no gem-side workaround: the floor is the only defense.
+  - **PR #3015, build 8283 — non-UTF-8 `suggestedFilename`.** A legacy-encoded `Content-Disposition` filename (Shift_JIS and friends) arrived as a JSON byte array, so a download was recorded under a `"[130, 160, …]"` name and `page.driver.downloads` returned a path that does not exist.
+- **`Element#drop` is now covered by Capybara's own shared specs** (5 examples). They were being excluded by the `:html5_drag` feature skip, which gates both `#drag_to` (needs pointer coordinates Lightpanda cannot produce — still skipped) and `Element#drop` (geometry-free, and shipped since 0.8.0). The skip was too coarse and hid passing coverage for working behavior.
 - `Options::DEFAULT_WINDOW_SIZE` is now `[1920, 1080]` (was `[1024, 768]`). It mirrors Lightpanda's own `Viewport.default`, so wiring `:window_size` up leaves default behavior byte-identical instead of silently shrinking every existing suite's viewport and flipping `@media` branches under it. Suites that want Cuprite's old default must now pass `window_size: [1024, 768]` explicitly.
 - An invalid `:window_size` now raises `ArgumentError` from `Options#initialize` instead of being ignored. It is validated at construction rather than at apply time because `Browser#initialize` spawns the browser process before the viewport is applied — raising later would leave an orphaned Lightpanda behind.
 - **4 stale `fetch`/XHR `FormData` skips retired.** They pinned "Bug #6" (FormData bodies coerced via `String()` instead of multipart-encoded), fixed upstream by PR #2370 at build 6068 — far below the current floor, so every supported binary has the encoder. The gem was under-declaring a capability Turbo's form path depends on; the four now run as regression cover.

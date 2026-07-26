@@ -113,6 +113,12 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
+      # `#drag_to` needs `Input.dispatchMouseEvent` coordinates, which Lightpanda
+      # has no layout to produce. Patterned rather than skipped via the
+      # `:html5_drag` feature flag, because that flag also gates the
+      # `Element#drop` specs — and those pass: `Node#drop` assembles a
+      # DataTransfer in JS and needs no geometry. See session_spec.rb.
+      /node #drag_to HTML5/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }

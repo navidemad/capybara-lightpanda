@@ -11,7 +11,14 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-07-25 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `0a492ef4` (2026-07-06) — HEAD unmoved since the 2026-07-24 review, nothing new to assess. Newest code commit remains #597/#583 — `Frame#loader_id`, `Frame#lifecycle_events`, `Frame#idle?`, a `:canceled` frame state, and a `Page#idling?` fix so Chrome's never-loaded `loading="lazy"` iframes don't hang the wait. Frame-lifecycle idling is a different axis from our network-traffic `wait_for_idle`; recorded as an Outstanding candidate below. The `PendingConnectionsError` message tweak in the same PR is cosmetic and N/A (we don't raise it). Outstanding/Diverged entries below stay valid.
+**Last reviewed**: 2026-07-26 against Ferrum v0.17.2 (latest release 2026-03-24) and `main` HEAD `0a492ef4` (2026-07-06) — HEAD unmoved for 20 days, so all signal is in the open-PR queue. Newest code commit remains #597/#583 (`Frame#loader_id`, `Frame#lifecycle_events`, `Frame#idle?`, `Page#idling?` fix for never-loaded lazy iframes); frame-lifecycle idling is a different axis from our network-traffic `wait_for_idle` and stays an Outstanding candidate below. Open-PR audits settled this run, recorded so they aren't repeated:
+
+- **#603 (websocket logger response race)** — gem already correct. `client/web_socket.rb`'s `:message` callback writes the logger line *before* `parse_message` and before pushing onto `@messages`, which is the ordering their patch introduces.
+- **#605 (console type + stack trace in logger)** — type: already have it (`Runtime.consoleAPICalled` types, our PR #2731). Stack trace: **browser-blocked** — Lightpanda emits no `stackTrace` on `consoleAPICalled` (absent from `runtime.zig`/`console.zig`), which is the same gap that forced `page_errors` onto the `errors.js` sentinel channel. Not adoptable until upstream adds it.
+- **#600 (select-all via the CDP `commands` field)** — N/A twice over: Lightpanda's `Input.dispatchKeyEvent` has no `commands` support, and `Node#set` writes `.value` directly rather than typing.
+- **#604 (intercepted-request URL patterns)** — N/A, the gem never uses the Fetch interception domain.
+- **#598 (make webrick optional)** — N/A, no webrick dependency in the gemspec or Gemfile.
+- **#595 (`page.accessibility` domain)** — assessed, deliberately not a candidate. Lightpanda does implement the Accessibility domain, but this is raw-CDP-client surface with no Capybara driver counterpart; Cuprite has no equivalent either.
 
 ### Adopted
 
@@ -52,7 +59,12 @@ Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-07-25 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `b64f03d3` (2026-07-09) — HEAD unmoved since the 2026-07-24 review. Newest two code commits, both already satisfied on our side:
+**Last reviewed**: 2026-07-26 against Cuprite v0.17 (latest release 2025-05-11) and `main` HEAD `b64f03d3` (2026-07-09) — HEAD unmoved for 17 days; the open-PR queue is the live surface. Audits settled this run:
+
+- **#313 (empty/nil keys in `Node#send_keys`)** — gem already conforms. `Keyboard#type`'s `case` has `when Symbol/String/Array` and no `else`, so `nil` falls through silently and `""` yields nothing from `each_char`. Both are no-ops, matching Selenium/rack_test — the divergence their patch fixes never existed here.
+- **#320 (`raise_on_unhandled_modal`)** — genuine gap, listed as an Outstanding candidate below. The false-negative it targets applies to us: Lightpanda's un-pre-armed default is `confirm→false`, `prompt→null`, `alert→void` (`lp.zig`), so a runaway confirm silently cancels the action and the spec can still pass. We already subscribe to `Page.javascriptDialogOpening` for `find_modal`, so the detection hook exists.
+
+Newest two code commits, both already satisfied on our side:
 - **#317** (closed `<details>`: non-`summary` descendants are non-visible) — Cuprite had to hand-roll the `DETAILS`/`:scope > summary` check into its JS `isVisible` walk. We need nothing: Lightpanda's UA stylesheet implements `details:not([open]) > *:not(summary) { display: none }` (`StyleManager.zig`), so `el.checkVisibility()` already returns false. Neither `<details>` spec is in our `spec_helper.rb` skip list.
 - **#318** (`tag_name` reports `"ShadowRoot"` for shadow roots) — our `Node#tag_name` already returns `'ShadowRoot'` for `nodeType === 11`, predating theirs.
 
@@ -80,6 +92,7 @@ Earlier adopted features (rect, shadow_root, time inputs, focus-before-value, ob
 ### Outstanding adoption candidates
 
 - **[tiny] `setValue` uses native HTMLInputElement value setter** — `lib/capybara/cuprite/javascripts/index.js#setValue` ↔ our `SET_VALUE_JS`. Cuprite calls `Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set` to bypass framework value setters (React-style). Lightpanda's React SSR/hydration support is limited so this is mostly latent; defer until we have a test that needs it.
+- **[medium] Raise on an unhandled modal** — Cuprite PR #316's sibling #320 ↔ our `Browser::Modals` + the existing `Page.javascriptDialogOpening` subscription. Today an un-pre-armed dialog resolves to Lightpanda's silent default and the spec passes anyway, so a runaway `confirm` reads as green. Counting dialogs that opened without a pre-arm and raising under an opt-in option would close that false negative. Unmerged upstream — shape ours on the merged API if it lands.
 ### Diverged on purpose
 
 - **`Node#set` writes `.value` directly + dispatches input/change** — Cuprite types char-by-char and dispatches `keydown` / `keypress` / `input` / `keyup` per character (`lib/capybara/cuprite/javascripts/index.js#set`). Lightpanda's keyboard event handling is limited and per-char CDP dispatch is much slower and more error-prone; direct `.value` + `input`/`change` events is the right choice for the gem's perf and stability. Tests that assert keystroke-level handlers may need to use `node.send_keys` instead of `node.set`.
