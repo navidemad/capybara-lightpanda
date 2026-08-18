@@ -306,6 +306,77 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  describe "redirect chains" do
+    # Chrome — and Lightpanda since #3175 (build ≥8602, in 0.3.7) — announces
+    # every followed hop with a SECOND requestWillBeSent carrying the same
+    # requestId plus the 3xx as `redirectResponse`, and never sends a
+    # responseReceived for the 3xx itself. If the hop's event doesn't close the
+    # previous entry, that entry stays pending forever: one redirect wedges
+    # pending_connections at 1 and every wait_for_network_idle burns its full
+    # timeout for the rest of the session. This is the Rails post-create /
+    # post-login flow, so it must stay cheap.
+    def fire_document_request(id, url, redirect_status: nil)
+      params = {
+        "requestId" => id,
+        "type" => "Document",
+        "request" => { "url" => url, "method" => "GET" },
+        "timestamp" => 1.0,
+      }
+      if redirect_status
+        params["redirectResponse"] = { "status" => redirect_status, "headers" => { "location" => url } }
+      end
+      browser.fire("Network.requestWillBeSent", params)
+    end
+
+    def fire_final_response(id, status: 200)
+      browser.fire("Network.responseReceived", {
+                     "requestId" => id,
+                     "response" => { "status" => status, "headers" => {}, "mimeType" => "text/html" },
+                   })
+    end
+
+    it "closes the previous hop from redirectResponse so a redirect leaves nothing pending" do
+      network.enable
+      fire_document_request("nav", "https://example.test/things")
+      fire_document_request("nav", "https://example.test/things/1", redirect_status: 302)
+      fire_final_response("nav")
+
+      assert_equal 0, network.pending_connections
+      assert network.idle?
+      assert_equal([302, 200], network.traffic.map { |t| t.dig(:response, :status) })
+    end
+
+    it "keeps status_code on the final hop, not the 3xx" do
+      network.enable
+      fire_document_request("nav", "https://example.test/things")
+      fire_document_request("nav", "https://example.test/things/1", redirect_status: 302)
+      fire_final_response("nav", status: 200)
+
+      assert_equal 200, network.last_navigation_response[:status]
+    end
+
+    it "resolves the response onto the newest open entry across a multi-hop chain" do
+      network.enable
+      fire_document_request("nav", "https://example.test/a")
+      fire_document_request("nav", "https://example.test/b", redirect_status: 301)
+      fire_document_request("nav", "https://example.test/c", redirect_status: 302)
+      fire_final_response("nav", status: 404)
+
+      assert_equal 0, network.pending_connections
+      assert_equal(%w[a b c], network.traffic.map { |t| t[:url][-1] })
+      assert_equal([301, 302, 404], network.traffic.map { |t| t.dig(:response, :status) })
+    end
+
+    it "still works below build 8602, where a chain is a single requestWillSent" do
+      network.enable
+      fire_document_request("nav", "https://example.test/things")
+      fire_final_response("nav")
+
+      assert_equal 0, network.pending_connections
+      assert_equal([200], network.traffic.map { |t| t.dig(:response, :status) })
+    end
+  end
+
   describe "#enable failure rollback" do
     it "unsubscribes the just-installed handlers when Network.enable fails" do
       browser.expects(:command).with("Network.enable").raises(Capybara::Lightpanda::TimeoutError).once

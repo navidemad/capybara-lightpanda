@@ -21,6 +21,20 @@ gh api 'repos/lightpanda-io/browser/commits?per_page=40' \
   --jq '.[] | {sha: .sha[0:8], date: .commit.author.date[0:10], msg: (.commit.message | split("\n")[0])} | select((.msg | ascii_downcase) | test("cdp|runtime|page|network|dom|target|cookie|xpath|navigate|dialog|frame|input"))'
 ```
 
+**When the window is long (verified 2026-08-18: 115 merges in 23 days), the 40-commit page above misses most of it.** Enumerate by PR instead, and number every merge from the local checkout so each finding carries the build it landed in:
+
+```bash
+gh pr list --repo lightpanda-io/browser --state merged --limit 200 \
+  --search "merged:>=<last-sync-date>" --json number,title,mergedAt,author \
+  --jq 'sort_by(.number) | .[] | "\(.number)\t\(.mergedAt[0:10])\t\(.author.login)\t\(.title)"'
+
+cd /Users/navid/code/browser && git fetch origin --tags && \
+git log --first-parent --format='%h %s' <last-snapshot-sha>..origin/main | \
+  while read -r sha rest; do echo "$(git rev-list --count $sha) $sha $rest"; done
+```
+
+`gh pr view` bodies are often empty on this repo (#3162, #3090, #3183…) — read `gh pr diff` or the local `git diff <parent> <merge> -- <file>` for those. And `Runtime.executionContextCreated` is emitted by the V8 inspector (`inspector.contextCreated`), so a literal grep of the zig tree finds nothing; that is not a missing event.
+
 ### Tracked issues — are any closed?
 
 For each issue listed in the "Upstream Open Issues That Affect This Gem" table in `lightpanda-io.md`:

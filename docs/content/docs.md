@@ -102,17 +102,17 @@ For any shared or CI environment, pin a tagged release:
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "0.3.5"   # a tag from lightpanda-io/browser/releases
+  binary.required_version = "0.3.7"   # a tag from lightpanda-io/browser/releases
 end
 ```
 
 A pin is downloaded once into its own version-scoped file
-(`~/.cache/lightpanda/lightpanda-0.3.5`), is never refreshed on age, and is
+(`~/.cache/lightpanda/lightpanda-0.3.7`), is never refreshed on age, and is
 never satisfied by a nightly left over from an earlier run. Cache that directory
 in CI and the browser becomes as reproducible as your `Gemfile.lock`.
 
 The driver enforces a floor on both channels and refuses to start below it —
-nightly build ≥ 8160, or release ≥ 0.3.5. The error names the version it found
+nightly build ≥ 8448, or release ≥ 0.3.7. The error names the version it found
 and how to move off it.
 
 Two supporting knobs:
@@ -478,8 +478,6 @@ also why triaging your own suite goes faster than the raw count suggests.
 | `NoExecutionContextError` | The JS context was swapped mid-command — a child iframe navigating invalidates the main frame's context upstream. The driver retries on context re-creation and Capybara reloads the element, so persistent cases mean the page churns iframes faster than the retry window |
 | `ElementNotFound` on a menu item after `hover` | CSS `:hover` reveals nothing here. JS-driven menus do open (`mouseover` + `mouseenter` are dispatched); a `:hover`-only menu needs Cuprite. See [limitations](#limits) |
 | `ElementNotFound` on a menu item after `click` | Often the menu closed itself: a `click@window->close` listener registered up front sees the opening click bubble and closes in the same dispatch. The [dropdown example](#examples) reproduces this and the variant that works |
-| `select` can't see an option inside `<optgroup>` | Confirmed upstream gap ([browser#3057](https://github.com/lightpanda-io/browser/issues/3057)) — grouped options are invisible to `HTMLSelectElement`, including on submit. No workaround; route that spec to Cuprite |
-| A `<dialog>` Turbo-confirm never closes | `<form method="dialog">` only closes its dialog on nightly ≥ 8311. No tagged release carries it yet (0.3.5 is build 8165), so a pinned suite hits this — common in Spree 5-style admin destroy flows |
 | Something is slow, or hangs on one page | `LIGHTPANDA_DEBUG=1` streams raw CDP traffic to `$stdout`, and `page.driver.browser.console_logs` surfaces page-side JS errors. `page.driver.network.traffic` shows what never came back |
 
 Not listed here? [Open an issue](https://github.com/navidemad/capybara-lightpanda/issues)

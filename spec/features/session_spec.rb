@@ -23,10 +23,12 @@ Capybara::SpecHelper.run_specs(
   #                        geometry-free via DROP_JS. Skipping the whole feature
   #                        hid 5 passing specs for shipped behavior; audited
   #                        2026-07-26.
+  #                        :shadow_dom is likewise NOT listed: all 9 examples
+  #                        pass on nightly ≥8609 (audited 2026-08-18) once
+  #                        Node#path returns Selenium's shadow-DOM sentinel.
   #   :scroll            — no rendering engine, no scroll.
   #   :hover             — no real layout for hover positioning.
   #   :spatial           — `find(above:|below:|near:)` needs real geometry.
-  #   :shadow_dom        — node #path doesn't traverse shadow DOM boundaries.
   #   :download          — downloads ARE supported (Browser.setDownloadBehavior,
   #                        PR #2722), but only for `Content-Disposition: attachment`
   #                        responses. Capybara's fixture serves text/csv with no
@@ -43,7 +45,6 @@ Capybara::SpecHelper.run_specs(
     scroll
     hover
     spatial
-    shadow_dom
     download
     active_element
   ]

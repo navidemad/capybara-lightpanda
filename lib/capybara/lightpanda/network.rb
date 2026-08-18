@@ -162,6 +162,16 @@ module Capybara
         browser.on("Network.responseReceived", &@response_handler)
       end
 
+      # Redirects follow Chrome's shape (Lightpanda since #3175, build ≥8602):
+      # every followed hop re-emits requestWillBeSent with the SAME requestId
+      # and the 3xx riding along as `redirectResponse`; the 3xx never gets a
+      # responseReceived of its own. So the hop's event is what closes the
+      # previous entry — without it that entry stays `response: nil` forever,
+      # pending_connections wedges at ≥1 and every wait_for_idle burns its
+      # full timeout after the first redirect (Ferrum's
+      # subscribe_request_will_be_sent does the same close). Deliberately NOT
+      # fed into @last_navigation_response: status_code must report the final
+      # hop, and the redirected requestWillBeSent resets it below anyway.
       def build_request_handler
         lambda do |params|
           if params["type"] == "Document"
@@ -176,6 +186,9 @@ module Capybara
             response: nil,
           }
           @traffic_mutex.synchronize do
+            if (redirect = params["redirectResponse"]) && (previous = last_open_entry(params["requestId"]))
+              previous[:response] = response_summary(redirect)
+            end
             @traffic << entry
             @traffic.shift(@traffic.size - TRAFFIC_LIMIT) if @traffic.size > TRAFFIC_LIMIT
           end
@@ -191,16 +204,28 @@ module Capybara
             }
           end
           @traffic_mutex.synchronize do
-            request = @traffic.find { |t| t[:request_id] == params["requestId"] }
+            # Last open entry, not `find`: after a redirect chain several
+            # entries share the requestId and only the newest is still open.
+            request = last_open_entry(params["requestId"])
             next unless request
 
-            request[:response] = {
-              status: params.dig("response", "status"),
-              headers: params.dig("response", "headers"),
-              mime_type: params.dig("response", "mimeType"),
-            }
+            request[:response] = response_summary(params["response"])
           end
         end
+      end
+
+      # Caller holds @traffic_mutex.
+      def last_open_entry(request_id)
+        @traffic.reverse_each.find { |t| t[:request_id] == request_id && t[:response].nil? }
+      end
+
+      def response_summary(response)
+        response ||= {}
+        {
+          status: response["status"],
+          headers: response["headers"],
+          mime_type: response["mimeType"],
+        }
       end
 
       def unsubscribe
