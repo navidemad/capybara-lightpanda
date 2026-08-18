@@ -1,9 +1,5 @@
 {
-  "effortLevel": "xhigh",
   "permissions": {
-    "allow": [
-      "Edit(.claude/rules/**)",
-      "Edit(.claude/skills/**)"
-    ]
+    "allow": ["Edit(.claude/rules/**)", "Edit(.claude/skills/**)"]
   }
 }
