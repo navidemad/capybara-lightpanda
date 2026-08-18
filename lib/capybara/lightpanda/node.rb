@@ -86,6 +86,17 @@ module Capybara
         previous
       end
 
+      # Quiet form of the `isConnected` guard every other operation carries:
+      # true while the node is still attached to a live document, false once
+      # it has been detached or its document navigated away (mirrors Ferrum's
+      # `Node#exists?`, whose probe is `DOM.resolveNode`). Anything else that
+      # goes wrong still raises — only "gone" is turned into false.
+      def exists?
+        call("function() { return true; }")
+      rescue ObsoleteNode, NodeNotFoundError, NoExecutionContextError
+        false
+      end
+
       # Routed through #call (not a bare call_function_on) so a detached
       # host raises ObsoleteNode like every other node operation — Capybara's
       # automatic_reload then re-finds the host instead of silently reading
@@ -174,17 +185,29 @@ module Capybara
       end
 
       # Capybara's drag-and-drop API (`Element#drop`). String/Pathname arguments
-      # are file paths — read here and rebuilt as `File` objects in the page;
-      # Hash arguments are `{ mime_type => data }` string drops. We assemble a
-      # `DataTransfer` and fire `dragenter` -> `dragover` -> `drop` on this
-      # element, so HTML5 dropzones see the payload via `event.dataTransfer`.
+      # are file paths; Hash arguments are `{ mime_type => data }` string drops.
+      # We assemble a `DataTransfer` and fire `dragenter` -> `dragover` -> `drop`
+      # on this element, so HTML5 dropzones see the payload via
+      # `event.dataTransfer`.
+      #
+      # Files reach the page the way Cuprite's #316 does it: a hidden
+      # `<input type=file>` is attached to this element's document,
+      # `DOM.setFileInputFiles` points it at the paths (the browser reads the
+      # bytes off disk itself), and the drop JS moves `input.files` into the
+      # DataTransfer and removes the input. Previously the bytes were base64'd
+      # into the `Runtime.callFunctionOn` message, which capped a drop at
+      # ~70 MB under `--cdp-max-message-size` and pinned every byte in Ruby;
+      # now the size ceiling is Lightpanda's own file handling. Paths are read
+      # on the machine running Lightpanda (local for the spawned process),
+      # exactly like `attach_file`.
       #
       # DataTransfer/DataTransferItem/DragEvent landed upstream in PR #2671
       # (build ≥6699) and are guaranteed by the MINIMUM_NIGHTLY_BUILD floor;
       # without them the drop JS raises "DataTransfer is not defined".
       def drop(*args)
-        files, strings = partition_drop_args(args)
-        call(DROP_JS, files.to_json, strings.to_json)
+        paths, strings = partition_drop_args(args)
+        input = paths.empty? ? nil : attach_drop_input(paths)
+        call(DROP_JS, input, strings.to_json)
         nil
       end
 
@@ -395,37 +418,26 @@ module Capybara
       # here and base64-encoded so binary content survives the JSON hop; Hashes
       # are `{ type => data }` string drops. Returns `[files, strings]`.
       def partition_drop_args(args)
-        files = []
+        paths = []
         strings = []
         args.each do |arg|
           if arg.is_a?(Hash)
             arg.each { |type, data| strings << { type: type.to_s, data: data.to_s } }
           else
-            path = arg.to_s
-            files << {
-              name: File.basename(path),
-              type: drop_mime_for(path),
-              b64: [File.binread(path)].pack("m0"),
-            }
+            paths << File.expand_path(arg.to_s)
           end
         end
-        [files, strings]
+        [paths, strings]
       end
 
-      # The dropzone handler only reads `file.name`, but real upload widgets key
-      # off `file.type`, so map the common upload extensions and fall back to a
-      # generic binary type.
-      DROP_MIME_TYPES = {
-        ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg", ".png" => "image/png",
-        ".gif" => "image/gif", ".webp" => "image/webp", ".svg" => "image/svg+xml",
-        ".pdf" => "application/pdf", ".txt" => "text/plain", ".csv" => "text/csv",
-        ".json" => "application/json", ".html" => "text/html", ".xml" => "application/xml",
-        ".zip" => "application/zip",
-      }.freeze
-      private_constant :DROP_MIME_TYPES
-
-      def drop_mime_for(path)
-        DROP_MIME_TYPES.fetch(File.extname(path).downcase, "application/octet-stream")
+      # Hidden `<input type=file multiple>` in this element's own document (so
+      # drops inside an iframe stay in that frame's DOM), pre-loaded via
+      # DOM.setFileInputFiles. Returned as a Node so it can be bound as a
+      # callFunctionOn argument; DROP_JS removes it once the files are moved.
+      def attach_drop_input(paths)
+        oid = call(CREATE_DROP_INPUT_JS, return_by_value: false)["objectId"]
+        driver.browser.set_file_input_files(oid, paths)
+        self.class.new(driver, oid)
       end
 
       # Whitespace-normalized text (Cuprite pattern). Capybara's text matchers compare
@@ -600,17 +612,30 @@ module Capybara
         }
       JS
 
-      # Build a DataTransfer from the JSON payloads and replay the HTML5 drop
-      # sequence on this element. Files arrive base64-encoded and are rebuilt
-      # with `atob` (Blob accepts the binary string directly); string drops are
-      # added as typed items so the page can read them via getData/getAsString.
+      CREATE_DROP_INPUT_JS = <<~JS
+        function() {
+          var doc = this.ownerDocument || document;
+          var input = doc.createElement('input');
+          input.type = 'file';
+          input.multiple = true;
+          input.style.display = 'none';
+          input.setAttribute('data-lightpanda-drop-input', '');
+          (doc.body || doc.documentElement).appendChild(input);
+          return input;
+        }
+      JS
+
+      # Build a DataTransfer from the pre-loaded hidden input (files) and the
+      # JSON string payloads (typed items), then replay the HTML5 drop sequence
+      # on this element. The input is removed once its files are moved.
       DROP_JS = <<~JS
-        function(filesJson, stringsJson) {
+        function(input, stringsJson) {
           var el = this;
           var dt = new DataTransfer();
-          JSON.parse(filesJson).forEach(function(f) {
-            dt.items.add(new File([atob(f.b64)], f.name, { type: f.type }));
-          });
+          if (input) {
+            for (var i = 0; i < input.files.length; i++) dt.items.add(input.files[i]);
+            input.remove();
+          }
           JSON.parse(stringsJson).forEach(function(s) {
             dt.items.add(s.data, s.type);
           });
@@ -812,7 +837,8 @@ module Capybara
 
       # Internal wire format, not API — aligned with browser.rb's convention
       # of private_constant for its JS snippets.
-      private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :SHADOW_ROOT_JS, :VISIBLE_JS, :VISIBLE_TEXT_JS,
+      private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :CREATE_DROP_INPUT_JS, :SHADOW_ROOT_JS, :VISIBLE_JS,
+                       :VISIBLE_TEXT_JS,
                        :PROPERTY_OR_ATTRIBUTE_JS, :GET_VALUE_JS, :SET_VALUE_JS,
                        :IMPLICIT_SUBMIT_JS, :SELECT_OPTION_JS, :UNSELECT_OPTION_JS,
                        :SET_CHECKBOX_JS, :EDITABLE_HOST_JS, :DISABLED_JS, :GET_STYLE_JS,

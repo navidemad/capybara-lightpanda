@@ -363,8 +363,9 @@ module Capybara
           # dropped with WS close 1009 and NO JSON-RPC error — the whole CDP
           # connection dies (wishlist A44). The 1 MiB default already covers
           # axe-core (~553 KB), but larger injected bundles (jQuery + plugins,
-          # instrumentation) via execute_script, and base64 drag-drop payloads in
-          # Node#drop, exceed it. The reader buffer grows lazily (16 KB at init),
+          # instrumentation) via execute_script exceed it (Node#drop used to as
+          # well, before files moved to DOM.setFileInputFiles). The reader
+          # buffer grows lazily (16 KB at init),
           # so a high cap costs nothing until a big message actually arrives.
           # Flag added in PR #2760 (build 7441) — below the floor, so guaranteed.
           "--cdp-max-message-size",

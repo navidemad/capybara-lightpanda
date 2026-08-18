@@ -87,6 +87,7 @@ end
 | `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
 | `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
 | `logger` | `nil` | An IO (or `Capybara::Lightpanda::Logger`) that receives raw CDP traffic. `LIGHTPANDA_DEBUG=1` wires `$stdout` |
+| `raise_on_unhandled_modal` | `false` | A JS dialog that opens with no `accept_*`/`dismiss_*` wrapper in flight is resolved by Lightpanda's default (confirm → cancel, prompt → `null`, alert → dismissed), so a runaway `confirm` cancels the action and the spec still passes. `false` prints a warning naming the dialog text; `true` raises `Capybara::Lightpanda::UnhandledModalError` from the click or `visit` that opened it |
 | `headless` | `true` | Accepted for Cuprite drop-in compatibility, and inert — headless is the only mode Lightpanda has |
 
 ### Pinning the browser version { #pinning }
@@ -291,7 +292,7 @@ end
 | Frames — `within_frame`, scoped finding | ✓ |
 | Keyboard — `send_keys` with modifiers | ✓ |
 | Downloads — `Content-Disposition: attachment` responses | ✓ — streamed to `save_path` (build ≥7545) |
-| Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Coordinate `drag_to` / `drag_by` are not supported |
+| Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Files are handed to the browser through `DOM.setFileInputFiles` (read off disk on the Lightpanda host, like `attach_file`), so there is no payload-size ceiling in the driver. Coordinate `drag_to` / `drag_by` are not supported |
 | Hover — `hover` | ~ — fires `mouseover` + `mouseenter`, so JS-driven menus open. CSS `:hover` reveals can't work (see [limitations](#limits)) |
 | Windows — `current_window`, `resize_to`, `maximize` | ✓ **one window only.** `open_new_window` / `close_window` / a second tab raise `NotSupportedByDriverError` (see [limitations](#limits)) |
 

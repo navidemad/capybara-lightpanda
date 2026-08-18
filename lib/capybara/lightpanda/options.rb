@@ -41,8 +41,15 @@ module Capybara
       # save_path: directory for downloaded files (Cuprite parity). nil falls
       # back to Capybara.save_path at create_page time; downloads stay off when
       # both are nil (Browser#create_page only opts in when a path exists).
+      # raise_on_unhandled_modal: a JS dialog that opens with no
+      # accept_modal/dismiss_modal pre-arm in flight is resolved by Lightpanda's
+      # silent default (confirm → cancel, prompt → null, alert → dismissed), so
+      # a runaway confirm cancels the action and the spec can still pass. false
+      # (default, Cuprite parity) warns on stderr; true raises
+      # UnhandledModalError from the action that opened it.
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,
-                    :window_size, :browser_path, :headless, :logger, :save_path
+                    :window_size, :browser_path, :headless, :logger, :save_path,
+                    :raise_on_unhandled_modal
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -55,6 +62,7 @@ module Capybara
         @browser_path = options[:browser_path]
         @headless = options.fetch(:headless, true)
         @save_path = options[:save_path]
+        @raise_on_unhandled_modal = options.fetch(:raise_on_unhandled_modal, false)
         @ws_url = options[:ws_url]
         @logger = parse_logger(options[:logger])
       end
@@ -79,6 +87,7 @@ module Capybara
           headless: headless,
           logger: logger,
           save_path: save_path,
+          raise_on_unhandled_modal: raise_on_unhandled_modal,
         }
         h[:ws_url] = @ws_url if @ws_url
         h

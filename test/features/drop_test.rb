@@ -47,6 +47,32 @@ describe "Capybara::Lightpanda::Node#drop" do
     assert_includes session.html, "file: capybara.jpg"
   end
 
+  # Files travel via a hidden <input type=file> + DOM.setFileInputFiles, so the
+  # browser reads them off disk itself instead of the gem base64-ing them into
+  # one CDP message. Two things must hold: the page gets the real bytes, and
+  # the helper input does not linger in the DOM afterwards.
+  it "hands the page the file's actual bytes" do
+    session.execute_script(<<~JS)
+      document.getElementById('dropzone').addEventListener('drop', function(e) {
+        e.dataTransfer.files[0].text().then(function(t) {
+          document.getElementById('summary').setAttribute('data-bytes', t);
+        });
+      });
+    JS
+    dropzone.drop(fixture("test_file.txt"))
+
+    expected = File.read(fixture("test_file.txt"))
+    assert session.has_css?("#summary[data-bytes]"), "drop handler never read the file"
+    assert_equal expected, session.find(:css, "#summary")["data-bytes"]
+  end
+
+  it "leaves no helper input behind" do
+    dropzone.drop(fixture("capybara.jpg"))
+
+    assert_includes session.html, "file: capybara.jpg"
+    assert session.has_no_css?("input[type=file]", visible: :all)
+  end
+
   it "drops string data as a typed item, readable via getAsString" do
     dropzone.drop("text/plain" => "Some dropped text")
 
