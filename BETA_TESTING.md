@@ -1,7 +1,7 @@
 # Beta testing capybara-lightpanda
 
 <!-- version-bearing — keep in sync with lib/capybara/lightpanda/version.rb -->
-`capybara-lightpanda` is `0.9.0` — public beta. Real Rails suites are how we find the edges. This guide is the shortest path from "I'm curious" to "I have data and an opinion."
+`capybara-lightpanda` is `0.10.0` — public beta. Real Rails suites are how we find the edges. This guide is the shortest path from "I'm curious" to "I have data and an opinion."
 
 ## TL;DR — try it in 5 minutes
 
