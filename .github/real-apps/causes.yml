@@ -58,7 +58,13 @@ layout-measuring-js:
 select-optgroup-invisible:
   confidence: confirmed
   summary: >-
-    Lightpanda's HTMLSelectElement accessors walk direct children only, so
+    FIXED UPSTREAM at build 8328 (PR #3058, merged 2026-07-26), inside
+    MINIMUM_NIGHTLY_BUILD = 8448 / MINIMUM_RELEASE = 0.3.7 (bumped
+    2026-08-18), so no supported binary can still hit it. Baseline entries
+    stay attributed here until the next scheduled run clears them; a
+    regression should land back here rather than as a fresh mystery.
+    Original mechanism, kept for that case:
+    Lightpanda's HTMLSelectElement accessors walked direct children only, so
     <option>s nested in an <optgroup> are invisible to options / value /
     selectedIndex / selectedOptions and to form submission. Solidus's split
     select groups every destination, so select2's onSelect calls

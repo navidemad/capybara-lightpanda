@@ -13,7 +13,7 @@ of work:
 | Lot | N | Reality |
 | --- | --- | --- |
 | `layout-measuring-js` | 38 | Never fixable. Needs a layout engine. Document it, stop counting it as debt. |
-| `select-optgroup-invisible` | 15 | Fixed upstream: PR #3058 merged 2026-07-26 at build **8328**. Above both the 8311 floor and the newest release (0.3.6 = 8318), so it only clears once a release ≥8328 ships and the floor moves again. |
+| `select-optgroup-invisible` | 15 | Closed out. PR #3058 merged 2026-07-26 at build **8328**; 0.3.7 (= 8671) shipped 2026-08-16 and the floor moved to 8448 / 0.3.7 on 2026-08-18. Drops at the next scheduled run. |
 | `form-method-dialog` | 5 | Closed out. #3054 merged at build 8311, and `MINIMUM_NIGHTLY_BUILD` was bumped to 8311 (with `MINIMUM_RELEASE` = 0.3.6) on 2026-07-26. |
 | `selenium-only-api` | 2 | Already fixed by #104; drops at the next scheduled run. |
 | `selenium-only-api` (`switch_to`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |

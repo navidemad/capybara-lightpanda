@@ -782,9 +782,19 @@ module Capybara
       # No `id`-based shortcut: an `//*[@id="x"]` prefix is shorter but stops
       # pointing at *this* node the moment the document has a duplicate id,
       # which malformed real-world pages routinely do.
+      #
+      # An element inside a shadow root has no document-level XPath at all
+      # (XPath doesn't cross shadow boundaries, and a `/SPAN[1]` computed from
+      # the shadow tree would re-find some unrelated light-DOM node). Selenium's
+      # driver returns the sentinel string below in that case and Capybara's
+      # shared `node #path` spec pins it, so mirror it rather than emit a path
+      # that lies.
       GET_PATH_JS = <<~JS
         function() {
           var el = this;
+          if (el.getRootNode && typeof ShadowRoot !== 'undefined' && el.getRootNode() instanceof ShadowRoot) {
+            return '(: Shadow DOM element - no XPath :)';
+          }
           var steps = [];
           while (el && el.nodeType === Node.ELEMENT_NODE) {
             var name = el.nodeName.toUpperCase();

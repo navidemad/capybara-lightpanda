@@ -159,8 +159,29 @@ module Capybara
       # <dialog>+Turbo-confirm idiom Spree 5's admin uses for every destroy
       # confirmation. There is no gem-side workaround to guard this: the only
       # defense is the floor.
-      # Build 8311 = the #3054 merge (c917cadc) — now the binding floor.
-      # Subsumed by 8311, recorded so they are not re-derived: build 8298 made
+      # Build 8311 = the #3054 merge (c917cadc).
+      # PR #3058 (forms: include optgroup children in a select's list of
+      # options, merged 2026-07-26) makes `<option>`s inside an `<optgroup>`
+      # reachable through HTMLSelectElement (options / value / selectedIndex /
+      # submission). Below it Capybara's `select` cannot find a grouped option
+      # at all and there is no gem-side workaround — a plain ElementNotFound on
+      # any grouped <select>. Build 8328 = the #3058 merge (c7182354).
+      # PR #3080 (webapi: increase max timer count, merged 2026-07-29) lifts the
+      # one-shot setTimeout cap 512 → 2048 (Airbnb-class pages schedule 600+);
+      # below it timers past the cap are silently dropped and page JS stalls in
+      # ways that read as Capybara timeouts. Build 8412 = the #3080 merge.
+      # PR #3081 + #3082/#3085 (script load/error events; dynamic scripts whose
+      # `src` is set via setAttribute, merged 2026-07-30) — below them an
+      # inline script fired no load event, a throwing script still fired
+      # `load`, and a setAttribute('src') script never loaded, which breaks
+      # loader idioms (importmap shims, lazy widget bootstraps) that gate the
+      # UI Capybara waits for. Builds 8414/8419.
+      # PR #3087 (fix: potential UAF when an option's value is programmatically
+      # set, merged 2026-07-30) — a use-after-free in exactly the path
+      # `Node#select_option`/`Node#set` on a <select> drives, i.e. a browser
+      # crash surfacing as DeadBrowserError mid-spec.
+      # Build 8448 = the #3087 merge (6d824c88) — now the binding floor.
+      # Subsumed by 8448, recorded so they are not re-derived: build 8298 made
       # Network.enable idempotent (the gem never hit it — the Notification is
       # per-BrowserContext and Network#enable's @enabled guard means one enable
       # per context), and build 8305 (#3048) derives scrollWidth/scrollHeight
@@ -170,7 +191,7 @@ module Capybara
       # `window_size` option. Note the override only reached
       # Page.getLayoutMetrics later (~build 8300); the gem does not depend on
       # that half, so it is NOT part of the floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8311")
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8448")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -179,15 +200,15 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor: 0.3.6 is build 8318, seven commits past the #3054 merge
-      # this floor exists for. (0.3.5 is only 8165 — it predates every fix in
-      # the 8311 floor, which is why this pin had to move with it.)
+      # nightly floor: 0.3.7 is build 8671, well past the #3087 merge (8448)
+      # this floor exists for. (0.3.6 is only 8318 — it predates the optgroup
+      # fix and everything after it, which is why this pin had to move.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("0.3.6")
+      MINIMUM_RELEASE = Gem::Version.new("0.3.7")
 
       attr_reader :pid, :ws_url, :version, :nightly_build, :release
 
