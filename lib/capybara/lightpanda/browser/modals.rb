@@ -24,7 +24,19 @@ module Capybara
 
           on("Page.javascriptDialogOpening") do |params|
             entry = { type: params["type"], message: params["message"] }
-            @modal_messages_mutex.synchronize { @modal_messages << entry }
+            @modal_messages_mutex.synchronize do
+              @modal_messages << entry
+              # The pre-arm slot is single-shot on both sides: Lightpanda
+              # consumes its stashed response on this dialog, so we consume
+              # ours. No pre-arm in flight means Lightpanda just applied its
+              # silent default — remember it for the main thread; raising here
+              # would only die inside the subscriber.
+              if @modal_armed
+                @modal_armed = false
+              else
+                @unhandled_modal ||= entry
+              end
+            end
           end
 
           @modal_handler_installed = true
@@ -34,12 +46,31 @@ module Capybara
           prepare_modals
           params = { accept: true }
           params[:promptText] = text if text
-          page_command("LP.handleJavaScriptDialog", **params)
+          arm_modal { page_command("LP.handleJavaScriptDialog", **params) }
         end
 
         def dismiss_modal(_type)
           prepare_modals
-          page_command("LP.handleJavaScriptDialog", accept: false)
+          arm_modal { page_command("LP.handleJavaScriptDialog", accept: false) }
+        end
+
+        # Surface a dialog that opened with no pre-arm. Called from the main
+        # thread after every action that can open one (Browser#wait_for_idle,
+        # #go_to). Warns by default; raises when the driver was built with
+        # `raise_on_unhandled_modal: true` (Cuprite's option name). Either way
+        # the dialog is already gone — Lightpanda's default resolved it.
+        def check_unhandled_modal!
+          entry = @modal_messages_mutex.synchronize do
+            e = @unhandled_modal
+            @unhandled_modal = nil
+            e
+          end
+          return unless entry
+
+          message = unhandled_modal_message(entry)
+          raise UnhandledModalError, message if @options.raise_on_unhandled_modal
+
+          warn "[capybara-lightpanda] #{message}"
         end
 
         # `type` is accepted for the error message only: like Selenium (where
@@ -65,6 +96,26 @@ module Capybara
         end
 
         private
+
+        def arm_modal
+          @modal_messages_mutex.synchronize { @modal_armed = true }
+          yield
+        end
+
+        LIGHTPANDA_DIALOG_DEFAULTS = {
+          "confirm" => "cancelled it",
+          "prompt" => "answered null",
+          "beforeunload" => "cancelled it",
+        }.freeze
+        private_constant :LIGHTPANDA_DIALOG_DEFAULTS
+
+        def unhandled_modal_message(entry)
+          with_text = entry[:message] ? " with text `#{entry[:message]}`" : ""
+          default = LIGHTPANDA_DIALOG_DEFAULTS.fetch(entry[:type].to_s, "dismissed it")
+          "A #{entry[:type]} dialog#{with_text} opened, but the action was not wrapped in " \
+            "accept_alert / accept_confirm / dismiss_confirm / accept_prompt / dismiss_prompt " \
+            "— Lightpanda #{default} by default"
+        end
 
         # Pop the first queued dialog whose message matches the requested
         # pattern (any dialog when `regexp` is nil). Returns the entry or nil.

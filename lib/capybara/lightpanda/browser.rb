@@ -103,6 +103,8 @@ module Capybara
         @modal_messages = []
         @modal_messages_mutex = Mutex.new
         @modal_handler_installed = false
+        @modal_armed = false
+        @unhandled_modal = nil
         @console_logs = []
         @console_logs_mutex = Mutex.new
         @page_errors = []
@@ -166,6 +168,10 @@ module Capybara
         downloads.enable(configured_download_path)
         register_auto_scripts
         set_viewport
+        # Subscribe to dialogs from the first page, not lazily on the first
+        # accept_modal — otherwise a dialog nobody pre-armed is invisible and
+        # the unhandled-modal check below has nothing to report.
+        prepare_modals
       end
 
       # Download destination: explicit :save_path option wins, else
@@ -216,7 +222,11 @@ module Capybara
       def clear_session_state
         @page_events_enabled = false
         @modal_handler_installed = false
-        @modal_messages_mutex.synchronize { @modal_messages.clear }
+        @modal_messages_mutex.synchronize do
+          @modal_messages.clear
+          @modal_armed = false
+          @unhandled_modal = nil
+        end
         @console_logs_mutex.synchronize { @console_logs.clear }
         @page_errors_mutex.synchronize { @page_errors.clear }
         clear_frames
@@ -423,6 +433,7 @@ module Capybara
 
         @default_context_event.wait(@options.timeout)
         @turbo_event.wait(@options.timeout)
+        check_unhandled_modal!
       end
 
       def keyboard

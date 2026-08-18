@@ -113,6 +113,12 @@ describe Capybara::Lightpanda::Options do
       end
     end
 
+    it "defaults raise_on_unhandled_modal to false (warn, Cuprite parity) and round-trips it" do
+      assert_equal false, Capybara::Lightpanda::Options.new.raise_on_unhandled_modal
+      strict = Capybara::Lightpanda::Options.new(raise_on_unhandled_modal: true)
+      assert_equal true, Capybara::Lightpanda::Options.new(strict.to_h).raise_on_unhandled_modal
+    end
+
     it "excludes ws_url when not explicitly set" do
       options = Capybara::Lightpanda::Options.new
       refute_includes options.to_h.keys, :ws_url

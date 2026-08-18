@@ -13,6 +13,11 @@ module Capybara
     class UnsupportedPlatformError < Error; end
 
     class TimeoutError < Error; end
+    # A JS dialog opened with no accept_modal/dismiss_modal pre-arm in flight
+    # and the driver was configured with `raise_on_unhandled_modal: true`.
+    # Lightpanda has already applied its silent default by the time this is
+    # raised (confirm → cancel, prompt → null, alert → dismissed).
+    class UnhandledModalError < Error; end
 
     # Base class for any error originating from a CDP response or live browser
     # state. Lets callers `rescue BrowserError` to catch the whole CDP family
