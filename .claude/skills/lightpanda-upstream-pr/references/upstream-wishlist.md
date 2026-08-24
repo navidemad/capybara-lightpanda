@@ -177,6 +177,14 @@ Use this file when:
 - **Why the battery never caught it**: Capybara's shared specs do have `<optgroup>` fixtures (`form.erb`'s `form_disabled_select` and `my_test_id`), but they are only exercised by `disabled`-state and `find_field` examples — no example selects a grouped option and asserts the resulting value.
 - **Drop-on-fix**: nothing gem-side to remove; unblocks the solidus split/transfer cluster (15 entries) and grouped selects in any app.
 
+### A53. `MouseEvent.clientX`/`clientY` return the init dictionary's double verbatim — Chrome rounds to integers
+
+- **Today (found 2026-08-24 on nightly 8781, via Capybara's `#drag_to HTML5` battery)**: `new DragEvent('dragover', {clientX: 47.5, clientY: 312.5})` reads back `47.5`/`312.5` from the handler. Chrome's legacy `MouseEvent.clientX`/`clientY` getters return integers (the init double is rounded); test suites and page code written against Chrome assume integer client coordinates. Note the CSSOM-View spec actually types these as `double`, so Lightpanda is arguably spec-correct and Chrome is the legacy behavior — file as a *compat* question, not a clear-cut bug.
+- **Real-world impact**: Capybara's shared spec `node #drag_to HTML5 should set clientX/Y in dragover events` asserts `/position: [1-9]\d*,[1-9]\d*/` — fractional coordinates can't match, so the example is pattern-skipped in `spec/spec_helper.rb`. Low severity beyond that: no real-app failure observed.
+- **Want**: match Chrome — round `clientX`/`clientY` (and `screenX`/`screenY`, `pageX`/`pageY` similarly if they take the same path) on the MouseEvent getters, or a documented decision to stay spec-pure.
+- **Gem workaround**: none needed for the driver itself (the drag script passes coordinates through untouched, as Selenium's does). Only the one shared-spec skip.
+- **Drop-on-fix**: remove the `node #drag_to HTML5 should set clientX\/Y in dragover events` pattern from `spec/spec_helper.rb` (12/13 HTML5 drag examples would then run).
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
@@ -285,6 +293,14 @@ Three independent issues:
 - **Want**: emit `Runtime.exceptionThrown` for uncaught exceptions and unhandled promise rejections when `Runtime.enable` is on, carrying at minimum `exceptionDetails.text`, `.lineNumber`, `.columnNumber`, `.url` and `.exception.description`. The gem already parses that exact shape — `JavaScriptError` in `lib/capybara/lightpanda/errors.rb` reads `exceptionDetails` off command responses — so a faithful payload needs no new client-side parsing.
 - **Gem workaround**: SHIPPED. `javascripts/errors.js` attaches passive `error` + `unhandledrejection` listeners on `window` and reports over the same `console.debug` sentinel channel `turbo.js` uses; `Browser::Console#record_page_error` routes those into `Browser#page_errors`. Deliberately a **separate buffer**, not folded into `console_logs`: Chrome models an exception as `exceptionThrown` rather than `consoleAPICalled` and Playwright/Puppeteer expose `pageerror` separately from `console`, so merging them would diverge from every peer *and* start failing suites that already assert `console_logs` holds no errors. Known blind spots, documented on the method: an exception a framework catches itself (Stimulus's `handleError`, any `try/catch`) never reaches `window`, and a cross-origin script collapses to `"Script error."`.
 - **Drop-on-fix**: delete `javascripts/errors.js` and its entry in `AutoScripts::PARTS`, drop `record_page_error` + the `PAGE_ERROR_SENTINEL_PREFIX` half of `driver_sentinel?`, and subscribe `Browser::Console` to `Runtime.exceptionThrown` feeding the same `@page_errors` buffer. The public API (`Browser#page_errors`, `#clear_page_errors`, the entry shape) is designed to survive that swap unchanged, so `test/features/page_errors_test.rb` should keep passing as-is — that's the signal the replacement is faithful.
+
+### B20. `HTMLElement.draggable` IDL property not implemented — reads `undefined` even with `draggable="true"`
+
+- **Today (probed 2026-08-24 on nightly 8781, macOS aarch64)**: `el.draggable` is `undefined` for every element — with `draggable="true"` set, on `<img>`, on `<a href>`. Only the attribute *name* is interned upstream (`src/string.zig`'s `asUint("draggable")`); no getter/setter exists on HTMLElement. Chrome: reflects the content attribute (`"true"`/`"false"`) with spec defaults (`<img>`, `<a href>` → true), and the *setter* writes the attribute.
+- **Real-world impact**: every HTML5 drag-and-drop library and every drag script ported from Selenium/Cuprite gates on `el.draggable` — Capybara's own `HTML5_DRAG_DROP_SCRIPT` walks `while (source && !source.draggable) source = source.parentElement;`, which walks straight off the tree and NPEs. SortableJS assigns `dragEl.draggable = true` (a property write that should reflect to the attribute). Found implementing `Node#drag_to`.
+- **Want**: per WHATWG HTML §draggable: getter — `"true"` → true, `"false"` → false, else default (`<img>`, `<a>` with `href` → true, otherwise false); setter reflects to the attribute. No layout dependency; same calibre as the GPC/console-type micro-fixes.
+- **Gem workaround**: SHIPPED — `_lightpanda.isDraggable` in `javascripts/predicates.js` (native-first: `typeof el.draggable === 'boolean'` defers to the browser the day this lands), used by `Node#drag_to`'s `LEGACY_DRAG_CHECK_JS` and `HTML5_DRAG_JS` in place of raw `.draggable` reads. Bun-tested in `test/js/predicates.test.ts`.
+- **Drop-on-fix**: nothing must be deleted (the native-first guard makes the polyfill inert); optionally restore the verbatim `source.draggable` reads in `node.rb`'s drag scripts and drop `isDraggable` + its tests.
 
 ---
 

@@ -166,7 +166,8 @@ Cuprite (or whatever full browser you run today) when it depends on:
 - scrolling as an assertion (infinite scroll, sticky-header behavior)
 - a second tab or window — `open_new_window`, `within_window`, OAuth popups
 - UI revealed purely by CSS `:hover`
-- coordinate drag — `drag_to` / `drag_by`
+- coordinate (non-HTML5) drag — `drag_by`, or `drag_to` on sources that aren't
+  HTML5-draggable (mouse-driven libraries like SortableJS in fallback mode)
 
 Everything else — navigation, forms, Turbo, AJAX, auth, file upload and
 download, iframes, `@media`-gated responsive variants — runs on Lightpanda. In
@@ -292,7 +293,8 @@ end
 | Frames — `within_frame`, scoped finding | ✓ |
 | Keyboard — `send_keys` with modifiers | ✓ |
 | Downloads — `Content-Disposition: attachment` responses | ✓ — streamed to `save_path` (build ≥7545) |
-| Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Files are handed to the browser through `DOM.setFileInputFiles` (read off disk on the Lightpanda host, like `attach_file`), so there is no payload-size ceiling in the driver. Coordinate `drag_to` / `drag_by` are not supported |
+| Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Files are handed to the browser through `DOM.setFileInputFiles` (read off disk on the Lightpanda host, like `attach_file`), so there is no payload-size ceiling in the driver |
+| Drag-and-drop — `Element#drag_to` (HTML5) | ✓ — the same DragEvent simulation Capybara's Selenium driver uses (`dragstart` → `dragenter` → `dragover` → `drop`/`dragend`, one shared `DataTransfer`, `drop_modifiers` supported). A source that isn't HTML5-draggable would need real mouse dragging, which raises `NotImplementedError` (pass `html5: true` to force the simulation). Coordinate `drag_by` is not supported |
 | Hover — `hover` | ~ — fires `mouseover` + `mouseenter`, so JS-driven menus open. CSS `:hover` reveals can't work (see [limitations](#limits)) |
 | Windows — `current_window`, `resize_to`, `maximize` | ✓ **one window only.** `open_new_window` / `close_window` / a second tab raise `NotSupportedByDriverError` (see [limitations](#limits)) |
 

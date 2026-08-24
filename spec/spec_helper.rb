@@ -113,12 +113,26 @@ RSpec.configure do |config|
       # `<input list=...>` datalist — Lightpanda renders the input but the
       # browser-side datalist UI/option-fill logic isn't implemented.
       /#select input with datalist should select an option/,
-      # `#drag_to` needs `Input.dispatchMouseEvent` coordinates, which Lightpanda
-      # has no layout to produce. Patterned rather than skipped via the
-      # `:html5_drag` feature flag, because that flag also gates the
-      # `Element#drop` specs — and those pass: `Node#drop` assembles a
-      # DataTransfer in JS and needs no geometry. See session_spec.rb.
-      /node #drag_to HTML5/,
+      # Legacy (non-HTML5) `#drag_to` — real coordinate mouse dragging via
+      # Input.dispatchMouseEvent, which Lightpanda has no layout to feed.
+      # `Node#drag_to` raises NotImplementedError on that path. The HTML5
+      # examples ("node #drag_to HTML5 ...") run — DragEvent simulation is
+      # geometry-free. Matching "#drag_to should" excludes exactly the
+      # legacy block.
+      /node #drag_to should/,
+      # Two HTML5 drag examples that outrun the synthetic geometry (11/13
+      # pass, audited 2026-08-24 on nightly 8781):
+      # — clientX/Y values: the coordinates flow through correctly but are
+      #   fractional ("47.5,312.5") because synthetic rect centers land on
+      #   halves; Chrome's MouseEvent.clientX getter rounds to an integer,
+      #   which is what the spec's [1-9]\d* regex encodes. (The companion
+      #   "preserve clientX/Y" example passes — preservation is what it
+      #   asserts, not integerness.)
+      # — SortableJS prevents default on mousedown, steering Selenium's
+      #   auto-detect to the LEGACY (real mouse) path — which Selenium can
+      #   drive and we cannot; its reordering also needs real hit-testing.
+      %r{node #drag_to HTML5 should set clientX/Y in dragover events},
+      /node #drag_to HTML5 should work with SortableJS/,
     ].freeze
 
     if browser_limitation_patterns.any? { |re| description =~ re }
