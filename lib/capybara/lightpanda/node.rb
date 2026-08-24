@@ -211,6 +211,41 @@ module Capybara
         nil
       end
 
+      # Maps Capybara's documented drop_modifiers aliases onto the DragEvent
+      # init keys (`ctrlKey`, `metaKey`, ...). Same table as Cuprite's #315.
+      DRAG_MODIFIER_ALIASES = { control: :ctrl, command: :meta, cmd: :meta }.freeze
+
+      # Capybara's `Element#drag_to` — HTML5 half only. HTML5_DRAG_JS replays
+      # Capybara's own Selenium HTML5_DRAG_DROP_SCRIPT (the same source
+      # Cuprite's drag.js ports): dragstart on the draggable ancestor, then
+      # dragenter -> 2x dragover -> dragleave/drop -> dragend, setTimeout-paced,
+      # sharing one DataTransfer so `setData` in the page's dragstart handler is
+      # readable at drop. Runs through `evaluate_async` (the script signals
+      # completion via the appended callback), so the drag has fully played out
+      # before this method returns.
+      #
+      # The legacy path is coordinate-based mouse dragging, which Lightpanda
+      # cannot express (no layout to produce coordinates from) — it raises
+      # instead of silently no-oping. `html5: nil` auto-detects like Selenium
+      # does, via LEGACY_DRAG_CHECK_JS: we dispatch a synthetic mousedown where
+      # Selenium presses a real button, then apply the same
+      # prevented-or-no-draggable-ancestor test.
+      #
+      # `steps:`/`scroll:` (Cuprite's legacy-path knobs) are accepted and
+      # ignored so suites migrating from cuprite don't ArgumentError.
+      def drag_to(other, html5: nil, delay: 0.05, drop_modifiers: [], **)
+        keys = Array(drop_modifiers).map { |m| DRAG_MODIFIER_ALIASES.fetch(m.to_sym, m.to_sym).to_s }
+        html5 = !call(LEGACY_DRAG_CHECK_JS) if html5.nil?
+        unless html5
+          raise NotImplementedError,
+                "drag_to needs coordinate mouse dispatch for non-HTML5 (legacy) drags, which Lightpanda " \
+                "cannot do (no layout). Pass `html5: true` to force HTML5 DragEvent simulation."
+        end
+
+        driver.browser.evaluate_async(HTML5_DRAG_JS, self, other, (delay * 1000).to_i, keys)
+        nil
+      end
+
       def select_option
         call(SELECT_OPTION_JS)
       end
@@ -643,6 +678,150 @@ module Capybara
             el.dispatchEvent(new DragEvent(name, { bubbles: true, cancelable: true, dataTransfer: dt }));
           });
         }
+      JS
+
+      # Selenium's MOUSEDOWN_TRACKER + LEGACY_DRAG_CHECK folded into one round
+      # trip. Selenium presses a real mouse button before checking; we dispatch
+      # a synthetic mousedown so drag libraries that preventDefault on it
+      # (mouse-based / fallback DnD) still steer the check toward the legacy
+      # path. Returns true when the drag would need the legacy (coordinate)
+      # path: mousedown prevented / never observed, or no draggable ancestor.
+      LEGACY_DRAG_CHECK_JS = <<~JS
+        function() {
+          var doc = this.ownerDocument || document;
+          var prevented = null;
+          doc.addEventListener('mousedown', function(ev) { prevented = ev.defaultPrevented; }, { once: true });
+          this.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          if (prevented === true || prevented === null) return true;
+          var el = this;
+          do {
+            if (_lightpanda.isDraggable(el)) return false;
+          } while ((el = el.parentElement));
+          return true;
+        }
+      JS
+
+      # Ported near-verbatim from Capybara's Selenium driver
+      # (capybara/selenium/extensions/html5_drag.rb, HTML5_DRAG_DROP_SCRIPT) —
+      # the same source Cuprite's #315 drag.js ports — kept close to ease
+      # future syncs. Upstream quirks preserved deliberately: `rectPt.top` in
+      # pointOnRect (DOMPoint has no .top, that branch just falls through), the
+      # undeclared `key` loop variable, and `callback.call(true)`. One
+      # deliberate deviation: `source.draggable` reads go through
+      # `_lightpanda.isDraggable` — Lightpanda doesn't implement the IDL
+      # property (see predicates.js). Coordinates come from
+      # getBoundingClientRect, which Lightpanda synthesizes without layout —
+      # dropzones reading clientX/Y get plausible-but-synthetic numbers.
+      HTML5_DRAG_JS = <<~JS
+        function rectCenter(rect){
+          return new DOMPoint(
+            (rect.left + rect.right)/2,
+            (rect.top + rect.bottom)/2
+          );
+        }
+
+        function pointOnRect(pt, rect) {
+          var rectPt = rectCenter(rect);
+          var slope = (rectPt.y - pt.y) / (rectPt.x - pt.x);
+
+          if (pt.x <= rectPt.x) { // left side
+            var minXy = slope * (rect.left - pt.x) + pt.y;
+            if (rect.top <= minXy && minXy <= rect.bottom)
+              return new DOMPoint(rect.left, minXy);
+          }
+
+          if (pt.x >= rectPt.x) { // right side
+            var maxXy = slope * (rect.right - pt.x) + pt.y;
+            if (rect.top <= maxXy && maxXy <= rect.bottom)
+              return new DOMPoint(rect.right, maxXy);
+          }
+
+          if (pt.y <= rectPt.y) { // top side
+            var minYx = (rectPt.top - pt.y) / slope + pt.x;
+            if (rect.left <= minYx && minYx <= rect.right)
+              return new DOMPoint(minYx, rect.top);
+          }
+
+          if (pt.y >= rectPt.y) { // bottom side
+            var maxYx = (rect.bottom - pt.y) / slope + pt.x;
+            if (rect.left <= maxYx && maxYx <= rect.right)
+              return new DOMPoint(maxYx, rect.bottom);
+          }
+
+          return new DOMPoint(pt.x,pt.y);
+        }
+
+        function dragEnterTarget() {
+          target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'});
+          var targetRect = target.getBoundingClientRect();
+          var sourceCenter = rectCenter(source.getBoundingClientRect());
+
+          for (var i = 0; i < drop_modifier_keys.length; i++) {
+            key = drop_modifier_keys[i];
+            if (key == "control"){
+              key = "ctrl"
+            }
+            opts[key + 'Key'] = true;
+          }
+
+          var dragEnterEvent = new DragEvent('dragenter', opts);
+          target.dispatchEvent(dragEnterEvent);
+
+          // fire 2 dragover events to simulate dragging with a direction
+          var entryPoint = pointOnRect(sourceCenter, targetRect)
+          var dragOverOpts = Object.assign({clientX: entryPoint.x, clientY: entryPoint.y}, opts);
+          var dragOverEvent = new DragEvent('dragover', dragOverOpts);
+          target.dispatchEvent(dragOverEvent);
+          window.setTimeout(dragOnTarget, step_delay);
+        }
+
+        function dragOnTarget() {
+          var targetCenter = rectCenter(target.getBoundingClientRect());
+          var dragOverOpts = Object.assign({clientX: targetCenter.x, clientY: targetCenter.y}, opts);
+          var dragOverEvent = new DragEvent('dragover', dragOverOpts);
+          target.dispatchEvent(dragOverEvent);
+          window.setTimeout(dragLeave, step_delay, dragOverEvent.defaultPrevented, dragOverOpts);
+        }
+
+        function dragLeave(drop, dragOverOpts) {
+          var dragLeaveOptions = Object.assign({}, opts, dragOverOpts);
+          var dragLeaveEvent = new DragEvent('dragleave', dragLeaveOptions);
+          target.dispatchEvent(dragLeaveEvent);
+          if (drop) {
+            var dropEvent = new DragEvent('drop', dragLeaveOptions);
+            target.dispatchEvent(dropEvent);
+          }
+          var dragEndEvent = new DragEvent('dragend', dragLeaveOptions);
+          source.dispatchEvent(dragEndEvent);
+          callback.call(true);
+        }
+
+        var source = arguments[0],
+            target = arguments[1],
+            step_delay = arguments[2],
+            drop_modifier_keys = arguments[3],
+            callback = arguments[4];
+
+        var dt = new DataTransfer();
+        var opts = { cancelable: true, bubbles: true, dataTransfer: dt };
+
+        while (source && !_lightpanda.isDraggable(source)) {
+          source = source.parentElement;
+        }
+
+        if (source.tagName == 'A'){
+          dt.setData('text/uri-list', source.href);
+          dt.setData('text', source.href);
+        }
+        if (source.tagName == 'IMG'){
+          dt.setData('text/uri-list', source.src);
+          dt.setData('text', source.src);
+        }
+
+        var dragEvent = new DragEvent('dragstart', opts);
+        source.dispatchEvent(dragEvent);
+
+        window.setTimeout(dragEnterTarget, step_delay);
       JS
 
       VISIBLE_JS = "function() { return _lightpanda.isVisible(this); }"

@@ -15,14 +15,15 @@ Capybara::SpecHelper.run_specs(
   # Capybara feature flags Lightpanda doesn't support (yet). Each entry has a
   # corresponding entry in `.claude/rules/lightpanda-io.md`.
   #   :windows           — `window.open` in flight upstream (PR #2237).
-  #   :drag              — no real layout/pointer dispatch geometry.
-  #                        NOTE :html5_drag is deliberately NOT listed. It gates
-  #                        both `#drag_to HTML5` (needs coordinates — still
-  #                        skipped, by pattern in spec_helper.rb) and
-  #                        `Element#drop`, which the gem implements
-  #                        geometry-free via DROP_JS. Skipping the whole feature
-  #                        hid 5 passing specs for shipped behavior; audited
-  #                        2026-07-26.
+  #   NOTE :drag is deliberately NOT listed — the `#drag_to HTML5` examples
+  #                        inherit it, and those run geometry-free through
+  #                        Node#drag_to (HTML5 DragEvent simulation). The
+  #                        legacy `#drag_to` examples (real coordinate mouse
+  #                        dragging) are skipped by pattern in spec_helper.rb.
+  #   NOTE :html5_drag is deliberately NOT listed. It gates `#drag_to HTML5`
+  #                        and `Element#drop`, both of which the gem implements
+  #                        geometry-free. Skipping whole features hid passing
+  #                        specs for shipped behavior; audited 2026-07-26.
   #                        :shadow_dom is likewise NOT listed: all 9 examples
   #                        pass on nightly ≥8609 (audited 2026-08-18) once
   #                        Node#path returns Selenium's shadow-DOM sentinel.
@@ -41,7 +42,6 @@ Capybara::SpecHelper.run_specs(
   #                        can't track which element should be active.
   capybara_skip: %i[
     windows
-    drag
     scroll
     hover
     spatial
