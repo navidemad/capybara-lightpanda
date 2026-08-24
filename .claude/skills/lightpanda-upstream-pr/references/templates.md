@@ -110,6 +110,8 @@ The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domai
 
 ## Reproducer skeleton (Step 6)
 
+**First decide whether you need CDP at all.** For pure JS-visible behavior (getters, constructors, DOM APIs — no CDP events, navigation waits, or network) the whole harness collapses to `lightpanda fetch --dump html` + a static page that writes its verdict into the DOM: no Node, no `ws`, no serve/attach dance, and the maintainer runs it with just the binary + python3. Pattern: page script probes the behavior, appends human-readable lines plus machine-greppable `verdict-*: ...` lines into a `<pre id=out>`; `repro.sh` serves the dir, runs `fetch --dump html`, greps the verdicts, exits 1 on bug / 0 on fix (guard verdicts for behavior the fix must NOT change are cheap and catch over-fixing). Remember `--dump html` — without it `fetch` exits 0 with empty stdout. Reference implementation: `/Users/navid/code/browser/repro/a53-mouseevent-fractional-coords/`. Only fall through to the CDP skeleton below when the bug genuinely needs protocol traffic.
+
 Use raw `ws` (not `chrome-remote-interface`) and the vendored helpers in `references/probe-lib/cdp.js`. Two reasons:
 
 - **Lightpanda fights `chrome-remote-interface` at every layer.** `/json/list` returns `[]` (errors `No inspectable targets` — workaround: `target: 'ws://...'`). `/json/protocol` returns 404 (errors `Not found` — workaround: `local: true`). After both workarounds, the default flow still assumes a single implicit session, but Lightpanda needs `Target.createTarget` + `Target.attachToTarget` returning a `sessionId` that has to be passed on every subsequent call. Once you've stacked all three patches, c-r-i is no shorter than raw `ws`.

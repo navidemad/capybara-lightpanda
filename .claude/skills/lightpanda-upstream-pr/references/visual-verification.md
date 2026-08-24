@@ -4,17 +4,36 @@ Apply this after `gh issue create` (Step 7c) and after `gh pr create` (Step 8e).
 
 ## How to inspect
 
-```
-mcp__playwright__browser_navigate(url: "<issue or PR URL>")
-mcp__playwright__browser_snapshot()        # accessibility snapshot — verifies structure
-mcp__playwright__browser_take_screenshot() # pixel snapshot — verifies rendering
+Use `agent-browser` (the Playwright MCP is not wired into this setup — verified 2026-08-24). Issue/PR pages are public, so no `--session-name`:
+
+```bash
+agent-browser open "<issue or PR URL>"    # then sleep 3-4s: mermaid renders async
+agent-browser eval "<JS checks below>"
+agent-browser screenshot --full /tmp/render.png   # then Read the PNG
+agent-browser close
 ```
 
-Use both: the accessibility snapshot proves mermaid blocks rendered as actual `svg`/graph nodes (not as `mermaid` code blocks), and the screenshot catches layout/contrast issues.
+DOM checks that settle each question in one `eval` (all verified 2026-08-24):
+
+```js
+// Mermaid: GitHub renders each diagram into a cross-origin iframe — success is
+// measured on these three, NOT on svg counts (the parent document's svgs are octicons):
+[...document.querySelectorAll('iframe.render-viewer')].map(f => f.offsetHeight)
+  // one iframe per diagram, src viewscreen.githubusercontent.com, real heights (~180-500px)
+/Unable to render rich display|Parse error/i.test(document.querySelector('.markdown-body').textContent)
+  // parse failures surface as this banner in the PARENT document — must be false
+[...document.querySelectorAll('.markdown-body pre')].filter(p => p.offsetParent !== null && /sequenceDiagram|flowchart/.test(p.textContent)).length
+  // raw mermaid source stays in hidden <pre> fallbacks — visible count must be 0
+// PR-only: "Closes #n" hyperlink + sidebar linkage:
+[...document.querySelectorAll('.markdown-body a')].some(a => /issues\/<n>/.test(a.href))
+// Leftovers: /<paste|<issue-num>|wishlist|[Cc]apybara|RSpec/.test(body.textContent) must be false
+```
+
+**Screenshot caveat**: the mermaid iframes are cross-origin and routinely paint as blank rectangles in a headless screenshot — a blank diagram area in the PNG is NOT evidence of a broken render. Trust the DOM checks for the diagrams; use the screenshot for everything else (tables, code highlighting, heading structure, overall read).
 
 ## Common checklist (issue and PR)
 
-- **Mermaid diagrams render as graphs, not raw text inside a `mermaid` code block.** If they show as code, the fence syntax is wrong (extra blank line inside the fence, missing `mermaid` language tag, or a stray indent). The accessibility snapshot will show real `svg` / graph nodes when it works.
+- **Mermaid diagrams render as graphs, not raw text inside a `mermaid` code block.** If they show as code, the fence syntax is wrong (extra blank line inside the fence, missing `mermaid` language tag, or a stray indent). Success = the three iframe/banner/hidden-pre checks above, not svg-counting.
 - **Code blocks (`repro.html` / `repro.sh` / `repro.js`, Zig snippets) are syntax-highlighted** with no leaked backticks from outer-fence interference, no HEREDOC `EOF` artifact bleeding into the body, no broken indentation. Read the actual rendered code, not just the markdown.
 - **Headings and TOC sidebar** match the H2 hierarchy you intended. No skipped levels, no `## ## Foo` artifacts from accidental double-prefix.
 - **Inline code** (`Network.clearBrowserCookies`, `Page.loadEventFired`, `src/<file>.zig` paths) renders as code, not as bare text. Spec links resolve, no 404s in the link previews.
@@ -43,7 +62,7 @@ gh issue edit <issue-num> --repo lightpanda-io/browser --body-file <fixed.md>
 gh pr edit <pr-num> --repo lightpanda-io/browser --body-file <fixed.md>
 
 # Then re-verify:
-mcp__playwright__browser_navigate(url: "<URL>")
+agent-browser open "<URL>"   # + the eval checks from "How to inspect"
 ```
 
 The skill is responsible for the **rendered** quality of the artifact, not just the source. Don't move on until the page reads cleanly to a Zig engineer who isn't on this conversation.

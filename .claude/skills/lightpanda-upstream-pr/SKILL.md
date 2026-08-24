@@ -148,8 +148,11 @@ As of 2026-07-24 both say `0.16.0`. If `zig version` disagrees with `build.zig.z
 Performance notes:
 
 - First run after a dep update builds curl/brotli/sqlite/html5ever (~1–2 min). Subsequent runs are incremental.
-- `zig build check` typically finishes in <10s after warm-up.
+- **A fresh worktree pays a full cold build** (measured 2026-08-24): `.zig-cache` is per-worktree (only the global `~/.cache/zig` is shared), so the first `zig build test` in a `git worktree add` checkout recompiles every C dep and does the full V8 link — ~10 min for check+test, and the first `zig build` (debug binary) took another **22 min**. Run the first build of a fresh worktree with `run_in_background` from the start; a foreground timeout that force-backgrounds it mid-flight just loses you the output stream. Warm, the same worktree behaves like the numbers below.
+- **One `zig build test` invocation per verification round.** Every invocation relinks the test binary (~1 min even when nothing changed), so chaining `TEST_FILTER=A zig build test && TEST_FILTER=B zig build test && ...` multiplies the link cost. Batch instead: both filter halves are substring matches, so one broader name filter covers sibling fixtures in a single link — e.g. `TEST_FILTER='Event'` ran the mouse/drag/pointer fixture trio (25 tests) in 52s warm where three chained filtered runs had blown a 600s timeout.
+- `zig build check` typically finishes in <10s after warm-up (in a warm checkout).
 - `zig build test` runs in 30s–2min depending on what changed.
+- When a build runs long, don't pipe it through `grep`/`head` to "watch" it — the filter swallows all progress output and the build looks hung. Redirect to a log file and tail that.
 - The `extras` step (legacy_test, snapshot_creator) is not in the default — don't trigger it.
 
 Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by your branch):
@@ -175,8 +178,9 @@ cd /Users/navid/code/browser
 git fetch origin && git log --oneline origin/main -10
 ```
 
-Three confirmation paths, in order of cheapness:
+Four confirmation paths, in order of cheapness:
 
+0. **`lightpanda fetch --dump html` against a static page** — cheapest of all, and sufficient whenever the bug is pure JS-visible behavior (a getter, a constructor, a DOM API — no CDP events, navigation, or network involved). Write a page whose script runs the check and writes results into a `<pre id=out>`, serve it (`python3 -m http.server`), run `lightpanda fetch --dump html <url>` and grep the serialized DOM. **The trap (burned 2026-08-24): `fetch` prints NOTHING without `--dump html`** — exit 0, empty stdout, empty stderr — which reads exactly like "the probe page didn't run". The same page + a 3-line assertion script later becomes the Step 6 reproducer with zero CDP client for the maintainer to install (precedent: the A53 repro).
 1. **Pure-CDP probe against the installed nightly** — the strongest signal and the right default for any DOM / event / navigation / form / cookie bug. Copy `references/probe-lib/cdp.js` into `/tmp/probe-<id>/`, write a 30-line `probe.js` that exercises the bug via `Page.navigate` + `Runtime.evaluate` + `Target.attachToTarget`, and run it against a `lightpanda serve` from the binary already on disk. Asserts the wishlist's claim with no gem code in the loop. **Do this even if you "know" the bug is real** — the 5 minutes saves the 30+ minutes of branch + tests + issue-draft work that gets thrown away when you discover the bug is already fixed.
 2. **Grep the relevant `.zig` file for the missing symbol** — only valid for _pure absence_ (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
 3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `zig build` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
@@ -230,7 +234,7 @@ git log --oneline -5                           # sanity-check the new HEAD
 git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix-a1-clearbrowsercookies
 ```
 
-If the main clone is on a different open-PR branch (because a previous session left it there), prefer creating a worktree for the new fix — keeps the main clone's branch intact and matches the existing per-fix-worktree pattern. Use `git worktree add -b fix-<id>-<slug> ../browser-<slug> origin/main`; the worktree starts from a fresh `origin/main` automatically.
+If the main clone is on a different open-PR branch (because a previous session left it there), prefer creating a worktree for the new fix — keeps the main clone's branch intact and matches the existing per-fix-worktree pattern. Use `git worktree add -b fix-<id>-<slug> ../browser-<slug> origin/main`; the worktree starts from a fresh `origin/main` automatically. Budget for the cold build: the worktree gets its own empty `.zig-cache`, so its first `zig build test` / `zig build` is a from-scratch compile (see "Performance notes" — run it in background, don't chain invocations).
 
 **`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
 
@@ -338,6 +342,8 @@ Run the reproducer against the current nightly binary already on disk and confir
 After Step 4 implements the fix, build a local debug binary with `zig build` and re-run the reproducer against `./zig-out/bin/lightpanda` to confirm exit 0 (bug fixed). This is the most direct end-to-end signal — it exercises the fix through the same CDP surface the maintainer will use to verify the patch. If the unit test passes but the reproducer still exits 1, the fix is incomplete (often: the test exercises an internal helper but the CDP dispatch path was missed).
 
 ## Step 7: File the issue first
+
+**Compat/design questions get a different close to the flow.** When correct behavior is genuinely contested — spec says X, Chrome ships Y (A50's stream bodies, A53's coordinate flooring) — the issue lays out both options with empirical control data (probe the real Chrome via `agent-browser` on the same fixture page; pin the exact operation with edge values, e.g. negatives distinguish floor from round) and explicitly asks the maintainer to pick. Default: stop there, no PR (A50 precedent). Exception: when one option is clearly dominant — established multi-engine consensus plus upstream's own direction (e.g. they're actively chasing WPT parity in the same area) — ship the PR same-day implementing it, with a Notes section that names the tradeoff and offers the close-both-if-you-prefer-the-other-option exit (A53 precedent: #3258 + #3259). Never ship a PR that silently picks a side the issue framed as open.
 
 The issue is filed **before** the PR, even when both go up the same day. The PR will close it via `Closes #<n>`. Filing the issue first gives the maintainer a place to comment on approach if they disagree, and gives the bug a permanent searchable record independent of any single PR's life.
 
