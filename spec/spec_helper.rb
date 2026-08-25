@@ -120,18 +120,14 @@ RSpec.configure do |config|
       # geometry-free. Matching "#drag_to should" excludes exactly the
       # legacy block.
       /node #drag_to should/,
-      # Two HTML5 drag examples that outrun the synthetic geometry (11/13
-      # pass, audited 2026-08-24 on nightly 8781):
-      # — clientX/Y values: the coordinates flow through correctly but are
-      #   fractional ("47.5,312.5") because synthetic rect centers land on
-      #   halves; Chrome's MouseEvent.clientX getter rounds to an integer,
-      #   which is what the spec's [1-9]\d* regex encodes. (The companion
-      #   "preserve clientX/Y" example passes — preservation is what it
-      #   asserts, not integerness.)
+      # One HTML5 drag example that outruns what Lightpanda can drive (12/13
+      # pass, audited 2026-08-25 on nightly 8796):
       # — SortableJS prevents default on mousedown, steering Selenium's
       #   auto-detect to the LEGACY (real mouse) path — which Selenium can
       #   drive and we cannot; its reordering also needs real hit-testing.
-      %r{node #drag_to HTML5 should set clientX/Y in dragover events},
+      # (A second skip — fractional clientX/Y in dragover events — was dropped
+      # when upstream #3259, build >= 8796, floored the MouseEvent coordinate
+      # getters Chrome-style. Needs a >= 8796 binary to pass.)
       /node #drag_to HTML5 should work with SortableJS/,
     ].freeze
 

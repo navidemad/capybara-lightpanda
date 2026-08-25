@@ -363,6 +363,14 @@ class TestApp
     HTML
   end
 
+  # 1x1 transparent PNG referenced by /lightpanda/links. Lightpanda only
+  # requests it when spawned with `--load-resources image` (the gem's
+  # `load_images: true`), which image_loading_test.rb asserts both ways.
+  get "/lightpanda/image.png" do
+    content_type "image/png"
+    Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+  end
+
   # -- Turbo-compatible form submission test --
   # Simulates Turbo intercepting a form submit event (prevents default, updates DOM).
   # Verifies that clicking a submit button fires the submit event with correct submitter.

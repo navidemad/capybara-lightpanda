@@ -47,9 +47,16 @@ module Capybara
       # a runaway confirm cancels the action and the spec can still pass. false
       # (default, Cuprite parity) warns on stderr; true raises
       # UnhandledModalError from the action that opened it.
+      # load_images: passes `--load-resources image` so `<img>` elements are
+      # fetched over the network (upstream #3230, build >= 8834). Off by
+      # default, matching Lightpanda's default of skipping image fetches
+      # entirely. When on, image requests ride the Network domain like any
+      # other — they show in `network.traffic` and count toward
+      # `wait_for_network_idle`. On builds < 8834 the flag is a fatal
+      # UnknownOption at boot, so only enable against binaries that have it.
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,
                     :window_size, :browser_path, :headless, :logger, :save_path,
-                    :raise_on_unhandled_modal
+                    :raise_on_unhandled_modal, :load_images
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -63,6 +70,7 @@ module Capybara
         @headless = options.fetch(:headless, true)
         @save_path = options[:save_path]
         @raise_on_unhandled_modal = options.fetch(:raise_on_unhandled_modal, false)
+        @load_images = options.fetch(:load_images, false)
         @ws_url = options[:ws_url]
         @logger = parse_logger(options[:logger])
       end
@@ -88,6 +96,7 @@ module Capybara
           logger: logger,
           save_path: save_path,
           raise_on_unhandled_modal: raise_on_unhandled_modal,
+          load_images: load_images,
         }
         h[:ws_url] = @ws_url if @ws_url
         h

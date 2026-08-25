@@ -119,6 +119,15 @@ describe Capybara::Lightpanda::Options do
       assert_equal true, Capybara::Lightpanda::Options.new(strict.to_h).raise_on_unhandled_modal
     end
 
+    # Off by default so the browser spends no bandwidth on images nothing
+    # asserts on; opting in must survive a to_h round-trip because Driver
+    # rebuilds Options from the hash.
+    it "defaults load_images to false and round-trips it" do
+      assert_equal false, Capybara::Lightpanda::Options.new.load_images
+      with_images = Capybara::Lightpanda::Options.new(load_images: true)
+      assert_equal true, Capybara::Lightpanda::Options.new(with_images.to_h).load_images
+    end
+
     it "excludes ws_url when not explicitly set" do
       options = Capybara::Lightpanda::Options.new
       refute_includes options.to_h.keys, :ws_url

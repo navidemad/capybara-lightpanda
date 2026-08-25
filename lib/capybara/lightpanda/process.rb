@@ -180,7 +180,8 @@ module Capybara
       # set, merged 2026-07-30) — a use-after-free in exactly the path
       # `Node#select_option`/`Node#set` on a <select> drives, i.e. a browser
       # crash surfacing as DeadBrowserError mid-spec.
-      # Build 8448 = the #3087 merge (6d824c88) — now the binding floor.
+      # Build 8448 = the #3087 merge (6d824c88) — the binding floor of the
+      # 2026-07-30 bump.
       # Subsumed by 8448, recorded so they are not re-derived: build 8298 made
       # Network.enable idempotent (the gem never hit it — the Notification is
       # per-BrowserContext and Network#enable's @enabled guard means one enable
@@ -191,7 +192,16 @@ module Capybara
       # `window_size` option. Note the override only reached
       # Page.getLayoutMetrics later (~build 8300); the gem does not depend on
       # that half, so it is NOT part of the floor.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8448")
+      #
+      # 2026-08-25 bump 8448 -> 8796: #3257 (HTMLElement.draggable IDL, build
+      # 8793) and #3259 (MouseEvent coordinate getters floor to integers
+      # Chrome-style, build 8796; PointerEvent stays fractional). The floor
+      # guarantees native `.draggable`, so the drag scripts in node.rb read it
+      # verbatim — the `_lightpanda.isDraggable` polyfill was retired with
+      # this bump — and drag events carry integer clientX/Y (the shared spec
+      # asserting that runs un-skipped). Build 8796 = the #3259 merge
+      # (341a01570), which is also the 2026-08-25 nightly cut.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8796")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -200,15 +210,21 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor: 0.3.7 is build 8671, well past the #3087 merge (8448)
-      # this floor exists for. (0.3.6 is only 8318 — it predates the optgroup
-      # fix and everything after it, which is why this pin had to move.)
+      # nightly floor. As of 2026-08-25 NO published release clears the 8796
+      # floor — 0.3.7 (build 8671) predates the draggable-IDL and
+      # coordinate-flooring fixes the floor exists for — so this pin names the
+      # NEXT release. 0.3.8 is not tagged yet; any future tag is cut from a
+      # trunk already past build 8834, so it clears the floor by construction.
+      # Until upstream tags it, the release channel is deliberately unusable
+      # (nightly-only), reported with the standard too-old error. When 0.3.8
+      # ships: verify `git rev-list --count 0.3.8` >= 8796 and update the
+      # lockstep table in process_test.rb.
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("0.3.7")
+      MINIMUM_RELEASE = Gem::Version.new("0.3.8")
 
       attr_reader :pid, :ws_url, :version, :nightly_build, :release
 
@@ -371,6 +387,12 @@ module Capybara
           "--cdp-max-message-size",
           (100 * 1024 * 1024).to_s,
         ]
+        # Opt-in image fetching (upstream #3230, build >= 8834). Deliberately
+        # NOT always-on like --enable-external-stylesheets: images never feed
+        # the DOM predicates, so the default spends no bandwidth on them. On
+        # builds < 8834 the flag is a fatal UnknownOption at boot — see
+        # Options#load_images.
+        base.push("--load-resources", "image") if @options.load_images
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
       end
