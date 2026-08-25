@@ -371,6 +371,12 @@ module Capybara
           "--cdp-max-message-size",
           (100 * 1024 * 1024).to_s,
         ]
+        # Opt-in image fetching (upstream #3230, build >= 8834). Deliberately
+        # NOT always-on like --enable-external-stylesheets: images never feed
+        # the DOM predicates, so the default spends no bandwidth on them. On
+        # builds < 8834 the flag is a fatal UnknownOption at boot — see
+        # Options#load_images.
+        base.push("--load-resources", "image") if @options.load_images
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
       end
