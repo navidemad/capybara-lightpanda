@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0] - 2026-08-25
+
+> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8796 (2026-08-25 or newer). **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor and is now refused, so version pinning is unavailable until Lightpanda ships its next release — CI runs on the rolling nightly in the meantime.
+
+### Added
+
+- **Drag and drop between elements.** `element.drag_to(target)` performs an HTML5 drag — `dragstart` through `drop` with a shared `DataTransfer`, so dropzone pages and `setData`/`getData` handlers behave as in Chrome, and drag events carry whole-number coordinates like Chrome's. Libraries that only respond to real mouse movement (SortableJS's fallback mode) remain out of reach — there is still no layout engine to drive a pointer through.
+- **`load_images` driver option.** `load_images: true` makes the browser fetch `<img>` sources over the network, so image requests appear in `network.traffic` and are counted by `wait_for_network_idle` — useful for suites that assert on image traffic. Off by default (images are skipped entirely, as before). Needs a nightly from 2026-08-26 onward.
+- **Screenshots show the page.** `save_screenshot` — and the automatic failure screenshots capybara-screenshot takes — now produce a real rendering of the page's content instead of a fixed placeholder image. It is a text-layout rendering, useful for seeing what the DOM held at failure time; pixel-accurate visual regression still needs a full browser.
+
+### Removed
+
+- The internal workaround for reading an element's `draggable` state is gone now that the browser answers natively — no change required on your end.
+
 ## [0.10.0] - 2026-08-19
 
 > **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8448 **or a tagged release ≥ 0.3.7**. The driver refuses to start below either floor and tells you which version it found. If you pin the browser (see below), pin `0.3.7` or newer.
