@@ -95,7 +95,27 @@ jobs:
         id: floor
         run: |
           echo "release=$(grep 'MINIMUM_RELEASE = Gem::Version' lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')" >> "$GITHUB_OUTPUT"
+      - name: Check the pinned release is published upstream
+        id: published
+        env:
+          RELEASE: ${{ steps.floor.outputs.release }}
+        # MINIMUM_RELEASE can be pre-pinned to a release upstream has not
+        # tagged yet (the 2026-08-25 floor bump to 8796 pinned 0.3.8 before it
+        # existed — the release channel is deliberately nightly-only until it
+        # ships). Skip the remaining steps instead of failing; the day the tag
+        # appears, this job resumes guarding the release channel unchanged.
+        run: |
+          set -euo pipefail
+          code=$(curl -sIL -o /dev/null -w '%{http_code}' \
+            "https://github.com/lightpanda-io/browser/releases/download/$RELEASE/lightpanda-x86_64-linux")
+          if [ "$code" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release $RELEASE is not published upstream yet (HTTP $code) — release-channel guard skipped until it ships."
+          fi
       - name: Cache the pinned release binary
+        if: steps.published.outputs.published == 'true'
         uses: actions/cache@v6
         with:
           # Keyed by version alone — a tagged release is immutable, so unlike the
@@ -103,6 +123,7 @@ jobs:
           path: ~/.cache/lightpanda-release
           key: lightpanda-release-${{ runner.os }}-${{ steps.floor.outputs.release }}
       - name: Download the pinned release
+        if: steps.published.outputs.published == 'true'
         env:
           RELEASE: ${{ steps.floor.outputs.release }}
         run: |
@@ -119,6 +140,7 @@ jobs:
           fi
           echo "LIGHTPANDA_BIN=$BIN" >> "$GITHUB_ENV"
       - name: Assert the binary reports the pinned release
+        if: steps.published.outputs.published == 'true'
         # Catches a mis-tagged or redirected asset before the suite blames the driver.
         run: |
           set -euo pipefail
@@ -127,6 +149,7 @@ jobs:
           [ "$actual" = "${{ steps.floor.outputs.release }}" ] || {
             echo "Expected ${{ steps.floor.outputs.release }}, got $actual" >&2; exit 1; }
       - name: Driver suite against the pinned release
+        if: steps.published.outputs.published == 'true'
         run: bundle exec rake test
 
   capybara-specs:
