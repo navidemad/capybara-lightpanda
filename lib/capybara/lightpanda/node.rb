@@ -695,7 +695,7 @@ module Capybara
           if (prevented === true || prevented === null) return true;
           var el = this;
           do {
-            if (_lightpanda.isDraggable(el)) return false;
+            if (el.draggable) return false;
           } while ((el = el.parentElement));
           return true;
         }
@@ -706,12 +706,13 @@ module Capybara
       # the same source Cuprite's #315 drag.js ports — kept close to ease
       # future syncs. Upstream quirks preserved deliberately: `rectPt.top` in
       # pointOnRect (DOMPoint has no .top, that branch just falls through), the
-      # undeclared `key` loop variable, and `callback.call(true)`. One
-      # deliberate deviation: `source.draggable` reads go through
-      # `_lightpanda.isDraggable` — Lightpanda doesn't implement the IDL
-      # property (see predicates.js). Coordinates come from
-      # getBoundingClientRect, which Lightpanda synthesizes without layout —
-      # dropzones reading clientX/Y get plausible-but-synthetic numbers.
+      # undeclared `key` loop variable, and `callback.call(true)`. The
+      # `source.draggable` reads are native — the HTMLElement.draggable IDL
+      # shipped upstream in #3257 (build 8793, guaranteed by the floor; the
+      # `_lightpanda.isDraggable` polyfill was retired with that bump).
+      # Coordinates come from getBoundingClientRect, which Lightpanda
+      # synthesizes without layout — dropzones reading clientX/Y get
+      # plausible-but-synthetic (integer since #3259) numbers.
       HTML5_DRAG_JS = <<~JS
         function rectCenter(rect){
           return new DOMPoint(
@@ -805,7 +806,7 @@ module Capybara
         var dt = new DataTransfer();
         var opts = { cancelable: true, bubbles: true, dataTransfer: dt };
 
-        while (source && !_lightpanda.isDraggable(source)) {
+        while (source && !source.draggable) {
           source = source.parentElement;
         }
 

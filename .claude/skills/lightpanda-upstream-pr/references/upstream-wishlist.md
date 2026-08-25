@@ -293,7 +293,7 @@ Three independent issues:
 - **Want**: per WHATWG HTML §draggable: getter — `"true"` → true, `"false"` → false, else default (`<img>`, `<a>` with `href` → true, otherwise false); setter reflects to the attribute. No layout dependency; same calibre as the GPC/console-type micro-fixes.
 - **Upstream issue**: #3255, **Upstream PR**: #3257 — **MERGED 2026-08-25, build 8793** (merged 00:17 UTC, before the nightly cut, so the 2026-08-25 nightly carries it). Fix mirrors the `hidden`/`translate`/`tabIndex` reflection pattern in `Html.zig`; fixture added to `tests/element/html/htmlelement-props.html`. Deliberately matches Chrome (not the spec letter) on `<object>`-representing-an-image: auto default stays false.
 - **Gem workaround**: SHIPPED — `_lightpanda.isDraggable` in `javascripts/predicates.js` (native-first: `typeof el.draggable === 'boolean'` defers to the browser the day this lands), used by `Node#drag_to`'s `LEGACY_DRAG_CHECK_JS` and `HTML5_DRAG_JS` in place of raw `.draggable` reads. Bun-tested in `test/js/predicates.test.ts`.
-- **Drop-on-fix**: nothing must be deleted (the native-first guard makes the polyfill inert on ≥8793); optionally restore the verbatim `source.draggable` reads in `node.rb`'s drag scripts and drop `isDraggable` + its tests **once the gem floor clears 8793** — until then the polyfill covers floor builds (8448–8792).
+- **Drop-on-fix**: DONE 2026-08-25 — the gem floor moved to 8796, `node.rb`'s drag scripts read `source.draggable` verbatim again, and `isDraggable` + its Bun tests were deleted (`predicates.js`, `attach.js`, `test/js/predicates.test.ts`).
 
 ---
 
