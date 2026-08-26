@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875. That build is *newer than the 2026-08-26 nightly* (8855), so it arrives with the next nightly cut — update the browser after that publishes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
+
+### Added
+
+- **The keyboard activates things.** Pressing Enter on a button, link or submit input — and Space on a button, checkbox or radio — now does what it does in a real browser: the control activates, forms submit, checkboxes toggle. Previously `send_keys(:enter)` and `send_keys(:space)` were silently ignored on those controls, so keyboard-accessibility specs passed by doing nothing. Printable keys also emit `keypress` now, and a handler that cancels `keypress` correctly suppresses Enter's implicit form submission.
+- **A closed `<dialog>` is properly hidden.** Text and controls inside a `<dialog>` that has never been opened no longer match Capybara's default visibility filter. Suites using the `<dialog>`-as-confirmation idiom (Turbo, Spree 5's admin) could previously "find" and click a confirm button that was not on screen — passing where Chrome would have raised `ElementNotFound`.
+- **Uppercase inline styles hide elements.** `style="display: NONE"` and `style="visibility: HIDDEN"` are now treated as hidden, matching the CSS spec's case-insensitive keywords. Legacy templates and CMS output that upcase keywords no longer read as visible.
+- **`ws_url:` accepts `localhost`.** Connecting to an externally-managed Lightpanda over `ws://localhost:PORT/` works; previously only an IP literal such as `ws://127.0.0.1:PORT/` was accepted by the browser's handshake.
+
 ## [0.11.0] - 2026-08-25
 
 > **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8796 (2026-08-25 or newer). **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor and is now refused, so version pinning is unavailable until Lightpanda ships its next release — CI runs on the rolling nightly in the meantime.

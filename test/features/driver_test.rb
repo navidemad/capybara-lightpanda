@@ -561,6 +561,20 @@ describe Capybara::Lightpanda::Driver do
       refute_predicate session.find(:css, "#hidden-collapse-inline", visible: false), :visible?
     end
 
+    # CSS keywords are ASCII case-insensitive per spec, but Lightpanda compared
+    # inline declaration values byte-for-byte until #3270 (build >= 8857, in
+    # the floor) — so `style="display: NONE"` read as *visible* and Capybara
+    # would happily click through it. Uppercase inline styles are not exotic:
+    # they come out of legacy templates, CMS WYSIWYG output, and anything that
+    # round-trips style through a serializer that upcases keywords.
+    it "treats an UPPERCASE inline display keyword as not visible" do
+      refute_predicate session.find(:css, "#hidden-display-upper", visible: false), :visible?
+    end
+
+    it "treats an UPPERCASE inline visibility keyword as not visible" do
+      refute_predicate session.find(:css, "#hidden-visibility-upper", visible: false), :visible?
+    end
+
     it "treats the HTML `hidden` attribute as not visible" do
       refute_predicate session.find(:css, "#hidden-attr", visible: false), :visible?
     end

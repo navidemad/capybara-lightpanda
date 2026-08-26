@@ -123,8 +123,8 @@ describe Capybara::Lightpanda::Process do
     describe "with load_images" do
       let(:options) { Capybara::Lightpanda::Options.new(load_images: true) }
 
-      # The flag must be absent by default (a fatal UnknownOption on
-      # builds < 8834) and present as two argv entries when opted in —
+      # The flag must be absent by default and present as two argv entries
+      # when opted in —
       # "--load-resources image" as one string would not parse.
       it "appends --load-resources image" do
         assert_equal %w[--load-resources image], process.send(:build_args).last(2)
@@ -213,10 +213,10 @@ describe Capybara::Lightpanda::Process do
         Gem::Version.new("0.3.5") => Gem::Version.new("8165"),
         Gem::Version.new("0.3.6") => Gem::Version.new("8318"),
         Gem::Version.new("0.3.7") => Gem::Version.new("8671"),
-        # 0.3.8 is anticipated, not yet tagged (2026-08-25). Lower bound:
-        # any future release is cut from a trunk past main 8834, above the
-        # 8796 floor. Replace with `git rev-list --count 0.3.8` on release.
-        Gem::Version.new("0.3.8") => Gem::Version.new("8834"),
+        # 0.3.8 is anticipated, not yet tagged (2026-08-26). Lower bound:
+        # any future release is cut from a trunk past main 8886, above the
+        # 8875 floor. Replace with `git rev-list --count 0.3.8` on release.
+        Gem::Version.new("0.3.8") => Gem::Version.new("8886"),
       }
       build = release_builds[release_floor]
 

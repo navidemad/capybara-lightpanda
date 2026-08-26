@@ -201,7 +201,37 @@ module Capybara
       # this bump — and drag events carry integer clientX/Y (the shared spec
       # asserting that runs un-skipped). Build 8796 = the #3259 merge
       # (341a01570), which is also the 2026-08-25 nightly cut.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8796")
+      #
+      # 2026-08-26 bump 8796 -> 8875, four fixes the gem now asserts on:
+      #   #3264 (8842) CDP Input.dispatchKeyEvent builds a *trusted*
+      #     KeyboardEvent, so frame/user_input.zig fires `keypress` on
+      #     printable/Enter keydowns and synthesizes a trusted PointerEvent
+      #     click for Enter on <button>/<a href>/input[submit|button|reset|
+      #     image] and Space-keyup on those plus checkbox/radio. That click is
+      #     a real activation event (PointerEvent.Proto = MouseEvent), so
+      #     Node#send_keys(:enter) submits/navigates and send_keys(:space)
+      #     toggles a checkbox — both were no-ops below 8842. No gem code
+      #     drives it; Keyboard never sends CDP `type: "char"`, so nothing
+      #     double-fires. Pinned by test/features/keyboard_activation_test.rb.
+      #   #3269 (8868) adds `dialog:not([open]) { display: none }` to the
+      #     UA-stylesheet truth checkVisibility() and getComputedStyle().display
+      #     share, so a closed <dialog> AND its subtree read as non-visible.
+      #     Below 8868 Capybara matched text and controls inside a never-opened
+      #     dialog. Pinned by test/features/upstream_bugs_test.rb (Bug #4).
+      #   #3270 (8857) inline-style keyword matching in checkVisibility /
+      #     getComputedStyle is case-insensitive for display / visibility /
+      #     opacity / pointer-events, so `style="display: NONE"` hides.
+      #     Feeds _lightpanda.isVisible. Pinned by visibility_keywords_test.rb.
+      #   #3256 (8875) the CDP WS handshake accepts the exact lowercase
+      #     `Host: localhost:<port>` form (bare `localhost`, `LOCALHOST:<port>`
+      #     and `localhost.evil.com:<port>` still 403). Below 8875 only an IP
+      #     literal passed, so a user-supplied `ws_url:` had to say 127.0.0.1.
+      #     Pinned by test/features/ws_url_host_test.rb.
+      # Build 8875 = the #3256 merge (f2169836e). NOTE: this floor leads the
+      # nightly channel — the 2026-08-26 nightly is 8855 — so it lands with the
+      # next nightly cut. #3267 (8880, Authorization stripped on cross-origin
+      # redirects) arrives with the same floor but drives nothing gem-side.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8875")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -210,15 +240,15 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. As of 2026-08-25 NO published release clears the 8796
-      # floor — 0.3.7 (build 8671) predates the draggable-IDL and
-      # coordinate-flooring fixes the floor exists for — so this pin names the
-      # NEXT release. 0.3.8 is not tagged yet; any future tag is cut from a
-      # trunk already past build 8834, so it clears the floor by construction.
-      # Until upstream tags it, the release channel is deliberately unusable
-      # (nightly-only), reported with the standard too-old error. When 0.3.8
-      # ships: verify `git rev-list --count 0.3.8` >= 8796 and update the
-      # lockstep table in process_test.rb.
+      # nightly floor. As of 2026-08-26 NO published release clears the 8875
+      # floor — 0.3.7 (build 8671) predates every fix the floor exists for — so
+      # this pin names the NEXT release. 0.3.8 is not tagged yet; any future tag
+      # is cut from a trunk already past build 8886, so it clears the floor by
+      # construction. Until upstream tags it, the release channel is
+      # deliberately unusable (nightly-only), reported with the standard
+      # too-old error. When 0.3.8 ships: verify
+      # `git rev-list --count 0.3.8` >= 8875 and update the lockstep table in
+      # process_test.rb.
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the

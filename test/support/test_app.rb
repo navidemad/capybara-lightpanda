@@ -210,6 +210,8 @@ class TestApp
         <body>
           <div id="visible">I am visible</div>
           <div id="hidden-display-inline" style="display: none">inline display none</div>
+          <div id="hidden-display-upper" style="display: NONE">upper display none</div>
+          <div id="hidden-visibility-upper" style="visibility: HIDDEN">upper visibility hidden</div>
           <div id="hidden-visibility-inline" style="visibility: hidden">inline visibility hidden</div>
           <div id="hidden-collapse-inline" style="visibility: collapse">inline visibility collapse</div>
           <div id="hidden-display-class">class display none</div>
@@ -945,6 +947,47 @@ class TestApp
         <body>
           <a id="desktop-cta" href="/lightpanda/other">Get started</a>
           <a id="mobile-cta" href="/lightpanda/other">Get started</a>
+        </body>
+      </html>
+    HTML
+  end
+  # -- Keyboard activation (upstream #3264, build >= 8842) --
+  # Every control here is driven through CDP Input.dispatchKeyEvent, which
+  # builds a *trusted* KeyboardEvent — the precondition for the browser's
+  # keypress/activation synthesis. The handlers only log, so the assertions
+  # stay independent of #3179 (anchor default action), which is still open.
+  get "/lightpanda/keyboard_activation" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Keyboard Activation</title></head>
+        <body>
+          <button type="button" id="btn">Press me</button>
+          <a id="link" href="/lightpanda/other">A link</a>
+          <input type="checkbox" id="cb">
+          <form id="f" action="/lightpanda/other" method="get">
+            <input type="text" id="field" name="q" value="hello">
+            <input type="submit" id="submit-btn" value="Go">
+          </form>
+          <div id="log"></div>
+          <div id="keypress-log"></div>
+          <script>
+            var log = document.getElementById('log');
+            function record(name) { log.textContent = name; }
+            document.getElementById('btn').addEventListener('click', function() {
+              record('button-clicked');
+            });
+            document.getElementById('link').addEventListener('click', function(e) {
+              // Cancel the default action: this example asserts that the
+              // activation event reached the anchor, not that Lightpanda
+              // navigates (see upstream #3179).
+              e.preventDefault();
+              record('link-clicked');
+            });
+            document.getElementById('field').addEventListener('keypress', function(e) {
+              document.getElementById('keypress-log').textContent = 'keypress:' + e.key;
+            });
+          </script>
         </body>
       </html>
     HTML

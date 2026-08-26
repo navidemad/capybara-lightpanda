@@ -92,6 +92,30 @@ describe "Upstream Lightpanda bug repros & workarounds" do
       assert_equal ["done"], events, "expected the polyfilled close() to dispatch a 'close' event"
     end
 
+    # #3269 (build >= 8868, in the floor) added
+    # `dialog:not([open]) { display: none }` to the UA-stylesheet truth that
+    # `checkVisibility()` and `getComputedStyle().display` share — so a closed
+    # <dialog> AND its whole subtree finally read as non-visible.
+    #
+    # Below 8868 this was a false-*positive* machine: Capybara's default
+    # `:visible` filter matched text and controls inside a dialog the user had
+    # never opened, so a spec could "find" a confirmation button that was not
+    # on screen, click it, and pass — while the same code against Chrome
+    # raised ElementNotFound. The <dialog>-as-confirm idiom (Turbo, Spree 5's
+    # admin destroy flow) puts every destructive action behind exactly this.
+    it "hides a closed <dialog> and its subtree from visibility filtering" do
+      session.visit("/lightpanda/upstream/dialog")
+
+      session.assert_no_text("I am modal")
+      session.assert_no_selector(:css, "#dialog-close")
+      refute_predicate session.find(:css, "#d", visible: false), :visible?
+
+      session.find(:css, "#open-modal").click
+
+      session.assert_text("I am modal")
+      session.assert_selector(:css, "#dialog-close")
+    end
+
     it "showModal on an already-open dialog throws InvalidStateError per spec" do
       session.visit("/lightpanda/upstream/dialog")
       session.find(:css, "#open-modal").click
