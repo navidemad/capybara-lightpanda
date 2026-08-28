@@ -425,7 +425,7 @@ module Capybara
           "info",
           # External stylesheet fetch (PR #2487, build >= 6353 — enforced by the
           # floor). Always on so linked CSS contributes to checkVisibility /
-          # getComputedStyle; see .claude/rules/lightpanda-io.md limitation #6.
+          # getComputedStyle; see .claude/rules/lightpanda-io.md limitation #5.
           "--enable-external-stylesheets",
           # Raise the inbound CDP WebSocket message cap from Lightpanda's 1 MiB
           # default (Config.zig `cdp_max_message_size`) to 100 MiB, matching
