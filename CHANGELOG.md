@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- **Iframes keep working when the browser stops loading them by default.** Lightpanda build 8946 turns off `<iframe>` and Web Worker loading unless asked: the parser still puts the iframe in the DOM, but no frame is ever created, so `within_frame` and `switch_to_frame` find nothing and report no cause. The driver now asks for both on every session, which holds today's behavior across the change and needs no newer browser — the request is understood by every build the gem supports. Nothing to configure. If you run the rolling nightly, take this before your browser passes 8946.
+
 - **A browser you manage yourself is version-checked like one the gem spawns.** `ws_url:` was the only way into the driver that skipped the version floor: a Lightpanda too old for the gem connected happily, then failed further along as a CDP error naming neither the version nor the option that let it through. The driver now reads the version over CDP at connect and refuses anything below the floor, with the same message the spawn path produces. An endpoint that cannot report a version at all — a Lightpanda older than the command, or a Chrome pointed at by mistake — is refused for the same reason. `page.driver.browser.version`, `.nightly_build` and `.release` report the browser on this path now instead of returning `nil`.
 
 ## [0.11.0] - 2026-08-25

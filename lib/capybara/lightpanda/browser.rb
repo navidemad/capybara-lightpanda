@@ -159,6 +159,9 @@ module Capybara
         attach_result = @client.command("Target.attachToTarget", { targetId: @target_id, flatten: true })
         @session_id = attach_result["sessionId"]
 
+        # Must precede the first navigation: sub-resource loading is a
+        # per-BrowserContext setting read while the document loads.
+        configure_loading
         @turbo_event.set
         subscribe_to_console_logs
         subscribe_to_console_capture
@@ -504,6 +507,34 @@ module Capybara
               :enable_page_events
 
       private
+
+      # Keep iframes and workers loading.
+      #
+      # Upstream #3305 (build 8946) turned `Config.LoadResources` into a
+      # four-field struct defaulting every sub-resource to false, so
+      # `Frame.iframeAddedCallback` now returns early unless `iframe` is set:
+      # the parser still registers the `<iframe>` in the DOM, but no child
+      # frame is ever created. That silently breaks `switch_to_frame` and
+      # Capybara's `within_frame` — core driver API, not an optional extra —
+      # and there is no CLI opt-in the gem can use below 8946, because the
+      # `--load-resources` *value* `iframe` only parses from that build.
+      #
+      # The `subFrame`/`worker` params predate #3305 and simply write a
+      # different field after it, which makes this the one form that spans the
+      # whole supported range: a no-op below 8946 where both already defaulted
+      # on, load-bearing above it, and no MINIMUM_NIGHTLY_BUILD bump either way.
+      #
+      # Workers are included to hold the gem's behavior still across the flip
+      # rather than to satisfy a feature we ship: a worker that silently never
+      # runs is the same debugging trap as an iframe that silently never loads.
+      #
+      # Not rescued on purpose. LP.configureLoading predates the floor by a
+      # wide margin, so a failure here means the endpoint is not a Lightpanda
+      # we understand, and swallowing it would restore the exact silence this
+      # call exists to prevent.
+      def configure_loading
+        page_command("LP.configureLoading", subFrame: true, worker: true)
+      end
 
       def register_auto_scripts
         page_command("Page.addScriptToEvaluateOnNewDocument", source: AutoScripts::JS)
