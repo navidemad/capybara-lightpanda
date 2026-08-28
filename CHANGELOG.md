@@ -11,6 +11,10 @@
 - **Uppercase inline styles hide elements.** `style="display: NONE"` and `style="visibility: HIDDEN"` are now treated as hidden, matching the CSS spec's case-insensitive keywords. Legacy templates and CMS output that upcase keywords no longer read as visible.
 - **`ws_url:` accepts `localhost`.** Connecting to an externally-managed Lightpanda over `ws://localhost:PORT/` works; previously only an IP literal such as `ws://127.0.0.1:PORT/` was accepted by the browser's handshake.
 
+### Fixed
+
+- **A browser you manage yourself is version-checked like one the gem spawns.** `ws_url:` was the only way into the driver that skipped the version floor: a Lightpanda too old for the gem connected happily, then failed further along as a CDP error naming neither the version nor the option that let it through. The driver now reads the version over CDP at connect and refuses anything below the floor, with the same message the spawn path produces. An endpoint that cannot report a version at all — a Lightpanda older than the command, or a Chrome pointed at by mistake — is refused for the same reason. `page.driver.browser.version`, `.nightly_build` and `.release` report the browser on this path now instead of returning `nil`.
+
 ## [0.11.0] - 2026-08-25
 
 > **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8796 (2026-08-25 or newer). **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor and is now refused, so version pinning is unavailable until Lightpanda ships its next release — CI runs on the rolling nightly in the meantime.

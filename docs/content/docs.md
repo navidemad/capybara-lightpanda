@@ -85,6 +85,7 @@ end
 | `handshake_timeout` | `5` | Budget for the WebSocket TCP + Upgrade handshake alone. Separate from `timeout` because a handshake either lands in a few hundred ms or never |
 | `browser_path` | `nil` | Path to a binary **you** manage — used unconditionally. When `nil` the gem downloads and refreshes its own copy under `~/.cache/lightpanda/`, falling back to a `lightpanda` on `PATH` while that cache is cold or stale (see [quick start](#install)) |
 | `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
+| `ws_url` | `nil` | Connect to a Lightpanda you started yourself rather than spawning one — see [external browser](#external-browser). `host`, `port` and `browser_path` are unused when it is set |
 | `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
 | `logger` | `nil` | An IO (or `Capybara::Lightpanda::Logger`) that receives raw CDP traffic. `LIGHTPANDA_DEBUG=1` wires `$stdout` |
 | `raise_on_unhandled_modal` | `false` | A JS dialog that opens with no `accept_*`/`dismiss_*` wrapper in flight is resolved by Lightpanda's default (confirm → cancel, prompt → `null`, alert → dismissed), so a runaway `confirm` cancels the action and the spec still passes. `false` prints a warning naming the dialog text; `true` raises `Capybara::Lightpanda::UnhandledModalError` from the click or `visit` that opened it |
@@ -98,23 +99,35 @@ the browser can change under a suite that didn't change a single line, and
 nightly builds are not archived, so you cannot go back to the one that was green
 yesterday.
 
-For any shared or CI environment, pin a tagged release:
+> **No tagged release clears the floor yet.** The driver requires nightly build
+> ≥ 8875 or release ≥ 0.3.8, and 0.3.8 is not tagged — the newest release, 0.3.7,
+> is build 8671. Until upstream cuts the next one, `required_version` has nothing
+> valid to point at, and pinning a release below the floor fails at boot with a
+> `BinaryError` naming both versions. Vendor a nightly instead (below).
+
+For any shared or CI environment, pin a tagged release once one qualifies:
 
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "0.3.7"   # a tag from lightpanda-io/browser/releases
+  binary.required_version = "0.3.8"   # a tag from lightpanda-io/browser/releases
 end
 ```
 
 A pin is downloaded once into its own version-scoped file
-(`~/.cache/lightpanda/lightpanda-0.3.7`), is never refreshed on age, and is
+(`~/.cache/lightpanda/lightpanda-0.3.8`), is never refreshed on age, and is
 never satisfied by a nightly left over from an earlier run. Cache that directory
 in CI and the browser becomes as reproducible as your `Gemfile.lock`.
 
-The driver enforces a floor on both channels and refuses to start below it —
-nightly build ≥ 8448, or release ≥ 0.3.7. The error names the version it found
-and how to move off it.
+Meanwhile the same reproducibility is available one step down: download a
+nightly once, keep it as a build artifact or bake it into your CI image, and
+point `browser_path` at it. The gem never downloads when that is set, so the
+browser changes only when you replace the artifact.
+
+The driver enforces the floor on both channels and refuses to start below it —
+nightly build ≥ 8875, or release ≥ 0.3.8. The error names the version it found
+and how to move off it. The check runs on every path into the driver, including
+a browser you started yourself ([external browser](#external-browser)).
 
 Two supporting knobs:
 
@@ -277,6 +290,52 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   end
 end
 ```
+
+### External or shared browser { #external-browser }
+
+By default the driver spawns a Lightpanda per Capybara session and shuts it down
+at exit. `ws_url:` points it at one you manage instead — a sidecar container, a
+`docker-compose` service, or a single browser kept warm across runs:
+
+```ruby
+Capybara.register_driver :lightpanda do |app|
+  Capybara::Lightpanda::Driver.new(app, ws_url: ENV.fetch("LIGHTPANDA_WS_URL"))
+end
+```
+
+```bash
+lightpanda serve --host 127.0.0.1 --port 9222 \
+  --enable-external-stylesheets --cdp-max-message-size 104857600 &
+LIGHTPANDA_WS_URL=ws://127.0.0.1:9222/ bundle exec rspec
+```
+
+Three things change once the browser is yours:
+
+- **The flags are yours too.** Match what the spawn path passes, or the browser
+  behaves differently for reasons nothing reports.
+  `--enable-external-stylesheets` fetches `<link rel="stylesheet">` so linked CSS
+  counts toward visibility; without it `visible?` quietly starts answering
+  something else. `--cdp-max-message-size` lifts the 1 MiB default that a large
+  `execute_script` payload — jQuery plus plugins, instrumentation bundles —
+  exceeds, and an oversized message kills the whole CDP connection with no
+  protocol error to read. Add `--load-resources image` if the suite sets
+  `load_images: true`.
+- **So is shutdown.** The driver closes its CDP connection at exit but never
+  signals a process it did not start.
+- **The version floor still applies.** The driver asks the endpoint for its
+  version over CDP and refuses one below the floor, exactly as it refuses an old
+  binary it spawned — so a stale sidecar image fails at connect, naming the
+  version, instead of halfway through the suite as a missing-feature error.
+
+`host` and `port` are ignored when `ws_url` is set; the URL carries both. The
+browser accepts `127.0.0.1` and the exact lowercase form `localhost:<port>` in
+the WebSocket handshake, and rejects other hostnames.
+
+One browser per parallel worker stays the arrangement the suite tests. Sharing a
+single server across workers should hold — every session gets its own
+`BrowserContext`, which is the boundary cookies, storage and targets live in —
+but nothing here covers it, so prove it on your own workload before relying on
+it.
 
 ## What works { #what-works }
 

@@ -256,6 +256,56 @@ module Capybara
       # silently accept a binary the nightly channel rejects.
       MINIMUM_RELEASE = Gem::Version.new("0.3.8")
 
+      class << self
+        # `lightpanda version` prints one of two shapes, and the gem supports
+        # both so a suite can either track nightly or pin a reproducible
+        # release:
+        #
+        #   "1.0.0-nightly.8285+de85a51d"  rolling nightly (also "dev.NNNN" for
+        #                                  a locally compiled tree — same
+        #                                  `git rev-list --count HEAD` counter,
+        #                                  different label). Checked against
+        #                                  MINIMUM_NIGHTLY_BUILD.
+        #   "0.3.5"                        a tagged release: bare semver, no
+        #                                  build metadata. Checked against
+        #                                  MINIMUM_RELEASE.
+        #
+        # The release form is matched anchored — a bare semver and nothing else
+        # — so a stray "1.2.3" inside some other string can never be mistaken
+        # for a release. Anything that matches neither shape stays a hard
+        # failure: a version we cannot identify is never assumed to be new
+        # enough.
+        #
+        # Lives on the class, not the instance, because there are two ways to
+        # learn a version and only one of them involves a Process: the spawn
+        # path shells out to the binary, while an externally-managed browser
+        # (`ws_url:`) is asked over CDP. `LP.version` returns the identical
+        # string the CLI prints, so both channels share this one parser rather
+        # than drifting apart — the drift being how `ws_url:` shipped with no
+        # floor check at all.
+        #
+        # Returns [version, nightly_build, release]; exactly one of the latter
+        # two is non-nil. The update hint is yielded rather than passed so the
+        # caller's hint-building only runs on the failure path.
+        def check_version!(raw)
+          version = raw.to_s.strip
+
+          if (build = version[/(?:nightly|dev)\.(\d+)/, 1])
+            nightly_build = Gem::Version.new(build)
+            return [version, nightly_build, nil] if nightly_build >= MINIMUM_NIGHTLY_BUILD
+          elsif (tag = version[/\A\d+\.\d+\.\d+\z/])
+            release = Gem::Version.new(tag)
+            return [version, nil, release] if release >= MINIMUM_RELEASE
+          end
+
+          raise BinaryError,
+                "Lightpanda #{version} is too old. " \
+                "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
+                "or release >= #{MINIMUM_RELEASE}. " \
+                "Update: #{yield}"
+        end
+      end
+
       attr_reader :pid, :ws_url, :version, :nightly_build, :release
 
       def initialize(options)
@@ -303,38 +353,12 @@ module Capybara
 
       private
 
-      # `lightpanda version` prints one of two shapes, and the gem supports both
-      # so a suite can either track nightly or pin a reproducible release:
-      #
-      #   "1.0.0-nightly.8285+de85a51d"  rolling nightly (also "dev.NNNN" for a
-      #                                  locally compiled tree — same
-      #                                  `git rev-list --count HEAD` counter,
-      #                                  different label). Checked against
-      #                                  MINIMUM_NIGHTLY_BUILD.
-      #   "0.3.5"                        a tagged release: bare semver, no build
-      #                                  metadata. Checked against MINIMUM_RELEASE.
-      #
-      # The release form is matched anchored — a bare semver and nothing else —
-      # so a stray "1.2.3" inside some other string can never be mistaken for a
-      # release. Anything that matches neither shape stays a hard failure: a
-      # binary we cannot identify is never assumed to be new enough.
+      # Shells the floor check out to the binary. The ws_url path can't — see
+      # Browser#check_remote_version, which feeds the same parser from CDP.
       def check_minimum_version(binary_path)
         stdout, = Open3.capture3(binary_path, "version")
-        @version = stdout.strip
-
-        if (build = @version[/(?:nightly|dev)\.(\d+)/, 1])
-          @nightly_build = Gem::Version.new(build)
-          return if @nightly_build >= MINIMUM_NIGHTLY_BUILD
-        elsif (tag = @version[/\A\d+\.\d+\.\d+\z/])
-          @release = Gem::Version.new(tag)
-          return if @release >= MINIMUM_RELEASE
-        end
-
-        raise BinaryError,
-              "Lightpanda #{@version} is too old. " \
-              "This gem requires nightly build >= #{MINIMUM_NIGHTLY_BUILD} " \
-              "or release >= #{MINIMUM_RELEASE}. " \
-              "Update: #{Binary.update_hint(binary_path)}"
+        @version, @nightly_build, @release =
+          self.class.check_version!(stdout) { Binary.update_hint(binary_path) }
       rescue Errno::ENOENT
         # Binary not runnable — let attempt_start handle it
       end
