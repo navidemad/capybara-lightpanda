@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875. That build is *newer than the 2026-08-26 nightly* (8855), so it arrives with the next nightly cut — update the browser after that publishes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
+> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875, and the rolling `nightly` tag now carries it (8925 as of 2026-08-28), so updating the browser is all it takes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
 
 ### Added
 
