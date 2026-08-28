@@ -73,28 +73,34 @@ module Capybara
         end
       end
 
-      # Lightpanda binary version (e.g. "lightpanda 0.2.9 nightly.5267") and
-      # parsed nightly build number, captured at Process startup. nil when
-      # the gem is connecting to an externally-managed Lightpanda via ws_url.
+      # Lightpanda version string (e.g. "1.0.0-nightly.8925+a7bda0ea5") and its
+      # parsed build number. Learned from `lightpanda version` at Process
+      # startup on the spawn path, and from the CDP `LP.version` command when
+      # connecting to an externally-managed browser via ws_url — so these are
+      # populated either way, and a caller inspecting them does not have to
+      # know which path built the session.
       def version
-        @process&.version
+        @process&.version || @remote_version
       end
 
       # Set on the nightly/dev channel only; nil for a tagged release, which
       # carries no build counter. `release` is its mirror image — exactly one of
-      # the two is non-nil once the process has started.
+      # the two is non-nil once the session is up.
       def nightly_build
-        @process&.nightly_build
+        @process&.nightly_build || @remote_nightly_build
       end
 
       def release
-        @process&.release
+        @process&.release || @remote_release
       end
 
       def initialize(options = {})
         @options = Options.new(options)
         @process = nil
         @client = nil
+        @remote_version = nil
+        @remote_nightly_build = nil
+        @remote_release = nil
         @target_id = nil
         @session_id = nil
         @browser_context_id = nil
@@ -121,6 +127,7 @@ module Capybara
 
         if @options.ws_url?
           @client = Client.new(@options.ws_url, @options)
+          check_remote_version
         else
           @process = Process.new(@options)
           @process.start
@@ -588,6 +595,44 @@ module Capybara
           @target_id = nil
           @session_id = nil
         end
+      end
+
+      # Binary.update_hint would be a lie here: it prints a curl into a path the
+      # gem controls, and under ws_url the browser is somebody else's process on
+      # possibly another host.
+      REMOTE_UPDATE_HINT = "the gem does not manage that browser — " \
+                           "update the Lightpanda serving ws_url yourself."
+      private_constant :REMOTE_UPDATE_HINT
+
+      # The spawn path runs `lightpanda version` before the browser is even up
+      # (Process#check_minimum_version). An externally-managed browser has no
+      # binary to shell out to, so the same floor is enforced over CDP instead:
+      # `LP.version` returns the identical string the CLI prints, and
+      # Process.check_version! is the one parser both channels share.
+      #
+      # Without this, `ws_url:` was the one way into the driver that skipped the
+      # floor entirely — an old browser connected happily and then failed later
+      # as an unrelated-looking CDP error, with nothing naming the real cause.
+      #
+      # A browser that cannot answer `LP.version` is refused rather than assumed
+      # new enough, matching the spawn path's rule that an unidentifiable binary
+      # never passes. Two things land here: a Lightpanda predating the LP domain,
+      # and a Chrome someone pointed ws_url at by mistake — the second being easy
+      # to do and previously diagnosable only by watching later commands fail.
+      #
+      # Only #start calls this. #reconnect deliberately does not: it re-dials the
+      # same endpoint, whose version cannot have changed, and the crash-recovery
+      # path should not spend a round-trip re-asking.
+      def check_remote_version
+        result = @client.command("LP.version")
+        @remote_version, @remote_nightly_build, @remote_release =
+          Process.check_version!(result["version"]) { REMOTE_UPDATE_HINT }
+      rescue BrowserError, TimeoutError => e
+        raise BinaryError,
+              "Could not read the Lightpanda version at #{@options.ws_url} " \
+              "(LP.version failed: #{e.message}). ws_url: must point at a " \
+              "Lightpanda CDP endpoint new enough to answer LP.version; the gem " \
+              "cannot verify a browser it does not manage."
       end
 
       def restart_process_if_dead
