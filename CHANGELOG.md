@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875, and the rolling `nightly` tag now carries it (8925 as of 2026-08-28), so updating the browser is all it takes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
+> **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875, and the rolling `nightly` tag now carries it (8982 as of 2026-08-28), so updating the browser is all it takes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
 
 ### Added
 
@@ -12,6 +12,8 @@
 - **`ws_url:` accepts `localhost`.** Connecting to an externally-managed Lightpanda over `ws://localhost:PORT/` works; previously only an IP literal such as `ws://127.0.0.1:PORT/` was accepted by the browser's handshake.
 
 ### Fixed
+
+- **Keyboard-triggered navigation is waited for.** Now that Enter activates a submit button, pressing it starts a real navigation — but `send_keys` returned without waiting for it, so the very next `current_url` (or any non-waiting assertion) could still report the previous page. Keystrokes now settle the page the same way a click does. As with a click, a navigation whose server round-trip is slow still needs one of Capybara's waiting matchers, such as `have_current_path`.
 
 - **Iframes keep working when the browser stops loading them by default.** Lightpanda build 8946 turns off `<iframe>` and Web Worker loading unless asked: the parser still puts the iframe in the DOM, but no frame is ever created, so `within_frame` and `switch_to_frame` find nothing and report no cause. The driver now asks for both on every session, which holds today's behavior across the change and needs no newer browser — the request is understood by every build the gem supports. Nothing to configure. If you run the rolling nightly, take this before your browser passes 8946.
 

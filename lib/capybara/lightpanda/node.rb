@@ -256,9 +256,25 @@ module Capybara
         raise Capybara::UnselectNotAllowed, "Cannot unselect option from single select box."
       end
 
+      # The trailing `wait_for_idle` mirrors #click, and for the same reason.
+      # Since upstream #3264 (build >= 8842) `Input.dispatchKeyEvent` builds a
+      # *trusted* KeyboardEvent, so Enter on a submit input / <a href> and
+      # Space on a button or checkbox synthesize a real activation click —
+      # which means a keystroke can now start a navigation. Before #3264 it
+      # could not, which is why this settle step was historically absent; its
+      # absence then showed up as `current_url` being read against the
+      # outgoing document (test/features/keyboard_activation_test.rb).
+      #
+      # Caveat, shared with #click: `wait_for_idle` only sniffs for ~50 ms
+      # (Browser::SNIFF_WINDOW) and watches Runtime.executionContextsCleared,
+      # which Lightpanda emits when the *response* lands, not when the request
+      # starts. A navigation whose server round-trip exceeds that window is
+      # therefore still not awaited here — use Capybara's waiting matchers
+      # (`have_current_path`) for those, as you would after a click.
       def send_keys(*)
         call("function() { this.focus() }")
         driver.browser.keyboard.type(*)
+        driver.browser.wait_for_idle
       end
 
       def tag_name
