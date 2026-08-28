@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.12.0] - 2026-08-28
 
 > **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875, and the rolling `nightly` tag now carries it (8982 as of 2026-08-28), so updating the browser is all it takes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
 
