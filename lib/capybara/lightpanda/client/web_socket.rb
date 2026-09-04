@@ -54,6 +54,16 @@ module Capybara
           mark_dead
         end
 
+        # Single home for the "dead implies queue closed" invariant: every
+        # path that gives up on the connection must close @messages so the
+        # Client message thread's blocking pop returns. Public because the
+        # Client calls it when its own message thread dies — either transport
+        # thread dying means the connection is dead.
+        def mark_dead(status = :closed)
+          @status = status
+          @messages.close
+        end
+
         private
 
         def connect
@@ -95,19 +105,25 @@ module Capybara
 
           @driver.on(:error) do |event|
             # Do NOT raise here. This callback fires synchronously from
-            # @driver.parse(data) inside the reader thread, which sets
-            # abort_on_exception = true. Raising DeadBrowserError escapes
-            # the reader's narrow IO rescue and aborts the entire Ruby
-            # process. Mark the connection dead and let Client#command
-            # surface DeadBrowserError on its next dispatch via closed?.
+            # @driver.parse(data) inside the reader thread. Mark the
+            # connection dead and let Client#command surface DeadBrowserError
+            # on its next dispatch via closed?.
             @logger&.puts("✗ WebSocket error: #{event.message}")
             mark_dead(:error)
           end
         end
 
+        # The reader must never take the host process down. With
+        # abort_on_exception an error the narrow IO rescue doesn't expect
+        # (Errno::ETIMEDOUT is a SystemCallError, not an IOError) was re-raised
+        # on the main thread wherever it happened to be: a spec failure blamed
+        # on an unrelated call, or a server dying with its `ensure` never
+        # reaching browser.quit. Any error here means the connection is dead —
+        # report it and let the next command raise DeadBrowserError
+        # (mirrors ferrum #632).
         def start_reader_thread
           @thread = Thread.new do
-            Thread.current.abort_on_exception = true
+            Thread.current.abort_on_exception = false
 
             loop do
               break if @status == :closed || @status == :closing
@@ -119,6 +135,10 @@ module Capybara
                 @driver_mutex.synchronize { @driver.parse(data) }
               rescue Errno::ECONNRESET, Errno::EPIPE, IOError
                 mark_dead
+                break
+              rescue StandardError => e
+                warn "Capybara::Lightpanda: WebSocket reader died: #{e.class}: #{e.message}"
+                mark_dead(:error)
                 break
               end
             end
@@ -142,14 +162,6 @@ module Capybara
           return if @status == :open
 
           raise TimeoutError, "WebSocket handshake timed out after #{@options.handshake_timeout}s"
-        end
-
-        # Single home for the "dead implies queue closed" invariant: every
-        # path that gives up on the connection must close @messages so the
-        # Client message thread's blocking pop returns.
-        def mark_dead(status = :closed)
-          @status = status
-          @messages.close
         end
 
         def parse_message(data)

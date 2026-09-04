@@ -102,12 +102,31 @@ module Capybara
         @pendings.each_value { |ivar| ivar.try_set(nil) }
       end
 
+      # The message thread must never take the host process down: with
+      # abort_on_exception, anything handle_message raised was re-raised on
+      # the main thread mid-whatever-it-was-doing. An unexpected error here
+      # means the connection is dead — mark it so and stop (ferrum #632).
+      #
+      # The `ensure` is also the fail-fast for a connection that dies
+      # *underneath* us: the WebSocket's mark_dead closes @messages, pop
+      # returns nil, the loop ends, and every blocked caller is released to
+      # raise DeadBrowserError instead of waiting out its full timeout
+      # (ferrum #630). Ordering is what makes that work — mark_dead flips the
+      # status before it closes the queue, so by the time the waiters wake,
+      # `@ws.closed?` is already true.
       def start_message_thread
         @message_thread = Thread.new do
-          Thread.current.abort_on_exception = true
+          Thread.current.abort_on_exception = false
 
-          while (message = @ws.messages.pop)
-            handle_message(message)
+          begin
+            while (message = @ws.messages.pop)
+              handle_message(message)
+            end
+          rescue StandardError => e
+            warn "Capybara::Lightpanda: CDP message thread died: #{e.class}: #{e.message}"
+            @ws.mark_dead(:error)
+          ensure
+            fail_pending_commands
           end
         end
       end
@@ -117,8 +136,8 @@ module Capybara
           pending = @pendings[message["id"]]
           # try_set, not set: a duplicate frame for an already-answered id
           # (Lightpanda emits occasional malformed/duplicate frames — see
-          # upstream-wishlist.md A41) would raise MultipleAssignmentError on
-          # this thread, and abort_on_exception would kill the whole process.
+          # upstream-wishlist.md A41) would raise MultipleAssignmentError and
+          # kill the connection for a frame we should simply ignore.
           pending&.try_set(message)
         elsif message["method"]
           @subscriber.dispatch(message["method"], message["params"])
