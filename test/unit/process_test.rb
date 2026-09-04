@@ -213,10 +213,7 @@ describe Capybara::Lightpanda::Process do
         Gem::Version.new("0.3.5") => Gem::Version.new("8165"),
         Gem::Version.new("0.3.6") => Gem::Version.new("8318"),
         Gem::Version.new("0.3.7") => Gem::Version.new("8671"),
-        # 0.3.8 is anticipated, not yet tagged (2026-08-26). Lower bound:
-        # any future release is cut from a trunk past main 8886, above the
-        # 8875 floor. Replace with `git rev-list --count 0.3.8` on release.
-        Gem::Version.new("0.3.8") => Gem::Version.new("8886"),
+        Gem::Version.new("0.4.0") => Gem::Version.new("9058"),
       }
       build = release_builds[release_floor]
 

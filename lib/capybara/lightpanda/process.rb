@@ -240,21 +240,16 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. As of 2026-08-26 NO published release clears the 8875
-      # floor — 0.3.7 (build 8671) predates every fix the floor exists for — so
-      # this pin names the NEXT release. 0.3.8 is not tagged yet; any future tag
-      # is cut from a trunk already past build 8886, so it clears the floor by
-      # construction. Until upstream tags it, the release channel is
-      # deliberately unusable (nightly-only), reported with the standard
-      # too-old error. When 0.3.8 ships: verify
-      # `git rev-list --count 0.3.8` >= 8875 and update the lockstep table in
-      # process_test.rb.
+      # nightly floor. 0.4.0 (2026-08-31) is build 9058 — the first tagged
+      # release past the 8875 floor (0.3.7 = 8671 predates every fix the floor
+      # exists for). There was never a 0.3.8: upstream jumped the minor, and
+      # the pin briefly named that nonexistent version while it waited.
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("0.3.8")
+      MINIMUM_RELEASE = Gem::Version.new("0.4.0")
 
       class << self
         # `lightpanda version` prints one of two shapes, and the gem supports
