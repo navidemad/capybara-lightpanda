@@ -52,10 +52,17 @@ describe "Capybara::Lightpanda viewport" do
 
     # Upstream #3378 (build 9207): Emulation.setDeviceMetricsOverride now
     # re-evaluates every MediaQueryList and fires `change` where `matches`
-    # flipped. Before it, a mid-test resize moved innerWidth and the @media
-    # cascade but no listener ever ran — responsive JS (nav collapse, chart
-    # re-layout) silently kept its desktop state, and a spec asserting on it
-    # passed or failed for the wrong reason.
+    # flipped. Before it, a mid-test resize moved innerWidth and what
+    # matchMedia reports but no listener ever ran — responsive JS (nav
+    # collapse, chart re-layout) silently kept its desktop state.
+    #
+    # What #3378 does NOT change, and this example deliberately does not
+    # claim: the `@media` *cascade* of the already-loaded document. Lightpanda
+    # fixes it at parse time (see Driver#resize_window_to's comment), so after
+    # the resize the JS side says mobile while the CSS branch is still
+    # desktop; only a navigation re-resolves it. The last two assertions pin
+    # that documented resize-then-visit shape so the split can't drift
+    # unnoticed (verified 2026-09-06 on main 9213).
     #
     # Build-gated rather than floor-guaranteed: the floor is pinned to release
     # 0.4.0 (= 9058) and cannot pass 9207 until upstream tags a newer release.
@@ -70,6 +77,12 @@ describe "Capybara::Lightpanda viewport" do
       session.current_window.resize_to(375, 667)
 
       assert_equal "change:true;", session.find("#mq-log").text
+      assert session.evaluate_script("window.matchMedia('(max-width: 500px)').matches")
+      # Cascade still desktop until the next navigation — documented, not a bug here.
+      assert_equal "desktop-cta", session.find_link("Get started")[:id]
+
+      session.visit("/lightpanda/viewport")
+
       assert_equal "mobile-cta", session.find_link("Get started")[:id]
     end
   end
