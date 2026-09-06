@@ -57,7 +57,7 @@ driven_by :lightpanda
 > Lightpanda is a headless agentic browser, not a layout engine. External `<link rel="stylesheet">` **are** fetched and applied (the gem enables this by default), and `@media` / `window.matchMedia()` evaluate against the `window_size` you configure — so a mobile-only CTA gated by `@media (max-width: …)` resolves at the width you ask for. What's missing is *layout*: nothing reflows, `getBoundingClientRect` stays synthetic, and there is no real scroll. Specs that assert on pixel geometry, scrolling, or screenshots — plus the two that catch people out, a second browser tab and a menu revealed purely by CSS `:hover` — should stay on Cuprite (or whichever full-browser driver you were already using). The [per-spec dual-driver setup](https://navidemad.github.io/capybara-lightpanda/docs/#dual-per-spec) routes that minority to Cuprite and the structural majority to Lightpanda for speed.
 
 > [!TIP]
-> For reproducible CI, pin the browser: `Capybara::Lightpanda::Binary.required_version = "0.4.0"` (the first tagged release that clears the gem's current floor, nightly build 8875). Without a pin the driver tracks Lightpanda's rolling `nightly` tag, which moves under you. See [Pinning the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
+> For reproducible CI, pin the browser: `Capybara::Lightpanda::Binary.required_version = "0.4.0"` (the tagged release the gem's current floor is pinned to — nightly build 9058 is that release's commit). Without a pin the driver tracks Lightpanda's rolling `nightly` tag, which moves under you. See [Pinning the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
 
 ## Credits
 

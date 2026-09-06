@@ -947,6 +947,14 @@ class TestApp
         <body>
           <a id="desktop-cta" href="/lightpanda/other">Get started</a>
           <a id="mobile-cta" href="/lightpanda/other">Get started</a>
+          <div id="mq-log"></div>
+          <script>
+            // Breakpoint listener for the resize pin (upstream #3378): a real
+            // browser fires `change` when the viewport crosses 500px.
+            window.matchMedia('(max-width: 500px)').addEventListener('change', function(e) {
+              document.getElementById('mq-log').textContent += 'change:' + e.matches + ';';
+            });
+          </script>
         </body>
       </html>
     HTML
@@ -987,6 +995,34 @@ class TestApp
             document.getElementById('field').addEventListener('keypress', function(e) {
               document.getElementById('keypress-log').textContent = 'keypress:' + e.key;
             });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  # -- Keyboard editing (upstream #3298, build >= 8937) --
+  # Backspace/Delete arriving through CDP Input.dispatchKeyEvent edit the
+  # control: a cancelable trusted `beforeinput`, then `input`, both carrying
+  # inputType deleteContentBackward / deleteContentForward. The log records
+  # every such event so the assertions can prove which fired and which didn't.
+  get "/lightpanda/keyboard_editing" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Keyboard Editing</title></head>
+        <body>
+          <input type="text" id="field" value="abc">
+          <textarea id="area">abc</textarea>
+          <div id="log"></div>
+          <script>
+            var log = document.getElementById('log');
+            function track(el) {
+              el.addEventListener('beforeinput', function(e) { log.textContent += 'beforeinput:' + e.inputType + ';'; });
+              el.addEventListener('input', function(e) { log.textContent += 'input:' + e.inputType + ';'; });
+            }
+            track(document.getElementById('field'));
+            track(document.getElementById('area'));
           </script>
         </body>
       </html>

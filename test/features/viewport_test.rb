@@ -49,6 +49,29 @@ describe "Capybara::Lightpanda viewport" do
       assert session.find("#desktop-cta", visible: :all).visible?
       refute session.find("#mobile-cta", visible: :all).visible?
     end
+
+    # Upstream #3378 (build 9207): Emulation.setDeviceMetricsOverride now
+    # re-evaluates every MediaQueryList and fires `change` where `matches`
+    # flipped. Before it, a mid-test resize moved innerWidth and the @media
+    # cascade but no listener ever ran — responsive JS (nav collapse, chart
+    # re-layout) silently kept its desktop state, and a spec asserting on it
+    # passed or failed for the wrong reason.
+    #
+    # Build-gated rather than floor-guaranteed: the floor is pinned to release
+    # 0.4.0 (= 9058) and cannot pass 9207 until upstream tags a newer release.
+    # The skip keeps the pin honest on both channels instead of encoding a
+    # behavior the floor does not promise.
+    it "fires matchMedia change listeners when a resize crosses the breakpoint" do
+      build = session.driver.browser.nightly_build
+      skip "upstream #3378 (build 9207) is not in this Lightpanda" unless build && build >= Gem::Version.new("9207")
+
+      assert_equal "", session.find("#mq-log").text
+
+      session.current_window.resize_to(375, 667)
+
+      assert_equal "change:true;", session.find("#mq-log").text
+      assert_equal "mobile-cta", session.find_link("Get started")[:id]
+    end
   end
 
   describe "explicit window_size" do
