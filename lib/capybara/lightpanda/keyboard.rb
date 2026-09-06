@@ -181,9 +181,16 @@ module Capybara
         KEYS.fetch(key) { raise ArgumentError, "Unknown key: #{key.inspect}" }
       end
 
+      # Always `keyDown`, never `rawKeyDown`. Chrome's convention (Ferrum,
+      # Puppeteer) is rawKeyDown for keys that carry no `text`, but Lightpanda's
+      # Input.dispatchKeyEvent drops rawKeyDown on the floor as a
+      # Chrome-internal type (input.zig: `if (params.type == .rawKeyDown)
+      # return;`). Under that convention every text-less key — Backspace,
+      # Delete, Tab, Escape, the arrows — silently never reached the page,
+      # while Enter and Space (which have `text`) did. Lightpanda synthesizes
+      # its own keypress from a keyDown, so there is nothing to double-fire.
       def raw_dispatch(definition, modifiers: 0)
-        type = definition[:text] ? "keyDown" : "rawKeyDown"
-        send_key_event(type, definition, modifiers: modifiers)
+        send_key_event("keyDown", definition, modifiers: modifiers)
         send_key_event("keyUp", definition, modifiers: modifiers)
       end
 

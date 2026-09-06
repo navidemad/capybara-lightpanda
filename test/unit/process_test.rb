@@ -104,9 +104,12 @@ describe Capybara::Lightpanda::Process do
       end
     end
 
-    it "builds the full serve command line, stylesheets + message-size flags included" do
-      assert_equal %w[serve --host 127.0.0.1 --port 0 --log_level info --enable-external-stylesheets
-                      --cdp-max-message-size 104857600],
+    # `--load-resources stylesheet` is the post-#3305 (build 8946) spelling of
+    # the always-on external-CSS fetch; the old --enable-external-stylesheets
+    # alias still parses upstream but warns on every boot.
+    it "builds the full serve command line, message-size + stylesheet flags included" do
+      assert_equal %w[serve --host 127.0.0.1 --port 0 --log_level info
+                      --cdp-max-message-size 104857600 --load-resources stylesheet],
                    process.send(:build_args)
     end
 
@@ -114,8 +117,8 @@ describe Capybara::Lightpanda::Process do
       let(:options) { Capybara::Lightpanda::Options.new(host: "0.0.0.0", port: 9333) }
 
       it "passes them through" do
-        assert_equal %w[serve --host 0.0.0.0 --port 9333 --log_level info --enable-external-stylesheets
-                        --cdp-max-message-size 104857600],
+        assert_equal %w[serve --host 0.0.0.0 --port 9333 --log_level info
+                        --cdp-max-message-size 104857600 --load-resources stylesheet],
                      process.send(:build_args)
       end
     end
@@ -123,21 +126,25 @@ describe Capybara::Lightpanda::Process do
     describe "with load_images" do
       let(:options) { Capybara::Lightpanda::Options.new(load_images: true) }
 
-      # The flag must be absent by default and present as two argv entries
-      # when opted in —
-      # "--load-resources image" as one string would not parse.
-      it "appends --load-resources image" do
-        assert_equal %w[--load-resources image], process.send(:build_args).last(2)
+      # Lightpanda's CLI fills the LoadResources packed struct from ONE
+      # comma-separated value — the flag is not repeatable — so opting into
+      # images must widen the existing value, not add a second flag. And it
+      # must stay two argv entries: "--load-resources stylesheet,image" as one
+      # string would not parse.
+      it "joins image onto the stylesheet value" do
+        assert_equal %w[--load-resources stylesheet,image], process.send(:build_args).last(2)
       end
     end
 
-    it "omits --load-resources by default" do
-      refute_includes process.send(:build_args), "--load-resources"
+    it "never asks the CLI for iframes or workers — Browser#configure_loading owns those over CDP" do
+      value = process.send(:build_args).each_cons(2).find { |flag, _| flag == "--load-resources" }.last
+
+      refute_match(/iframe|worker/, value)
     end
 
     it "appends LIGHTPANDA_EXTRA_ARGS split on whitespace" do
-      ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log-format pretty --log-filter-scopes telemetry"
-      assert_equal %w[--log-format pretty --log-filter-scopes telemetry],
+      ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log-format pretty --log-filter telemetry"
+      assert_equal %w[--log-format pretty --log-filter telemetry],
                    process.send(:build_args).last(4)
     end
   end

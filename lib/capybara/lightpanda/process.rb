@@ -63,10 +63,10 @@ module Capybara
       # returns spec-correct booleans. Lets _lightpanda.isVisible detect
       # inline-@media-gated hides via el.checkVisibility() without any
       # gem-side workaround),
-      # PR #2487 (css: external <link rel="stylesheet"> fetch behind the
-      # --enable-external-stylesheets flag — build_args now passes that flag
-      # unconditionally, so the floor MUST include the build that introduced
-      # it; the flag is a fatal UnknownOption on builds < 6353),
+      # PR #2487 (css: external <link rel="stylesheet"> fetch behind a CLI
+      # flag — build_args passes it unconditionally, so the floor MUST include
+      # the build that introduced it; since #3305 (8946) the spelling is
+      # `--load-resources stylesheet`, see the 2026-09-06 bump),
       # PR #2498 (StyleManager: author display rule beats UA [hidden] — fixes
       # the Stimulus/Alpine dropdown ElementNotFound),
       # PR #2635 (dom: DOM.setFileInputFiles backs input.files + fires change
@@ -227,11 +227,30 @@ module Capybara
       #     and `localhost.evil.com:<port>` still 403). Below 8875 only an IP
       #     literal passed, so a user-supplied `ws_url:` had to say 127.0.0.1.
       #     Pinned by test/features/ws_url_host_test.rb.
-      # Build 8875 = the #3256 merge (f2169836e). NOTE: this floor leads the
-      # nightly channel — the 2026-08-26 nightly is 8855 — so it lands with the
-      # next nightly cut. #3267 (8880, Authorization stripped on cross-origin
-      # redirects) arrives with the same floor but drives nothing gem-side.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("8875")
+      # Build 8875 = the #3256 merge (f2169836e).
+      #
+      # 2026-09-06 bump 8875 -> 9058. The binding constraint is the lockstep
+      # with MINIMUM_RELEASE below: 9058 is exactly `git rev-list --count
+      # 0.4.0`, the newest tagged release, so this is as high as the nightly
+      # floor can go without naming a release that does not exist. Two fixes
+      # the gem now asserts on ride along:
+      #   #3298 (8937) Backspace/Delete through CDP Input.dispatchKeyEvent
+      #     actually edit an <input>/<textarea>: a trusted `beforeinput`
+      #     (cancelable) then `input` with inputType deleteContentBackward /
+      #     deleteContentForward, via the text_entry.zig mixin. Below 8937 the
+      #     keys were dead, so Node#send_keys(:backspace) silently did nothing.
+      #     Pinned by test/features/keyboard_editing_test.rb.
+      #   #3305 (8946) renamed --enable-external-stylesheets to
+      #     `--load-resources stylesheet` and --log-filter-scopes to
+      #     --log-filter; build_args now passes the new spelling, which is a
+      #     fatal UnknownOption below 8946. (The same PR flipped iframes and
+      #     workers off by default — Browser#configure_loading re-enables them
+      #     per BrowserContext, and did so before this bump.)
+      # Not in the floor, still worked around: #3375 (9071, option.selected
+      # deselects siblings — SELECT_OPTION_JS keeps its `sel.value =` detour)
+      # and #3378 (9207, matchMedia change events on viewport override —
+      # viewport_test.rb's pin skips below it).
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("9058")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -240,10 +259,11 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 0.4.0 (2026-08-31) is build 9058 — the first tagged
-      # release past the 8875 floor (0.3.7 = 8671 predates every fix the floor
-      # exists for). There was never a 0.3.8: upstream jumped the minor, and
-      # the pin briefly named that nonexistent version while it waited.
+      # nightly floor. 0.4.0 (2026-08-31) is build 9058 — exactly the nightly
+      # floor, which is no accident: the floor was raised *to* the release so
+      # both channels gate the same commit. (0.3.7 = 8671 predates every fix
+      # the floor exists for; there was never a 0.3.8, upstream jumped the
+      # minor.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
@@ -418,10 +438,6 @@ module Capybara
           @options.port.to_s,
           "--log_level",
           "info",
-          # External stylesheet fetch (PR #2487, build >= 6353 — enforced by the
-          # floor). Always on so linked CSS contributes to checkVisibility /
-          # getComputedStyle; see .claude/rules/lightpanda-io.md limitation #5.
-          "--enable-external-stylesheets",
           # Raise the inbound CDP WebSocket message cap from Lightpanda's 1 MiB
           # default (Config.zig `cdp_max_message_size`) to 100 MiB, matching
           # Chrome's inbound DevTools buffer. An inbound message over the cap is
@@ -436,12 +452,23 @@ module Capybara
           "--cdp-max-message-size",
           (100 * 1024 * 1024).to_s,
         ]
-        # Opt-in image fetching (upstream #3230, build >= 8834). Deliberately
-        # NOT always-on like --enable-external-stylesheets: images never feed
-        # the DOM predicates, so the default spends no bandwidth on them. On
-        # builds < 8834 the flag is a fatal UnknownOption at boot — see
-        # Options#load_images.
-        base.push("--load-resources", "image") if @options.load_images
+        # Sub-resource loading is one comma-separated `--load-resources` value
+        # (Config.LoadResources is a packed struct the CLI parser fills from a
+        # comma list — the flag is NOT repeatable). Every kind defaults OFF
+        # since #3305 (build 8946).
+        #   stylesheet — always on (PR #2487, build >= 6353) so linked CSS
+        #     contributes to checkVisibility / getComputedStyle; see
+        #     .claude/rules/lightpanda-io.md limitation #5. The spelling
+        #     `--load-resources stylesheet` is a fatal UnknownOption below 8946,
+        #     which the floor clears.
+        #   image — opt-in (upstream #3230, build >= 8834): images never feed
+        #     the DOM predicates, so the default spends no bandwidth on them.
+        #     See Options#load_images.
+        #   iframe / worker — deliberately NOT here. Browser#configure_loading
+        #     re-enables both over CDP (LP.configureLoading) per BrowserContext.
+        resources = ["stylesheet"]
+        resources << "image" if @options.load_images
+        base.push("--load-resources", resources.join(","))
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
       end

@@ -186,12 +186,36 @@ Use this file when:
 - **Gem workaround**: none needed for the driver itself (the drag script passes coordinates through untouched, as Selenium's does). Only the one shared-spec skip.
 - **Drop-on-fix**: remove the `node #drag_to HTML5 should set clientX\/Y in dragover events` pattern from `spec/spec_helper.rb` (12/13 HTML5 drag examples would then run). **PENDING** — validate against a ≥8796 nightly first.
 
+### A54. Trusted `beforeinput` is never cancelable — `preventDefault()` cannot veto a keyboard edit
+
+- **Today (found 2026-09-06 on nightly 9204, re-read on main 9213)**: `frame/user_input.zig#allowEdit` builds the pre-edit event with `InputEvent.initTrusted("beforeinput", .{ .cancelable = true, … })` and checks `before._prevent_default` — but `InputEvent.zig#initWithTrusted` ends with `rootevt._cancelable = false` for *every* InputEvent (comment cites MDN's `input` page). `Event.preventDefault` is a no-op on a non-cancelable event, so the flag never sets, `innerDelete`/`innerInsert` run, and `input` fires. A listener observes `beforeinput.cancelable === false`, `defaultPrevented === false`.
+- **Want**: `beforeinput` cancelable (per UI Events / Input Events Level 2), `input` not — i.e. honor `opts.cancelable` instead of forcing false, or special-case by type. Cancelling `beforeinput` must skip the edit and the `input` event.
+- **Real-world impact**: masked-input / rich-text libraries (Cleave, Maskito, ProseMirror's `beforeinput` path) implement "reject this keystroke" exactly this way; on Lightpanda the rejected character lands anyway.
+- **Gem workaround**: none possible from the driver side. `test/features/keyboard_editing_test.rb` documents the gap in a comment instead of pinning it.
+- **Drop-on-fix**: add the veto example back to `keyboard_editing_test.rb` (fixture: a second input whose `beforeinput` listener calls `preventDefault()`; assert value unchanged and no `input` in the log).
+
+### A55. `<textarea>` `select()` / `setSelectionRange()` reset the caret to 0 until a value has been assigned
+
+- **Today (found 2026-09-06 on nightly 9204, code on main 9213)**: `webapi/element/text_entry.zig#setSelectionRange` does `const value = self._value orelse { start = end = 0; return; }` and `select()` computes its length from `self._value` too. A `<textarea>abc</textarea>` seeded only by its child text node has `_value == null` (its value is derived from `textContent` on read), so both calls collapse the selection to `[0, 0]`. `<input value="abc">` populates `_value` from the attribute, so inputs are unaffected. Consequence: Backspace/Delete on a default-text textarea always operate at caret 0.
+- **Want**: selection setters clamp against the *current* value (`getValue()`), as `innerDelete` already does.
+- **Gem workaround**: none in the driver; `keyboard_editing_test.rb`'s textarea example assigns the value (`set`) before selecting, which is also the shape a suite naturally uses.
+- **Drop-on-fix**: nothing to remove — optionally drop the `set` from that example.
+
+### A56. Assigning `.value` does not move the caret to the end
+
+- **Today (2026-09-06, `Input.zig#setValue`, main 9213)**: the setter updates `_value` and `_user_edited` only; `_selection_start`/`_selection_end` stay where they were (0 on a fresh control). Chrome/spec: setting `value` moves the selection to the end of the new value.
+- **Want**: `setValue` (and TextArea's) set `_selection_start = _selection_end = value.len`.
+- **Real-world impact**: `fill_in` then `send_keys(:backspace)` — the type-then-correct idiom — deletes nothing on Lightpanda (caret at 0), while it removes the last character in Chrome. Silent wrong-value, not an exception.
+- **Gem workaround**: none (`SET_VALUE_JS` could call `setSelectionRange(len, len)` after assigning, and may yet — noted as an option, not done, to avoid papering over the upstream deviation). `keyboard_editing_test.rb` places the caret explicitly.
+- **Drop-on-fix**: the explicit `place_caret` calls in that file become redundant.
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
 
   1. **`KeyboardEvent.keyCode` and `charCode` legacy attributes** — PARTIALLY FIXED, RESIDUAL ISSUE. **PR #2292 MERGED 2026-04-28** (in nightly ≥5900, by us) implements `keyCode`/`charCode` and adds Enter charCode, BUT gates on `isTrusted: true`. Verified empirically 2026-04-29 against build 5918: events from `Input.dispatchKeyEvent` still report `keyCode: 0` because `isTrusted` is false on synthetic CDP-dispatched events. The Capybara test `node #send_keys should generate key events` asserts on these synthetic events, so it still fails. **Want**: loosen the gate so `Input.dispatchKeyEvent` emits keyCode/charCode regardless of `isTrusted`. Browsers don't normally expose synthetic events with isTrusted=true (it's a security boundary), but CDP-driven test environments are expected to surface the values. Cross-check Chrome: `Input.dispatchKeyEvent` emits events with keyCode populated. **Upstream issue**: not yet filed (was #2291, but that's resolved by #2292 — needs a follow-up issue for the CDP path). Skip pattern `node #send_keys should generate key events` retained.
-  2. **`Input.dispatchKeyEvent` for `ArrowLeft`/`ArrowRight`/`Home`/`End` doesn't move the input caret**. Fails `should send special characters` (which uses `:left` to position the cursor mid-string before inserting a char). **Not yet filed.**
+  2. **`Input.dispatchKeyEvent` for `ArrowLeft`/`ArrowRight`/`Home`/`End` doesn't move the input caret**. Fails `should send special characters` (which uses `:left` to position the cursor mid-string before inserting a char). **Re-verified 2026-09-06 on nightly 9204, now cleanly attributable**: until that day the gem sent text-less keys as CDP `rawKeyDown`, which `input.zig` drops outright, so the arrow never even reached the page. With the gem fixed (always `keyDown`) the keydown is delivered and `user_input.zig#handleKeydown` simply has no arm for the navigation keys — `editKey` handles Backspace/Delete/printables only — so the result is now `"Ocean sied"` (character inserted at the unmoved caret) instead of a silently swallowed key. Fix belongs next to #3298's `text_entry.zig` (`moveCaret(forward|backward|home|end, extend: shift)`). **Not yet filed.**
+     Sub-item (1) resolved itself the same day: `should generate key events` passes on 9204 once the keydown is actually sent (#3264 made CDP-dispatched key events trusted, so `keyCode`/`charCode` populate); it was never skip-listed in `spec_helper.rb`, only mis-recorded here.
   3. **Gem-side bug** (separate — handled in 2b623164): `Capybara::Lightpanda::Keyboard#type` tracks standalone modifier symbols as sticky modifiers. Modifier flags propagate via CDP correctly; this was a Ruby-side state-tracking issue.
 - **Gem workaround**: none. Skip-listed: `node #send_keys should send special characters` (#2), `should generate key events` (#1).
 - **Drop-on-fix**: remove the `should generate key events` skip pattern when #1 is fully resolved. `should send special characters` requires sub-item (2) to be filed and fixed.
