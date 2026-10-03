@@ -4,17 +4,10 @@ require_relative "../test_helper"
 
 # `Capybara::Session#active_element` against Lightpanda.
 #
-# Capybara's own `#active_element` shared examples are skipped (the `:active_element`
-# capability is in `capybara_skip`) because the describe block bundles a
-# Tab-traversal case — `send_keys(:tab)` walking focus across `[tabindex]`
-# elements — that Lightpanda can't satisfy: it has no keyboard focus-traversal
-# pipeline, so synthetic Tab events don't move `document.activeElement`.
-#
-# But explicit focus DOES work: a JS `.focus()` call, or a public-API
-# interaction that focuses a control (`fill_in` runs `this.focus()` via
-# SET_VALUE_JS), updates `document.activeElement`, and `Driver#active_element`
-# reads it back faithfully (`browser.rb` -> `evaluate_with_ref("document.activeElement")`).
-# That working slice has no shared-spec coverage, so we lock it in here.
+# Capybara's own `#active_element` shared examples run too (Tab traversal
+# works since upstream #2699); these pin the finer-grained explicit-focus
+# paths — a JS `.focus()`, and `fill_in` focusing the field it fills — that
+# `Driver#active_element` reads back through `document.activeElement`.
 describe "Capybara::Lightpanda#active_element" do
   let(:session) { TestSessions::Lightpanda }
 

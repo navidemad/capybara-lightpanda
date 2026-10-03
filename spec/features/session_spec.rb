@@ -36,16 +36,15 @@ Capybara::SpecHelper.run_specs(
   #                        such header (MIME-triggered), which Lightpanda renders
   #                        rather than downloads — so this spec can't pass. The
   #                        real path is covered by test/features/download_test.rb.
-  #   :active_element    — Tab-key focus traversal isn't implemented, and
-  #                        `el.click()` doesn't focus form controls the way
-  #                        a native mouse click does, so `:focused` filters
-  #                        can't track which element should be active.
+  #   NOTE :active_element is deliberately NOT listed: Tab moves focus since
+  #                        upstream #2699, and CLICK_JS focuses its target
+  #                        itself (upstream #3702 stopped doing it), so all 3
+  #                        examples pass on the 9994 floor (audited 2026-10-03).
   capybara_skip: %i[
     windows
     scroll
     hover
     spatial
     download
-    active_element
   ]
 )
