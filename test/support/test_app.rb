@@ -1132,4 +1132,15 @@ class TestApp
     sleep NAV_WAIT_DELAY
     redirect "/lightpanda/other"
   end
+
+  # -- go_back / go_forward across history entries. /lightpanda/history/*
+  # answers every sub-path with the same page so a driver that wrongly
+  # *reloads* a pushState entry gets a 200 (and fails on the lost JS state),
+  # not a 404 that would hide the real defect.
+  get %r{/lightpanda/history(/.*)?} do
+    <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>History</title></head><body><h1>History</h1></body></html>
+    HTML
+  end
 end

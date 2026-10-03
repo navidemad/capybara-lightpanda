@@ -60,7 +60,6 @@ Page.enable                  Page.navigate
 Page.reload                  Page.loadEventFired (event)
 Page.addScriptToEvaluateOnNewDocument                    Page.getLayoutMetrics
 Page.captureScreenshot       Page.javascriptDialogOpening (event)
-Page.getNavigationHistory    Page.navigateToHistoryEntry
 Runtime.enable               Runtime.evaluate
 Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
@@ -95,6 +94,7 @@ Page.handleJavaScriptDialog  → DISPATCH HANDLER EXISTS but DELIBERATELY ALWAYS
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
+Page.getNavigationHistory    Page.navigateToHistoryEntry (reloads even a pushState entry — Browser#back uses history.back())
 Page.removeScriptToEvaluateOnNewDocument
 DOM.querySelector            DOM.querySelectorAll (finds go through JS in Runtime.callFunctionOn)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
@@ -189,7 +189,7 @@ LP.configureCDP              LP.getContentSignal         LP.version
 | Issue | Impact | Description |
 |---|---|---|
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
-| #3726 | Navigation | `history.back()` between two pushState entries reloads from the server — `Driver#go_back` in a Turbo Drive app does a full reload instead of a Turbo restore. |
+| #3726 | Navigation | `history.back()` between two pushState entries reloads from the server unless the URLs differ only by fragment (`URL.eqlDocument`, verified 2026-10-04 on 1.0.0) — `Driver#go_back` (which runs `history.back()`) in a Turbo Drive app does a full reload instead of a Turbo restore. Fragment-only entries restore in place with `popstate`. |
 | #3725 | Turbo / idle | `AbortController.abort()` doesn't cancel an in-flight fetch; it rejects with `TypeError` (not `AbortError`) only when the response ends — can land in `page_errors` and keeps the request pending for `wait_for_idle`. |
 | #3672 | Crash | SIGILL in V8's regexp JIT on aarch64-linux (0.3.7 → 0.4.1); not re-checked on V8 15.5 (#3676, in 1.0.0). Reporter's workaround: `LIGHTPANDA_EXTRA_ARGS="--v8-flags-unsafe --regexp-interpret-all"`. |
 
