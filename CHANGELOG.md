@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.13.0] - 2026-10-03
+
+> **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.0** or a nightly build ≥ 9994. The driver refuses anything older and names the version it found. Tagged releases work again: pin `1.0.0` for a reproducible browser.
+
+### Changed
+
+- **Cross-origin requests follow CORS, as in Chrome.** Lightpanda 1.0.0 enforces CORS by default, and the driver doesn't turn it off, so a `fetch` or XHR your app sends from `127.0.0.1` to `localhost` (or to another port) is blocked there just as Chrome would block it. Suites already green on Cuprite or Selenium are unaffected. A blocked request is listed in `network.traffic` with an `:error` and no response, and it no longer stalls `wait_for_network_idle` (see Fixed).
+- **`Cookies#set` returns whether the browser accepted the cookie.** Lightpanda now refuses `SameSite=None` without `Secure`. `set` returns `false` in that case instead of dropping the cookie silently. `Cookies#load` repairs cookie files saved by older versions, which marked every cookie `SameSite=None`, and warns about any cookie it still can't restore.
+
+### Fixed
+
+- **Clicking a field focuses it again.** On current Lightpanda builds, `click` followed by `send_keys` sent the keys to the page body instead of the clicked field. Clicking a field, a label or a contenteditable region now focuses it, and clicking empty space blurs the focused element, as in Chrome. Capybara's `active_element` specs now pass.
+- **`send_keys` appends to a field's existing value.** On a field that was pre-filled and not yet focused, `send_keys("x")` produced `"xfoo"` instead of `"foox"`. Typing now starts at the end of the value, as in chromedriver. If you need to type at a specific position, focus the field and place the caret yourself first.
+- **Backspace, Delete, Tab, Escape and the arrow keys reach the page.** Previously only keys that type a character were delivered, so these keys did nothing. They now edit fields, move the caret and extend the selection with Shift. A `beforeinput` handler can cancel an edit, which input-mask libraries rely on.
+- **Ctrl/Cmd shortcuts no longer type a character.** `send_keys([:ctrl, "a"])` used to insert a stray `a`. Your shortcut handlers still receive the key.
+- **`select` never picks a disabled option, and picks the right one when values repeat.** When several options shared the same value, the first one was always selected.
+- **Failed requests no longer stall `wait_for_network_idle`.** A request that failed without a response (blocked by CORS, refused connection) stayed pending until the timeout expired.
+- **`console_logs` shows objects.** `console.log({a: 1})`, arrays and DOM elements used to appear as empty text. They now appear as a short description.
+- **A browser crash no longer takes your test process down with it.** If the connection died unexpectedly, the error could be raised somewhere unrelated in your test, or abort a server before its cleanup ran. Commands now fail cleanly with `DeadBrowserError`, waiting commands are released immediately, and each crashed browser releases its connection instead of keeping it open until garbage collection.
+- **`matchMedia` listeners fire when you resize the window.** `resize_window_to` now runs the JavaScript breakpoint handlers. Stylesheet `@media` rules still only apply after the next `visit`.
+
 ## [0.12.0] - 2026-08-28
 
 > **Update Lightpanda before upgrading.** This release requires a Lightpanda nightly build ≥ 8875, and the rolling `nightly` tag now carries it (8982 as of 2026-08-28), so updating the browser is all it takes. **No tagged Lightpanda release is new enough yet**: 0.3.7 is below the floor, so version pinning stays unavailable until Lightpanda ships its next release.
