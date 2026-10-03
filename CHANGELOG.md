@@ -5,6 +5,7 @@
 ### Fixed
 
 - **A click waits for the page it navigates to, even when the server is slow.** `click` used to return after about 50 ms, before a link, `window.location` assignment or form submission had loaded the next page whenever the server took longer than that (a slow action, a redirect). The very next `current_url` or `assert_current_path(..., wait: 0)` then read the page being left. The click now waits for the new page, as in Cuprite. Clicks that don't navigate are as fast as before, and so are `pushState` and anchor clicks. A navigation that fails, such as a refused connection, doesn't make the click wait for the timeout. `send_keys` waits the same way when Enter submits a form.
+- **`go_back` and `go_forward` keep the page when the history entry comes from `pushState`.** They used to reload the document from the server, so the page's JavaScript state was lost and no `popstate` event fired: a "browser back button" test on a step-by-step page could not pass. They now behave like the browser's buttons: the page stays, `popstate` fires and `current_url` is up to date when the call returns. Going back or forward to another page still loads it, and the call waits for it. Lightpanda limit: this only applies when the two entries differ by their `#fragment`. When `pushState` changed the path (Turbo Drive, client-side routers), Lightpanda still reloads the page ([lightpanda-io/browser#3726](https://github.com/lightpanda-io/browser/issues/3726)).
 
 ## [0.13.0] - 2026-10-03
 

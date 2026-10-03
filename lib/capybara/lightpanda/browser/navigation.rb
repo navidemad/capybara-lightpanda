@@ -33,12 +33,20 @@ module Capybara
         end
         alias goto go_to
 
+        # Back/forward go through the page's own History API, like the
+        # browser's buttons: an entry created by `pushState` is restored in
+        # the same document (JS state kept, `popstate` fired synchronously),
+        # while an entry from another document starts a real navigation that
+        # `wait_for_idle` sniffs and waits out. CDP's
+        # `Page.navigateToHistoryEntry` is not an option — Lightpanda reloads
+        # the document even for a `pushState` entry. Both are no-ops at either
+        # end of the session history.
         def back
-          wait_for_navigation { navigate_history(-1) }
+          traverse_history("history.back()")
         end
 
         def forward
-          wait_for_navigation { navigate_history(+1) }
+          traverse_history("history.forward()")
         end
 
         def refresh
@@ -98,23 +106,13 @@ module Capybara
           await_navigation(&)
         end
 
-        # Step the session history by `offset` (-1 = back, +1 = forward) using
-        # native CDP. `Page.getNavigationHistory` returns the entry list and
-        # `currentIndex`; `Page.navigateToHistoryEntry` jumps to the chosen
-        # entry's `id`. No-op when the offset would step past either end so
-        # the behavior matches `history.back()` / `history.forward()` on a
-        # bounded session history.
-        def navigate_history(offset)
-          history = page_command("Page.getNavigationHistory")
-          target_index = history["currentIndex"] + offset
-          entries = history["entries"]
-          return if target_index.negative? || target_index >= entries.length
-
-          page_command("Page.navigateToHistoryEntry", entryId: entries[target_index]["id"])
+        def traverse_history(expression)
+          page_command("Runtime.evaluate", expression: expression)
+          wait_for_idle
         end
 
         # Common navigation lifecycle shared by `wait_for_page_load` (fresh
-        # `Page.navigate`) and `wait_for_navigation` (back / forward / reload).
+        # `Page.navigate`) and `wait_for_navigation` (reload).
         # Subscribes to Page.loadEventFired, runs the trigger, waits briefly for
         # the event, falls back to readyState polling for the remaining budget.
         # The handler is unsubscribed via `ensure` so a raising trigger doesn't
