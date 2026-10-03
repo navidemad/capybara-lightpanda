@@ -212,6 +212,15 @@ Use this file when:
 - **Drop-on-fix**: the explicit `place_caret` calls in that file become redundant.
 - **Upstream issue**: #3419, **Upstream PR**: #3420 — **MERGED 2026-09-06, build 9223** (verified 2026-10-03). Above the floor, so keep the `place_caret` calls until `MINIMUM_NIGHTLY_BUILD` ≥ 9223. Fix moves the caret in `Input.setValue` (guarded by `selectionAvailable()`, using the *sanitized* length) and `TextArea.setValue` (unguarded). `setUserValue` delegates to it, and the `text_entry.zig` arms that need a specific caret assign the selection after the call, so they are unaffected; `innerInsert`'s `.none` arm (append) now correctly leaves the caret after the inserted text. Verified: reproducer at `browser:repro/a56-value-setter-caret/` (`lightpanda fetch --dump html`, no CDP client) exits 1 on nightly 9204 and 0 on the branch build; the same 11 checks all pass in Chrome 149 headless.
 
+### A57. Closed `[popover]` reads as visible — Capybara matches content of a never-shown popover
+
+- **Today (verified 2026-10-03 on nightly 10033)**: `StyleManager.matchesUaDisplayNoneRule` (the single UA display:none truth shared by `getComputedStyle().display` and `checkVisibility()`) handles `[hidden]`, `input[type=hidden]`, `dialog:not([open])` and closed `<details>` children, but not `[popover]:not(:popover-open)`. A `<div popover>` that was never shown reports `checkVisibility() === true` and `display: "block"`. The Popover API itself works (`showPopover()`, `:popover-open` matches after).
+- **Want**: add `[popover]:not(:popover-open) { display: none }` to that function (HTML Rendering §15.3.1), next to the `dialog` arm — same shape as #3269.
+- **Real-world impact**: native-popover menus/tooltips (increasingly common in Rails + Stimulus apps) are "visible" before they open — `have_content` false positives, `Capybara::Ambiguous` against a second copy of the same link, clicks on items Chrome would refuse with `ElementNotFound`.
+- **Gem workaround**: none yet; would live in `_lightpanda.isVisible` (`javascripts/predicates.js`) as an ancestor walk for `[popover]:not(:popover-open)`.
+- **Drop-on-fix**: that walk, if added.
+- **Upstream issue/PR**: not filed.
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
@@ -383,9 +392,8 @@ These exist because Lightpanda has no rendering engine, no compositor, no real l
 - Each session starts fresh (in-process state).
 - **Status**: out of scope.
 
-### C9. CORS not enforced
-- Acknowledged in upstream README. Tests can request anywhere.
-- **Status**: not relevant for testing context.
+### C9. ~~CORS not enforced~~ — OBSOLETE: enforced by default since #3654 (build 9883, in 1.0.0)
+- Chrome parity now; opt out with `--disable-features cors` (≥9883 only). Gem side: a blocked request emits `Network.loadingFailed {errorText: "CorsBlocked"}` — see `lightpanda-io.md`'s CORS bullet.
 
 ### C10. External CSS not fetched, `@media` not evaluated, `matchMedia()` always false (verified 2026-05-15)
 - **Confirmed by upstream maintainer (2026-05-15)** as an intentional design choice: Lightpanda is a headless agentic-AI / scraping browser, not a layout engine. Skipping external CSS fetch + media-query evaluation is a deliberate cost trade-off and an upstream PR adding them won't be accepted.
@@ -428,10 +436,11 @@ See each open A/B entry's **Upstream issue/PR** line for current filing status.
 
 Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (closed-issue defensive helpers) and B11 (re-classified gem-side) are intentionally excluded.
 
+0. **A57 — closed `[popover]` visible** — one arm in `StyleManager.matchesUaDisplayNoneRule`, same shape as #3269; cheap + high-confidence.
 1. **A23 — `Element.innerText` block-level line breaks** — ~50 LOC drop-on-fix; multi-day Zig project (writer needs `getComputedStyle` access from inside the walker, plus the line-collapsing pass). Highest single-item LOC saving among open items, but the most expensive to implement.
 2. **A10 — `Page.loadEventFired` reliability (#1801)** — ~20 LOC drop-on-fix; long-standing, still open. Keep the gem's readyState fallback as a safety net even after a fix lands (cheap), but the 2-second cap could be retired.
 3. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
-4. **B5#2 — Caret-movement keys (`ArrowLeft`/`Home`/`End`) don't move input caret** — single skip pattern; not yet filed as an issue.
+4. ~~**B5#2 — Caret-movement keys**~~ — fixed by our PR #3424 (build 9234).
 5. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
 6. **B14 — Sequential focus navigation (`Tab` moves `document.activeElement`)** — unblocks `:active_element`. **Cheap + high-confidence**: no layout needed (focus order = tabindex + document order), and the explicit-focus half already works and is gem-tested. Closest in shape to a self-contained DOM-behavior PR.
 7. **B16 — File downloads (`Browser.setDownloadBehavior` path + `downloadWillBegin`/`downloadProgress`)** — unblocks `:download`. The CDP method is already a dispatched stub; needs the disk write + two events. No rendering required. **Upstream issue**: #2701 (filed 2026-06-11, issue-first; awaiting maintainer's call on the page-preservation design before a PR).
