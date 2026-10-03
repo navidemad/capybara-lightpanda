@@ -106,12 +106,6 @@ RSpec.configure do |config|
       /node #obscured\? should see overlapped elements as obscured/,
       /node #obscured\? should work in frames/,
       /node #obscured\? should work in nested iframes/,
-      # `node #send_keys should send special characters` — `Input.dispatchKeyEvent`
-      # doesn't move the input caret on ArrowLeft/Home/End, so `:left` doesn't
-      # reposition the cursor mid-string (re-verified 2026-09-06 on nightly
-      # 9204 with the key actually delivered: "Ocean sied"). Upstream gap,
-      # wishlist B5(2), not yet filed.
-      /node #send_keys should send special characters/,
       # CSS text-transform / case sensitivity for invisible text — depends
       # on getComputedStyle returning cascade-resolved `text-transform`,
       # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.

@@ -99,33 +99,27 @@ the browser can change under a suite that didn't change a single line, and
 nightly builds are not archived, so you cannot go back to the one that was green
 yesterday.
 
-> **No tagged release clears the floor yet.** The driver requires nightly build
-> ≥ 8875 or release ≥ 0.3.8, and 0.3.8 is not tagged — the newest release, 0.3.7,
-> is build 8671. Until upstream cuts the next one, `required_version` has nothing
-> valid to point at, and pinning a release below the floor fails at boot with a
-> `BinaryError` naming both versions. Vendor a nightly instead (below).
-
-For any shared or CI environment, pin a tagged release once one qualifies:
+For any shared or CI environment, pin a tagged release:
 
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "0.3.8"   # a tag from lightpanda-io/browser/releases
+  binary.required_version = "1.0.0"   # a tag from lightpanda-io/browser/releases
 end
 ```
 
 A pin is downloaded once into its own version-scoped file
-(`~/.cache/lightpanda/lightpanda-0.3.8`), is never refreshed on age, and is
+(`~/.cache/lightpanda/lightpanda-1.0.0`), is never refreshed on age, and is
 never satisfied by a nightly left over from an earlier run. Cache that directory
 in CI and the browser becomes as reproducible as your `Gemfile.lock`.
 
-Meanwhile the same reproducibility is available one step down: download a
-nightly once, keep it as a build artifact or bake it into your CI image, and
-point `browser_path` at it. The gem never downloads when that is set, so the
+The same reproducibility is available for a nightly: download one once, keep
+it as a build artifact or bake it into your CI image, and point `browser_path`
+at it. The gem never downloads when that is set, so the
 browser changes only when you replace the artifact.
 
 The driver enforces the floor on both channels and refuses to start below it —
-nightly build ≥ 8875, or release ≥ 0.3.8. The error names the version it found
+nightly build ≥ 9994, or release ≥ 1.0.0. The error names the version it found
 and how to move off it. The check runs on every path into the driver, including
 a browser you started yourself ([external browser](#external-browser)).
 
@@ -349,6 +343,7 @@ it.
 | Matchers — `assert_selector`, `assert_text`, `has_field?`, `has_select?` | ✓ |
 | Cookies — `set_cookie`, `clear_cookies`, `remove_cookie` | ✓ |
 | HTTP response — `status_code`, `response_headers` | ✓ — from `Network.responseReceived` |
+| Cross-origin `fetch`/XHR — CORS | ✓ **enforced, like Chrome.** A request the server doesn't allow fails in the page (`TypeError`) and shows in `network.traffic` with `error: "CorsBlocked"`. Watch for `localhost` vs `127.0.0.1` or a second port — both are different origins |
 | Frames — `within_frame`, scoped finding | ✓ |
 | Keyboard — `send_keys` with modifiers | ✓ |
 | Downloads — `Content-Disposition: attachment` responses | ✓ — streamed to `save_path` (build ≥7545) |

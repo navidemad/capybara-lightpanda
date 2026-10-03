@@ -981,14 +981,10 @@ module Capybara
             // that path itself; just no-op here.
             return;
           }
-          if (sel.multiple) {
-            this.selected = true;
-          } else {
-            // Lightpanda doesn't auto-deselect siblings when we set
-            // `option.selected`, so mirror what a real browser does and
-            // route the change through the parent's `value`.
-            sel.value = this.value;
-          }
+          // Selects exactly this option — not the first one sharing its
+          // value — and, in a single <select>, deselects the rest (upstream
+          // #3375, guaranteed by the floor).
+          this.selected = true;
           sel.dispatchEvent(new Event('input', {bubbles: true}));
           sel.dispatchEvent(new Event('change', {bubbles: true}));
         }

@@ -1014,6 +1014,7 @@ class TestApp
         <body>
           <input type="text" id="field" value="abc">
           <textarea id="area">abc</textarea>
+          <input type="text" id="veto" value="abc">
           <div id="log"></div>
           <script>
             var log = document.getElementById('log');
@@ -1023,6 +1024,7 @@ class TestApp
             }
             track(document.getElementById('field'));
             track(document.getElementById('area'));
+            document.getElementById('veto').addEventListener('beforeinput', function(e) { e.preventDefault(); });
           </script>
         </body>
       </html>
@@ -1052,6 +1054,10 @@ class TestApp
             <option value="cat">Cat</option>
             <option value="dog" disabled>Dog</option>
             <optgroup label="Exotic" disabled><option value="axolotl">Axolotl</option></optgroup>
+          </select>
+          <select id="dupes">
+            <option value="x">First</option>
+            <option value="x">Second</option>
           </select>
           <script>
             document.getElementById('guarded').addEventListener('mousedown', function(e) { e.preventDefault(); });
