@@ -37,6 +37,7 @@ DOM checks that settle each question in one `eval` (all verified 2026-08-24):
 - **Code blocks (`repro.html` / `repro.sh` / `repro.js`, Zig snippets) are syntax-highlighted** with no leaked backticks from outer-fence interference, no HEREDOC `EOF` artifact bleeding into the body, no broken indentation. Read the actual rendered code, not just the markdown.
 - **Headings and TOC sidebar** match the H2 hierarchy you intended. No skipped levels, no `## ## Foo` artifacts from accidental double-prefix.
 - **Inline code** (`Network.clearBrowserCookies`, `Page.loadEventFired`, `src/<file>.zig` paths) renders as code, not as bare text. Spec links resolve, no 404s in the link previews.
+- **Mermaid labels survive the sanitizer** (verified 2026-10-03 on #3756/#3757/#3758/#3759): an HTML-looking label (`<div popover>`) renders as an EMPTY node; a `#` truncates the label (`input#inner` → "input", rest of the message dropped); parentheses inside a `[...]` flowchart node break the parse — quote it: `D["typed into input (id inner)"]`. And `style X fill:#fdd` leaves light-grey text on a pale fill in GitHub's dark theme — always add `,color:#000`. Write `div[popover]`, `input (id inner)` instead.
 - **No template leftovers**: no `<paste full body>`, no `<id>`, no `<issue-num>` placeholders, no copy of the wishlist accidentally pasted in.
 
 ## Issue-only check (Step 7c)

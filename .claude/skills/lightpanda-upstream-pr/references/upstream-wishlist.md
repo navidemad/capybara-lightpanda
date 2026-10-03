@@ -219,7 +219,7 @@ Use this file when:
 - **Real-world impact**: native-popover menus/tooltips (increasingly common in Rails + Stimulus apps) are "visible" before they open — `have_content` false positives, `Capybara::Ambiguous` against a second copy of the same link, clicks on items Chrome would refuse with `ElementNotFound`.
 - **Gem workaround**: none yet; would live in `_lightpanda.isVisible` (`javascripts/predicates.js`) as an ancestor walk for `[popover]:not(:popover-open)`.
 - **Drop-on-fix**: that walk, if added.
-- **Upstream issue/PR**: not filed.
+- **Upstream issue**: #3756, **Upstream PR**: #3757 (open as of 2026-10-03). Fix: a `[popover]` arm in `matchesUaDisplayNoneRule`, which now takes the `Frame` (open popovers live on the frame's document); fixture `ua_closed_popover_is_hidden` in `tests/element/check_visibility.html`. Repro `browser:repro/closed-popover-hidden/` (`fetch --dump html`).
 
 ### A58. Uncaught exceptions outside event listeners never reach `window`'s `error` event — `page_errors` misses them
 
@@ -227,8 +227,8 @@ Use this file when:
 - **Want**: route those callback paths through the same report-the-exception step (`Window.reportError` / `EventManagerBase.reportException`).
 - **Real-world impact**: the gem's `page_errors` (and any suite asserting "no JS errors" through `window.onerror`) sees only listener errors — most real app errors (timers, Stimulus `connect()` via microtasks, rAF animation code) pass silently.
 - **Gem workaround**: none possible from JS — the exception never surfaces to page script.
-- **Drop-on-fix**: nothing to remove; `test/features/page_errors_test.rb` gains timer/rAF/microtask examples.
-- **Upstream issue/PR**: not filed.
+- **Drop-on-fix**: nothing to remove; `test/features/page_errors_test.rb` gains timer/rAF/inline-handler examples.
+- **Upstream issue**: #3754, **Upstream PR**: #3755 (open as of 2026-10-03). Covers timers, rAF, requestIdleCallback, inline `on*` handlers (attribute + property, `EventManager.callInlineHandler`) and directly dispatched property handlers (`window.onmessage`, `EventManagerBase.dispatchDirect`); new `GlobalScope.reportError` routes to window/worker. **`queueMicrotask` deliberately left out** — V8's microtask checkpoint swallows the exception; needs an isolate message listener (follow-up). Fixture: `reportsCallbackExceptions` in `tests/event/report_error.html`. Repro `browser:repro/report-callback-exceptions/` (`fetch --dump html --wait-script`).
 
 ### A59. Keyboard input doesn't reach the focused element inside an iframe
 
@@ -236,7 +236,7 @@ Use this file when:
 - **Want**: resolve the key target by descending through focused frames (`activeElement` is an iframe → use its `contentDocument.activeElement`, recursively).
 - **Real-world impact**: `send_keys` inside `within_frame` types nothing (rich-text editors in iframes, embedded payment/login forms). `fill_in`/`set` still work (JS `.value`).
 - **Gem workaround**: none for real keystrokes.
-- **Upstream issue/PR**: not filed.
+- **Upstream issue**: #3758, **Upstream PR**: #3759 (open as of 2026-10-03). Two halves: `Element.focus` now focuses the containing `<iframe>` in the parent frame (HTML focus chain — the parent's `activeElement` becomes the iframe, which `tests/frames/cross_realm_focus.html` used to call "not modeled"), and the Input domain resolves keys through `user_input.focusedFrame`. CDP test `cdp.input: keyboard input goes to the focused element inside an iframe`. Repro `browser:repro/keyboard-focused-frame/` (raw `ws`, `serve --load-resources iframe`).
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 

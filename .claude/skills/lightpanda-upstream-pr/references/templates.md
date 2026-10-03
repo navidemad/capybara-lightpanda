@@ -348,8 +348,8 @@ Closes #<issue-num>.
 flowchart LR
     A[<entry point: CDP method or JS API>] --> B[<old broken path>]
     B --> C[<wrong outcome>]
-    style B fill:#fdd
-    style C fill:#fdd
+    style B fill:#fdd,color:#000
+    style C fill:#fdd,color:#000
 ```
 
 ## Fix
@@ -363,8 +363,8 @@ flowchart LR
 flowchart LR
     A[<entry point>] --> B[<new path>]
     B --> C[<correct outcome>]
-    style B fill:#dfd
-    style C fill:#dfd
+    style B fill:#dfd,color:#000
+    style C fill:#dfd,color:#000
 ```
 
 ## Test
