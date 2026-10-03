@@ -1060,4 +1060,30 @@ class TestApp
       </html>
     HTML
   end
+
+  # -- A request that never gets a response (upstream #3654, CORS on by
+  # default from build 9883). The page is served from 127.0.0.1; the fetch
+  # targets `localhost` on the same port — a different origin — and the app
+  # sends no Access-Control-Allow-Origin, so the browser blocks it.
+  get "/lightpanda/cross_origin_fetch" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Cross-origin fetch</title></head>
+        <body>
+          <div id="result">pending</div>
+          <script>
+            var target = 'http://localhost:' + location.port + '/lightpanda/cors_target';
+            fetch(target)
+              .then(function() { document.getElementById('result').textContent = 'allowed'; })
+              .catch(function() { document.getElementById('result').textContent = 'blocked'; });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/cors_target" do
+    "target"
+  end
 end

@@ -144,6 +144,62 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  # Lightpanda enforces CORS by default since upstream #3654 (build 9883); a
+  # blocked request never gets a response, only Network.loadingFailed. If
+  # that event isn't consumed the entry stays open and every wait_for_idle
+  # after it burns its full timeout — which is what users hit on 1.0.0.
+  describe "failed requests (Network.loadingFailed)" do
+    def request(id, url = "http://127.0.0.1:9/#{id}")
+      browser.fire("Network.requestWillBeSent", {
+                     "requestId" => id,
+                     "request" => { "url" => url, "method" => "GET" },
+                     "timestamp" => 1.0,
+                   })
+    end
+
+    it "stops counting a failed request as pending" do
+      network.enable
+      request("r1")
+      assert_equal 1, network.pending_connections
+
+      browser.fire("Network.loadingFailed", { "requestId" => "r1", "errorText" => "CorsBlocked" })
+
+      assert_equal 0, network.pending_connections
+      assert network.wait_for_idle(timeout: 0.2), "a CORS-blocked request must not hold idle hostage"
+    end
+
+    it "records why the request failed and leaves response nil" do
+      network.enable
+      request("r1")
+      browser.fire("Network.loadingFailed", { "requestId" => "r1", "errorText" => "CorsBlocked" })
+
+      entry = network.traffic.first
+      assert_equal "CorsBlocked", entry[:error]
+      assert_nil entry[:response]
+    end
+
+    it "closes only the newest open entry of a reused requestId" do
+      network.enable
+      request("r1")
+      browser.fire("Network.responseReceived", { "requestId" => "r1", "response" => { "status" => 200 } })
+      request("r1")
+      browser.fire("Network.loadingFailed", { "requestId" => "r1", "errorText" => "net::ERR_FAILED" })
+
+      first, second = network.traffic
+      assert_nil first[:error]
+      assert_equal 200, first[:response][:status]
+      assert_equal "net::ERR_FAILED", second[:error]
+    end
+
+    it "unsubscribes the failure handler on disable" do
+      network.enable
+      assert_equal 1, browser.subscriber_count("Network.loadingFailed")
+
+      network.disable
+      assert_equal 0, browser.subscriber_count("Network.loadingFailed")
+    end
+  end
+
   describe "#wait_for_idle!" do
     it "raises TimeoutError when traffic never settles" do
       network.enable

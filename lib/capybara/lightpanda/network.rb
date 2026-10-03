@@ -20,7 +20,7 @@ module Capybara
         @traffic = []
         @traffic_mutex = Mutex.new
         @enabled = false
-        @request_handler = @response_handler = nil
+        @request_handler = @response_handler = @failure_handler = nil
         @last_navigation_response = nil
         @document_request_id = nil
       end
@@ -111,10 +111,10 @@ module Capybara
         browser.page_command("Network.setExtraHTTPHeaders", headers: {})
       end
 
-      # Count of in-flight requests (those with no response yet recorded).
+      # Count of in-flight requests (no response and no failure recorded yet).
       # Cheap predicate-friendly accessor (ferrum parity).
       def pending_connections
-        @traffic_mutex.synchronize { @traffic.count { |t| t[:response].nil? } }
+        @traffic_mutex.synchronize { @traffic.count { |t| open?(t) } }
       end
 
       # True when no more than `connections` requests are in-flight.
@@ -158,8 +158,10 @@ module Capybara
       def subscribe
         @request_handler = build_request_handler
         @response_handler = build_response_handler
+        @failure_handler = build_failure_handler
         browser.on("Network.requestWillBeSent", &@request_handler)
         browser.on("Network.responseReceived", &@response_handler)
+        browser.on("Network.loadingFailed", &@failure_handler)
       end
 
       # Redirects follow Chrome's shape (Lightpanda since #3175, build ≥8602):
@@ -184,6 +186,7 @@ module Capybara
             method: params.dig("request", "method"),
             timestamp: params["timestamp"],
             response: nil,
+            error: nil,
           }
           @traffic_mutex.synchronize do
             if (redirect = params["redirectResponse"]) && (previous = last_open_entry(params["requestId"]))
@@ -214,9 +217,31 @@ module Capybara
         end
       end
 
+      # A request that never gets a response — refused connection, CORS
+      # block, abort — ends with Network.loadingFailed instead. Without this
+      # handler its entry stayed open forever, so pending_connections never
+      # reached zero and every wait_for_idle burned its full timeout. Routine
+      # since Lightpanda enforces CORS by default (upstream #3654, build 9883:
+      # a blocked fetch reports errorText "CorsBlocked"). Ferrum closes its
+      # exchange on the same event.
+      def build_failure_handler
+        lambda do |params|
+          @traffic_mutex.synchronize do
+            request = last_open_entry(params["requestId"])
+            next unless request
+
+            request[:error] = params["errorText"].to_s
+          end
+        end
+      end
+
       # Caller holds @traffic_mutex.
       def last_open_entry(request_id)
-        @traffic.reverse_each.find { |t| t[:request_id] == request_id && t[:response].nil? }
+        @traffic.reverse_each.find { |t| t[:request_id] == request_id && open?(t) }
+      end
+
+      def open?(entry)
+        entry[:response].nil? && entry[:error].nil?
       end
 
       def response_summary(response)
@@ -231,8 +256,10 @@ module Capybara
       def unsubscribe
         browser.off("Network.requestWillBeSent", @request_handler) if @request_handler
         browser.off("Network.responseReceived", @response_handler) if @response_handler
+        browser.off("Network.loadingFailed", @failure_handler) if @failure_handler
         @request_handler = nil
         @response_handler = nil
+        @failure_handler = nil
       end
     end
   end

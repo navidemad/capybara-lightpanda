@@ -79,7 +79,12 @@ module Capybara
       # Ferrum/Cuprite spelling: `browser.cookies["session_id"]`.
       alias [] get
 
-      def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists
+      # Returns whether the browser accepted the cookie (ferrum parity).
+      # Lightpanda answers `{success: false}` and drops the cookie for an
+      # invalid combination — notably `same_site: "None"` without `secure`
+      # since upstream #3529 (build 9877), Chrome's rule — so callers that
+      # need it to stick should check the result.
+      def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists, Naming/PredicateMethod
               same_site: nil, expires: nil)
         params = {
           name: name,
@@ -96,7 +101,8 @@ module Capybara
         params[:sameSite] = same_site if %w[Strict Lax None].include?(same_site)
         params[:expires] = expires.to_i if expires
 
-        browser.command("Network.setCookie", **params)
+        result = browser.command("Network.setCookie", **params)
+        !(result.is_a?(Hash) && result["success"] == false)
       end
 
       def remove(name:, domain: nil, path: "/")
@@ -119,10 +125,13 @@ module Capybara
       # Load cookies from a YAML file produced by `store` and re-set them.
       # CDP requires either domain or url for each cookie; entries from `store`
       # already include domain, so they round-trip cleanly. Returns true on
-      # success (intentionally not a predicate — mirrors ferrum's API).
+      # success (intentionally not a predicate — mirrors ferrum's API). A
+      # cookie the browser refuses is reported on stderr rather than raised,
+      # so one bad entry doesn't abort restoring the rest.
       def load(path = "cookies.yml") # rubocop:disable Naming/PredicateMethod
         cookies = YAML.load_file(path)
-        cookies.each { |c| restore_cookie(c) }
+        rejected = cookies.reject { |c| restore_cookie(c) }.map { |c| c.transform_keys(&:to_s)["name"] }
+        warn "Capybara::Lightpanda: the browser refused cookies from #{path}: #{rejected.join(', ')}" if rejected.any?
         true
       end
 
@@ -140,10 +149,23 @@ module Capybara
           http_only: attrs["httpOnly"] || false,
         }
         params[:domain] = attrs["domain"] if attrs["domain"]
-        params[:same_site] = attrs["sameSite"] if attrs["sameSite"]
+        same_site = restored_same_site(attrs)
+        params[:same_site] = same_site if same_site
         exp = attrs["expires"]
         params[:expires] = Time.at(exp) if exp.is_a?(Numeric) && exp.positive?
         set(**params)
+      end
+
+      # Lightpanda below build 9877 reported every cookie without a SameSite
+      # attribute as "None", so a file stored then is full of insecure
+      # SameSite=None cookies — which the browser now rejects (Chrome's rule,
+      # upstream #3529). Leaving SameSite unset restores what the cookie
+      # actually was: unspecified, i.e. Lax-by-default.
+      def restored_same_site(attrs)
+        same_site = attrs["sameSite"]
+        return nil if same_site == "None" && !attrs["secure"]
+
+        same_site
       end
     end
   end

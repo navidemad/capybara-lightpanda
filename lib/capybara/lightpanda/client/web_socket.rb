@@ -33,14 +33,19 @@ module Capybara
           @driver_mutex.synchronize { @driver.text(message) }
         end
 
+        # The socket is closed even when the connection is already dead. A
+        # browser that dies first makes the reader thread #mark_dead the
+        # connection (status :closed or :error) without closing the socket,
+        # and an early return here then left the TCPSocket — one descriptor
+        # per crashed browser — open until GC finalized it (ferrum #639).
         def close
-          return if @status == :closed
-
-          @status = :closing
-          @messages.close
-          @driver_mutex.synchronize { @driver&.close }
-          @thread&.join(1) || @thread&.kill
-          @socket&.close
+          unless @status == :closed
+            @status = :closing
+            @messages.close
+            @driver_mutex.synchronize { @driver&.close }
+            @thread&.join(1) || @thread&.kill
+          end
+          close_socket
           @status = :closed
         end
 
@@ -65,6 +70,12 @@ module Capybara
         end
 
         private
+
+        def close_socket
+          @socket&.close unless @socket.nil? || @socket.closed?
+        rescue IOError, SystemCallError
+          # Already torn down by the peer; nothing left to release.
+        end
 
         def connect
           uri = URI.parse(@url)
