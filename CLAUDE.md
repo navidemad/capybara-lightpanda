@@ -61,6 +61,8 @@ These are browser-level limitations, not fixable in this gem:
 
 ## Testing
 
+PR CI does not run the Capybara shared battery: the `capybara-specs` job is `if: github.event_name == 'push'`, so it only runs on `main` after merge. Run `bundle exec rake spec:shared:parallel` locally before merging anything that touches driver behavior — a green PR turned `main` red this way on 2026-09-06 and stayed red for a month.
+
 To test against a real Rails app, add `gem "capybara-lightpanda", path: "../capybara-lightpanda"` to the app's Gemfile and run with `BROWSER=lightpanda bundle exec rails test test/system/`.
 
 To reproduce a real-apps CI failure locally, use the boot harness rather than setting the app up by hand: `script/real-app/boot.sh <target>` then `script/real-app/spec.sh <target> <spec> -e "<example>"`. It ports `.github/workflows/real-apps.yml` step for step (reading the matrix out of it, so it can't drift), captures `console_logs` + `network.traffic` per failing example, and names the `causes.yml` entry the failure matches. See `script/real-app/README.md`.
