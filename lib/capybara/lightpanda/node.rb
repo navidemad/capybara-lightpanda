@@ -265,12 +265,9 @@ module Capybara
       # absence then showed up as `current_url` being read against the
       # outgoing document (test/features/keyboard_activation_test.rb).
       #
-      # Caveat, shared with #click: `wait_for_idle` only sniffs for ~50 ms
-      # (Browser::SNIFF_WINDOW) and watches Runtime.executionContextsCleared,
-      # which Lightpanda emits when the *response* lands, not when the request
-      # starts. A navigation whose server round-trip exceeds that window is
-      # therefore still not awaited here — use Capybara's waiting matchers
-      # (`have_current_path`) for those, as you would after a click.
+      # `wait_for_idle` sniffs for ~50 ms (Browser::SNIFF_WINDOW) for the
+      # main frame to *start* navigating, then waits for the new document —
+      # so a slow server round-trip is awaited, as after a click.
       def send_keys(*)
         call(SEND_KEYS_FOCUS_JS)
         driver.browser.keyboard.type(*)

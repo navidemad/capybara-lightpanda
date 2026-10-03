@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A click waits for the page it navigates to, even when the server is slow.** `click` used to return after about 50 ms, before a link, `window.location` assignment or form submission had loaded the next page whenever the server took longer than that (a slow action, a redirect). The very next `current_url` or `assert_current_path(..., wait: 0)` then read the page being left. The click now waits for the new page, as in Cuprite. Clicks that don't navigate are as fast as before, and so are `pushState` and anchor clicks. A navigation that fails, such as a refused connection, doesn't make the click wait for the timeout. `send_keys` waits the same way when Enter submits a form.
+
 ## [0.13.0] - 2026-10-03
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.0** or a nightly build ≥ 9994. The driver refuses anything older and names the version it found. Tagged releases work again: pin `1.0.0` for a reproducible browser.

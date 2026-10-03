@@ -1092,4 +1092,44 @@ class TestApp
   get "/lightpanda/cors_target" do
     "target"
   end
+
+  # -- Click-triggered navigations whose server round-trip outlasts the
+  # click's sniff window (Browser#wait_for_idle). Lightpanda announces the
+  # navigation (Page.frameStartedLoading, ~5 ms) long before it swaps the
+  # execution context (when the response lands), so these pin that the click
+  # waits for the new document instead of returning on the old one.
+  NAV_WAIT_DELAY = 0.3
+
+  get "/lightpanda/nav_wait" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Nav wait</title></head>
+        <body>
+          <a id="slow-link" href="/lightpanda/nav_wait/slow">Slow link</a>
+          <a id="redirect-link" href="/lightpanda/nav_wait/redirect">Redirect link</a>
+          <a id="top-link" href="/lightpanda/nav_wait/slow" target="_top">Top link</a>
+          <button id="js-nav" onclick="window.location = '/lightpanda/nav_wait/slow'">JS nav</button>
+          <button id="inert">Inert</button>
+          <button id="push" onclick="history.pushState({}, '', '/lightpanda/nav_wait/pushed')">Push</button>
+          <a id="anchor" href="#section">Anchor</a>
+          <a id="refused" href="http://127.0.0.1:1/unreachable">Refused</a>
+          <div id="section">Section</div>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/nav_wait/slow" do
+    sleep NAV_WAIT_DELAY
+    <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>Slow Page</title></head><body><h1>Slow Page</h1></body></html>
+    HTML
+  end
+
+  get "/lightpanda/nav_wait/redirect" do
+    sleep NAV_WAIT_DELAY
+    redirect "/lightpanda/other"
+  end
 end
