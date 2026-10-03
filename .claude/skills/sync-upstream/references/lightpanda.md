@@ -72,11 +72,11 @@ gh api "repos/lightpanda-io/browser/issues?state=open&per_page=50&sort=created&d
 This is the highest-value check — Lightpanda is in flux and an endpoint we depend on can be removed/renamed without warning. Fetch each domain file via `gh api` or WebFetch on raw GitHub URLs and grep the dispatch enum for every method in `lightpanda-io.md`'s "CDP Methods Used by This Gem" list.
 
 Files and methods to verify:
-- `src/cdp/domains/page.zig` — `Page.navigate`, `Page.reload`, `Page.enable`, `Page.handleJavaScriptDialog`, `Page.loadEventFired` (event), `Page.captureScreenshot`, `Page.getLayoutMetrics`, `Page.addScriptToEvaluateOnNewDocument`
-- `src/cdp/domains/runtime.zig` — `Runtime.evaluate`, `Runtime.callFunctionOn`, `Runtime.getProperties`, `Runtime.releaseObject`
-- `src/cdp/domains/network.zig` — `Network.enable`, `Network.disable`, `Network.getCookies` (with `urls`), `Network.setCookie`, `Network.deleteCookies`, `Network.clearBrowserCookies`
-- `src/cdp/domains/dom.zig` — `DOM.getDocument`, `DOM.querySelector`, `DOM.querySelectorAll`
-- `src/cdp/domains/target.zig` — `Target.createTarget`, `Target.attachToTarget`
+- `src/server/cdp/domains/page.zig` — `Page.navigate`, `Page.reload`, `Page.enable`, `Page.handleJavaScriptDialog`, `Page.loadEventFired` (event), `Page.captureScreenshot`, `Page.getLayoutMetrics`, `Page.addScriptToEvaluateOnNewDocument`
+- `src/server/cdp/domains/runtime.zig` — `Runtime.evaluate`, `Runtime.callFunctionOn`, `Runtime.getProperties`, `Runtime.releaseObject`
+- `src/server/cdp/domains/network.zig` — `Network.enable`, `Network.disable`, `Network.getCookies` (with `urls`), `Network.setCookie`, `Network.deleteCookies`, `Network.clearBrowserCookies`
+- `src/server/cdp/domains/dom.zig` — `DOM.getDocument`, `DOM.querySelector`, `DOM.querySelectorAll`
+- `src/server/cdp/domains/target.zig` — `Target.createTarget`, `Target.attachToTarget`
 
 Look for the method name in the `processMessage` dispatch enum. If absent, the gem is calling a non-existent endpoint — flag with the gem-side file:line that calls it.
 
