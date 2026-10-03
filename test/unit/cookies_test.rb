@@ -163,6 +163,40 @@ describe Capybara::Lightpanda::Cookies do
       cookies.load(tmp_path)
     end
 
+    # Stores written while Lightpanda (< build 9877) reported every cookie
+    # without SameSite as "None" must still load: since upstream #3529 the
+    # browser refuses SameSite=None without Secure, and a silent refusal
+    # would drop the whole session on reload.
+    it "restores an insecure SameSite=None cookie as unspecified SameSite" do
+      browser.stubs(:command).with("Network.getAllCookies").returns(
+        "cookies" => [cookie_attrs.merge("secure" => false, "sameSite" => "None")]
+      )
+      cookies.store(tmp_path)
+
+      browser.expects(:command).with("Network.setCookie", Not(has_key(:sameSite))).returns("success" => true)
+      cookies.load(tmp_path)
+    end
+
+    it "keeps SameSite=None on a secure cookie" do
+      browser.stubs(:command).with("Network.getAllCookies").returns(
+        "cookies" => [cookie_attrs.merge("sameSite" => "None")]
+      )
+      cookies.store(tmp_path)
+
+      browser.expects(:command).with("Network.setCookie", has_entries(sameSite: "None")).returns("success" => true)
+      cookies.load(tmp_path)
+    end
+
+    it "reports cookies the browser refused instead of dropping them silently" do
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [cookie_attrs])
+      cookies.store(tmp_path)
+      browser.stubs(:command).with("Network.setCookie", anything).returns("success" => false)
+
+      _out, err = capture_io { assert cookies.load(tmp_path) }
+
+      assert_match(/refused cookies .*: session/, err)
+    end
+
     it "defaults to cookies.yml when no path is given" do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir) do
@@ -171,6 +205,26 @@ describe Capybara::Lightpanda::Cookies do
           assert File.exist?("cookies.yml"), "expected cookies.yml in tmpdir"
         end
       end
+    end
+  end
+
+  describe "#set" do
+    let(:browser) { mock("Browser") }
+    let(:cookies) { Capybara::Lightpanda::Cookies.new(browser) }
+
+    # Lightpanda answers {success: false} and drops an invalid cookie
+    # (e.g. SameSite=None without Secure, upstream #3529); the return value
+    # is the only way a caller learns it never stuck.
+    it "returns false when the browser refuses the cookie" do
+      browser.stubs(:command).returns("success" => false)
+
+      refute cookies.set(name: "a", value: "b", domain: "example.test", same_site: "None")
+    end
+
+    it "returns true when the browser accepts it" do
+      browser.stubs(:command).returns("success" => true)
+
+      assert cookies.set(name: "a", value: "b", domain: "example.test")
     end
   end
 

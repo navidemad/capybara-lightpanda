@@ -380,7 +380,7 @@ page.driver.downloads                        # => ["/…/tmp/downloads/export.cs
 
 ```ruby
 page.driver.wait_for_network_idle(timeout: 5)  # true, or false on timeout
-page.driver.network.traffic                    # [{request_id:, url:, method:, response: …}, …]
+page.driver.network.traffic                    # [{request_id:, url:, method:, response: …, error: …}, …]
 page.driver.network.pending_connections        # in-flight count
 page.driver.network.clear
 
