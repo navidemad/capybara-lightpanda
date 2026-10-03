@@ -36,7 +36,7 @@ gem's upstream wishlist: `<one-line description>`.
 - Primary: `<file from file-mapping.md>`
 - Related: `<any test fixtures or sibling files>`
 
-**TDD steps** (local builds are fast — global mise pin handles Zig 0.16.0, the PreToolUse hook injects the prebuilt-V8 `-D` flag, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
+**TDD steps** (local builds are fast — global mise pin handles Zig 0.16.0, `build.zig` finds the prebuilt V8 that `make download-v8` cached in the checkout, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
 
 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes
    use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file
