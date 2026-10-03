@@ -93,6 +93,14 @@ RSpec.configure do |config|
       # arbitrary properties, which Lightpanda does not do (it returns "").
       /#assert_matches_style should raise error if the elements style/,
       /#has_css\? :style option should support Hash/,
+      # `valid: true` after `fill_in` with a value shorter than `minlength`.
+      # Spec-correct, not a gap: tooShort/tooLong apply only to a value "last
+      # changed by a user edit (as opposed to a change made by a script)"
+      # (HTML §4.10.5.3.1). Node#set writes `.value` from JS, and since
+      # upstream #3379 (build 9083) Lightpanda tracks that distinction
+      # (`_user_edited`), exactly like Chrome; Selenium/Cuprite pass only
+      # because they type real keystrokes.
+      /#has_field with valid should be false if field is invalid/,
       # Node #obscured? sub-tests requiring viewport / overlap detection.
       /node #obscured\? should see elements outside the viewport as obscured/,
       /node #obscured\? should see overlapped elements as obscured/,

@@ -29,8 +29,13 @@ describe "Capybara::Lightpanda keyboard editing" do
   before { session.visit("/lightpanda/keyboard_editing") }
   after { session.reset_session! }
 
+  # Focus first: `send_keys` moves the caret to the end of a field that does
+  # not already have focus (WebDriver's Element Send Keys, chromedriver's
+  # focus script), so a caret placed on an unfocused field would be discarded.
   def place_caret(element, at)
-    session.execute_script("arguments[0].setSelectionRange(arguments[1], arguments[1])", element, at)
+    session.execute_script(
+      "arguments[0].focus(); arguments[0].setSelectionRange(arguments[1], arguments[1])", element, at
+    )
   end
 
   it "Backspace removes the character before the caret in an <input>" do
