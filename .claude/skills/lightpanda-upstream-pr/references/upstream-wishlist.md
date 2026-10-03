@@ -221,6 +221,23 @@ Use this file when:
 - **Drop-on-fix**: that walk, if added.
 - **Upstream issue/PR**: not filed.
 
+### A58. Uncaught exceptions outside event listeners never reach `window`'s `error` event — `page_errors` misses them
+
+- **Today (verified 2026-10-03 on release 1.0.0 and nightly 10033)**: an exception thrown from a `setTimeout` callback, a `requestAnimationFrame` callback, a `queueMicrotask` callback or an inline `onclick="…"` handler fires no `error` event on `window`; only exceptions from `addEventListener` listeners (`EventManagerBase.zig#reportException`) and from top-level classic scripts are reported. Chrome reports all of them ("report an exception", HTML §8.1.4.6).
+- **Want**: route those callback paths through the same report-the-exception step (`Window.reportError` / `EventManagerBase.reportException`).
+- **Real-world impact**: the gem's `page_errors` (and any suite asserting "no JS errors" through `window.onerror`) sees only listener errors — most real app errors (timers, Stimulus `connect()` via microtasks, rAF animation code) pass silently.
+- **Gem workaround**: none possible from JS — the exception never surfaces to page script.
+- **Drop-on-fix**: nothing to remove; `test/features/page_errors_test.rb` gains timer/rAF/microtask examples.
+- **Upstream issue/PR**: not filed.
+
+### A59. Keyboard input doesn't reach the focused element inside an iframe
+
+- **Today (verified 2026-10-03 on nightly 10033)**: with focus on an `<input>` inside an iframe, `Input.insertText` / `Input.dispatchKeyEvent` deliver to the top document's `activeElement` (the `<iframe>`/`<body>`), so nothing is typed. Chrome routes keyboard input to the focused frame's focused element.
+- **Want**: resolve the key target by descending through focused frames (`activeElement` is an iframe → use its `contentDocument.activeElement`, recursively).
+- **Real-world impact**: `send_keys` inside `within_frame` types nothing (rich-text editors in iframes, embedded payment/login forms). `fill_in`/`set` still work (JS `.value`).
+- **Gem workaround**: none for real keystrokes.
+- **Upstream issue/PR**: not filed.
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
@@ -267,7 +284,7 @@ Three independent issues:
 - **Gem workaround**: none. Decidim's helper is not callable through this gem as written (uses `execute_cdp`, a Selenium convenience). Captured here as a portability gap for any future Ruby app that wants offline / throttled assertions against Lightpanda.
 - **Drop-on-fix**: nothing to remove on the gem side today. Could expose a Ruby surface (`Driver#emulate_network_conditions` mirroring ferrum's `Network#emulate_network_conditions`) once upstream ships.
 
-### B14. Sequential focus navigation — `Tab` doesn't move `document.activeElement` (unblocks `:active_element`)
+### B14. ~~Sequential focus navigation — `Tab` doesn't move `document.activeElement`~~ — RESOLVED (issue #2699 closed; verified 2026-10-03 on nightly 10033: Tab moves focus, `:active_element` left `capybara_skip`)
 
 - **Today (verified 2026-06-11 against `main` HEAD `d695ce10`)**: `Document.getActiveElement` (Document.zig:487) and `HTMLElement.tabIndex` get/set (Html.zig:389-401) work, and **explicit** focus is honored — a JS `el.focus()` (or `fill_in`, which focuses before setting) updates `document.activeElement`, and the gem reads it back faithfully (locked in by `test/features/active_element_test.rb`, 5 examples). What's missing: there is no sequential focus navigation — `Input.dispatchKeyEvent` with `Tab`/`Shift+Tab` does not advance focus to the next/previous element in tabindex + document order. No `Tab` handler walks the focusable set.
 - **Want**: implement HTML sequential focus navigation so a synthetic `Tab` moves `document.activeElement` to the next focusable element (firing `blur`/`focus`). No layout needed — focus order is computable from `tabindex` + document order alone.
@@ -442,7 +459,7 @@ Listed by drop-on-fix impact / spec-compliance importance. Items A11 and A12 (cl
 3. **B5#1 — `KeyboardEvent.keyCode` gated on `isTrusted`** — PR #2292 implemented `keyCode`/`charCode` but gates on `event._is_trusted == false → return 0` (verified at `src/browser/webapi/event/KeyboardEvent.zig:383`). Single skip pattern (`node #send_keys should generate key events`); needs the gate loosened for synthetic `Input.dispatchKeyEvent` per Chrome's CDP behavior.
 4. ~~**B5#2 — Caret-movement keys**~~ — fixed by our PR #3424 (build 9234).
 5. **B13 — `Network.emulateNetworkConditions` not implemented** — Decidim's PWA / offline test helper drives `execute_cdp("Network.emulateNetworkConditions", offline: true, …)`. Third Chrome-only CDP method Decidim leans on after `Network.setCookie` (native) and `Log.entryAdded` (still missing). Not blocking gem consumers today; documents the gap for any future portability work.
-6. **B14 — Sequential focus navigation (`Tab` moves `document.activeElement`)** — unblocks `:active_element`. **Cheap + high-confidence**: no layout needed (focus order = tabindex + document order), and the explicit-focus half already works and is gem-tested. Closest in shape to a self-contained DOM-behavior PR.
+6. ~~**B14 — Sequential focus navigation**~~ — resolved upstream (#2699). — unblocks `:active_element`. **Cheap + high-confidence**: no layout needed (focus order = tabindex + document order), and the explicit-focus half already works and is gem-tested. Closest in shape to a self-contained DOM-behavior PR.
 7. **B16 — File downloads (`Browser.setDownloadBehavior` path + `downloadWillBegin`/`downloadProgress`)** — unblocks `:download`. The CDP method is already a dispatched stub; needs the disk write + two events. No rendering required. **Upstream issue**: #2701 (filed 2026-06-11, issue-first; awaiting maintainer's call on the page-preservation design before a PR).
 8. **B15 — Independent multi-window targets for `window.open`/`_blank`** — unblocks `:windows`. Larger: upstream multi-target maturity *plus* gem-side `Driver` window methods. window.open v1 already landed (PR #2237).
 9. **C11 — CSS `:hover` state (low confidence)** — would unblock `:hover`'s reveal half, but it's interaction-driven CSS in the same class the maintainer declined for `@media` (C10). The mouseover-dispatch half already works and is gem-tested.
