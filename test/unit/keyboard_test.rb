@@ -52,6 +52,31 @@ describe Capybara::Lightpanda::Keyboard do
       assert_equal %w[keyUp Control], key_events.last.values_at(:type, :key)
     end
 
+    # Ctrl/Meta chords are commands; since upstream #3542 (build 9580)
+    # Lightpanda inserts any keyDown `text`, so carrying it typed a stray
+    # character. The key itself must still be named for shortcut handlers.
+    it "sends no text for a Ctrl chord, but still names the key" do
+      keyboard.type([:ctrl, "a"])
+
+      chord = key_events.find { |e| e[:type] == "keyDown" && e[:modifiers] == 2 }
+      assert_equal "a", chord[:key]
+      refute chord.key?(:text), "a Ctrl chord must not carry text"
+    end
+
+    it "sends no text for a Meta chord" do
+      keyboard.type([:meta, "c"])
+
+      chord = key_events.find { |e| e[:type] == "keyDown" && e[:modifiers] == 4 }
+      refute chord.key?(:text)
+    end
+
+    it "keeps text for a Shift chord — Shift changes the character, it is not a command" do
+      keyboard.type([:shift, "a"])
+
+      chord = key_events.find { |e| e[:type] == "keyDown" && e[:modifiers] == 8 }
+      assert_equal "A", chord[:text]
+    end
+
     it "applies shift mapping to held-modifier chars" do
       keyboard.type(:shift, "1")
 

@@ -93,4 +93,17 @@ describe "Capybara::Lightpanda keyboard editing" do
   # (verified 2026-09-06 on nightly 9204 and main 9213). Masked-input
   # libraries relying on the veto do not work yet — see
   # .claude/rules/lightpanda-io.md, keyboard editing bullet.
+
+  # A Ctrl chord is a command (select-all), never text. Since upstream #3542
+  # (build 9580) the browser inserts whatever a keyDown's `text` carries, so
+  # the driver must not send any with Ctrl held — otherwise `[:ctrl, "a"]`
+  # turned "abc" into "abca".
+  it "Ctrl+A does not type an 'a'" do
+    field = session.find(:css, "#field")
+    place_caret(field, 3)
+
+    field.send_keys([:ctrl, "a"])
+
+    assert_equal "abc", field.value
+  end
 end

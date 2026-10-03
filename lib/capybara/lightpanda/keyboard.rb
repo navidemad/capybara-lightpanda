@@ -171,10 +171,21 @@ module Capybara
         release_modifiers(active_mods)
       end
 
+      # A chord with Ctrl or Meta is a command, not text: Chrome inserts
+      # nothing for Ctrl+A, it selects. Since upstream #3542 (build 9580)
+      # Lightpanda inserts whatever the keyDown's `text` carries, so sending
+      # `text` with Ctrl held typed a stray "a" into the field. The keyDown
+      # still names the key, so shortcut handlers (`e.ctrlKey && e.key ===
+      # "a"`) fire exactly as before.
+      COMMAND_MODIFIERS = %i[ctrl control meta command].freeze
+      private_constant :COMMAND_MODIFIERS
+
       def dispatch_modified_char(char, modifier_value, modifiers)
-        text = modifiers.include?(:shift) ? self.class.shifted(char) : char
-        send_key_event("keyDown", { key: text, text: text, unmodifiedText: char }, modifiers: modifier_value)
-        send_key_event("keyUp", { key: text }, modifiers: modifier_value)
+        key = modifiers.include?(:shift) ? self.class.shifted(char) : char
+        definition = { key: key, unmodifiedText: char }
+        definition[:text] = key unless modifiers.intersect?(COMMAND_MODIFIERS)
+        send_key_event("keyDown", definition, modifiers: modifier_value)
+        send_key_event("keyUp", { key: key }, modifiers: modifier_value)
       end
 
       def key_definition(key)

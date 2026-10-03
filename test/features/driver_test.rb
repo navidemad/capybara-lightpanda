@@ -265,6 +265,12 @@ describe Capybara::Lightpanda::Driver do
   # ───────────────────────────────────────────────
 
   describe "network" do
+    # Tracking is on for every page (create_page enables it), and these
+    # examples switch it off. One of them never visits, so Capybara skips
+    # reset! for it and the next example would inherit a disabled domain —
+    # no navigation-response capture, `response_headers` empty. Put it back.
+    after { browser.network.enable }
+
     it "tracks network requests when enabled" do
       session.visit("/lightpanda/simple")
       browser.network.enable

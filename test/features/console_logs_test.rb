@@ -41,6 +41,26 @@ describe "Capybara::Lightpanda::Browser#console_logs" do
     assert_equal "boom", error[:text]
   end
 
+  # Since upstream #3504 (build 9414) only primitive args carry `value`; an
+  # object or DOM node arrives as a bare RemoteObject. Reading `value` alone
+  # rendered them as empty strings, so `console.log("user", user)` showed up
+  # as "user " — an assertion on the logged object could never match.
+  it "renders non-primitive arguments instead of dropping them" do
+    session.visit("/lightpanda/console_logs")
+    session.execute_script("console.log('obj', {a: 1}, document.body, undefined, [1, 2])")
+    Capybara::Lightpanda::Utils::Wait.until(timeout: 2) do
+      browser.console_logs.any? { |m| m[:text].start_with?("obj") }
+    end
+
+    text = browser.console_logs.find { |m| m[:text].start_with?("obj") }[:text]
+
+    # Five arguments, five non-empty words: an argument rendered as "" shows
+    # up as a doubled separator.
+    refute_match(/\s{2}|\s\z/, text, "an argument rendered as nothing in #{text.inspect}")
+    assert_equal 5, text.split.size, text
+    assert_includes text.split, "undefined"
+  end
+
   it "excludes the Turbo activity-tracker sentinels" do
     visit_fixture_and_wait
 
