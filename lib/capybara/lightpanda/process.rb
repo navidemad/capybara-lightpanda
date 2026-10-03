@@ -246,11 +246,25 @@ module Capybara
       #     fatal UnknownOption below 8946. (The same PR flipped iframes and
       #     workers off by default — Browser#configure_loading re-enables them
       #     per BrowserContext, and did so before this bump.)
-      # Not in the floor, still worked around: #3375 (9071, option.selected
-      # deselects siblings — SELECT_OPTION_JS keeps its `sel.value =` detour)
-      # and #3378 (9207, matchMedia change events on viewport override —
-      # viewport_test.rb's pin skips below it).
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("9058")
+      #
+      # 2026-10-03 bump 9058 -> 9994 (= release 1.0.0, the new lockstep cap).
+      # Retired or ungated by it:
+      #   #3375 (9071) option.selected deselects its siblings — SELECT_OPTION_JS
+      #     dropped its `sel.value =` detour, which selected the FIRST option
+      #     sharing a value rather than the one Capybara resolved.
+      #   #3378 (9207) matchMedia `change` fires on a viewport override —
+      #     viewport_test.rb's pin runs un-gated.
+      #   #3414 / #3420 / #3422 / #3424 (9217-9234, ours) trusted
+      #     `beforeinput` is cancelable; `.value =` moves the caret to the end;
+      #     a child-text <textarea> can be selected; arrows/Home/End move the
+      #     caret — the `send_keys should send special characters` skip is
+      #     gone and keyboard_editing_test.rb pins all four.
+      # Behavior changes the floor now guarantees, all compensated or
+      # Chrome-parity: #3654 (9883) CORS enforced by default (blocked requests
+      # end in Network.loadingFailed, which Network consumes); #3529 (9877)
+      # SameSite=None without Secure refused (Cookies#set reports it);
+      # #3702 (9968) click no longer focuses (CLICK_JS focuses itself).
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("9994")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -259,17 +273,16 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 0.4.0 (2026-08-31) is build 9058 — exactly the nightly
+      # nightly floor. 1.0.0 (2026-10-02) is build 9994 — exactly the nightly
       # floor, which is no accident: the floor was raised *to* the release so
-      # both channels gate the same commit. (0.3.7 = 8671 predates every fix
-      # the floor exists for; there was never a 0.3.8, upstream jumped the
-      # minor.)
+      # both channels gate the same commit. (0.4.1 = 9463 and 0.4.0 = 9058
+      # predate fixes the floor exists for.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("0.4.0")
+      MINIMUM_RELEASE = Gem::Version.new("1.0.0")
 
       class << self
         # `lightpanda version` prints one of two shapes, and the gem supports

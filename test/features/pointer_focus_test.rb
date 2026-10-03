@@ -116,6 +116,14 @@ describe "Capybara::Lightpanda pointer focus and typing" do
       assert_equal "cat", session.find(:css, "#pets").value
     end
 
+    # The `sel.value =` detour this replaced always picked the FIRST option
+    # with a matching value, whichever one Capybara had resolved.
+    it "selects the exact option when two share a value" do
+      session.select("Second", from: "dupes")
+
+      assert_equal 1, session.evaluate_script("document.getElementById('dupes').selectedIndex")
+    end
+
     it "does not select an option inside a disabled <optgroup>" do
       session.find(:css, "#pets").find(:css, "option[value=axolotl]", visible: :all).select_option
 

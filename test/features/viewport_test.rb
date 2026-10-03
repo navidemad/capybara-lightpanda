@@ -63,15 +63,7 @@ describe "Capybara::Lightpanda viewport" do
     # desktop; only a navigation re-resolves it. The last two assertions pin
     # that documented resize-then-visit shape so the split can't drift
     # unnoticed (verified 2026-09-06 on main 9213).
-    #
-    # Build-gated rather than floor-guaranteed: the floor is pinned to release
-    # 0.4.0 (= 9058) and cannot pass 9207 until upstream tags a newer release.
-    # The skip keeps the pin honest on both channels instead of encoding a
-    # behavior the floor does not promise.
     it "fires matchMedia change listeners when a resize crosses the breakpoint" do
-      build = session.driver.browser.nightly_build
-      skip "upstream #3378 (build 9207) is not in this Lightpanda" unless build && build >= Gem::Version.new("9207")
-
       assert_equal "", session.find("#mq-log").text
 
       session.current_window.resize_to(375, 667)

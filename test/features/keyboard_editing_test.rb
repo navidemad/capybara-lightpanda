@@ -17,12 +17,11 @@ require_relative "../test_helper"
 # control and hands the key to CDP; if upstream regresses, every downstream
 # spec that "types then corrects" passes by leaving the wrong value in place.
 #
-# Caret placement is explicit in every example. Lightpanda's `.value =`
-# setter does NOT move the caret to the end the way Chrome's does (Input.zig
-# `setValue` never touches `_selection_start`), so after Capybara's `set` the
-# caret still sits at 0 and a Backspace there is a legitimate no-op. Setting
-# the range via `setSelectionRange` is what a suite has to do today; if
-# upstream ever aligns the setter with the spec, these examples stay valid.
+# The caret is placed explicitly where an example depends on it. The floor
+# (build 9994) also guarantees our upstream fixes for the rest of the editing
+# story — `.value =` moves the caret to the end (#3420), a <textarea> seeded by
+# its child text can be selected (#3422) and a cancelled `beforeinput` vetoes
+# the edit (#3414) — each pinned below.
 describe "Capybara::Lightpanda keyboard editing" do
   let(:session) { TestSessions::Lightpanda }
 
@@ -67,11 +66,6 @@ describe "Capybara::Lightpanda keyboard editing" do
   # TextEntry mixin), and a full selection takes `howSelected`'s `.full` path
   # rather than the caret arithmetic above.
   #
-  # The value is assigned before selecting on purpose: `text_entry.zig`'s
-  # `select`/`setSelectionRange` read the control's *assigned* `_value`, and a
-  # <textarea> whose text came from its child text node has none, so on such a
-  # control they silently reset the caret to 0 instead of moving it. `set`
-  # then correct is the shape a suite actually uses, and it assigns the value.
   it "Backspace on a fully selected <textarea> clears it" do
     area = session.find(:css, "#area")
     area.set("abc")
@@ -86,13 +80,40 @@ describe "Capybara::Lightpanda keyboard editing" do
                  session.find(:css, "#log").text
   end
 
-  # Deliberately NOT pinned: `beforeinput.preventDefault()` vetoing the edit.
-  # user_input.zig asks for a cancelable beforeinput, but
-  # InputEvent.initWithTrusted hardcodes `_cancelable = false`, so the trusted
-  # event reports cancelable=false and the edit goes through regardless
-  # (verified 2026-09-06 on nightly 9204 and main 9213). Masked-input
-  # libraries relying on the veto do not work yet — see
-  # .claude/rules/lightpanda-io.md, keyboard editing bullet.
+  # Masked-input libraries cancel `beforeinput` to refuse a keystroke; the
+  # trusted event was never cancelable before upstream #3414 (build 9217), so
+  # the edit went through regardless.
+  it "a cancelled beforeinput vetoes the edit" do
+    field = session.find(:css, "#veto")
+    place_caret(field, 3)
+
+    field.send_keys(:backspace)
+
+    assert_equal "abc", field.value
+  end
+
+  # `set` then correct, with no caret placement: `.value =` leaves the caret
+  # at the end of the new value since upstream #3420 (build 9223), as in
+  # Chrome. Below it the Backspace hit position 0 and deleted nothing.
+  it "set then Backspace removes the last character" do
+    field = session.find(:css, "#field")
+    field.set("hello")
+    field.send_keys(:backspace)
+
+    assert_equal "hell", field.value
+  end
+
+  # A <textarea> whose text comes only from its child text node had no
+  # assigned value, so `select()` reset the caret to 0 instead of selecting
+  # (upstream #3422, build 9229).
+  it "Backspace after select() clears a <textarea> that was never assigned" do
+    area = session.find(:css, "#area")
+    session.execute_script("arguments[0].focus(); arguments[0].select()", area)
+
+    area.send_keys(:backspace)
+
+    assert_equal "", area.value
+  end
 
   # A Ctrl chord is a command (select-all), never text. Since upstream #3542
   # (build 9580) the browser inserts whatever a keyDown's `text` carries, so
