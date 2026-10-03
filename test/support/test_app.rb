@@ -1028,4 +1028,36 @@ class TestApp
       </html>
     HTML
   end
+
+  # -- Pointer focus + typing (upstream #3702 / #3424 / #3592) --
+  # A click must move focus the way a real pointer press does, and
+  # send_keys must type where a user would (caret after a pre-filled value).
+  get "/lightpanda/focus" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Focus</title></head>
+        <body>
+          <input type="text" id="first">
+          <input type="text" id="second">
+          <input type="text" id="prefilled" value="foo">
+          <textarea id="area">foo</textarea>
+          <label id="label" for="labelled">Labelled</label>
+          <input type="text" id="labelled">
+          <button type="button" id="disabled-button" disabled>Disabled</button>
+          <div id="plain">Plain text</div>
+          <div id="editor" contenteditable="true"><p id="editor-child">Edit me</p></div>
+          <div id="guarded"><span id="guarded-inner">Keeps focus</span></div>
+          <select id="pets">
+            <option value="cat">Cat</option>
+            <option value="dog" disabled>Dog</option>
+            <optgroup label="Exotic" disabled><option value="axolotl">Axolotl</option></optgroup>
+          </select>
+          <script>
+            document.getElementById('guarded').addEventListener('mousedown', function(e) { e.preventDefault(); });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
 end

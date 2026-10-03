@@ -272,7 +272,7 @@ module Capybara
       # therefore still not awaited here — use Capybara's waiting matchers
       # (`have_current_path`) for those, as you would after a click.
       def send_keys(*)
-        call("function() { this.focus() }")
+        call(SEND_KEYS_FOCUS_JS)
         driver.browser.keyboard.type(*)
         driver.browser.wait_for_idle
       end
@@ -609,7 +609,21 @@ module Capybara
           // Cancelling mousedown suppresses focus/text-selection in a real
           // browser but never the click, so the click below is dispatched
           // unconditionally.
-          hit.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          var pressed = hit.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          // mousedown's default action moves focus. Ours is untrusted, so the
+          // browser won't do it (and since upstream #3702 its click handling
+          // doesn't either): focus what the press landed on, or blur the
+          // current field when it landed on nothing focusable — Chrome's
+          // behavior, and what `click` then `page.send_keys` relies on.
+          if (pressed && window._lightpanda) {
+            var doc = hit.ownerDocument;
+            var focusTarget = _lightpanda.pointerFocusTarget(hit);
+            if (focusTarget) {
+              if (doc.activeElement !== focusTarget) focusTarget.focus();
+            } else if (doc.activeElement && doc.activeElement !== doc.body && doc.activeElement.blur) {
+              doc.activeElement.blur();
+            }
+          }
           hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
           var notCancelled = hit.dispatchEvent(clickEvt);
@@ -918,8 +932,46 @@ module Capybara
         }
       JS
 
+      # Focuses the element keys are about to be typed into, WebDriver's
+      # "Element Send Keys" way (what chromedriver's focus script does): an
+      # element that did NOT already have focus gets its caret after its
+      # content. Since upstream #3424 (build 9234) `Input.insertText` inserts
+      # at the caret, and a value seeded by the `value=` attribute leaves the
+      # caret at 0 — without this, `send_keys("x")` on a pre-filled field
+      # typed "xfoo" where Chrome types "foox". An element that already has
+      # focus keeps its caret, so `page.send_keys` mid-edit continues in place.
+      # A non-focusable target (focus() is a no-op on those since upstream
+      # #3592, build 9646) must not leave the previous field focused, or its
+      # keys land there: blur it so they go to the body, as in Chrome.
+      SEND_KEYS_FOCUS_JS = <<~JS
+        function() {
+          var doc = this.ownerDocument;
+          if (doc.activeElement === this) return;
+          this.focus();
+          if (doc.activeElement !== this) {
+            if (doc.activeElement && doc.activeElement !== doc.body && doc.activeElement.blur) doc.activeElement.blur();
+            return;
+          }
+          if (typeof this.setSelectionRange === 'function') {
+            // Throws on types without a selection (email, number, …) — those
+            // have no caret to place.
+            try {
+              var end = String(this.value || '').length;
+              this.setSelectionRange(end, end);
+            } catch (e) {}
+          }
+        }
+      JS
+
+      # A disabled option (or one in a disabled <optgroup>/<select>) is not
+      # selectable by a user, and Capybara's shared spec expects selecting one
+      # to be a no-op (rack_test: `return if disabled?`). Both IDL routes —
+      # `sel.value =` and `option.selected = true` — select it per spec;
+      # Lightpanda's `value` getter used to skip disabled options and hide that,
+      # until upstream #3502 (build 9424).
       SELECT_OPTION_JS = <<~JS
         function() {
+          if (_lightpanda.isDisabled(this)) return;
           var sel = this.parentElement;
           while (sel && (sel.tagName || '').toUpperCase() !== 'SELECT') sel = sel.parentElement;
           if (!sel) {
