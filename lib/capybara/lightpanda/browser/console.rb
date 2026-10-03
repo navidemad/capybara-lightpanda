@@ -59,12 +59,25 @@ module Capybara
 
           on("Runtime.consoleAPICalled") do |params|
             params["args"]&.each do |r|
-              value = r["value"]
-              next if driver_sentinel?(value)
+              next if driver_sentinel?(r["value"])
 
-              logger.puts(value)
+              logger.puts(console_arg_text(r))
             end
           end
+        end
+
+        # One console argument as text. Since upstream #3504 (build 9414)
+        # Lightpanda sends `value` for primitives only — an object, array or
+        # DOM node arrives as a RemoteObject with a `description` (sometimes
+        # empty), a `className` and a `type`. Reading `value` alone printed
+        # objects as blank lines in the logger and DOM nodes as "" in
+        # console_logs; fall through to the first non-empty descriptor,
+        # the way DevTools labels an object it can't preview.
+        def console_arg_text(arg)
+          return arg["value"].to_s if arg.key?("value")
+
+          [arg["unserializableValue"], arg["description"], arg["className"], arg["type"]]
+            .find { |v| v.is_a?(String) && !v.empty? }.to_s
         end
 
         TURBO_SENTINEL_PREFIX = "__lightpanda_turbo_"
@@ -117,7 +130,7 @@ module Capybara
 
             entry = {
               type: params["type"],
-              text: args.map { |a| a.fetch("value") { a["description"] }.to_s }.join(" "),
+              text: args.map { |a| console_arg_text(a) }.join(" "),
               timestamp: params["timestamp"],
               args: args,
             }
