@@ -166,6 +166,7 @@ module Capybara
         subscribe_to_console_logs
         subscribe_to_console_capture
         subscribe_to_execution_context
+        subscribe_to_navigation
         subscribe_to_turbo_signals
         # Network owns the Network.* domain: enabling installs traffic
         # tracking AND the navigation-response capture behind status_code.
@@ -423,17 +424,25 @@ module Capybara
       # (title, current_url, …) without racing the navigation lifecycle.
       #
       # Sniff window: the action returns synchronously, but the CDP events
-      # signalling its async fallout (Runtime.executionContextsCleared for
-      # full nav; the turbo sentinel for Turbo) arrive later on the dispatch
-      # thread. We poll briefly for either signal — if neither fires within
-      # the window, assume the action was inert and exit fast.
+      # signalling its async fallout arrive later on the dispatch thread. We
+      # poll briefly for any of them — a main-frame navigation start (see
+      # subscribe_to_navigation), Runtime.executionContextsCleared, or the
+      # turbo sentinel — and if none fires within the window, assume the
+      # action was inert and exit fast. Lightpanda announces a navigation
+      # ~5 ms after the click but only swaps the execution context once the
+      # response lands, so watching the context alone returned on the old
+      # document whenever the server took longer than the window.
       SNIFF_WINDOW = 0.05
       private_constant :SNIFF_WINDOW
 
       def wait_for_idle
         prior_context_iteration = @default_context_event.iteration
+        prior_navigation_iteration = @navigation_event.iteration
         sniff_deadline = monotonic_time + SNIFF_WINDOW
+        navigating = false
         loop do
+          navigating = @navigation_event.iteration > prior_navigation_iteration
+          break if navigating
           break if @default_context_event.iteration > prior_context_iteration
           break unless @turbo_event.set?
           break if monotonic_time > sniff_deadline
@@ -441,6 +450,9 @@ module Capybara
           sleep 0.001
         end
 
+        # Only a navigation this action started is awaited: one left pending
+        # by an earlier load must not make every later click pay the timeout.
+        @navigation_event.wait(@options.timeout) if navigating
         @default_context_event.wait(@options.timeout)
         @turbo_event.wait(@options.timeout)
         check_unhandled_modal!
@@ -605,6 +617,53 @@ module Capybara
         end
 
         page_command("Runtime.enable")
+      end
+
+      # Track cross-document navigations of the main frame, from the moment
+      # they start until the frame stops loading. Same-document ones
+      # (pushState, fragment) emit Page.navigatedWithinDocument instead and
+      # never reset the event, so they don't make wait_for_idle block; nor do
+      # iframe navigations (other frameId). The main frame shares the
+      # target's id.
+      #
+      # It ends at whichever comes first: the main frame's new default
+      # execution context (the new document committed — enough even when
+      # the load event never comes, lightpanda-io/browser#1801) or
+      # Page.frameStoppedLoading. A navigation whose request fails
+      # (connection refused, DNS) emits neither — only Network.loadingFailed for the
+      # document request — so that ends it too, keyed by the requestId the
+      # main-frame Document request was sent with. Needs Page.enable, which
+      # the first go_to turns on; a page that was never visited has no
+      # navigation to click into.
+      def subscribe_to_navigation
+        @navigation_event = Utils::Event.new
+        @navigation_event.set
+        @navigation_request_id = nil
+
+        on("Page.frameStartedNavigating") do |params|
+          @navigation_event.reset if main_frame_navigation_start?(params)
+        end
+        on("Network.requestWillBeSent") do |params|
+          @navigation_request_id = params["requestId"] if main_frame_document_request?(params)
+        end
+        on("Page.frameStoppedLoading") do |params|
+          @navigation_event.set if params["frameId"] == @target_id
+        end
+        on("Runtime.executionContextCreated") do |params|
+          aux = params.dig("context", "auxData") || {}
+          @navigation_event.set if aux["isDefault"] && aux["frameId"] == @target_id
+        end
+        on("Network.loadingFailed") do |params|
+          @navigation_event.set if params["requestId"] == @navigation_request_id
+        end
+      end
+
+      def main_frame_navigation_start?(params)
+        params["frameId"] == @target_id && !params["navigationType"].to_s.match?(/same/i)
+      end
+
+      def main_frame_document_request?(params)
+        params["type"] == "Document" && params["frameId"] == @target_id
       end
 
       def close_client_silently
