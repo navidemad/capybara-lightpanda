@@ -382,6 +382,25 @@ describe Capybara::Lightpanda::Driver do
       session.visit("/lightpanda/simple")
       assert_equal "Simple Page", session.title
     end
+
+    it "allows the next visit after reset fails with an already disposed context" do
+      session.visit("/lightpanda/simple")
+      failed_browser = driver.browser
+      dispose = failed_browser.method(:dispose_browser_context)
+      failed_browser.define_singleton_method(:dispose_browser_context) do
+        # Destroy the real session before failing: retaining this browser
+        # would otherwise poison every later example with stale CDP state.
+        dispose.call
+        raise Capybara::Lightpanda::TimeoutError, "reset failed after context disposal"
+      end
+
+      _out, err = capture_io { driver.reset! }
+      assert_includes err, "reset failed after context disposal"
+
+      session.visit("/lightpanda/other")
+      assert_equal "Other Page", session.title
+      refute_same failed_browser, driver.browser
+    end
   end
 
   # ───────────────────────────────────────────────
