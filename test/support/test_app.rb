@@ -291,6 +291,29 @@ class TestApp
     HTML
   end
 
+  # Same frame shape with a text field inside, for send_keys into an iframe.
+  get "/lightpanda/with_input_frame" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Page with Input Frame</title></head>
+        <body>
+          <iframe id="input-frame" src="/lightpanda/frame_input_content"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/frame_input_content" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Frame Input</title></head>
+        <body><input id="frame-input" type="text"></body>
+      </html>
+    HTML
+  end
+
   # -- Cookie test pages --
 
   get "/lightpanda/set_test_cookie" do
@@ -624,6 +647,26 @@ class TestApp
           // "idle" is safe to emit here: the turbo event is set (idle) by default.
           console.debug("__lightpanda_turbo_idle");
         </script>
+      </body>
+      </html>
+    HTML
+  end
+
+  # Exceptions thrown outside an addEventListener listener or a top-level
+  # script: a timer, an animation frame, an inline on* handler. Lightpanda
+  # only reports these to window's error event from build 10049 (#3755).
+  # The closed popover must read as hidden (#3757, build 10052).
+  get "/lightpanda/callback_errors" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head><title>callback errors</title></head>
+      <body>
+        <button id="timer" onclick="setTimeout(function() { throw new Error('timer boom'); }, 0)">timer</button>
+        <button id="raf" onclick="requestAnimationFrame(function() { throw new Error('raf boom'); })">raf</button>
+        <button id="inline" onclick="throw new Error('inline boom')">inline</button>
+        <div id="pop" popover>popover secret</div>
+        <button id="show-pop" onclick="document.getElementById('pop').showPopover()">show</button>
       </body>
       </html>
     HTML
