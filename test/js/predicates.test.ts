@@ -74,6 +74,16 @@ test("isDisabled: <option> inside an enabled <select> is not disabled", () => {
   expect(predicates.isDisabled(document.getElementById("t"))).toBe(false);
 });
 
+test("isDisabled: a form field named \"disabled\" does not disable the form's options", () => {
+  // form.disabled is named field access (Lightpanda #3778, Chrome too): it
+  // returns the <input>, an object. A truthiness check read every option in
+  // that form as disabled, and select_option silently did nothing.
+  const { predicates, document } = makeDom(
+    '<form><input name="disabled"><select><option id="t">a</option></select></form>',
+  );
+  expect(predicates.isDisabled(document.getElementById("t"))).toBe(false);
+});
+
 test("isDisabled: <option> under an <optgroup> walks past it to the disabled <select>", () => {
   // Exercises the multi-hop `while (p)` ancestor loop, not just a direct
   // parent — the option's immediate parent here is the optgroup, not the
