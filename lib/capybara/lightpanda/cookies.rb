@@ -83,7 +83,10 @@ module Capybara
       # Lightpanda answers `{success: false}` and drops the cookie for an
       # invalid combination — notably `same_site: "None"` without `secure`
       # since upstream #3529 (build 9877), Chrome's rule — so callers that
-      # need it to stick should check the result.
+      # need it to stick should check the result. A malformed field (a `;` or
+      # control character in the name or value, surrounding whitespace) raises
+      # BrowserError instead: since upstream #3791 (build 10212) the browser
+      # answers `-32602 Sanitizing cookie failed`, as Chrome does.
       def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists, Naming/PredicateMethod
               same_site: nil, expires: nil)
         params = {
@@ -126,8 +129,10 @@ module Capybara
       # CDP requires either domain or url for each cookie; entries from `store`
       # already include domain, so they round-trip cleanly. Returns true on
       # success (intentionally not a predicate — mirrors ferrum's API). A
-      # cookie the browser refuses is reported on stderr rather than raised,
-      # so one bad entry doesn't abort restoring the rest.
+      # cookie the browser refuses — `{success: false}`, or a malformed field
+      # it rejects outright — is reported on stderr rather than raised, so one
+      # bad entry doesn't abort restoring the rest. Builds before 10212 stored
+      # malformed cookies, so files saved from them can hold such entries.
       def load(path = "cookies.yml") # rubocop:disable Naming/PredicateMethod
         cookies = YAML.load_file(path)
         rejected = cookies.reject { |c| restore_cookie(c) }.map { |c| c.transform_keys(&:to_s)["name"] }
@@ -153,8 +158,21 @@ module Capybara
         params[:same_site] = same_site if same_site
         exp = attrs["expires"]
         params[:expires] = Time.at(exp) if exp.is_a?(Numeric) && exp.positive?
-        set(**params)
+        set_or_refuse(**params)
       end
+
+      def set_or_refuse(**params)
+        set(**params)
+      rescue BrowserError => e
+        raise unless e.code == INVALID_PARAMS
+
+        false
+      end
+
+      # Chrome's (and, since upstream #3791, Lightpanda's) answer to a cookie
+      # whose fields fail sanitizing.
+      INVALID_PARAMS = -32_602
+      private_constant :INVALID_PARAMS
 
       # Lightpanda below build 9877 reported every cookie without a SameSite
       # attribute as "None", so a file stored then is full of insecure
