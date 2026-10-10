@@ -75,13 +75,22 @@ describe "Node#click waits for the navigation it starts" do
 
   # A failed navigation emits neither a new context nor
   # Page.frameStoppedLoading — only Network.loadingFailed. Missing it would
-  # hang every such click for the full driver timeout (10 s here).
+  # hang every such click for the full driver timeout (10 s here). Where the
+  # click ends differs by build: through 10260 the old document stays; from
+  # upstream #3843 (10261) an error document is committed at the failed URL,
+  # as Chrome does.
   it "does not block on a navigation whose request fails" do
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     session.find(:css, "#refused").click
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
 
-    session.assert_current_path("/lightpanda/nav_wait", wait: 0)
     assert_operator elapsed, :<, 1, "failed-navigation click took #{(elapsed * 1000).round} ms"
+    build = session.driver.browser.nightly_build
+    if build && build >= Gem::Version.new("10261")
+      session.assert_current_path("/unreachable", wait: 0)
+      assert session.has_text?("Navigation failed")
+    else
+      session.assert_current_path("/lightpanda/nav_wait", wait: 0)
+    end
   end
 end
