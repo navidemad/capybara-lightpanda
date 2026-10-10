@@ -197,6 +197,34 @@ describe Capybara::Lightpanda::Cookies do
       assert_match(/refused cookies .*: session/, err)
     end
 
+    # Builds before 10212 stored cookies with malformed fields; since upstream
+    # #3791 setting one back answers -32602. One such entry in a saved file
+    # must not abort restoring the rest of the session.
+    it "keeps restoring after a cookie the browser rejects as malformed" do
+      good = cookie_attrs.merge("name" => "good")
+      bad = cookie_attrs.merge("name" => "a;b")
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [bad, good])
+      cookies.store(tmp_path)
+      refusal = Capybara::Lightpanda::BrowserError.new("code" => -32_602, "message" => "Sanitizing cookie failed")
+      browser.expects(:command).with("Network.setCookie", has_entries(name: "a;b")).raises(refusal)
+      browser.expects(:command).with("Network.setCookie", has_entries(name: "good")).returns("success" => true)
+
+      _out, err = capture_io { assert cookies.load(tmp_path) }
+
+      assert_match(/refused cookies .*: a;b\z/, err.strip)
+    end
+
+    # Only the sanitizing refusal is a per-cookie verdict; any other browser
+    # error (a dead connection, a protocol failure) must still surface.
+    it "still raises browser errors other than a cookie refusal" do
+      browser.stubs(:command).with("Network.getAllCookies").returns("cookies" => [cookie_attrs])
+      cookies.store(tmp_path)
+      browser.stubs(:command).with("Network.setCookie", anything)
+             .raises(Capybara::Lightpanda::BrowserError.new("code" => -32_000, "message" => "boom"))
+
+      assert_raises(Capybara::Lightpanda::BrowserError) { cookies.load(tmp_path) }
+    end
+
     it "defaults to cookies.yml when no path is given" do
       Dir.mktmpdir do |dir|
         Dir.chdir(dir) do

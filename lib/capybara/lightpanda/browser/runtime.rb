@@ -1,7 +1,20 @@
 # frozen_string_literal: true
 
+require "singleton"
+
 module Capybara
   module Lightpanda
+    # Stands in for a script result that has no Ruby representation because it
+    # references itself — `window`, or `a.self = a` — so `returnByValue` can't
+    # serialize it. Ferrum returns its own `Ferrum::CyclicObject` the same way.
+    class CyclicObject
+      include Singleton
+
+      def inspect
+        %(#<#{self.class} JavaScript object that cannot be represented in Ruby>)
+      end
+    end
+
     class Browser
       # JS evaluation and RemoteObject plumbing: Runtime.evaluate /
       # callFunctionOn dispatch, result serialization (Ferrum's
@@ -216,6 +229,11 @@ module Capybara
         # Re-fetch a remote object as JSON-serializable value for plain objects/arrays.
         # Cheaper than walking properties and good enough for shared specs. Releases
         # the original handle so long-lived sessions don't accumulate leaked objectIds.
+        #
+        # V8 refuses to return a cyclic object by value. Through 1.0.0 every
+        # Zig-backed object, `window` included, came back as a node; since
+        # upstream #3831 (build 10255) `window` lands here and raised. Both it
+        # and a plain self-referencing object now return CyclicObject.
         def serialize_remote_object(object_id)
           json = page_command(
             "Runtime.callFunctionOn",
@@ -224,9 +242,16 @@ module Capybara
             returnByValue: true
           )
           handle_evaluate_response(json, "function() { return this }")
+        rescue BrowserError => e
+          raise unless CYCLIC_VALUE_ERRORS.any? { |message| e.message.to_s.include?(message) }
+
+          CyclicObject.instance
         ensure
           release_object(object_id)
         end
+
+        CYCLIC_VALUE_ERRORS = ["Object reference chain is too long", "Object couldn't be returned by value"].freeze
+        private_constant :CYCLIC_VALUE_ERRORS
 
         # Walk an array's own indexed properties via `Runtime.getProperties`,
         # unwrapping each element through the regular result pipeline so that

@@ -47,6 +47,7 @@ Settled earlier, don't repeat:
 - **Socket released even on a dead connection** — Ferrum #639 `WebSocket#force_close` ↔ `client/web_socket.rb#close` + `#close_socket` (the close-frame/thread-join half still skips on a dead connection). Pinned by `test/features/dead_browser_socket_test.rb`.
 - **`Network.loadingFailed` closes the traffic entry** — `lib/ferrum/network.rb` (loadingFailed → exchange error) ↔ `network.rb#build_failure_handler`; `errorText` kept as `traffic[..][:error]`. Load-bearing since CORS is on by default (≥9883).
 - **`Cookies#set` returns the browser's verdict** — ferrum's `set` returns `success` ↔ `cookies.rb#set` (`{success: false}` for e.g. insecure SameSite=None since upstream #3529).
+- **`CyclicObject` placeholder for self-referencing results** — `lib/ferrum/frame/runtime.rb` (`CyclicObject`, a `Singleton`) ↔ `browser/runtime.rb#serialize_remote_object`. Ferrum detects cycles with a JS walk; we rescue V8's `returnByValue` refusal ("Object reference chain is too long") instead, so the whole value becomes the placeholder (Ferrum's top-level check does the same). Needed since upstream #3831 made `window` a plain object.
 
 ### Outstanding adoption candidates
 
