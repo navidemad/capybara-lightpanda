@@ -665,6 +665,8 @@ class TestApp
         <button id="timer" onclick="setTimeout(function() { throw new Error('timer boom'); }, 0)">timer</button>
         <button id="raf" onclick="requestAnimationFrame(function() { throw new Error('raf boom'); })">raf</button>
         <button id="inline" onclick="throw new Error('inline boom')">inline</button>
+        <button id="microtask" onclick="queueMicrotask(function() { throw new Error('microtask boom'); })">microtask</button>
+        <input id="prefilled" value="hello world">
         <div id="pop" popover>popover secret</div>
         <button id="show-pop" onclick="document.getElementById('pop').showPopover()">show</button>
       </body>
