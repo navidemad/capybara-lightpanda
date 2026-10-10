@@ -4,4 +4,4 @@
 # Dev-only JS test harness (test/js/) runs on Bun. Pinned to match
 # test/js/.bun-version so `mise install` provisions the same post-Rust-rewrite
 # build the predicate tests are validated against. Not a gem runtime dep.
-bun = "1.3.14"
+bun = "1.4.3"
