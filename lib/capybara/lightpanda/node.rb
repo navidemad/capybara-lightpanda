@@ -626,6 +626,13 @@ module Capybara
           var notCancelled = hit.dispatchEvent(clickEvt);
           if (!notCancelled || clickEvt.defaultPrevented) return;
           var tag = hit.tagName;
+          // A `javascript:` link never navigates: the click's own activation
+          // behavior has already run its code. Assigning it to location.href
+          // makes Lightpanda request `http://javascript:…`, and since upstream
+          // #3843 (build 10261) that failed navigation leaves the page with no
+          // execution context — `href="javascript:void(0)"` toggles (select2,
+          // Bootstrap) killed the page (lightpanda-io/browser#3898).
+          if (tag === 'A' && /^\\s*javascript:/i.test(hit.getAttribute('href') || '')) return;
           if (tag === 'A' && hit.href && hit.target !== '_blank') {
             // Same-document fragment-only navigation: just update hash (or do
             // nothing if identical). Mirrors Chrome — assigning location.href

@@ -3,10 +3,10 @@
 require_relative "../test_helper"
 
 # Upstream fixes that are in the nightly but above the gem's floor (1.0.0 =
-# 9994 still has the bugs): lightpanda-io/browser#3755, #3757, #3759. Each test
-# skips below the build that fixed it, so it runs on the rolling nightly and
-# pins the behavior the gem's users get there. Drop the gates when the floor
-# moves past 10057 (the next tagged release).
+# 9994 still has the bugs): lightpanda-io/browser#3755, #3757, #3759, #3849,
+# #3874. Each test skips below the build that fixed it, so it runs on the
+# rolling nightly and pins the behavior the gem's users get there. Drop the
+# gates when the floor moves past them (the next tagged release).
 describe "Lightpanda fixes above the floor" do
   let(:session) { TestSessions::Lightpanda }
   let(:browser) { session.driver.browser }
@@ -56,6 +56,36 @@ describe "Lightpanda fixes above the floor" do
 
       session.find(:css, "#show-pop").click
       assert session.has_css?("#pop", text: "popover secret")
+    end
+  end
+
+  describe "page_errors from a microtask (#3849, build 10310)" do
+    before do
+      session.visit("/lightpanda/callback_errors")
+      require_build(10_310, "#3849")
+    end
+
+    # Below 10310 V8's microtask checkpoint swallowed the exception, so a
+    # promise-chain handler (Turbo, Stimulus values callbacks) dying there
+    # left page_errors empty.
+    it "captures an exception thrown from queueMicrotask" do
+      session.find(:css, "#microtask").click
+      assert_includes page_error_messages(1).join("\n"), "microtask boom"
+    end
+  end
+
+  describe "Ctrl+A selects a field's text (#3874, build 10366)" do
+    before do
+      session.visit("/lightpanda/callback_errors")
+      require_build(10_366, "#3874")
+    end
+
+    # The usual "clear the field, then type" idiom. Below 10366 Ctrl+A did
+    # nothing, so the field ended as "hello worlnew" instead of "new".
+    it "replaces the whole value" do
+      field = session.find(:css, "#prefilled")
+      field.send_keys([:control, "a"], :backspace, "new")
+      assert_equal "new", field.value
     end
   end
 
