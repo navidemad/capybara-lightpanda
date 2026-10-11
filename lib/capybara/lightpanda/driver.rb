@@ -88,17 +88,20 @@ module Capybara
         object_ids.map { |oid| build_node(oid) }
       end
 
+      # Inside `within_frame` these run in the frame's document, as in Chrome.
       def evaluate_script(script, *args)
-        unwrap_script_result(browser.evaluate(script.strip, *native_args(args)))
+        unwrap_script_result(browser.evaluate(script.strip, *native_args(args),
+                                              frame: browser.frame_stack.last))
       end
 
       def execute_script(script, *args)
-        browser.execute(script.strip, *native_args(args))
+        browser.execute(script.strip, *native_args(args), frame: browser.frame_stack.last)
         nil
       end
 
       def evaluate_async_script(script, *args)
-        unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args)))
+        unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args),
+                                                    frame: browser.frame_stack.last))
       end
 
       # -- Network Inspection --

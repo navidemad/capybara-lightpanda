@@ -36,7 +36,15 @@ module Capybara
         # later calls, like the DevTools console) but allows redeclaration.
         # Completion-value semantics cover a bare expression (`'foo'`), a
         # `throw` statement, and multi-statement scripts alike.
-        def evaluate(expression, *args)
+        #
+        # `frame` (an `<iframe>` Node, `frame_stack.last` inside `within_frame`)
+        # runs the script against that frame's globals — see call_with_args.
+        # There the script goes through the frame's indirect `eval` rather than
+        # REPL mode: same completion-value semantics, `var` still lands on the
+        # frame's window, but a top-level `const`/`let` lives only for its call.
+        def evaluate(expression, *args, frame: nil)
+          return call_with_args(FRAME_EVAL_JS, [expression], frame: frame) if frame && args.empty?
+
           if args.empty?
             response = page_command("Runtime.evaluate", expression: expression, returnByValue: false,
                                                         awaitPromise: true, replMode: true)
@@ -46,7 +54,7 @@ module Capybara
           end
 
           wrapped = "function() { return #{expression} }"
-          call_with_args(wrapped, args)
+          call_with_args(wrapped, args, frame: frame)
         end
 
         # Execute JS without returning a value.
@@ -56,7 +64,12 @@ module Capybara
         # on JS exceptions so silent failures don't mask test bugs (the
         # previous fast path swallowed them because `awaitPromise: false` was
         # checked but `exceptionDetails` was not).
-        def execute(expression, *args)
+        def execute(expression, *args, frame: nil)
+          if frame && args.empty?
+            call_with_args(FRAME_EXECUTE_JS, [expression], return_by_value: true, frame: frame)
+            return nil
+          end
+
           if args.empty?
             response = page_command("Runtime.evaluate", expression: expression, returnByValue: false,
                                                         awaitPromise: false, replMode: true)
@@ -65,7 +78,7 @@ module Capybara
           end
 
           wrapped = "function() { #{expression} }"
-          call_with_args(wrapped, args, return_by_value: false)
+          call_with_args(wrapped, args, return_by_value: false, frame: frame)
           nil
         end
 
@@ -90,7 +103,7 @@ module Capybara
         # Evaluate async JS with a callback. The user's script receives
         # the callback as its last argument (`arguments[arguments.length - 1]`),
         # matching Capybara's evaluate_async_script contract.
-        def evaluate_async(expression, *args, wait: @options.timeout)
+        def evaluate_async(expression, *args, wait: @options.timeout, frame: nil)
           timeout_ms = (wait * 1000).to_i
           wrapped = <<~JS
             function() {
@@ -105,7 +118,7 @@ module Capybara
               });
             }
           JS
-          call_with_args(wrapped, args)
+          call_with_args(wrapped, args, frame: frame)
         end
 
         # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
@@ -155,6 +168,19 @@ module Capybara
           # itself timed out / failed in transport.
         end
 
+        # Compiles the declaration (first argument) with the frame's `eval` and
+        # applies it to the rest. `this` is the `<iframe>` element.
+        FRAME_APPLY_JS = <<~JS
+          function(declaration) {
+            var fn = this.contentWindow.eval('(' + declaration + ')');
+            return fn.apply(null, Array.prototype.slice.call(arguments, 1));
+          }
+        JS
+        # Indirect eval: global code in the frame, like a classic script.
+        FRAME_EVAL_JS = "function(source) { return (0, eval)(source); }"
+        # No return, so a script ending in a pending Promise isn't awaited.
+        FRAME_EXECUTE_JS = "function(source) { (0, eval)(source); }"
+
         private
 
         def serialize_argument(arg)
@@ -180,17 +206,32 @@ module Capybara
         # When `return_by_value: false` (the default) the return value is unwrapped via
         # `unwrap_call_result` so that DOM nodes come back as `{ "__lightpanda_node__" => ... }`
         # hashes the Driver can wrap as Capybara nodes.
-        def call_with_args(function_declaration, args, return_by_value: false)
-          # document_object_id returns a fresh RemoteObject handle every call.
-          # Release it on the way out so long-running shared-spec sessions don't
-          # accumulate orphaned V8 handles between resets.
-          doc_oid = document_object_id
+        #
+        # With `frame`, the function is compiled by the frame's own `eval`, so
+        # its free names (`window`, `document`, `location`) are the frame's, and
+        # called from the `<iframe>` element. Running it in the frame's own
+        # execution context instead would not do: Lightpanda runs every
+        # callFunctionOn in the top context, so node handles found inside a
+        # frame belong to that context and can't be passed into another
+        # ("Argument should belong to the same JavaScript world").
+        def call_with_args(function_declaration, args, return_by_value: false, frame: nil)
+          arguments = args.map { |a| serialize_argument(a) }
+          if frame
+            target = frame.remote_object_id
+            arguments.unshift({ value: function_declaration })
+            function_declaration = FRAME_APPLY_JS
+          else
+            # document_object_id returns a fresh RemoteObject handle every call.
+            # Release it on the way out so long-running shared-spec sessions
+            # don't accumulate orphaned V8 handles between resets.
+            target = doc_oid = document_object_id
+          end
           params = {
-            objectId: doc_oid,
+            objectId: target,
             functionDeclaration: function_declaration,
             returnByValue: return_by_value,
             awaitPromise: true,
-            arguments: args.map { |a| serialize_argument(a) },
+            arguments: arguments,
           }
           response = page_command("Runtime.callFunctionOn", **params)
           raise_on_js_error!("call_with_args", function_declaration, response)
