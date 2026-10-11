@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.14.0] - 2026-10-11
 
 ### Fixed
 
@@ -9,6 +9,10 @@
 - **Clicking a `javascript:` link no longer breaks the page on recent Lightpanda nightlies.** On nightly 10261 and later, clicking `<a href="javascript:void(0)">` (select2, Bootstrap toggles, older jQuery code) left the page unusable: every later `find` or `evaluate_script` raised `NoExecutionContextError` until the next `visit`. The link's code still runs, once, and the page stays.
 - **A click waits for the page it navigates to, even when the server is slow.** `click` used to return after about 50 ms, before a link, `window.location` assignment or form submission had loaded the next page whenever the server took longer than that (a slow action, a redirect). The very next `current_url` or `assert_current_path(..., wait: 0)` then read the page being left. The click now waits for the new page, as in Cuprite. Clicks that don't navigate are as fast as before, and so are `pushState` and anchor clicks. A navigation that fails, such as a refused connection, doesn't make the click wait for the timeout. `send_keys` waits the same way when Enter submits a form.
 - **`go_back` and `go_forward` keep the page when the history entry comes from `pushState`.** They used to reload the document from the server, so the page's JavaScript state was lost and no `popstate` event fired: a "browser back button" test on a step-by-step page could not pass. They now behave like the browser's buttons: the page stays, `popstate` fires and `current_url` is up to date when the call returns. Going back or forward to another page still loads it, and the call waits for it. Lightpanda limit: on Lightpanda 1.0.0 this only applies when the two entries differ by their `#fragment`. When `pushState` changed the path (Turbo Drive, client-side routers), 1.0.0 still reloads the page ([lightpanda-io/browser#3726](https://github.com/lightpanda-io/browser/issues/3726)); nightly builds from 10239 keep it.
+- **Clicking a link inside an iframe navigates the iframe, not the whole page.** Inside `within_frame`, `click_link` used to replace the whole page with the link's target, and a `#fragment` link in a frame did the same. Links with `target="_top"` or `target="_parent"` still leave the frame, as in Chrome.
+- **Scripts run inside the frame within `within_frame`.** `execute_script`, `evaluate_script` and `evaluate_async_script` used to run against the page around the frame, so `document` and `window` were the top page's. They now see the frame's document, as in Chrome.
+- **An element found in an iframe goes stale when that iframe navigates.** It used to keep answering from the old document: empty text, not visible, clicks that did nothing. Capybara never found it again. It is now treated as obsolete, as in Chrome, and Capybara's automatic reload finds the element in the new page.
+- **`select` works in a form that has a field named `disabled`.** On recent Lightpanda nightlies, an `<input name="disabled">` made every option in its form read as disabled, so `select` silently did nothing.
 
 ## [0.13.0] - 2026-10-03
 
