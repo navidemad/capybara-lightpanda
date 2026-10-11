@@ -291,6 +291,37 @@ class TestApp
     HTML
   end
 
+  # A frame whose document changes on navigation: `?v=N` renders version N
+  # and links to N+1 (in the frame, and with target=_top).
+  get "/lightpanda/with_versioned_frame" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Page with Versioned Frame</title></head>
+        <body>
+          <iframe id="versioned-frame" src="/lightpanda/frame_versioned?v=1"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/frame_versioned" do
+    version = params.fetch("v", "1").to_i
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Frame v#{version}</title></head>
+        <body>
+          <p id="version">v#{version}</p>
+          <a id="next" href="/lightpanda/frame_versioned?v=#{version + 1}">Next</a>
+          <a id="jump" href="#bottom">Jump</a>
+          <a id="top" href="/lightpanda/frame_versioned?v=#{version + 1}" target="_top">Leave frame</a>
+          <p id="bottom">Bottom</p>
+        </body>
+      </html>
+    HTML
+  end
+
   # Same frame shape with a text field inside, for send_keys into an iframe.
   get "/lightpanda/with_input_frame" do
     <<~HTML
