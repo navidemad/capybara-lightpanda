@@ -85,9 +85,10 @@ module Capybara
         # Selenium's `execute_async_script`: the script receives a completion
         # callback as its last argument. Same contract as
         # Driver#evaluate_async_script, minus the DOM-node unwrapping — callers
-        # on this path (axe-core et al.) hand back plain JSON.
+        # on this path (axe-core et al.) hand back plain JSON. Runs in the
+        # current frame, as Selenium's does.
         def execute_async_script(script, *)
-          evaluate_async(script.to_s.strip, *)
+          evaluate_async(script.to_s.strip, *, frame: frame_stack.last)
         end
 
         # Selenium's raw-CDP escape hatch, as used by
