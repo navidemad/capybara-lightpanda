@@ -43,6 +43,24 @@ describe "Node#click waits for the navigation it starts" do
     session.assert_current_path("/lightpanda/nav_wait/slow", wait: 0)
   end
 
+  # The new document is committed (fresh execution context) before its module
+  # scripts run. Returning there let the next click land before the page's
+  # JS had wired its handlers, and the click was silently lost. Cuprite
+  # waits for the load event.
+  it "waits for the new page's module scripts after a link click" do
+    session.find(:css, "#module-link").click
+    session.find(:css, "#armed").click
+
+    session.assert_selector(:css, "#result", text: "handled")
+  end
+
+  it "waits for the new page's module scripts after a form submit" do
+    session.find(:css, "#module-submit").click
+    session.find(:css, "#armed").click
+
+    session.assert_selector(:css, "#result", text: "handled")
+  end
+
   # The other half of the contract: waiting must be gated on a navigation
   # actually starting, or every click on a plain button pays for it.
   it "keeps an inert click fast" do

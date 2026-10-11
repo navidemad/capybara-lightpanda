@@ -167,6 +167,7 @@ module Capybara
         subscribe_to_console_capture
         subscribe_to_execution_context
         subscribe_to_navigation
+        subscribe_to_document_ready
         subscribe_to_turbo_signals
         # Network owns the Network.* domain: enabling installs traffic
         # tracking AND the navigation-response capture behind status_code.
@@ -452,7 +453,10 @@ module Capybara
 
         # Only a navigation this action started is awaited: one left pending
         # by an earlier load must not make every later click pay the timeout.
-        @navigation_event.wait(@options.timeout) if navigating
+        if navigating
+          @navigation_event.wait(@options.timeout)
+          wait_for_document_ready
+        end
         @default_context_event.wait(@options.timeout)
         @turbo_event.wait(@options.timeout)
         check_unhandled_modal!
@@ -656,6 +660,64 @@ module Capybara
         on("Network.loadingFailed") do |params|
           @navigation_event.set if params["requestId"] == @navigation_request_id
         end
+      end
+
+      # The new document's context exists before its deferred and module
+      # scripts have run: this event marks the end of that phase, at
+      # Page.domContentEventFired or anything later that proves it is over
+      # (load, the frame stopping, the document request failing).
+      def subscribe_to_document_ready
+        @document_ready_event = Utils::Event.new
+        @document_ready_event.set
+
+        on("Page.frameStartedNavigating") do |params|
+          @document_ready_event.reset if main_frame_navigation_start?(params)
+        end
+        on("Page.domContentEventFired") { @document_ready_event.set }
+        on("Page.loadEventFired") { @document_ready_event.set }
+        on("Page.frameStoppedLoading") do |params|
+          @document_ready_event.set if params["frameId"] == @target_id
+        end
+        on("Network.loadingFailed") do |params|
+          @document_ready_event.set if params["requestId"] == @navigation_request_id
+        end
+      end
+
+      # After a click that navigated, the next action must not run before the
+      # new page's JS has wired its handlers: Stimulus, Bootstrap's data-api
+      # and Turbo load as module scripts, which run after the document commits
+      # and before DOMContentLoaded. Cuprite waits for the load event. The
+      # event is awaited briefly, then document.readyState is polled for the
+      # rest of the budget, as #go_to does (lightpanda-io/browser#1801: page
+      # events may never come). Never raises: a page that never settles costs
+      # the timeout once, then the action returns as it did before.
+      DOCUMENT_READY_EVENT_WAIT = 2
+      private_constant :DOCUMENT_READY_EVENT_WAIT
+
+      def wait_for_document_ready
+        deadline = monotonic_time + @options.timeout
+        return if @document_ready_event.wait([DOCUMENT_READY_EVENT_WAIT, @options.timeout].min)
+
+        remaining = deadline - monotonic_time
+        return unless remaining.positive?
+
+        Utils::Wait.until(timeout: remaining, interval: 0.1) do
+          @document_ready_event.set? || @client.closed? || document_complete?
+        end
+      rescue TimeoutError
+        nil
+      end
+
+      def document_complete?
+        response = @client.command(
+          "Runtime.evaluate",
+          { expression: "document.readyState", returnByValue: true },
+          session_id: @session_id,
+          timeout: 2
+        )
+        response.dig("result", "value") == "complete"
+      rescue Error
+        false
       end
 
       def main_frame_navigation_start?(params)

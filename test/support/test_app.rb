@@ -1190,6 +1190,10 @@ class TestApp
           <button id="push" onclick="history.pushState({}, '', '/lightpanda/nav_wait/pushed')">Push</button>
           <a id="anchor" href="#section">Anchor</a>
           <a id="refused" href="http://127.0.0.1:1/unreachable">Refused</a>
+          <a id="module-link" href="/lightpanda/nav_wait/module">Module link</a>
+          <form id="module-form" action="/lightpanda/nav_wait/module" method="post">
+            <button id="module-submit" type="submit">Module submit</button>
+          </form>
           <div id="section">Section</div>
         </body>
       </html>
@@ -1207,6 +1211,37 @@ class TestApp
   get "/lightpanda/nav_wait/redirect" do
     sleep NAV_WAIT_DELAY
     redirect "/lightpanda/other"
+  end
+
+  # The page answers at once, but its module script (where apps load
+  # Stimulus, Bootstrap's data-api, Turbo) arrives NAV_WAIT_DELAY later and
+  # only then arms #armed. A click on #armed before it ran is lost.
+  %w[get post].each do |verb|
+    send(verb, "/lightpanda/nav_wait/module") do
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Module Page</title>
+            <script type="module" src="/lightpanda/nav_wait/module.js"></script>
+          </head>
+          <body>
+            <button id="armed">Armed</button>
+            <div id="result"></div>
+          </body>
+        </html>
+      HTML
+    end
+  end
+
+  get "/lightpanda/nav_wait/module.js" do
+    sleep NAV_WAIT_DELAY
+    content_type "text/javascript"
+    <<~JS
+      document.getElementById("armed").addEventListener("click", () => {
+        document.getElementById("result").textContent = "handled";
+      });
+    JS
   end
 
   # -- go_back / go_forward across history entries. /lightpanda/history/*
