@@ -1191,6 +1191,8 @@ class TestApp
           <a id="anchor" href="#section">Anchor</a>
           <a id="refused" href="http://127.0.0.1:1/unreachable">Refused</a>
           <a id="module-link" href="/lightpanda/nav_wait/module">Module link</a>
+          <a id="turbo-handback-link" href="/lightpanda/nav_wait/slow"
+             onclick="document.dispatchEvent(new Event('turbo:before-fetch-request')); setTimeout(function () { document.dispatchEvent(new Event('turbo:before-fetch-response')) }, 20)">Turbo handback link</a>
           <form id="module-form" action="/lightpanda/nav_wait/module" method="post">
             <button id="module-submit" type="submit">Module submit</button>
           </form>

@@ -5,6 +5,7 @@
 ### Fixed
 
 - **A click that loads a new page waits for that page's scripts.** `click` used to return as soon as the new document existed, before its deferred and module scripts had run. Apps load Stimulus, Turbo and Bootstrap that way, so the next action could land on a page whose handlers were not wired yet: a Bootstrap collapse that did not open, a `confirm()` that never showed (`accept_confirm` raised `ModalNotFound`) while the form was submitted anyway, a form posted before its JavaScript was ready. The click now also waits for `DOMContentLoaded`, as Cuprite waits for the load event. `send_keys`, `go_back` and `go_forward` wait the same way when they load a new page. Clicks that don't navigate are as fast as before.
+- **A click on a link that Turbo hands back to the browser waits for the new page.** With Turbo on the page, such a click returned immediately on the page being left, because Turbo reported activity and went idle again before the navigation started.
 
 ## [0.14.0] - 2026-10-11
 

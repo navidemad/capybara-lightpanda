@@ -61,6 +61,16 @@ describe "Node#click waits for the navigation it starts" do
     session.assert_selector(:css, "#result", text: "handled")
   end
 
+  # Turbo reports activity on the click, goes idle again a few ms later, and
+  # the browser loads the link itself (a link outside Turbo Drive). The busy
+  # signal used to end the navigation sniff, so the click returned on the
+  # page being left.
+  it "waits for a link Turbo hands back to the browser" do
+    session.find(:css, "#turbo-handback-link").click
+
+    session.assert_current_path("/lightpanda/nav_wait/slow", wait: 0)
+  end
+
   # The other half of the contract: waiting must be gated on a navigation
   # actually starting, or every click on a plain button pays for it.
   it "keeps an inert click fast" do

@@ -426,13 +426,15 @@ module Capybara
       #
       # Sniff window: the action returns synchronously, but the CDP events
       # signalling its async fallout arrive later on the dispatch thread. We
-      # poll briefly for any of them — a main-frame navigation start (see
-      # subscribe_to_navigation), Runtime.executionContextsCleared, or the
-      # turbo sentinel — and if none fires within the window, assume the
-      # action was inert and exit fast. Lightpanda announces a navigation
-      # ~5 ms after the click but only swaps the execution context once the
-      # response lands, so watching the context alone returned on the old
-      # document whenever the server took longer than the window.
+      # poll briefly for either of them — a main-frame navigation start (see
+      # subscribe_to_navigation) or Runtime.executionContextsCleared — and if
+      # none fires within the window, assume the action was inert and exit
+      # fast. Lightpanda announces a navigation ~5 ms after the click but only
+      # swaps the execution context once the response lands, so watching the
+      # context alone returned on the old document whenever the server took
+      # longer than the window. The turbo sentinel does not end the sniff
+      # (it is awaited after): Turbo goes busy then idle within a few ms on a
+      # link it hands back to the browser, before the navigation start lands.
       SNIFF_WINDOW = 0.05
       private_constant :SNIFF_WINDOW
 
@@ -445,7 +447,6 @@ module Capybara
           navigating = @navigation_event.iteration > prior_navigation_iteration
           break if navigating
           break if @default_context_event.iteration > prior_context_iteration
-          break unless @turbo_event.set?
           break if monotonic_time > sniff_deadline
 
           sleep 0.001
