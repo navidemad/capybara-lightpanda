@@ -634,21 +634,28 @@ module Capybara
           // Bootstrap) killed the page (lightpanda-io/browser#3898).
           if (tag === 'A' && /^\\s*javascript:/i.test(hit.getAttribute('href') || '')) return;
           if (tag === 'A' && hit.href && hit.target !== '_blank') {
+            // Navigate the link's own window, never the bare `window`:
+            // Lightpanda runs callFunctionOn in the top document's context
+            // even for a node inside an iframe, so `window` would be the top
+            // window and a link clicked in a frame replaced the whole page.
+            var own = hit.ownerDocument.defaultView || window;
+            var target = (hit.target || '').toLowerCase();
+            var win = (target === '_top' && own.top) || (target === '_parent' && own.parent) || own;
             // Same-document fragment-only navigation: just update hash (or do
             // nothing if identical). Mirrors Chrome — assigning location.href
             // to a same-document URL on Lightpanda triggers a real navigation
             // tick that cancels pending setTimeout callbacks and clears form
             // values, which breaks any test driving DOM updates from a click
             // handler on `<a href="#...">`.
-            var dest = new URL(hit.href, document.baseURI);
-            var here = new URL(window.location.href);
+            var dest = new URL(hit.href, hit.ownerDocument.baseURI);
+            var here = new URL(win.location.href);
             if (dest.origin === here.origin && dest.pathname === here.pathname &&
                 dest.search === here.search) {
               if (dest.hash !== here.hash) {
-                window.location.hash = dest.hash;
+                win.location.hash = dest.hash;
               }
             } else {
-              window.location.href = hit.href;
+              win.location.href = hit.href;
             }
           }
         }
