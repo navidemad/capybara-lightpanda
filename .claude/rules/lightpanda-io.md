@@ -186,6 +186,7 @@ LP.configureCDP              LP.getContentSignal
 | #1890 | Navigation | Multi-step form POST does not update page content (SAP SAML login). |
 | #3770 | Navigation | `location.hash = '#x'` fires `hashchange` but not `popstate` (our PR #3900, open). |
 | #3764 | Text | `innerText` ignores `text-transform`, so Capybara `text` sees the source case (our PR #3765, open). |
+| #3912 | Frames | Removing an `<iframe>` keeps its browsing context alive: `contentWindow`/`contentDocument`/`defaultView` stay set, its timers keep running, re-insertion doesn't reload. A held node from a removed frame keeps answering — gem #153's frame-scoped `ObsoleteNode` guard (`defaultView === null`) only catches *navigated* frames. |
 | #3852 | Binary | The 1.0.0 `aarch64-linux` binary needs glibc 2.38 (built on `ubuntu-24.04-arm`; x86_64 needs 2.35), so Debian 12 / Ubuntu 22.04 arm64 can't start it. |
 
 **Gem-side defenses we keep regardless of upstream**: the `readyState` fallback in `Browser#go_to` (#1801 closed 2026-09-17 on "seems fixed on main", no PR/repro), `handle_navigation_crash` (#2173 closed as usage error), `Browser#with_default_context_wait` + `NoExecutionContextError` in `invalid_element_errors` (#2400 fixed by #3397, 9238 — still cheap defense-in-depth).
