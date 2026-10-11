@@ -69,7 +69,7 @@ module Capybara
 
       def active_element
         oid = browser.active_element
-        oid && Node.new(self, oid)
+        oid && build_node(oid)
       end
 
       # Capybara's Session#send_keys routes to Driver#send_keys; Cuprite's pattern
@@ -80,12 +80,12 @@ module Capybara
 
       def find_xpath(selector)
         object_ids = browser.find("xpath", selector)
-        object_ids.map { |oid| Node.new(self, oid) }
+        object_ids.map { |oid| build_node(oid) }
       end
 
       def find_css(selector)
         object_ids = browser.find("css", selector)
-        object_ids.map { |oid| Node.new(self, oid) }
+        object_ids.map { |oid| build_node(oid) }
       end
 
       def evaluate_script(script, *args)
@@ -369,6 +369,12 @@ module Capybara
 
       private
 
+      # A node found while a frame is switched to lives in that frame's
+      # document, which Node#call checks for a frame navigation.
+      def build_node(oid)
+        Node.new(self, oid, frame_scoped: browser.frame_stack.any?)
+      end
+
       # Every window method takes a handle because Capybara's Window objects
       # carry one; with a single window the only valid value is the current
       # target id. Reject anything else rather than silently operating on the
@@ -414,7 +420,7 @@ module Capybara
         when Array then value.map { |v| unwrap_script_result(v) }
         when Hash
           if value.size == 1 && value.key?(Browser::NODE_MARKER)
-            Node.new(self, value[Browser::NODE_MARKER])
+            build_node(value[Browser::NODE_MARKER])
           else
             value.transform_values { |v| unwrap_script_result(v) }
           end
