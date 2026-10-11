@@ -238,6 +238,14 @@ Use this file when:
 - **Gem workaround**: none for real keystrokes.
 - **Upstream issue**: #3758, **Upstream PR**: #3759 (open as of 2026-10-03). Two halves: `Element.focus` now focuses the containing `<iframe>` in the parent frame (HTML focus chain — the parent's `activeElement` becomes the iframe, which `tests/frames/cross_realm_focus.html` used to call "not modeled"), and the Input domain resolves keys through `user_input.focusedFrame`. CDP test `cdp.input: keyboard input goes to the focused element inside an iframe`. Repro `browser:repro/keyboard-focused-frame/` (raw `ws`, `serve --load-resources iframe`).
 
+### A60. Removing an iframe doesn't discard its browsing context
+
+- **Today (verified 2026-10-11 on 1.0.0 and nightly 10426, `lightpanda fetch`)**: after `iframe.remove()`, `contentWindow`/`contentDocument` still return the old window/document, the old document's `defaultView` is still its window, `win.closed` stays `false`, the parent's `window.length` still counts it, the child's timers keep firing, and re-inserting the iframe loads no new document (one `load`, same document). Chrome 149 on the same page: `null`/`null`/`null`/`true`/`0`, timers stopped, re-insertion loads a fresh document. `Frame.removeNode`'s disconnect walk has no `IFrame` branch; the child `Frame` lives until the parent's `deinit`.
+- **Want**: HTML's iframe removing steps — destroy the child navigable (stop the child, drop it from `child_frames`, `IFrame._window = null`, `_executed = false`), plus CDP `Page.frameDetached`.
+- **Real-world impact**: an element held from a removed frame keeps answering instead of going stale; a removed frame's timers/requests keep running and can hold network-idle waits.
+- **Gem workaround**: none. Gem #153's frame-scoped `ObsoleteNode` guard (`Node#wrap_with_attached_guard`) keys on `defaultView === null`, so it catches a *navigated* frame's old nodes but not a *removed* frame's.
+- **Upstream issue**: #3912 (filed 2026-10-11, issue only — the teardown shape is a lifetime decision, left to the maintainers). Repro `browser:repro/iframe-removed-browsing-context/` (`lightpanda fetch`, no CDP client).
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:
