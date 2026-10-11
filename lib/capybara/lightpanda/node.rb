@@ -8,9 +8,13 @@ module Capybara
 
       attr_reader :remote_object_id
 
-      def initialize(driver, remote_object_id)
-        super
+      # `frame_scoped`: the node lives in an iframe's document — it was found
+      # while a frame was switched to, or from another frame-scoped node. See
+      # #wrap_with_attached_guard for what that changes.
+      def initialize(driver, remote_object_id, frame_scoped: false)
+        super(driver, remote_object_id)
         @remote_object_id = remote_object_id
+        @frame_scoped = frame_scoped
       end
 
       # Capybara::Driver::Node#native returns the constructor's second argument,
@@ -317,17 +321,17 @@ module Capybara
       # returned as Lightpanda::Node wrappers. Mirrors Cuprite's `Node#parents`.
       def parents
         oids = driver.browser.parents_of(@remote_object_id)
-        oids.map { |oid| self.class.new(driver, oid) }
+        oids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
       end
 
       def find_xpath(selector)
         object_ids = driver.browser.find_within(@remote_object_id, "xpath", selector)
-        object_ids.map { |oid| self.class.new(driver, oid) }
+        object_ids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
       end
 
       def find_css(selector)
         object_ids = driver.browser.find_within(@remote_object_id, "css", selector)
-        object_ids.map { |oid| self.class.new(driver, oid) }
+        object_ids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
       end
 
       # Equality compares the underlying DOM node via backendNodeId, the only
@@ -512,7 +516,9 @@ module Capybara
       # instead of returning stale data from V8's still-live reference. After
       # a DOM mutation like `replaceWith`, the cached objectId still resolves
       # to the detached node, so reads succeed quietly and Capybara's
-      # automatic_reload never re-runs the original query.
+      # automatic_reload never re-runs the original query. A frame-scoped node
+      # whose document has lost its window is obsolete too (see
+      # DISCARDED_DOCUMENT_CHECK).
       def call(function_declaration, *args, return_by_value: true)
         guarded = wrap_with_attached_guard(function_declaration)
         driver.browser.with_default_context_wait do
@@ -528,12 +534,21 @@ module Capybara
       end
 
       OBSOLETE_NODE_MARKER = "LIGHTPANDA_OBSOLETE_NODE"
-      private_constant :OBSOLETE_NODE_MARKER
+
+      # When an iframe navigates, Chrome destroys the old document's context,
+      # so calls on its nodes fail and Capybara re-finds them. Lightpanda keeps
+      # the context alive: the node stays `isConnected` and answers from the
+      # discarded document, whose `defaultView` is null. Only for frame-scoped
+      # nodes: a script-built document (DOMParser, createHTMLDocument) has no
+      # window either, and its nodes stay usable. `|| this` covers a Document
+      # node, whose ownerDocument is null.
+      DISCARDED_DOCUMENT_CHECK = " || (this.ownerDocument || this).defaultView === null"
+      private_constant :OBSOLETE_NODE_MARKER, :DISCARDED_DOCUMENT_CHECK
 
       def wrap_with_attached_guard(function_declaration)
         <<~JS
           function() {
-            if (!this.isConnected) throw new Error(#{OBSOLETE_NODE_MARKER.inspect});
+            if (!this.isConnected#{DISCARDED_DOCUMENT_CHECK if @frame_scoped}) throw new Error(#{OBSOLETE_NODE_MARKER.inspect});
             return (#{function_declaration}).apply(this, arguments);
           }
         JS
