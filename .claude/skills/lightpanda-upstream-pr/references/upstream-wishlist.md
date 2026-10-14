@@ -254,7 +254,7 @@ Use this file when:
 - **Want**: give `Window` and `Document` the same GlobalEventHandlers accessors `HtmlElement` has (a shared list, so the three can't drift).
 - **Gem workaround**: `javascripts/event_handlers.js` defines every `on*` name found on `HTMLElement.prototype` that `window`/`document` lack, with IDL semantics (getter → handler or null, a function registers one listener kept in place across reassignment, `return false` cancels). Pinned by `test/features/global_event_handlers_test.rb`.
 - **Drop-on-fix**: delete `event_handlers.js` and its `AutoScripts::PARTS` entry once the floor covers the fix; keep the test.
-- **Upstream issue**: not yet filed (searched 2026-10-14, nothing open or closed).
+- **Upstream issue**: #3956 (filed 2026-10-14, issue only). Repro: `lightpanda fetch --dump html` page comparing `HTMLElement.prototype`'s `on*` names with `window`/`document` — 89/93 missing on 1.0.0 and 10552, 0/0 on Chrome 155 (`oncopy`/`oncut`/`onpaste` are DocumentAndElementEventHandlers, not on Window).
 
 ### A62. A user-edited text field fires no `change` when it loses focus
 
@@ -262,7 +262,7 @@ Use this file when:
 - **Real-world impact**: any "on edit, update the row" handler bound to `change` never runs after `send_keys`. Solidus's return-authorization form ticks a row's checkbox from `$(input).on('change')` after `send_keys [1, :tab]` — 1 real-apps baseline entry. `Node#set` is unaffected (the gem dispatches `change` itself).
 - **Want**: record the value when a text control gains focus (or mark it dirty on a user edit) and fire a trusted bubbling `change` on blur/Enter if it changed.
 - **Gem workaround**: possible but not taken — a `focusin`/`focusout` pair in the injected bundle could synthesize the event, at the risk of double-firing once upstream implements it. Prefer the upstream fix.
-- **Upstream issue**: not yet filed (searched 2026-10-14).
+- **Upstream issue**: #3957 (filed 2026-10-14, issue only). Repro: raw-`ws` CDP client, `Input.insertText` + Tab key — Chrome 155 records `focus, input, change, blur`, Lightpanda `focus, input, blur`.
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
