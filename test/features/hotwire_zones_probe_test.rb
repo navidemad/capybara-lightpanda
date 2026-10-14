@@ -9,7 +9,7 @@ require_relative "../test_helper"
 # correctement cette famille" plutôt qu'un bug spécifique.
 #
 # Quand un test échoue, c'est un candidat à filer en upstream wishlist (A/B).
-# rubocop:disable Layout/LineLength -- inline JS payloads stay legible only un-wrapped
+# rubocop:disable-next Layout/LineLength -- inline JS payloads stay legible only un-wrapped
 describe "Lightpanda Hotwire-zone probes" do
   let(:session) { TestSessions::Lightpanda }
   let(:driver) { session.driver }
@@ -511,4 +511,3 @@ describe "Lightpanda Hotwire-zone probes" do
     end
   end
 end
-# rubocop:enable Layout/LineLength
