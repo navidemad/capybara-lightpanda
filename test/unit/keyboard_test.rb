@@ -85,6 +85,32 @@ describe Capybara::Lightpanda::Keyboard do
       assert_equal "1", modified[:unmodifiedText]
     end
 
+    # Suites are written against Selenium, whose Keys.encode types any key
+    # that is not a Symbol or an Array as its to_s. A real-app spec's
+    # `send_keys [1, :tab]` used to drop the 1 and send only the Tab, so the
+    # field never changed and its change listener had nothing to report.
+    it "types an Integer in an array group, before the key that follows it" do
+      keyboard.type([1, :tab])
+
+      insert_one = browser.events.index { |method, params| method == "Input.insertText" && params[:text] == "1" }
+      tab_down = browser.events.index { |method, params| method == "Input.dispatchKeyEvent" && params[:key] == "Tab" }
+      refute_nil insert_one, "the 1 was dropped"
+      assert insert_one < tab_down, "the 1 must be typed before the Tab moves focus away"
+    end
+
+    it "types a top-level Integer as its digits" do
+      keyboard.type(42)
+
+      typed = browser.events.filter_map { |method, params| params[:text] if method == "Input.insertText" }
+      assert_equal %w[4 2], typed
+    end
+
+    it "types nothing for nil" do
+      keyboard.type(nil, [nil, :tab])
+
+      refute(browser.events.any? { |method, _| method == "Input.insertText" })
+    end
+
     it "raises ArgumentError (not NoMethodError) for an unknown key symbol" do
       error = assert_raises(ArgumentError) { keyboard.type(:no_such_key) }
       assert_includes error.message, ":no_such_key"

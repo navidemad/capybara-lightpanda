@@ -17,14 +17,14 @@ read either as understood.
 | Lot | N | Reality |
 | --- | --- | --- |
 | `jquery1-change-shim` | 5 | Fixed in the gem (`event_handlers.js`, 2026-10-14). Drops at the next refresh; upstream wishlist A61. |
-| `no-change-on-blur` | 1 | Confirmed upstream gap (wishlist A62). |
+| `no-change-on-blur` | 1 | Gem half fixed (Integer keys, 2026-10-14); upstream half is wishlist A62, fixed by open third-party PR #3952. Drops once #3952 ships in a nightly. |
 | `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
 | `selenium-textarea-text` | 1 | `likely` — the spec relies on Selenium's visible text including a textarea's child text. |
 | `customer-switch-refill` | 2 | Open, `unknown`. |
 | `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
 | `select2-v3-flow`, `js-component-not-rendering` | 2 | Open, one entry each. |
 
-Once the jquery1 entries drop, the open work is the 6 entries in the last three rows (A62 is filed upstream as #3957).
+Once the jquery1 entries drop, the open work is the 6 entries in the last three rows (A62 is filed upstream as #3957; third-party PR #3952 fixes it).
 
 ---
 

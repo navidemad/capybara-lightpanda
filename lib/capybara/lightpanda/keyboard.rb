@@ -97,6 +97,11 @@ module Capybara
       # so JS keydown handlers see the modifier event; CDP's `rawKeyDown` is
       # documented as "no JS keyDown event is generated" and would hide the
       # modifier from listeners that count keydown events.
+      #
+      # Anything that is not a Symbol or an Array is typed as its `to_s`, as
+      # Selenium's `Keys.encode` does: `send_keys [1, :tab]` types "1", and
+      # `nil` types nothing. Without it an Integer was dropped silently and
+      # only the Tab went out.
       def type(*keys)
         active_mods = []
         keys.each do |key|
@@ -107,10 +112,10 @@ module Capybara
             else
               dispatch_key_with_mods(key, active_mods)
             end
-          when String
-            key.each_char { |char| dispatch_char_with_mods(char, active_mods) }
           when Array
             type_with_modifiers(key)
+          else
+            type_text(key, active_mods)
           end
         end
         release_modifiers(active_mods)
@@ -163,12 +168,17 @@ module Capybara
         active_mods = []
         modifiers.each { |m| press_modifier(m, active_mods) }
         rest.each do |key|
-          case key
-          when Symbol then dispatch_key_with_mods(key, active_mods)
-          when String then key.each_char { |char| dispatch_char_with_mods(char, active_mods) }
+          if key.is_a?(Symbol)
+            dispatch_key_with_mods(key, active_mods)
+          else
+            type_text(key, active_mods)
           end
         end
         release_modifiers(active_mods)
+      end
+
+      def type_text(key, active_mods)
+        key.to_s.each_char { |char| dispatch_char_with_mods(char, active_mods) }
       end
 
       # A chord with Ctrl or Meta is a command, not text: Chrome inserts
