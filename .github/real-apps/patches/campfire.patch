@@ -1,0 +1,30 @@
+diff --git a/Gemfile b/Gemfile
+index 1e602d0..421c1d6 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -59,6 +59,6 @@
+ group :test do
+   gem "capybara"
+   gem "mocha"
+-  gem "selenium-webdriver"
++  gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__"
+   gem "webmock", require: false
+ end
+diff --git a/test/application_system_test_case.rb b/test/application_system_test_case.rb
+index 185449d..859d0dc 100644
+--- a/test/application_system_test_case.rb
++++ b/test/application_system_test_case.rb
+@@ -1,9 +1,12 @@
+ require "test_helper"
++require "capybara-lightpanda"
++# capybara-lightpanda real-apps CI: write an RSpec-shaped JSON report for check_baseline.rb.
++require "__CAPYBARA_LIGHTPANDA_PATH__/.github/real-apps/minitest_report.rb" if ENV["REAL_APPS_REPORT"]
+ 
+ WebMock.disable!
+ 
+ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
+-  driven_by :selenium, using: :headless_chrome, screen_size: [ 1400, 1400 ]
++  driven_by :lightpanda
+ 
+   include SystemTestHelper
+   include RichTextEditorHelper

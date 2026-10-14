@@ -10,13 +10,15 @@ against actual production-shape codebases.
 .github/real-apps/
 ├── README.md                   # this file
 ├── causes.yml                  # why each baseline failure fails
+├── minitest_report.rb          # RSpec-shaped JSON report for Minitest targets
 └── patches/
     ├── forem.patch             # was on Cuprite
     ├── solidus.patch           # was on Selenium
     ├── spree.patch             # was on Selenium
     ├── decidim.patch           # was on Selenium
     ├── mastodon.patch          # was on Playwright
-    └── alonetone.patch         # was on Playwright (MySQL app)
+    ├── alonetone.patch         # was on Playwright (MySQL app)
+    └── campfire.patch          # was on Selenium (Minitest app)
 
 .github/workflows/
 └── real-apps.yml               # matrix workflow
@@ -29,6 +31,16 @@ Each patch is a `git diff HEAD` against the upstream SHA pinned in
 through the placeholder `__CAPYBARA_LIGHTPANDA_PATH__`; the workflow substitutes
 it with `$GITHUB_WORKSPACE/capybara-lightpanda` at apply time so the `path:`
 Gemfile entry resolves to the runner-side checkout.
+
+## Minitest targets
+
+The comparison reads RSpec's JSON report. A Minitest app (Campfire) sets
+`runner: minitest` in its matrix entry, and its patch requires
+`minitest_report.rb` when `REAL_APPS_REPORT` is set. The reporter writes the
+fields `check_baseline.rb` reads, keyed `./test/…_test.rb # Class#test_name`, so
+baselines, `causes.yml` and the aggregate job work unchanged. The run is serial
+(`PARALLEL_WORKERS=1`). `script/real-app/spec.sh` follows the same branch but
+gets no `probe.rb` artifacts, because the probe hooks RSpec.
 
 ## Why the failures fail
 
