@@ -247,6 +247,23 @@ Use this file when:
 - **Gem workaround**: none. Gem #153's frame-scoped `ObsoleteNode` guard (`Node#wrap_with_attached_guard`) keys on `defaultView === null`, so it catches a *navigated* frame's old nodes but not a *removed* frame's.
 - **Upstream issue**: #3912 (filed 2026-10-11, issue only — the teardown shape is a lifetime decision, left to the maintainers). Repro `browser:repro/iframe-removed-browsing-context/` (`lightpanda fetch`, no CDP client).
 
+### A61. Window and Document lack most GlobalEventHandlers — jQuery 1.x shims `change`/`submit` and delegated handlers go dead
+
+- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552; main `dd2cd5d7f` unchanged)**: `HtmlElement` (`webapi/element/Html.zig`) declares the full GlobalEventHandlers set (~99 `handlerAccessor`s), but `Window.zig` declares only `onload`/`onpageshow`/`onpopstate`/`onhashchange`/`onerror`/`onblur`/`onfocus`/`onresize`/`onscroll`/`onclick`/`onmessage`/`on(un)handledrejection` and `Document.zig` only `onselectionchange`/`onclick`/touch. So `'onchange' in window`, `'onsubmit' in window`, `'oninput' in window`, `'onkeydown' in window` are all `false`; Chrome says `true` (HTML puts GlobalEventHandlers on HTMLElement, Document and Window alike).
+- **Real-world impact**: jQuery 1.x computes `support.change = 'onchange' in window` (same for `submit`) at load. False → it installs its IE `beforeactivate`/`propertychange` shims, and every *delegated* change/submit handler plus every direct one on an *ancestor* stops firing although the native event bubbles fine. Backbone views (`events: {'change .x': …}`) sit on exactly that. Solidus 4.x admin (jQuery 1.12.4): the country → state swap, the payment form's card handling, the shipping-calculator picker and the product search all died silently — 4 real-apps baseline entries (5 on nightly) pass once the names exist.
+- **Want**: give `Window` and `Document` the same GlobalEventHandlers accessors `HtmlElement` has (a shared list, so the three can't drift).
+- **Gem workaround**: `javascripts/event_handlers.js` defines every `on*` name found on `HTMLElement.prototype` that `window`/`document` lack, with IDL semantics (getter → handler or null, a function registers one listener kept in place across reassignment, `return false` cancels). Pinned by `test/features/global_event_handlers_test.rb`.
+- **Drop-on-fix**: delete `event_handlers.js` and its `AutoScripts::PARTS` entry once the floor covers the fix; keep the test.
+- **Upstream issue**: not yet filed (searched 2026-10-14, nothing open or closed).
+
+### A62. A user-edited text field fires no `change` when it loses focus
+
+- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552)**: type into an `<input>` with CDP keystrokes (`Input.insertText`/`dispatchKeyEvent`), press Tab: `focus`, trusted `input`, `blur` fire and focus moves on, but no `change`. Chrome fires `change` on commit (blur or Enter) when the value differs from the one at focus (HTML "the change event", user-edited text controls). Upstream only fires `change` for checkbox/radio activation (`EventManager.zig` `ActivationState.restore`) and file selection (`Input.selectFiles`).
+- **Real-world impact**: any "on edit, update the row" handler bound to `change` never runs after `send_keys`. Solidus's return-authorization form ticks a row's checkbox from `$(input).on('change')` after `send_keys [1, :tab]` — 1 real-apps baseline entry. `Node#set` is unaffected (the gem dispatches `change` itself).
+- **Want**: record the value when a text control gains focus (or mark it dirty on a user edit) and fire a trusted bubbling `change` on blur/Enter if it changed.
+- **Gem workaround**: possible but not taken — a `focusin`/`focusout` pair in the injected bundle could synthesize the event, at the risk of double-firing once upstream implements it. Prefer the upstream fix.
+- **Upstream issue**: not yet filed (searched 2026-10-14).
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:

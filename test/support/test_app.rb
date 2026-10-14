@@ -1268,6 +1268,31 @@ class TestApp
     HTML
   end
 
+  # `support` repeats jQuery 1.12's own load-time detection, which decides
+  # whether delegated change/submit handlers can work at all.
+  get "/lightpanda/global_event_handlers" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>Global event handlers</title>
+        <script>
+          window.support = {change: 'onchange' in window, submit: 'onsubmit' in window,
+                            focusin: 'onfocusin' in window};
+        </script>
+      </head><body>
+        <form id="form" action="/lightpanda/global_event_handlers" method="get">
+          <select id="country" name="country"><option>France</option><option>Brazil</option></select>
+        </form>
+        <script>
+          window.__seen = [];
+          window.__cancelled = [];
+          window.onchange = function (e) { window.__seen.push('window:' + e.target.id); };
+          document.onchange = function (e) { window.__seen.push('document:' + e.target.id); };
+          window.addEventListener('change', function (e) { window.__cancelled.push(e.defaultPrevented); });
+        </script>
+      </body></html>
+    HTML
+  end
+
   get %r{/lightpanda/history(/.*)?} do
     <<~HTML
       <!DOCTYPE html>
