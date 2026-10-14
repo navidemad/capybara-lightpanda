@@ -28,7 +28,7 @@ gh pr list --repo lightpanda-io/browser --state merged --limit 200 \
   --search "merged:>=<last-sync-date>" --json number,title,mergedAt,author \
   --jq 'sort_by(.number) | .[] | "\(.number)\t\(.mergedAt[0:10])\t\(.author.login)\t\(.title)"'
 
-cd /Users/navid/code/browser && git fetch origin --tags && \
+cd /Users/navid/code/upstream/browser && git fetch origin --tags && \
 git log --first-parent --format='%h %s' <last-snapshot-sha>..origin/main | \
   while read -r sha rest; do echo "$(git rev-list --count $sha) $sha $rest"; done
 ```
@@ -97,12 +97,12 @@ The nightly build number (e.g. `5816` in `1.0.0-nightly.5816+a578f4d6`) is the f
 
 When required, build before validating any workaround-removal recommendation. `main` HEAD usually leads nightly by hours/days, so this is the only way to validate same-day.
 
-**Don't edit anything in `/Users/navid/code/browser`** — that's the user's upstream contribution worktree. Read-only access (git pull, build) is fine; never edit, branch, or commit there from this skill.
+**Don't edit anything in `/Users/navid/code/upstream/browser`** — that's the user's upstream contribution worktree. Read-only access (git pull, build) is fine; never edit, branch, or commit there from this skill.
 
 If the worktree has uncommitted changes or is on a non-`main` branch, **stop and ask the user** — they may have an in-progress upstream contribution. Don't auto-stash or auto-checkout.
 
 ```bash
-cd /Users/navid/code/browser
+cd /Users/navid/code/upstream/browser
 git status --porcelain  # must be empty before proceeding
 git rev-parse --abbrev-ref HEAD  # must be 'main' before proceeding
 git fetch origin && git pull --ff-only origin main
@@ -112,7 +112,7 @@ git rev-parse HEAD  # record this sha — goes into the report
 **Skip the build if up to date.** If `zig-out/bin/lightpanda` exists and its mtime is newer than the HEAD commit's author date, the binary already matches `main` — reuse it. Otherwise:
 
 ```bash
-LP_V8=$(ls -t /Users/navid/code/browser/.lp-cache/prebuilt-v8/*.a | head -1)
+LP_V8=$(ls -t /Users/navid/code/upstream/browser/.lp-cache/prebuilt-v8/*.a | head -1)
 echo "Using V8 archive: $LP_V8"
 mise exec -- zig build -Doptimize=ReleaseFast -Dprebuilt_v8_path="$LP_V8"
 ```
@@ -125,7 +125,7 @@ After the build, **do not run specs unprompted**. Print a one-line handoff for t
 Built lightpanda from main (HEAD <sha>, V8 <archive name>).
 To validate the workaround-removal recommendations, run:
 
-  LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+  LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
 
 (spec:incremental can take 10+ min — your call.)
 ```
@@ -141,7 +141,7 @@ After workaround removal, also audit `spec/spec_helper.rb`'s skip patterns — L
 The gem's audit mode: setting `AUDIT_SKIPS=1` flips every `metadata[:skip] = "..."` in `browser_limitation_patterns` to `metadata[:skip_audit] = true`, and `filter_run_when_matching(:skip_audit)` narrows the run to *only* those specs. So a single rspec invocation tells you which patterns can be dropped or narrowed:
 
 ```bash
-AUDIT_SKIPS=1 LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda \
+AUDIT_SKIPS=1 LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda \
   bundle exec rspec spec/features/session_spec.rb \
   --format json --out /tmp/audit.json
 ```

@@ -56,7 +56,7 @@ A secondary missing IDL attribute was also found: **`HTMLOptionElement.label` re
 
 ## Upstream source location
 
-Build under test = upstream `main` HEAD `ab53f92a` (in `/Users/navid/code/browser`).
+Build under test = upstream `main` HEAD `ab53f92a` (in `/Users/navid/code/upstream/browser`).
 
 - `src/browser/webapi/element/html/Select.zig` — has `getValue`, `getMultiple`, `getName`, `getSize`, `getForm`, `getLabels`, etc., but **no `getType`**, and no `type` entry in the JS-binding block (lines ~320–337). This is the bug.
 - `src/browser/webapi/element/html/Option.zig` — has `getValue`, `getText`, `getSelected`, etc., but **no `getLabel`** (secondary).
@@ -122,7 +122,7 @@ Add `HTMLSelectElement.type` / `HTMLOptionElement.label` to the gem's upstream w
 > `_loadChoices` never builds `_presetChoices` and `_addPredefinedChoices(undefined)`
 > throws `TypeError: ...reading 'forEach'`. Secondary: `HTMLOptionElement.label`
 > is also undefined. Both are missing getters in
-> `/Users/navid/code/browser/src/browser/webapi/element/html/{Select,Option}.zig`.
+> `/Users/navid/code/upstream/browser/src/browser/webapi/element/html/{Select,Option}.zig`.
 >
 > Your goal: land the upstream fix. Use the `lightpanda-upstream-pr` skill. The
 > patch is trivial and specified in the findings file (a `getType` returning
@@ -130,7 +130,7 @@ Add `HTMLSelectElement.type` / `HTMLOptionElement.label` to the gem's upstream w
 > `type` binding; and a `getLabel` on Option mirroring `getText`). Steps:
 > 1. Verify it still reproduces on current nightly with the minimal CDP probe in
 >    the findings file (the browser binary is `~/.cache/lightpanda/lightpanda`;
->    confirm it is `dev.675x+`, else rebuild from `/Users/navid/code/browser`
+>    confirm it is `dev.675x+`, else rebuild from `/Users/navid/code/upstream/browser`
 >    `main` — note this machine is CLT-only so a from-scratch V8 build fails;
 >    use the existing `zig-out/bin/lightpanda` as fallback).
 > 2. Implement `HTMLSelectElement.type` (primary) and `HTMLOptionElement.label`

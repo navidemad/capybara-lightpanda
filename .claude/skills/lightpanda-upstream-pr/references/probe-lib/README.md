@@ -11,14 +11,14 @@ doesn't reinvent the same WebSocket + session-attach boilerplate.
 
 ## How probes use it
 
-Reproducer probes live in `/Users/navid/code/browser/repro/<id>-<slug>/` (gitignored).
+Reproducer probes live in `/Users/navid/code/upstream/browser/repro/<id>-<slug>/` (gitignored).
 **Copy `cdp.js` into the repro directory** alongside `probe.js` — the repro must
 stay self-contained so the maintainer can run `bash repro.sh` with no reference
 to this skill's directory. Don't `require` paths outside the repro folder.
 
 ```bash
 cp .claude/skills/lightpanda-upstream-pr/references/probe-lib/cdp.js \
-   /Users/navid/code/browser/repro/<id>-<slug>/cdp.js
+   /Users/navid/code/upstream/browser/repro/<id>-<slug>/cdp.js
 ```
 
 Then in your `probe.js`:

@@ -24,7 +24,7 @@ Use this as a self-contained brief. Two ways to apply it:
 Either way, fill in the `<...>` placeholders before applying — the prompt assumes a self-contained brief, no outside context.
 
 ````
-**Context**: Working in `/Users/navid/code/browser`, the Lightpanda browser
+**Context**: Working in `/Users/navid/code/upstream/browser`, the Lightpanda browser
 (Zig 0.16.0 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from the
 gem's upstream wishlist: `<one-line description>`.
 
@@ -110,7 +110,7 @@ The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domai
 
 ## Reproducer skeleton (Step 6)
 
-**First decide whether you need CDP at all.** For pure JS-visible behavior (getters, constructors, DOM APIs — no CDP events, navigation waits, or network) the whole harness collapses to `lightpanda fetch --dump html` + a static page that writes its verdict into the DOM: no Node, no `ws`, no serve/attach dance, and the maintainer runs it with just the binary + python3. Pattern: page script probes the behavior, appends human-readable lines plus machine-greppable `verdict-*: ...` lines into a `<pre id=out>`; `repro.sh` serves the dir, runs `fetch --dump html`, greps the verdicts, exits 1 on bug / 0 on fix (guard verdicts for behavior the fix must NOT change are cheap and catch over-fixing). Remember `--dump html` — without it `fetch` exits 0 with empty stdout. Reference implementation: `/Users/navid/code/browser/repro/a53-mouseevent-fractional-coords/`. Only fall through to the CDP skeleton below when the bug genuinely needs protocol traffic.
+**First decide whether you need CDP at all.** For pure JS-visible behavior (getters, constructors, DOM APIs — no CDP events, navigation waits, or network) the whole harness collapses to `lightpanda fetch --dump html` + a static page that writes its verdict into the DOM: no Node, no `ws`, no serve/attach dance, and the maintainer runs it with just the binary + python3. Pattern: page script probes the behavior, appends human-readable lines plus machine-greppable `verdict-*: ...` lines into a `<pre id=out>`; `repro.sh` serves the dir, runs `fetch --dump html`, greps the verdicts, exits 1 on bug / 0 on fix (guard verdicts for behavior the fix must NOT change are cheap and catch over-fixing). Remember `--dump html` — without it `fetch` exits 0 with empty stdout. Reference implementation: `/Users/navid/code/upstream/browser/repro/a53-mouseevent-fractional-coords/`. Only fall through to the CDP skeleton below when the bug genuinely needs protocol traffic.
 
 Use raw `ws` (not `chrome-remote-interface`) and the vendored helpers in `references/probe-lib/cdp.js`. Two reasons:
 
@@ -125,7 +125,7 @@ Copy these into `repro/<id>-<slug>/` (gitignored — see Step 6a). The repro mus
 
 ```bash
 cp .claude/skills/lightpanda-upstream-pr/references/probe-lib/cdp.js \
-   /Users/navid/code/browser/repro/<id>-<slug>/cdp.js
+   /Users/navid/code/upstream/browser/repro/<id>-<slug>/cdp.js
 ```
 
 Cap the harness at ~80 lines of shell + ~50 lines of orchestration in `probe.js` (the helpers in `cdp.js` don't count). If the bug needs more, isolate further.
@@ -214,7 +214,7 @@ Step 6c says to verify the repro pre-fix (against installed nightly, exit 1) and
 3. `LIGHTPANDA_BIN=<worktree>/zig-out/bin/lightpanda bash repro.sh` → capture exit code + output.
 4. *Then* draft `/tmp/<id>-issue-body.md` (Step 7a), pasting both captured outputs into the `Run` section.
 
-Reference implementation (already verified to exit 1 against bug / format-correct against fix): `/Users/navid/code/browser/repro/a20-form-attrs-on-submitter/`.
+Reference implementation (already verified to exit 1 against bug / format-correct against fix): `/Users/navid/code/upstream/browser/repro/a20-form-attrs-on-submitter/`.
 
 ---
 

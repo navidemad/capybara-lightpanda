@@ -124,7 +124,7 @@ The empty-body signal in code: subscribe to CDP `Network.responseReceived` for t
 > Capybara Puma server binds) to see exactly where the body is or isn't on the
 > socket; then hypothesis 1 (`Expect: 100-continue`). The browser binary is at
 > `~/.cache/lightpanda/lightpanda` (verify it is still `dev.675x+`; if the gem
-> re-downloaded a published nightly, rebuild from `/Users/navid/code/browser`
+> re-downloaded a published nightly, rebuild from `/Users/navid/code/upstream/browser`
 > `main` with `zig build -Doptimize=ReleaseSafe` — note: a from-scratch V8
 > build needs full Xcode, not just CLT; this machine is CLT-only, so the
 > already-built `zig-out/bin/lightpanda` is the fallback).

@@ -38,7 +38,7 @@ RESULTS_DIR="$SCRIPT_DIR/results"
 REPORTER="$SCRIPT_DIR/json_reporter.rb"
 
 APP_DIR="${APP_DIR:-}"
-BROWSER_DIR="${BROWSER_DIR:-/Users/navid/code/browser}"
+BROWSER_DIR="${BROWSER_DIR:-/Users/navid/code/upstream/browser}"
 CACHE_BIN="${XDG_CACHE_HOME:-$HOME/.cache}/lightpanda/lightpanda"
 
 # Test scope: default to the whole system suite, or whatever args are passed.
