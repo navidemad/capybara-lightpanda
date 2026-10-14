@@ -42,7 +42,7 @@ script/real-app-coverage/diff.sh results/OLD.json results/NEW.json
 ## How it works / why these choices
 
 - **Auto-build from `main`** — each run pulls and rebuilds
-  `/Users/navid/code/browser`, so you test the freshest upstream, including
+  `/Users/navid/code/upstream/browser`, so you test the freshest upstream, including
   fixes merged but not yet in a published nightly. The first build backs up your
   previously-cached binary to `~/.cache/lightpanda/lightpanda.published.bak`.
   Pass `SKIP_BUILD=1` to reuse the cached binary.
@@ -87,4 +87,4 @@ script/real-app-coverage/diff.sh results/OLD.json results/NEW.json
 |---|---|---|
 | `APP_DIR` | _(required)_ | The Rails app under test. No default — keeps the private app path out of this tracked script. |
 | `SKIP_BUILD` | `0` | `1` = don't rebuild the browser; use the cached binary. |
-| `BROWSER_DIR` | `/Users/navid/code/browser` | Lightpanda browser checkout to build. |
+| `BROWSER_DIR` | `/Users/navid/code/upstream/browser` | Lightpanda browser checkout to build. |

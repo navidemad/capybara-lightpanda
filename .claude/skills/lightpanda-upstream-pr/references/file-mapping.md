@@ -17,7 +17,7 @@ Read these for context before editing the Zig side. The workaround pins down the
 | B1 | `lib/capybara/lightpanda/javascripts/index.js` (`XPathEval` IIFE line 74; `xpathFind` line 790; `document.evaluate` shim line 1013 — XPath 1.0 evaluator + spec polyfill, ~700 LOC) |
 | B2 | `lib/capybara/lightpanda/browser.rb` (`back` line 173, `forward` line 177 — JS `history.back()` / `history.forward()`. PR #2289 OPEN proposes native `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`.) |
 
-## Item → upstream Zig source (`/Users/navid/code/browser/`)
+## Item → upstream Zig source (`/Users/navid/code/upstream/browser/`)
 
 Starting points only. Confirm with `rg`/`grep` — file layout drifts.
 
@@ -36,8 +36,8 @@ CDP domain files live at `src/cdp/domains/<domain>.zig`. Browser-internal logic 
 To find the dispatch enum for CDP additions:
 
 ```bash
-rg -n "fn processMessage" /Users/navid/code/browser/src/cdp/domains/network.zig
-rg -n "method_name" /Users/navid/code/browser/src/cdp/domains/network.zig | head
+rg -n "fn processMessage" /Users/navid/code/upstream/browser/src/cdp/domains/network.zig
+rg -n "method_name" /Users/navid/code/upstream/browser/src/cdp/domains/network.zig | head
 ```
 
 For JS APIs, look in `src/browser/<area>/` for `.zig` files — APIs are bound through Zig→V8 reflection (look for `pub const` declarations of method names).
@@ -68,5 +68,5 @@ Several `src/browser/webapi/<File>.zig` files own an entire `src/browser/tests/<
 Other webapi files (`Performance.zig`, `Blob.zig`, `FileReader.zig`, `XMLSerializer.zig`, `TreeWalker.zig`, etc.) own a single `.html` file, not a directory — adding a sibling `test "..."` block in those is fine. Refresh this table when a new directory runner lands:
 
 ```bash
-rg -n 'htmlRunner\("[a-z_]+", \.\{\}\)' /Users/navid/code/browser/src/browser/webapi/*.zig
+rg -n 'htmlRunner\("[a-z_]+", \.\{\}\)' /Users/navid/code/upstream/browser/src/browser/webapi/*.zig
 ```

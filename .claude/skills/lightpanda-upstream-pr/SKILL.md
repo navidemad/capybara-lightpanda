@@ -1,6 +1,6 @@
 ---
 name: lightpanda-upstream-pr
-description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "file an issue and PR for the requestSubmit gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
+description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/upstream/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "file an issue and PR for the requestSubmit gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
 user_invocable: true
 model: opus
 effort: xhigh
@@ -15,7 +15,7 @@ Two repos are in play. Keep them straight:
 | Path                                    | Role                                    | What this skill edits                                                                                                       |
 | --------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/Users/navid/code/capybara-lightpanda` | The gem (Ruby). Source of the wishlist. | NOTHING — only reads `references/upstream-wishlist.md` (this skill's own reference) and gem workaround sources for context. |
-| `/Users/navid/code/browser`             | Lightpanda upstream (Zig).              | All edits land here. New branch, new commit, PR opened from here.                                                           |
+| `/Users/navid/code/upstream/browser`             | Lightpanda upstream (Zig).              | All edits land here. New branch, new commit, PR opened from here.                                                           |
 
 The gem stays untouched in this skill. Removing the gem-side workaround happens in a **separate** turn after the upstream PR merges — never speculatively delete a workaround in the same session as the fix.
 
@@ -78,7 +78,7 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Skipping mermaid diagrams.** Issue and PR both require diagrams (sequence diagram for the issue, flowchart for the PR). They're not decoration — they're the fastest way for a Zig engineer to understand a bug they didn't write.
 - **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
 - **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
-- **Branching off a stale `main`.** Every session that enters `/Users/navid/code/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
+- **Branching off a stale `main`.** Every session that enters `/Users/navid/code/upstream/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
 - **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.16.0 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. Never pass `-Dprebuilt_v8_path=…` either: `build.zig` picks up the archive `make download-v8` cached, and an explicit path overrides that tag-keyed lookup. Just write `zig build check` / `zig build test`. See "Local build & test commands" below.
 - **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `zig build check` / `zig build test` directly.
 
@@ -108,7 +108,7 @@ Use this branch when the user says "branch X is done, verify it" / "we made chan
 
 Run these checks in order. Each one cross-references an existing Step in this file — go read that Step's detail if a check fails:
 
-1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `repro/`, no editor config).
+1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/upstream/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/upstream/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `repro/`, no editor config).
 2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
 3. **Toolchain pin.** `zig version` prints `0.16.0` — see Step 2's pin block.
 4. **Compile clean.** `zig build check` is clean — see Step 4a.
@@ -145,7 +145,7 @@ The recipes below are bare `zig build …`. Two layers do the right thing automa
 Sanity-check the toolchain once per session before the first build. **`build.zig.zon`'s `minimum_zig_version` is the authority, not the number written here** — upstream CI derives its Zig version from that field (`.github/workflows/zig-test.yml` feeds it to `mlugg/setup-zig`), so when upstream bumps it, the repo is right and this skill is stale. Check both and trust the repo:
 
 ```bash
-grep minimum_zig_version /Users/navid/code/browser/build.zig.zon   # the authority
+grep minimum_zig_version /Users/navid/code/upstream/browser/build.zig.zon   # the authority
 zig version                                                        # must match it
 ```
 
@@ -168,7 +168,7 @@ Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by 
 - `cdp.lp: waitForSelector` (`src/cdp/domains/lp.zig:423`)
 - The `server:` group (`src/server/Server.zig` / `http.zig`): `a shutdown in the same batch as a readable connection`, `an accept at the connection limit …`, `releasing past the pool's retain …`, `accepted sockets get TCP keepalive` (ConnectionResetByPeer / NotAccepted), and a **panic** in `http connections stay ordered by deadline` (`Server.zig` kqueue `@intCast(socket)` — integer does not fit). Verified 2026-09-06 identical on unmodified `main` 14d868486; the five tests and the kqueue `@intCast(socket)` are all still in `Server.zig` on `main` 6fbbeeec3 (2026-10-03, not re-run). The panic ABORTS the whole run, so an unfiltered `zig build test` never reaches most of the suite on macOS — batch the rest by prefix instead (`TEST_FILTER=WebApi`, `cdp`, `browser.`, `MCP`, `agent`, `bidi`, `Selector`, `Form` covered ~1270 tests in ~8 min on 2026-09-06; filters are include-only, there is no exclude).
 
-If `zig build test` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/browser && TEST_FILTER='<test name>' zig build test` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
+If `zig build test` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/upstream/browser && TEST_FILTER='<test name>' zig build test` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
 
 Local verification reduces the cost of a broken CI run: catch trivial errors on your machine first, let upstream CI be the authoritative second opinion (it builds on Linux against the upstream toolchain, which catches macOS-vs-Linux drift you can't see locally).
 
@@ -181,7 +181,7 @@ Before touching any code, confirm three things. **Do this before Step 2** — th
 The wishlist entries are written from gem-level Capybara observation by humans on a specific date. The gem routes through workarounds (CLICK_JS, fetch+swap, polyfills) that can mask or _misdiagnose_ what's actually broken upstream — you'll see this most often when the wishlist's `Today` claim is broader than the actual bug. **Always confirm with a pure-CDP probe before bootstrapping the branch.**
 
 ```bash
-cd /Users/navid/code/browser
+cd /Users/navid/code/upstream/browser
 git fetch origin && git log --oneline origin/main -10
 ```
 
@@ -228,12 +228,12 @@ The wishlist says where the workaround lives, and `references/file-mapping.md` h
 
 **Verify only the item you're fixing — don't take _adjacent_ wishlist items at face value.** The wishlist is updated by hand and entries drift between reviews; a neighbor item described as broken may have been silently fixed upstream. If the design of your reproducer or fix depends on a neighbor item's behavior (e.g., A6's reproducer happens to call `form.submit()`, and A4 claims `form.submit()` doesn't navigate), spend two minutes confirming the neighbor is still broken — empirically, via a tiny CDP probe — before designing around the wishlist's claim. Cheaper than over-engineering a workaround you didn't need.
 
-## Step 2: Bootstrap branch in `/Users/navid/code/browser`
+## Step 2: Bootstrap branch in `/Users/navid/code/upstream/browser`
 
-**Non-negotiable**: every session that touches `/Users/navid/code/browser` starts by checking out `main` and pulling the latest from `origin`. The upstream repo moves fast — branching off a stale `main` means rebasing later, missed fixes, and PRs that conflict on day one. Do this even if you "just" left the repo on `main` in a previous session; another machine, another teammate, or a Dependabot bump may have advanced it.
+**Non-negotiable**: every session that touches `/Users/navid/code/upstream/browser` starts by checking out `main` and pulling the latest from `origin`. The upstream repo moves fast — branching off a stale `main` means rebasing later, missed fixes, and PRs that conflict on day one. Do this even if you "just" left the repo on `main` in a previous session; another machine, another teammate, or a Dependabot bump may have advanced it.
 
 ```bash
-cd /Users/navid/code/browser
+cd /Users/navid/code/upstream/browser
 git status                                     # must be clean
 git checkout main                              # ALWAYS — never branch off whatever was checked out last
 git pull origin main                           # ALWAYS — never branch off a stale main
@@ -243,7 +243,7 @@ git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix
 
 If the main clone is on a different open-PR branch (because a previous session left it there), prefer creating a worktree for the new fix — keeps the main clone's branch intact and matches the existing per-fix-worktree pattern. Use `git worktree add -b fix-<id>-<slug> ../browser-<slug> origin/main`; the worktree starts from a fresh `origin/main` automatically. Budget for the cold build: the worktree gets its own empty `.zig-cache`, so its first `zig build test` / `zig build` is a from-scratch compile (see "Performance notes" — run it in background, don't chain invocations).
 
-**`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
+**`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/upstream/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
 
 If `git status` is dirty (uncommitted work from a previous session, stray repro artifacts, etc.), stop and surface it to the user — do not stash, reset, or clean without permission. The user decides whether to keep, discard, or move that work.
 
@@ -319,7 +319,7 @@ A working `repro.js` + `repro.sh` skeleton lives in `references/templates.md` ("
 Local workspace only — do **not** commit the reproducer to the upstream branch. Suggested layout:
 
 ```
-/Users/navid/code/browser/repro/<id>-<slug>/
+/Users/navid/code/upstream/browser/repro/<id>-<slug>/
   repro.html            # minimal fixture, no frameworks
   repro.sh              # orchestrates lightpanda + driver + assertions
   repro.js              # (if needed) Node CDP client using chrome-remote-interface
@@ -385,7 +385,7 @@ GitHub recognizes any of: `Closes`, `closes`, `Close`, `Fixes`, `fixes`, `Resolv
 Stage the PR body the same way as the issue body — use the `Write` tool to put it at `/tmp/<id>-pr-body.md`, then pass `--body-file`. Heredoc invocations get tripped by local hooks; `--body-file` survives them and makes re-publish a single command.
 
 ```bash
-cd /Users/navid/code/browser
+cd /Users/navid/code/upstream/browser
 git status                                     # confirm only intended files (no repro/, no editor config)
 git diff --stat                                # confirm reasonable surface
 git add <specific files>                       # NEVER `git add -A` — the repro dir is local-only
@@ -459,9 +459,9 @@ GitHub also has a "code suggestion" feature: a comment whose body starts with `\
 
 ### 10b. Address the feedback in code BEFORE replying
 
-**Locate the worktree first.** Run `cd /Users/navid/code/browser && git worktree list | grep <branch>` — the explicit `cd` is required because a fresh session typically starts in `/Users/navid/code/capybara-lightpanda` (the gem) and `git worktree list` only enumerates worktrees of the repo containing cwd. The branch is often checked out at `/Users/navid/code/browser-<slug>/` from a previous session — `cd` into the worktree directory before editing. If you skip this and `git checkout <branch>` from the main clone, you'll either be blocked (`'<branch>' is already used by worktree at <path>`) or fall back to checking out `fork/<branch>` and end up in detached HEAD, where edits commit fine but the eventual `git push` either fails or pushes the wrong ref.
+**Locate the worktree first.** Run `cd /Users/navid/code/upstream/browser && git worktree list | grep <branch>` — the explicit `cd` is required because a fresh session typically starts in `/Users/navid/code/capybara-lightpanda` (the gem) and `git worktree list` only enumerates worktrees of the repo containing cwd. The branch is often checked out at `/Users/navid/code/upstream/browser-<slug>/` from a previous session — `cd` into the worktree directory before editing. If you skip this and `git checkout <branch>` from the main clone, you'll either be blocked (`'<branch>' is already used by worktree at <path>`) or fall back to checking out `fork/<branch>` and end up in detached HEAD, where edits commit fine but the eventual `git push` either fails or pushes the wrong ref.
 
-If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone (a previous session may have done all its work there, or this is the first follow-up since the branch was created). Fall back to `cd /Users/navid/code/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts from the original), don't assume the branch is missing.
+If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone (a previous session may have done all its work there, or this is the first follow-up since the branch was created). Fall back to `cd /Users/navid/code/upstream/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts from the original), don't assume the branch is missing.
 
 **Before applying review fixes, check `mergeable`.** Run `gh pr view <n> --repo lightpanda-io/browser --json mergeable --jq .mergeable`. If it's `CONFLICTING`, the branch is stale relative to `origin/main` and must be reconciled before you can push fixes — see Step 10b-merge below.
 

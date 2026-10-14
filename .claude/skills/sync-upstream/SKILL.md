@@ -78,7 +78,7 @@ Run target recons in parallel where possible (each `gh api` or WebFetch is indep
 Use this taxonomy across all targets — every finding lands in exactly one bucket:
 
 - **Broken** — methods we call that no longer exist upstream (Lightpanda only). Bugs in our gem. Flag with our gem-side file:line.
-- **Workaround removal** — bugs we work around that are now fixed (Lightpanda). Always require validation before recommending removal: build the local browser from `main` (see `references/lightpanda.md` "Build local browser from main"), then prompt the user to run specs with `LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda`. Don't run specs unprompted. After workaround validation, also run the **skip-pattern audit** (`AUDIT_SKIPS=1`, see `references/lightpanda.md` "Audit obsolete spec skip patterns") — Lightpanda fixes browser-side gaps independently of the workarounds we file PRs for, so `spec/spec_helper.rb` skip patterns can quietly become obsolete.
+- **Workaround removal** — bugs we work around that are now fixed (Lightpanda). Always require validation before recommending removal: build the local browser from `main` (see `references/lightpanda.md` "Build local browser from main"), then prompt the user to run specs with `LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda`. Don't run specs unprompted. After workaround validation, also run the **skip-pattern audit** (`AUDIT_SKIPS=1`, see `references/lightpanda.md` "Audit obsolete spec skip patterns") — Lightpanda fixes browser-side gaps independently of the workarounds we file PRs for, so `spec/spec_helper.rb` skip patterns can quietly become obsolete.
 - **New capabilities** — CDP methods or browser features now available that could replace JS workarounds (Lightpanda).
 - **Adoption candidates** — patterns/APIs Ferrum or Cuprite has that we don't, and that aren't Lightpanda-blocked. Each entry: peer file ↔ our file ↔ rationale ↔ rough effort (tiny/medium/large).
 - **Already adopted** — patterns we mirror from a previous sync. Note when the peer has since diverged (do we re-mirror?).
@@ -209,7 +209,7 @@ If a finding has a clear next code change (workaround removal, pattern adoption)
 For each recommended workaround removal, also output the exact validation command for the user to run before any cleanup, and pause:
 
 ```
-LIGHTPANDA_BIN=/Users/navid/code/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
 ```
 
 Don't run it yourself — `spec:incremental` is long-running and the user decides when to validate.
