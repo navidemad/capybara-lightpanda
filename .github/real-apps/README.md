@@ -43,18 +43,20 @@ the run's failure message. `check_baseline.rb` prints the per-cause tally and
 lists anything matching no cause:
 
 ```
+solidus: 338 examples, 11 failed (baseline 11) — 0 new, 0 fixed
+
 Known failures by cause:
-  layout-measuring-js           38  (confirmed)
-  select2-v3-flow               16  (likely)
-  ajax-partial-not-applied       6  (likely)
-  multipart-content-loss         5  (confirmed)
-  search-returns-nothing         2  (unknown)
+  ajax-partial-not-applied       4  (likely)
+  address-state-not-toggled      4  (unknown)
   selenium-only-api              1  (confirmed)
+  select2-v3-flow                1  (likely)
+  search-returns-nothing         1  (unknown)
 ```
 
 The number to drive down is the unattributed count, then the `unknown` and
 `likely` confidences. Causes live here rather than in the baselines because
-`REFRESH=1` rewrites those wholesale.
+`REFRESH=1` rewrites those wholesale. After a refresh, retire any cause that no
+longer matches an entry (see the header of `causes.yml`).
 
 ## Running locally
 
