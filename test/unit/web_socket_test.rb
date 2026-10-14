@@ -101,4 +101,78 @@ describe Capybara::Lightpanda::Client::WebSocket do
     accepter&.join
     server&.close
   end
+
+  # A browser that stops reading its socket (hung, SIGSTOPped, or a page stuck
+  # in a synchronous JS loop on Lightpanda's single thread) used to freeze the
+  # caller forever once a frame outgrew the kernel socket buffers: the write
+  # blocked under @driver_mutex, the command timeout only starts after the
+  # write returns, and #close needs the same mutex, so even teardown hung
+  # (rubycdp/ferrum#644). Reproduced on Lightpanda 1.0.0 with a 2 MB
+  # Runtime.evaluate. The peer below completes the handshake, then never
+  # reads again.
+  describe "a peer that stops reading" do
+    # Comfortably past any kernel's loopback send+receive buffers.
+    let(:frame) { "x" * (64 * 1024 * 1024) }
+
+    def stalled_peer(server, release)
+      serve_once(server) do |sock|
+        request = +""
+        request << sock.readpartial(4096) until request.include?("\r\n\r\n")
+        key = request[/Sec-WebSocket-Key: (\S+)/, 1]
+        accept = Digest::SHA1.base64digest("#{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+        sock.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n" \
+                   "Connection: Upgrade\r\nSec-WebSocket-Accept: #{accept}\r\n\r\n")
+        release.pop
+        sock.close
+      end
+    end
+
+    it "gives up on a frame the browser never takes, within the command's timeout" do
+      server = TCPServer.new("127.0.0.1", 0)
+      release = Queue.new
+      accepter = stalled_peer(server, release)
+      ws = Capybara::Lightpanda::Client::WebSocket.new("ws://127.0.0.1:#{server.addr[1]}/", options)
+
+      sender = Thread.new do
+        ws.send_message(frame, timeout: 0.5)
+        :sent
+      rescue StandardError => e
+        e
+      end
+
+      assert sender.join(5), "send_message still blocked 5s after a 0.5s timeout"
+      assert_instance_of Capybara::Lightpanda::DeadBrowserError, sender.value
+      assert_predicate ws, :closed?
+    ensure
+      sender&.kill
+      release&.push(true)
+      accepter&.join(2)
+      server&.close
+    end
+
+    it "lets #close through once a stalled write gives up, instead of waiting on the lock forever" do
+      server = TCPServer.new("127.0.0.1", 0)
+      release = Queue.new
+      accepter = stalled_peer(server, release)
+      ws = Capybara::Lightpanda::Client::WebSocket.new("ws://127.0.0.1:#{server.addr[1]}/", options)
+
+      sender = Thread.new do
+        ws.send_message(frame, timeout: 1)
+      rescue StandardError
+        nil
+      end
+      sleep 0.2 # let the sender take the lock and fill the buffers
+
+      closer = Thread.new { ws.close }
+
+      assert closer.join(5), "#close still blocked behind the stalled write after 5s"
+      assert_predicate ws, :closed?
+    ensure
+      sender&.kill
+      closer&.kill
+      release&.push(true)
+      accepter&.join(2)
+      server&.close
+    end
+  end
 end

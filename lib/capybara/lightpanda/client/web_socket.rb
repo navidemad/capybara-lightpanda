@@ -26,11 +26,18 @@ module Capybara
           connect
         end
 
-        def send_message(message)
+        # `timeout` bounds how long the browser may go without taking any of
+        # the frame's bytes (see #write); nil falls back to options.timeout.
+        def send_message(message, timeout: nil)
           raise DeadBrowserError, "WebSocket is not open" unless @status == :open
 
           @logger&.puts("\n\n▶ #{@logger.elapsed_time} #{message}")
-          @driver_mutex.synchronize { @driver.text(message) }
+          @driver_mutex.synchronize do
+            @write_timeout = timeout
+            @driver.text(message)
+          ensure
+            @write_timeout = nil
+          end
         end
 
         # The socket is closed even when the connection is already dead. A
@@ -53,8 +60,25 @@ module Capybara
           @status == :closed || @status == :error
         end
 
+        # Called by websocket-driver, always under @driver_mutex. A browser
+        # that stops reading (hung, stopped, or a page stuck in a sync JS loop
+        # on Lightpanda's single thread) would block a plain write forever
+        # once the frame outgrows the socket buffers, holding the lock that
+        # every other command, the reader's parse and #close need — and the
+        # command timeout only starts after the write returns. So the write
+        # gives up once the browser takes no byte for the timeout; the wait
+        # restarts on every partial write, so a slow but moving peer is fine
+        # (ferrum #644). Close and pong frames have no command timeout and
+        # fall back to options.timeout rather than waiting forever.
         def write(data)
-          @socket.write(data)
+          until data.empty?
+            written = @socket.write_nonblock(data, exception: false)
+            if written.is_a?(Integer)
+              data = data.byteslice(written..)
+            elsif !wait_for_socket(written)
+              abandon_stalled_write
+            end
+          end
         rescue Errno::EPIPE, Errno::ECONNRESET, IOError
           mark_dead
         end
@@ -70,6 +94,21 @@ module Capybara
         end
 
         private
+
+        def wait_for_socket(state)
+          timeout = @write_timeout || @options.timeout
+          state == :wait_readable ? @socket.wait_readable(timeout) : @socket.wait_writable(timeout)
+        end
+
+        # The frame was cut off midway, so the connection can't be reused:
+        # mark it dead (the reader and message threads stop, pending commands
+        # are released) and close the socket.
+        def abandon_stalled_write
+          timeout = @write_timeout || @options.timeout
+          mark_dead(:error)
+          close_socket
+          raise DeadBrowserError, "Browser accepted no data for #{timeout}s and is likely stuck; connection closed"
+        end
 
         def close_socket
           @socket&.close unless @socket.nil? || @socket.closed?

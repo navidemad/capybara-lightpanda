@@ -22,18 +22,18 @@ module Capybara
 
       def command(method, params = {}, async: false, session_id: nil, timeout: nil)
         message = build_message(method, params, session_id: session_id)
+        effective_timeout = timeout || @options.timeout
 
         if async
-          @ws.send_message(JSON.generate(message))
+          @ws.send_message(JSON.generate(message), timeout: effective_timeout)
           return true
         end
 
         pending = Concurrent::IVar.new
         @pendings[message[:id]] = pending
 
-        @ws.send_message(JSON.generate(message))
+        @ws.send_message(JSON.generate(message), timeout: effective_timeout)
 
-        effective_timeout = timeout || @options.timeout
         response = pending.value!(effective_timeout)
 
         if response.nil?
