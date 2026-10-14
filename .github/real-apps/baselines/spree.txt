@@ -1,1 +1,0 @@
-./spec/features/spree/admin/products/option_types_spec.rb # Option Types manaing option values allows an admin to manage option values

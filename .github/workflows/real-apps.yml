@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # NOTE: `matrix` context is not available in job-level `if:`, so per-target
     # filtering happens in the "Should this matrix entry run?" step below; every
     # later step is gated on `steps.guard.outputs.skip != 'true'`.
@@ -485,7 +485,7 @@ jobs:
   aggregate:
     needs: smoke
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out capybara-lightpanda
         uses: actions/checkout@v7
