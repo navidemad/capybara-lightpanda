@@ -265,6 +265,15 @@ Use this file when:
 - **Upstream issue**: #3957 (filed 2026-10-14). Repro: raw-`ws` CDP client, `Input.insertText` + Tab key — Chrome 155 records `focus, input, change, blur`, Lightpanda `focus, input, blur`.
 - **Upstream PR**: #3952 — **third-party** (jayhemnani9910, opened 2026-10-13, the day *before* our issue; open as of 2026-10-14). Don't open a second one. Chrome's model: the first user edit remembers the value before it (`_value_before_edit` on `Input`/`TextArea`, `text_entry.zig`), `dispatchBlur` and Enter's implicit submission fire `change` first if the value now differs; script-set values never count. Its body had no `Closes #3957`; we asked for it in a comment. Verified 2026-10-14 on its head 6a8dfde04: #3957's repro exits 0 with Chrome's exact sequence, `TEST_FILTER=cdp.input` (68) passes. The real-apps Solidus spec behind this item also needed a gem fix — `send_keys [1, :tab]` typed nothing because `Keyboard#type` dropped Integer keys — and passes only with both.
 
+### A63. CSS Nesting unsupported — nested rules dropped from the cascade and the CSSOM
+
+- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552)**: `.a { &.b {…} }`, `.a { .child {…} }` and `.a { @media (…) {…} }` never reach the cascade or the CSSOM (`CSSStyleRule.cssRules` is `undefined`), and the declaration right after a nested rule is lost too (`DeclarationsIterator` skips to the next top-level `;`). Chrome 120+, Firefox 117+ and Safari 17.2+ support CSS Nesting.
+- **Real-world impact**: no-build stylesheets (Propshaft, 37signals apps) reveal content from nested rules. Campfire's `.message { visibility: hidden; &.message--formatted { visibility: visible } }` hides every message: 15 of its 27 system tests (`css-nesting-dropped` in `.github/real-apps/causes.yml`).
+- **Want**: CSS Nesting §3 resolution (`&` → `:is(parent)`, relative selectors), nested `@media`/`@layer` applied to the parent selector, nested rules in `CSSStyleRule.cssRules`.
+- **Gem workaround**: none possible.
+- **Drop-on-fix**: nothing in the gem; refresh the Campfire real-apps baseline (the 15 entries drop).
+- **Upstream issue**: #3961, **Upstream PR**: #3962 (both filed 2026-10-14, by us). Verified on the branch build (10560): the repro (`browser:repro/css-nesting/`, `lightpanda fetch --dump html`) exits 0, and the Campfire suite goes from 24 to 9 failures. Gaps left on purpose: declarations after a nested rule fold into the parent rule (no `CSSNestedDeclarations`), top-level `&`, nested `@supports`/`@container`, `parentRule` still `null`.
+
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
 Three independent issues:

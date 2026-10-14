@@ -209,7 +209,7 @@ css-nesting-dropped:
     Reproduced 2026-10-14 on 1.0.0 and nightly 10552 with a three-rule page.
     `cssRules` keeps only the parent rule. A local upstream build with nesting
     support (10560, 2026-10-14) turns all 15 green.
-  reference: "upstream fix in preparation (CSS nesting)"
+  reference: "upstream lightpanda-io/browser#3961 (fix: PR #3962), wishlist A63"
   patterns:
     - 'Unable to find visible css "#(message|boost)_\d+"'
     - 'visible css "\.message'
