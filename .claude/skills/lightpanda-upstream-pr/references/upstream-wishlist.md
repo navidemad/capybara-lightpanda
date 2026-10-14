@@ -262,7 +262,8 @@ Use this file when:
 - **Real-world impact**: any "on edit, update the row" handler bound to `change` never runs after `send_keys`. Solidus's return-authorization form ticks a row's checkbox from `$(input).on('change')` after `send_keys [1, :tab]` — 1 real-apps baseline entry. `Node#set` is unaffected (the gem dispatches `change` itself).
 - **Want**: record the value when a text control gains focus (or mark it dirty on a user edit) and fire a trusted bubbling `change` on blur/Enter if it changed.
 - **Gem workaround**: possible but not taken — a `focusin`/`focusout` pair in the injected bundle could synthesize the event, at the risk of double-firing once upstream implements it. Prefer the upstream fix.
-- **Upstream issue**: #3957 (filed 2026-10-14, issue only). Repro: raw-`ws` CDP client, `Input.insertText` + Tab key — Chrome 155 records `focus, input, change, blur`, Lightpanda `focus, input, blur`.
+- **Upstream issue**: #3957 (filed 2026-10-14). Repro: raw-`ws` CDP client, `Input.insertText` + Tab key — Chrome 155 records `focus, input, change, blur`, Lightpanda `focus, input, blur`.
+- **Upstream PR**: #3952 — **third-party** (jayhemnani9910, opened 2026-10-13, the day *before* our issue; open as of 2026-10-14). Don't open a second one. Chrome's model: the first user edit remembers the value before it (`_value_before_edit` on `Input`/`TextArea`, `text_entry.zig`), `dispatchBlur` and Enter's implicit submission fire `change` first if the value now differs; script-set values never count. Its body had no `Closes #3957`; we asked for it in a comment. Verified 2026-10-14 on its head 6a8dfde04: #3957's repro exits 0 with Chrome's exact sequence, `TEST_FILTER=cdp.input` (68) passes. The real-apps Solidus spec behind this item also needed a gem fix — `send_keys [1, :tab]` typed nothing because `Keyboard#type` dropped Integer keys — and passes only with both.
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 

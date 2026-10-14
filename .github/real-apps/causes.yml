@@ -55,12 +55,16 @@ jquery1-change-shim:
 no-change-on-blur:
   confidence: confirmed
   summary: >-
-    The spec types into a refund-amount field and presses Tab, expecting the
-    row's checkbox to tick from a jQuery change handler. Lightpanda fires
-    input and blur for the edit but never change when the field loses focus
-    (verified 2026-10-14 on 1.0.0 and nightly 10552), so the handler never
-    runs. Upstream gap, no gem mitigation.
-  reference: "upstream lightpanda-io/browser#3957, wishlist A62"
+    The spec sends `send_keys [1, :tab]` to a refund-amount field, expecting
+    the row's checkbox to tick from a jQuery change handler. Two gaps, both
+    needed: the gem dropped the Integer key and sent only the Tab (fixed in
+    the gem 2026-10-14, Keyboard#type types any non-Symbol key's to_s like
+    Selenium), and Lightpanda fires input and blur for the edit but never
+    change when the field loses focus (verified 2026-10-14 on 1.0.0 and
+    nightly 10552). Third-party PR #3952 fixes the latter: with both fixes
+    the spec passes (verified 2026-10-14 on its head 6a8dfde04), with either
+    one alone it fails.
+  reference: "upstream lightpanda-io/browser#3957 (fix: PR #3952), wishlist A62"
   patterns:
     - 'return_authorizations_spec\.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows'
 

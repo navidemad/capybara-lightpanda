@@ -145,6 +145,23 @@ answers — export `PGUSER`/`PGPASSWORD` yourself to override.
 | `LIGHTPANDA_PROBE_HTML=0` | skip the page-body dump |
 | `LIGHTPANDA_DEBUG=1` | the gem's own CDP-level logging |
 
+To run a spec against a local Lightpanda build (an upstream PR branch, say),
+point the gem's binary cache at it. `spec.sh` sets `LIGHTPANDA_CACHE_TIME=0`,
+so whatever sits at `$XDG_CACHE_HOME/lightpanda/lightpanda` is used as is.
+Pin `MISE_CACHE_DIR` too, or mise moves its cache under the new
+`XDG_CACHE_HOME`:
+
+```bash
+mkdir -p /tmp/lp-xdg/lightpanda
+ln -sf ~/code/upstream/browser/zig-out/bin/lightpanda /tmp/lp-xdg/lightpanda/lightpanda
+XDG_CACHE_HOME=/tmp/lp-xdg MISE_CACHE_DIR="$(mise cache path)" \
+  script/real-app/spec.sh solidus <spec> -e "<example>"
+```
+
+The run prints no binary path, so check what the gem resolves with the same
+environment:
+`XDG_CACHE_HOME=/tmp/lp-xdg LIGHTPANDA_CACHE_TIME=0 ruby -Ilib -r capybara/lightpanda/errors -r capybara/lightpanda/binary -e 'p Capybara::Lightpanda::Binary.update'`.
+
 ## Related
 
 - `.github/real-apps/README.md` — the manual version of this, and how patches are
