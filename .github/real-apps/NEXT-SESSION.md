@@ -7,20 +7,22 @@ only if it is pointed at the right files and told what has already been tried.
 
 ## What is actually left
 
-101 baseline failures, all attributed in `causes.yml`. They are not 101 pieces
-of work:
+14 baseline failures as of the 2026-10-12 refresh (run 38261324053, gem 0.14.1
+on that day's nightly), all attributed in `causes.yml`. The refresh dropped 83
+entries, including whole clusters this file used to call permanent:
+`layout-measuring-js` (38, "never fixable") and `multipart-content-loss` (A45)
+both cleared. Nobody has checked which upstream change cleared them, so don't
+read either as understood.
 
 | Lot | N | Reality |
 | --- | --- | --- |
-| `layout-measuring-js` | 38 | Never fixable. Needs a layout engine. Document it, stop counting it as debt. |
-| `select-optgroup-invisible` | 15 | Closed out. PR #3058 merged 2026-07-26 at build **8328**; 0.3.7 (= 8671) shipped 2026-08-16 and the floor moved to 8448 / 0.3.7 on 2026-08-18. Drops at the next scheduled run. |
-| `form-method-dialog` | 5 | Closed out. #3054 merged at build 8311, and `MINIMUM_NIGHTLY_BUILD` was bumped to 8311 (with `MINIMUM_RELEASE` = 0.3.6) on 2026-07-26. |
-| `selenium-only-api` | 2 | Already fixed by #104; drops at the next scheduled run. |
-| `selenium-only-api` (`switch_to`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
-| Everything else | **40** | Genuinely open, mechanism not identified. |
+| `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
+| `ajax-partial-not-applied` | 4 | Open, `likely`. |
+| `address-state-not-toggled` | 4 | Open, `unknown` — grouped by symptom on 2026-10-14. |
+| `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
+| `select2-v3-flow`, `search-returns-nothing`, `js-component-not-rendering` | 3 | Open, one entry each. |
 
-Targeting "101" rewards gaming the baseline and makes 38 inherent limitations
-look like a lack of effort. The honest target is 40.
+The honest target is 13: every entry except the `switch_to.alert` one.
 
 ---
 
@@ -99,7 +101,6 @@ Run once per cluster. Substitute the slug.
 > while the test stays red.
 >
 > **Non-goals**
-> - `layout-measuring-js` (38 entries). Inherent, needs real layout. Leave it.
 > - Editing a baseline to make a number smaller.
 >
 > **Traps already paid for**
@@ -118,15 +119,11 @@ Run once per cluster. Substitute the slug.
 
 ## Do these first
 
-**Reconcile A45.** `findings/cluster-1-multipart-empty-body.md` (2026-06-13)
-states "root cause confirmed, browser-side": one submission, `hasPostData:
-true`, a valid boundary, and `Network.getRequestPostData` returning no body.
-Wishlist A45 (2026-07-24) states the opposite: the generic path is exonerated on
-both platforms, `Content-Length` always matched the bytes sent, root cause
-unknown. Both cannot describe the same path. This is 11 baseline entries and the
-oldest open item, and it can be settled without the new harness — the finding
-came from the private app that `APP_DIR` already drives. If it revives a
-confirmed root cause, it changes what the harness needs to capture.
+**~~Reconcile A45~~ — moot 2026-10-12.** Every `multipart-content-loss` entry
+passed on run 38261324053 and the cause was retired. Reopen it only if
+`Invalid request parameters` / `ActionController::BadRequest` comes back as a
+new failure; the diagnosis is in `git log -p .github/real-apps/causes.yml` and
+wishlist A45.
 
 **~~Then `select2-v3-flow`~~ — DONE 2026-07-25.** The premise was wrong: the
 helper reaches select2 fine and the pick registers. 15 of the 16 entries are
@@ -139,6 +136,7 @@ in the booted app and with a Ruby-free flat-vs-grouped reproducer; not
 gem-fixable. See `findings/cluster-3-select-optgroup-options.md`. The 16th entry
 (`products/edit/taxons_spec.rb`) is still `select2-v3-flow` and still open.
 
-**Next largest addressable cluster**: `ajax-partial-not-applied` (7, likely).
-Same harness, same method — the question there is whether the request is issued
-at all, which `network.traffic` answers in one run.
+**Next clusters**: `ajax-partial-not-applied` (4, likely) and
+`address-state-not-toggled` (4, unknown). Same harness, same method: the
+question for both is whether the request is issued at all, which
+`network.traffic` answers in one run.

@@ -19,68 +19,27 @@
 #   unknown   — grouped by symptom only; needs a local boot to resolve
 #
 # Order matters: the first matching cause wins, so put narrow patterns first.
+#
+# Retire a cause once no baseline entry matches it, and a pattern once no entry
+# needs it. Attribution only runs on baseline entries, so a kept cause cannot
+# label a regression: a new failure fails the job unattributed either way.
+# `git log -p` on this file recovers a retired cause and its diagnosis. The
+# 2026-10-12 refresh (run 38261324053) retired backbone-model-race-on-click,
+# layout-measuring-js, select-optgroup-invisible, multipart-content-loss,
+# form-method-dialog and axe-and-html-validation.
 
-backbone-model-race-on-click:
+selenium-only-api:
   confidence: confirmed
   summary: >-
-    Solidus's taxonomy tree renders from a Backbone model fetched over XHR
-    (GET /api/taxonomies/:id?set=nested), and the spec's own precondition,
-    have_content("Brand"), is satisfied by the breadcrumb "Brand 1" before that
-    fetch lands. click_on("Add taxon") then runs handle_create, which reads
-    this.model.get("root").id on a still-empty model and throws "TypeError:
-    Cannot read properties of undefined (reading 'id')" right after its
-    preventDefault — so no POST is issued and no "New node" ever appears.
-    Reproduced with script/real-app on nightly 8314: at click time the tree held
-    0 <li>, one render later it held 1, and the traffic shows the ?set=nested
-    GET returning 200 with no POST following it. A spec-side race that this
-    driver loses because visit returns at load rather than at network idle,
-    which is what Cuprite and Ferrum do too. The TypeError took a hand-injected
-    window error listener to see, because Lightpanda implements no
-    Runtime.exceptionThrown and console_logs only ever holds console.* calls;
-    that listener now ships in javascripts/errors.js, so re-running this one
-    reports the TypeError in browser.page_errors directly.
-  reference: "wishlist B: Runtime.exceptionThrown"
+    The spec reaches for Selenium's post-hoc switch_to.alert. The gem cannot
+    honour it: Lightpanda arms a dialog response before the action that opens
+    it, so there is nothing to accept afterwards, and the gem raises
+    NotSupportedByDriverError pointing at accept_alert/accept_confirm. Fails by
+    design. Solidus's split-shipment spec hits it once the optgroup bug (fixed
+    upstream in #3058) no longer stops the flow earlier.
   patterns:
-    - 'admin/taxons_spec\.rb # Taxonomies and taxons can view and add to taxon tree'
-
-layout-measuring-js:
-  confidence: confirmed
-  summary: >-
-    Page JS reads offsetWidth/getBoundingClientRect to make layout decisions.
-    Lightpanda has no layout, so every element reports a synthetic 5x5 rect and
-    a parent ends up narrower than the sum of its children. Solidus's Tabs
-    component concludes "overflowed" and moves every tab but the first into a
-    hover dropdown that :hover never opens.
-  reference: "wishlist C12"
-  patterns:
-    - 'Unable to find visible (link|link or button) "(Customer|Product Stock|Images|Product Properties|Variants|Prices|Shipments|Adjustments|Store Credit|RMA|Stock Locations)"'
-
-select-optgroup-invisible:
-  confidence: confirmed
-  summary: >-
-    FIXED UPSTREAM at build 8328 (PR #3058, merged 2026-07-26), inside
-    MINIMUM_NIGHTLY_BUILD = 8448 / MINIMUM_RELEASE = 0.3.7 (bumped
-    2026-08-18), so no supported binary can still hit it. Baseline entries
-    stay attributed here until the next scheduled run clears them; a
-    regression should land back here rather than as a fresh mystery.
-    Original mechanism, kept for that case:
-    Lightpanda's HTMLSelectElement accessors walked direct children only, so
-    <option>s nested in an <optgroup> are invisible to options / value /
-    selectedIndex / selectedOptions and to form submission. Solidus's split
-    select groups every destination, so select2's onSelect calls
-    $(el).val("stock_location:2"), jQuery iterates elem.options (which holds
-    only the empty placeholder), finds no match, sets selectedIndex = -1, and
-    the getter then returns null — completeItemSplit dies on null.split(':')
-    before it can POST. Proven in the booted app AND with a Ruby-free
-    flat-vs-grouped reproducer; not gem-fixable, every read path is
-    browser-side.
-  reference: >-
-    upstream lightpanda-io/browser#3057, PR #3058; wishlist A52;
-    findings/cluster-3-select-optgroup-options.md
-  patterns:
-    - 'order_details_spec\.rb # Order Details as Admin Shipment edit page splitting'
-    - 'shipments_spec\.rb # Shipments moving variants between shipments'
-    - 'shipments_spec\.rb # Shipments when split shipment'
+    - "undefined method [`']switch_to"
+    - 'post-hoc switch_to\.alert'
 
 select2-v3-flow:
   confidence: likely
@@ -89,9 +48,7 @@ select2-v3-flow:
     select2-focused, .select2-drop) and never finds it, so the dropdown never
     opened for that helper's click path. The gem's CLICK_JS wrapper descent
     (wishlist C13) fixed the container-click path into select2; the taxons
-    display-order picker takes a third path again. Distinct from
-    select-optgroup-invisible above, where the dropdown DOES open and the
-    selection is lost afterwards.
+    display-order picker takes a third path again.
   reference: "wishlist C13"
   next_step: >-
     Boot solidus, run products/edit/taxons_spec.rb with console capture, and
@@ -100,73 +57,42 @@ select2-v3-flow:
   patterns:
     - 'select2-input|select2-focused|select2-drop'
 
-multipart-content-loss:
-  confidence: confirmed
+address-state-not-toggled:
+  confidence: unknown
   summary: >-
-    Multipart form submissions reach Rack with a body it cannot parse
-    (EOFError / EmptyContentError), which Rails turns into
-    ActionController::BadRequest and the error page replaces the document.
-    Root cause still unidentified — every synthetic probe encodes correctly on
-    both platforms.
-  reference: "wishlist A45"
+    Solidus swaps an address's state control with the country: a state_id
+    <select> when the country has states, a state_name text input when it has
+    none, and the selected state follows the customer picked on a new order.
+    The field the spec waits for never becomes visible, so the swap or the
+    refill does not run. Grouped by symptom only. The store-credit memo entry
+    is the same shape on another widget: after an inline edit the new memo is
+    in the DOM but still hidden, so the display/edit toggle does not flip back.
   next_step: >-
-    Run one real failing spec behind a raw-capturing proxy in front of the
-    app's Puma, to capture the actual bytes and the submit mechanism.
+    Boot solidus, run customer_details_spec.rb "changes state field to text
+    input" with console_logs and network.traffic, and check whether the
+    country change requests the states API and whether its callback runs.
   patterns:
-    - 'Invalid request parameters'
-    - 'ActionController::BadRequest'
-
-selenium-only-api:
-  confidence: confirmed
-  summary: >-
-    The spec reaches for a Selenium-shaped API. browser.logs,
-    browser.execute_async_script and element.native.send_keys now work (#104);
-    switch_to.alert cannot, because Lightpanda arms a dialog response before
-    the action that opens it, so there is nothing to accept afterwards.
-  patterns:
-    - "undefined method [`']switch_to"
-    # Fixed in #104; kept so pre-#104 reports still attribute cleanly and so a
-    # regression lands back under this cause rather than as a fresh mystery.
-    - "undefined method [`'](logs|execute_async_script)"
-    - "undefined method [`']send_keys' for an instance of String"
-
-form-method-dialog:
-  confidence: confirmed
-  summary: >-
-    FIXED UPSTREAM at build 8311, which is now MINIMUM_NIGHTLY_BUILD itself
-    (bumped 2026-07-26 alongside MINIMUM_RELEASE = 0.3.6), so no supported
-    binary can still hit it. Submitting a <form method="dialog"> navigated
-    instead of closing its ancestor <dialog>, so Turbo's confirm promise never
-    resolved and the DELETE was never issued. Spree 5's admin uses that markup
-    for every destroy confirmation.
-    The 5 spree entries were dropped from the baseline on 2026-07-25 after all
-    of them passed twice on nightly 8314. Entry kept, not deleted: a regression
-    should land back here rather than as a fresh mystery.
-  reference: "upstream lightpanda-io/browser#3053, PR #3054 (merged 2026-07-25, build 8311)"
-  patterns:
-    - 'settings/(shipping_categories|shipping_methods|stock_locations|tax_categories|tax_rates)_spec\.rb'
+    - 'customer_details_spec\.rb # Customer Details editing an order selected country has no state'
+    - 'new_order_spec\.rb # New Order when changing customer'
+    - "store_credits_spec\\.rb # Store credits admin displaying a store credit details page lets edit store credit's memo"
 
 ajax-partial-not-applied:
   confidence: likely
   summary: >-
-    A control changes (a select, an inline edit save) and the server-rendered
-    partial that should replace part of the page never lands, so the page keeps
-    its pre-change content. Seen on solidus's line-item total, cart edit,
-    calculator fields, tax-country select and the new-credit-card form. The
-    gem does dispatch bubbling input/change events (SELECT_OPTION_JS), so the
-    event dispatch itself is not the gap.
+    A control changes (a select, a checkbox, a payment-method radio) and the
+    server-rendered partial or JS update that should follow never lands, so the
+    page keeps its pre-change content. Seen on solidus's calculator fields, the
+    new-credit-card form and the return-authorization rows. The gem does
+    dispatch bubbling input/change events (SELECT_OPTION_JS), so the event
+    dispatch itself is not the gap.
   next_step: >-
     Boot solidus, drive one of these by hand and watch Network#traffic plus
     console_logs — the question is whether the request is issued, whether it
     responds, and whether the response handler runs.
   patterns:
-    - 'line_items_spec\.rb # Order Line Items can edit'
-    - 'order_details_spec\.rb # Order Details as Admin cart edit page'
     - 'payments_spec\.rb # Payments'
     - 'configuration/shipping_methods_spec\.rb # Shipping Methods update can change the calculator'
-    - 'configuration/store_spec\.rb # Store editing general store settings'
     - 'return_authorizations_spec\.rb # ReturnAuthorizations'
-    - 'return_payment_state_spec\.rb # Return payment state'
 
 search-returns-nothing:
   confidence: unknown
@@ -177,44 +103,23 @@ search-returns-nothing:
     render and the assertion misses them.
   patterns:
     - 'products_spec\.rb # Products as admin user searching products'
-    - 'stock_items_spec\.rb # Stock Items Management searching'
-    - 'products/option_types_spec\.rb # Option Types'
 
 js-component-not-rendering:
   confidence: likely
   summary: >-
-    Forem's article editor, comment editor and article-management panels are
-    Preact components. The containers exist but their contents never appear
-    (#section-delete, #section-discussion, "Editing comment", the previewed
-    body), so the component tree is not mounting or not updating. Same family
-    as the readyState stall that took out the forem homepage, but on article
-    pages.
+    Forem's comment UI is made of Preact components. After a reply is
+    submitted, the parent comment keeps its "replying" state, so the component
+    tree is not updating. Same family as the readyState stall that took out the
+    forem homepage, but on article pages.
   reference: "wishlist A10"
   patterns:
-    - 'spec/system/articles/'
     - 'spec/system/comments/'
-    - 'spec/system/authentication/user_logs_in_with_email_spec\.rb'
 
 decidim-account-js:
   confidence: likely
   summary: >-
-    Decidim's account form reveals and hides password/email fields in JS. The
-    fields stay in whichever state the page loaded with, so "Current password"
-    is never findable and the toggle assertions fail. The two Ambiguous
-    "Remove" matches are the avatar widget showing both its states at once,
-    which is a visibility question rather than a toggle one.
+    Decidim's avatar widget shows both of its states at once, so "Remove"
+    matches twice and Capybara raises Ambiguous. A visibility question: the
+    hidden state is not recognised as hidden.
   patterns:
-    - 'account_spec\.rb # Account when on the account page when update (password|email)'
     - 'account_spec\.rb # Account when on the account page update avatar'
-    - 'account_spec\.rb # Account navigation'
-
-axe-and-html-validation:
-  confidence: confirmed
-  summary: >-
-    Decidim's shared "accessible page" examples. The axe-core injection path
-    works again now that browser.execute_async_script exists (#104); what these
-    report is whatever axe and the HTML validator actually find on the page,
-    which may be genuine app findings rather than driver gaps.
-  patterns:
-    - 'accessibility_examples\.rb'
-    - 'behaves like accessible page'
