@@ -16,13 +16,15 @@ read either as understood.
 
 | Lot | N | Reality |
 | --- | --- | --- |
+| `jquery1-change-shim` | 5 | Fixed in the gem (`event_handlers.js`, 2026-10-14). Drops at the next refresh; upstream wishlist A61. |
+| `no-change-on-blur` | 1 | Confirmed upstream gap (wishlist A62). |
 | `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
-| `ajax-partial-not-applied` | 4 | Open, `likely`. |
-| `address-state-not-toggled` | 4 | Open, `unknown` — grouped by symptom on 2026-10-14. |
+| `selenium-textarea-text` | 1 | `likely` — the spec relies on Selenium's visible text including a textarea's child text. |
+| `customer-switch-refill` | 2 | Open, `unknown`. |
 | `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
-| `select2-v3-flow`, `search-returns-nothing`, `js-component-not-rendering` | 3 | Open, one entry each. |
+| `select2-v3-flow`, `js-component-not-rendering` | 2 | Open, one entry each. |
 
-The honest target is 13: every entry except the `switch_to.alert` one.
+Once the jquery1 entries drop, the open work is the 6 entries in the last three rows, plus filing A62 upstream.
 
 ---
 
@@ -136,7 +138,7 @@ in the booted app and with a Ruby-free flat-vs-grouped reproducer; not
 gem-fixable. See `findings/cluster-3-select-optgroup-options.md`. The 16th entry
 (`products/edit/taxons_spec.rb`) is still `select2-v3-flow` and still open.
 
-**Next clusters**: `ajax-partial-not-applied` (4, likely) and
-`address-state-not-toggled` (4, unknown). Same harness, same method: the
-question for both is whether the request is issued at all, which
-`network.traffic` answers in one run.
+**Done 2026-10-14**: `ajax-partial-not-applied`, `address-state-not-toggled`
+and `search-returns-nothing` were mostly one bug, jQuery 1.12's change shim
+(wishlist A61), fixed in the gem. **Next**: `customer-switch-refill` (2,
+unknown), same harness, same method.

@@ -26,7 +26,71 @@
 # `git log -p` on this file recovers a retired cause and its diagnosis. The
 # 2026-10-12 refresh (run 38261324053) retired backbone-model-race-on-click,
 # layout-measuring-js, select-optgroup-invisible, multipart-content-loss,
-# form-method-dialog and axe-and-html-validation.
+# form-method-dialog and axe-and-html-validation. The 2026-10-14 diagnosis
+# replaced address-state-not-toggled, ajax-partial-not-applied and
+# search-returns-nothing with the causes it proved.
+
+jquery1-change-shim:
+  confidence: confirmed
+  summary: >-
+    FIXED IN THE GEM by javascripts/event_handlers.js; these entries drop at the
+    next baseline refresh. Lightpanda gives window and document almost none of
+    the GlobalEventHandlers on* attributes, so 'onchange' in window is false.
+    Solidus's admin runs jQuery 1.12.4, which reads that at load, swaps in its
+    IE change/submit shims, and from then on no delegated or ancestor change
+    handler fires although the native event bubbles: Backbone's
+    events: {change: ...} on the address view never sees the country change,
+    so no /api/states request goes out. Proven on a booted app 2026-10-14:
+    capture/bubble listeners on every ancestor saw the event, jQuery handlers
+    on .js-billing-address did not, and the polyfill turned 4 of these green on
+    1.0.0 and all 5 on nightly 10552 (the card-type entry also needs our
+    upstream #3776, 10080, for the hidden input's value to reach its attribute).
+  reference: "wishlist A61"
+  patterns:
+    - 'customer_details_spec\.rb # Customer Details editing an order selected country has no state'
+    - 'payments_spec\.rb # Payments'
+    - 'configuration/shipping_methods_spec\.rb # Shipping Methods update can change the calculator'
+    - 'products_spec\.rb # Products as admin user searching products'
+
+no-change-on-blur:
+  confidence: confirmed
+  summary: >-
+    The spec types into a refund-amount field and presses Tab, expecting the
+    row's checkbox to tick from a jQuery change handler. Lightpanda fires
+    input and blur for the edit but never change when the field loses focus
+    (verified 2026-10-14 on 1.0.0 and nightly 10552), so the handler never
+    runs. Upstream gap, no gem mitigation.
+  reference: "wishlist A62"
+  patterns:
+    - 'return_authorizations_spec\.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows'
+
+selenium-textarea-text:
+  confidence: likely
+  summary: >-
+    After a failed memo save the row stays in edit mode, so the memo text is
+    hidden and the expected "Memo Lottery Won" can only come from the
+    textarea's child text (its defaultValue, set by the previous successful
+    save). Selenium's visible-text atom includes a textarea's child text;
+    innerText, which this gem reads, does not, so the spec is written against
+    a Selenium-only reading. Not reproduced in Chrome's innerText yet.
+  patterns:
+    - "store_credits_spec\\.rb # Store credits admin displaying a store credit details page lets edit store credit's memo"
+
+customer-switch-refill:
+  confidence: unknown
+  summary: >-
+    Switching the order's customer through the select2 customer search should
+    refill the bill address, including the state control (a state_id select
+    for a country with states, a state_name input for one without). The field
+    the spec waits for never becomes visible. The country -> state swap itself
+    works once jquery1-change-shim is fixed, so the gap is in the
+    customer-select path (onSelectCustomer -> model.set(bill_address)).
+  next_step: >-
+    Boot solidus, run new_order_spec.rb "when changing customer" with
+    console_logs and network.traffic, and check whether the second select2 pick
+    fires the select event and requests the states of the new country.
+  patterns:
+    - 'new_order_spec\.rb # New Order when changing customer'
 
 selenium-only-api:
   confidence: confirmed
@@ -56,53 +120,6 @@ select2-v3-flow:
     handler for that widget. One entry.
   patterns:
     - 'select2-input|select2-focused|select2-drop'
-
-address-state-not-toggled:
-  confidence: unknown
-  summary: >-
-    Solidus swaps an address's state control with the country: a state_id
-    <select> when the country has states, a state_name text input when it has
-    none, and the selected state follows the customer picked on a new order.
-    The field the spec waits for never becomes visible, so the swap or the
-    refill does not run. Grouped by symptom only. The store-credit memo entry
-    is the same shape on another widget: after an inline edit the new memo is
-    in the DOM but still hidden, so the display/edit toggle does not flip back.
-  next_step: >-
-    Boot solidus, run customer_details_spec.rb "changes state field to text
-    input" with console_logs and network.traffic, and check whether the
-    country change requests the states API and whether its callback runs.
-  patterns:
-    - 'customer_details_spec\.rb # Customer Details editing an order selected country has no state'
-    - 'new_order_spec\.rb # New Order when changing customer'
-    - "store_credits_spec\\.rb # Store credits admin displaying a store credit details page lets edit store credit's memo"
-
-ajax-partial-not-applied:
-  confidence: likely
-  summary: >-
-    A control changes (a select, a checkbox, a payment-method radio) and the
-    server-rendered partial or JS update that should follow never lands, so the
-    page keeps its pre-change content. Seen on solidus's calculator fields, the
-    new-credit-card form and the return-authorization rows. The gem does
-    dispatch bubbling input/change events (SELECT_OPTION_JS), so the event
-    dispatch itself is not the gap.
-  next_step: >-
-    Boot solidus, drive one of these by hand and watch Network#traffic plus
-    console_logs — the question is whether the request is issued, whether it
-    responds, and whether the response handler runs.
-  patterns:
-    - 'payments_spec\.rb # Payments'
-    - 'configuration/shipping_methods_spec\.rb # Shipping Methods update can change the calculator'
-    - 'return_authorizations_spec\.rb # ReturnAuthorizations'
-
-search-returns-nothing:
-  confidence: unknown
-  summary: >-
-    A search or filter form is submitted and the results page comes back
-    without the expected row. Grouped by symptom only — not yet established
-    whether the submission carries its parameters, or whether the results
-    render and the assertion misses them.
-  patterns:
-    - 'products_spec\.rb # Products as admin user searching products'
 
 js-component-not-rendering:
   confidence: likely

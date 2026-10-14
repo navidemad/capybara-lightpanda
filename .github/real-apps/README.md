@@ -46,11 +46,12 @@ lists anything matching no cause:
 solidus: 338 examples, 11 failed (baseline 11) — 0 new, 0 fixed
 
 Known failures by cause:
-  ajax-partial-not-applied       4  (likely)
-  address-state-not-toggled      4  (unknown)
+  jquery1-change-shim            5  (confirmed)
+  customer-switch-refill         2  (unknown)
+  no-change-on-blur              1  (confirmed)
   selenium-only-api              1  (confirmed)
   select2-v3-flow                1  (likely)
-  search-returns-nothing         1  (unknown)
+  selenium-textarea-text         1  (likely)
 ```
 
 The number to drive down is the unattributed count, then the `unknown` and
