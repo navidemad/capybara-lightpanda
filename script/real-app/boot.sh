@@ -178,7 +178,9 @@ fi
 if [ -n "$RA_PRE_SPEC" ]; then
   if ! step_done pre_spec; then
     log "pre-spec: $RA_PRE_SPEC"
-    in_app bash -c "$RA_PRE_SPEC"
+    # Blank BASH_ENV: a startup file that runs `mise hook-env` (a common
+    # dotfiles setup) would re-resolve Ruby for the cwd and undo `mise exec`.
+    in_app env BASH_ENV= bash -c "$RA_PRE_SPEC"
     mark_done pre_spec
   else
     log "pre-spec    done (FORCE=pre_spec to redo)"
