@@ -5,6 +5,7 @@
 ### Fixed
 
 - **A browser that stops reading no longer hangs the test process.** When Lightpanda was stuck (a page in an endless synchronous loop, a stopped process) and a command was larger than the socket buffers, about 1 MB and up (a large `execute_script` bundle, for example), sending it blocked forever: the command's timeout never started, every other command waited behind it, and so did quitting the browser, at exit included. Sending now gives up after the command's timeout without progress and raises `DeadBrowserError`, as Ferrum now does.
+- **Clicking a `mailto:` or `tel:` link keeps the page, as in Chrome.** On Lightpanda 1.0.0, clicking `<a href="mailto:someone@example.com">` left the page and loaded `example.com`, the host in the address. On nightlies 10261 to 10535, clicking a `tel:` link left the page unusable: every later call raised `NoExecutionContextError`. The page now stays and the page's own click handlers still run. The same applies to any link whose scheme the browser can't load (`sms:`, `ftp:`…).
 
 ## [0.14.1] - 2026-10-12
 
