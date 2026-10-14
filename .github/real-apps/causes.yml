@@ -45,7 +45,7 @@ jquery1-change-shim:
     on .js-billing-address did not, and the polyfill turned 4 of these green on
     1.0.0 and all 5 on nightly 10552 (the card-type entry also needs our
     upstream #3776, 10080, for the hidden input's value to reach its attribute).
-  reference: "wishlist A61"
+  reference: "upstream lightpanda-io/browser#3956, wishlist A61"
   patterns:
     - 'customer_details_spec\.rb # Customer Details editing an order selected country has no state'
     - 'payments_spec\.rb # Payments'
@@ -60,7 +60,7 @@ no-change-on-blur:
     input and blur for the edit but never change when the field loses focus
     (verified 2026-10-14 on 1.0.0 and nightly 10552), so the handler never
     runs. Upstream gap, no gem mitigation.
-  reference: "wishlist A62"
+  reference: "upstream lightpanda-io/browser#3957, wishlist A62"
   patterns:
     - 'return_authorizations_spec\.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows'
 

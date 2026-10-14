@@ -24,7 +24,7 @@ read either as understood.
 | `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
 | `select2-v3-flow`, `js-component-not-rendering` | 2 | Open, one entry each. |
 
-Once the jquery1 entries drop, the open work is the 6 entries in the last three rows, plus filing A62 upstream.
+Once the jquery1 entries drop, the open work is the 6 entries in the last three rows (A62 is filed upstream as #3957).
 
 ---
 
