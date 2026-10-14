@@ -106,10 +106,6 @@ RSpec.configure do |config|
       /node #obscured\? should see overlapped elements as obscured/,
       /node #obscured\? should work in frames/,
       /node #obscured\? should work in nested iframes/,
-      # CSS text-transform / case sensitivity for invisible text — depends
-      # on getComputedStyle returning cascade-resolved `text-transform`,
-      # which Lightpanda's CSSOM doesn't yet implement for non-inline rules.
-      /#assert_text should raise error.*if requested text is present but invisible and with incorrect case/,
       # `obscured: true/false` for nodes outside viewport — needs real
       # geometry & viewport (Page.getLayoutMetrics is hardcoded 1920x1080).
       /#all with obscured filter should not find nodes on top outside the viewport when false/,
