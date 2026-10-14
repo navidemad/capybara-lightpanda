@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A browser that stops reading no longer hangs the test process.** When Lightpanda was stuck (a page in an endless synchronous loop, a stopped process) and a command was larger than the socket buffers, about 1 MB and up (a large `execute_script` bundle, for example), sending it blocked forever: the command's timeout never started, every other command waited behind it, and so did quitting the browser, at exit included. Sending now gives up after the command's timeout without progress and raises `DeadBrowserError`, as Ferrum now does.
+
 ## [0.14.1] - 2026-10-12
 
 ### Fixed
