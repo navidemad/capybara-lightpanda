@@ -120,7 +120,7 @@ the app.
 | --- | --- | --- | --- | --- |
 | `solidus` | 3.3 | — | none (sqlite) | generates a dummy app in `pre_spec`; `brew install shared-mime-info` |
 | `spree` | 3.3 | — | none (sqlite) | nested layout: `work_dir=spree/admin`; same MIME db |
-| `forem` | 3.3.9 exact | 20 | postgres, redis | needs pgvector (`CREATE EXTENSION "vector"`) |
+| `forem` | 3.3.12 exact | 20 | postgres, redis | needs pgvector (`CREATE EXTENSION "vector"`) |
 | `decidim` | 3.4 | 22 | postgres | generates + moves a dummy app |
 | `mastodon` | 4.0 | 24 | postgres, redis | `brew install libidn` for idn-ruby |
 | `alonetone` | 4.0 | 22 | mysql (root/root) | `brew install mysql` |

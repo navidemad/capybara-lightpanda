@@ -46,10 +46,12 @@ jobs:
           - name: forem
             repo: forem/forem
             sha: 3a22391a6d83ee1fda6a185799c86dcb76800318
-            # Forem's Gemfile reads .ruby-version (patched to 3.3.9) and
+            # Forem's Gemfile reads .ruby-version (patched to 3.3.12) and
             # demands an exact match, so pin Ruby to that version exactly
             # rather than letting setup-ruby resolve "3.3" to the latest patch.
-            ruby: "3.3.9"
+            # Must be a patch ruby/ruby-builder ships for the runner image:
+            # ubuntu-26.04 builds start at 3.3.11 (3.3.9 has none).
+            ruby: "3.3.12"
             node: "20"
             work_dir: "."
             spec_dir: "."
