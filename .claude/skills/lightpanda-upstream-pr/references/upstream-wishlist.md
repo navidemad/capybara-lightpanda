@@ -254,7 +254,7 @@ Use this file when:
 - **Want**: give `Window` and `Document` the same GlobalEventHandlers accessors `HtmlElement` has (a shared list, so the three can't drift).
 - **Gem workaround**: `javascripts/event_handlers.js` defines every `on*` name found on `HTMLElement.prototype` that `window`/`document` lack, with IDL semantics (getter → handler or null, a function registers one listener kept in place across reassignment, `return false` cancels). Pinned by `test/features/global_event_handlers_test.rb`.
 - **Drop-on-fix**: delete `event_handlers.js` and its `AutoScripts::PARTS` entry once the floor covers the fix; keep the test.
-- **Upstream issue**: #3956 (filed 2026-10-14, issue only). Repro: `lightpanda fetch --dump html` page comparing `HTMLElement.prototype`'s `on*` names with `window`/`document` — 89/93 missing on 1.0.0 and 10552, 0/0 on Chrome 155 (`oncopy`/`oncut`/`onpaste` are DocumentAndElementEventHandlers, not on Window).
+- **Upstream issue**: #3956, **Upstream PR**: #3958 (open as of 2026-10-14). The PR leaves `oncopy`/`oncut`/`onpaste`, `onfullscreen*` and `ontouch*` off `window` (Chrome 155 parity: `'ontouchstart' in window` is false on desktop), so `event_handlers.js` should stop adding those nine names to `window` too. Repro: `lightpanda fetch --dump html` page comparing `HTMLElement.prototype`'s `on*` names with `window`/`document` — 89/93 missing on 1.0.0 and 10552, 0/0 on Chrome 155 (`oncopy`/`oncut`/`onpaste` are DocumentAndElementEventHandlers, not on Window).
 
 ### A62. A user-edited text field fires no `change` when it loses focus
 
