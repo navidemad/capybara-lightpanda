@@ -1250,6 +1250,24 @@ class TestApp
   # answers every sub-path with the same page so a driver that wrongly
   # *reloads* a pushState entry gets a 200 (and fails on the lost JS state),
   # not a 404 that would hide the real defect.
+  # -- Links to schemes the browser can't fetch. The mailto: address points at
+  # this server, so a build that mangles it into `http://mailto:someone@<host>/`
+  # visibly leaves the page instead of failing a DNS lookup somewhere else.
+  get "/lightpanda/external_links" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>External links</title></head><body>
+        <a id="mail" href="mailto:someone@#{request.host_with_port}"><span>Email us</span></a>
+        <a id="phone" href="tel:+15555550100">Call us</a>
+        <script>
+          window.__kept = true;
+          window.__clicks = [];
+          document.addEventListener('click', function (e) { window.__clicks.push(e.defaultPrevented); });
+        </script>
+      </body></html>
+    HTML
+  end
+
   get %r{/lightpanda/history(/.*)?} do
     <<~HTML
       <!DOCTYPE html>
