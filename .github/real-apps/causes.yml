@@ -61,10 +61,10 @@ no-change-on-blur:
     the gem 2026-10-14, Keyboard#type types any non-Symbol key's to_s like
     Selenium), and Lightpanda fires input and blur for the edit but never
     change when the field loses focus (verified 2026-10-14 on 1.0.0 and
-    nightly 10552). Third-party PR #3952 fixes the latter: with both fixes
+    nightly 10552). Third-party PR #3952 (merged 2026-10-14, build 10575) fixes the latter: with both fixes
     the spec passes (verified 2026-10-14 on its head 6a8dfde04), with either
     one alone it fails.
-  reference: "upstream lightpanda-io/browser#3957 (fix: PR #3952), wishlist A62"
+  reference: "upstream lightpanda-io/browser#3957 (fixed by PR #3952, build 10575), wishlist A62"
   patterns:
     - 'return_authorizations_spec\.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows'
 
