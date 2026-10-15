@@ -27,7 +27,7 @@ Use this file when:
 
 ## A. Bugs to fix upstream
 
-> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41, A57–A59, A61, A62) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
+> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41, A57–A62) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
 
 ### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801 OPEN; #1832 CLOSED 2026-04-09)
 
@@ -212,14 +212,6 @@ Use this file when:
 - **Gem workaround**: none (`SET_VALUE_JS` could call `setSelectionRange(len, len)` after assigning, and may yet — noted as an option, not done, to avoid papering over the upstream deviation). `keyboard_editing_test.rb` places the caret explicitly.
 - **Drop-on-fix**: the explicit `place_caret` calls in that file become redundant.
 - **Upstream issue**: #3419, **Upstream PR**: #3420 — **MERGED 2026-09-06, build 9223** (verified 2026-10-03). In the floor since the 2026-10-03 bump to 9994; `keyboard_editing_test.rb` pins set-then-Backspace without `place_caret`. Fix moves the caret in `Input.setValue` (guarded by `selectionAvailable()`, using the *sanitized* length) and `TextArea.setValue` (unguarded). `setUserValue` delegates to it, and the `text_entry.zig` arms that need a specific caret assign the selection after the call, so they are unaffected; `innerInsert`'s `.none` arm (append) now correctly leaves the caret after the inserted text. Verified: reproducer at `browser:repro/a56-value-setter-caret/` (`lightpanda fetch --dump html`, no CDP client) exits 1 on nightly 9204 and 0 on the branch build; the same 11 checks all pass in Chrome 149 headless.
-
-### A60. Removing an iframe doesn't discard its browsing context
-
-- **Today (verified 2026-10-11 on 1.0.0 and nightly 10426, `lightpanda fetch`)**: after `iframe.remove()`, `contentWindow`/`contentDocument` still return the old window/document, the old document's `defaultView` is still its window, `win.closed` stays `false`, the parent's `window.length` still counts it, the child's timers keep firing, and re-inserting the iframe loads no new document (one `load`, same document). Chrome 149 on the same page: `null`/`null`/`null`/`true`/`0`, timers stopped, re-insertion loads a fresh document. `Frame.removeNode`'s disconnect walk has no `IFrame` branch; the child `Frame` lives until the parent's `deinit`.
-- **Want**: HTML's iframe removing steps — destroy the child navigable (stop the child, drop it from `child_frames`, `IFrame._window = null`, `_executed = false`), plus CDP `Page.frameDetached`.
-- **Real-world impact**: an element held from a removed frame keeps answering instead of going stale; a removed frame's timers/requests keep running and can hold network-idle waits.
-- **Gem workaround**: none. Gem #153's frame-scoped `ObsoleteNode` guard (`Node#wrap_with_attached_guard`) keys on `defaultView === null`, so it catches a *navigated* frame's old nodes but not a *removed* frame's.
-- **Upstream issue**: #3912 (filed 2026-10-11, issue only — the teardown shape is a lifetime decision, left to the maintainers). Repro `browser:repro/iframe-removed-browsing-context/` (`lightpanda fetch`, no CDP client).
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
