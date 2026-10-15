@@ -264,7 +264,29 @@ module Capybara
       # end in Network.loadingFailed, which Network consumes); #3529 (9877)
       # SameSite=None without Secure refused (Cookies#set reports it);
       # #3702 (9968) click no longer focuses (CLICK_JS focuses itself).
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("9994")
+      #
+      # 2026-10-16 bump 9994 -> 10641 (= release 1.0.1, the new lockstep cap).
+      # Retired or ungated by it:
+      #   #3958 (10613, ours) Window and Document carry the GlobalEventHandlers
+      #     `on*` attributes, so javascripts/event_handlers.js can go — jQuery
+      #     1.x sees `'onchange' in window` natively.
+      #   #3940 (10536) a link to a non-fetchable scheme (mailto:, tel:) is a
+      #     no-op that keeps the document, so CLICK_JS need not cancel the
+      #     click's default from a window listener.
+      #   #3755 / #3849 (10049 / 10310, ours / upstream) exceptions from timers,
+      #     rAF, inline handlers and microtasks reach `window.onerror`, so
+      #     Browser#page_errors sees them; #3757 (10052) hides a closed
+      #     [popover]; #3759 (10057) routes send_keys into an iframe; #3874
+      #     (10366) Ctrl+A selects a field — upstream_fixes_test.rb runs them
+      #     un-gated.
+      #   #3763 (10239, ours) history traverses pushState entries in place;
+      #     #3831 (10255) `window` serializes as CyclicObject, not a node;
+      #     #3843 (10261) a failed navigation commits an error document — their
+      #     tests drop the nightly_build branches.
+      #   #3952 (10575) typed text fires `change` when committed by blur/Enter.
+      # A `nightly_build` gate is nil on a release binary, so every such test
+      # skipped on 1.0.1 although it carried the fix: ungate, don't re-gate.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("10641")
 
       # Second, equivalent floor for the *release* channel.
       #
@@ -273,16 +295,16 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 1.0.0 (2026-10-02) is build 9994 — exactly the nightly
+      # nightly floor. 1.0.1 (2026-10-15) is build 10641 — exactly the nightly
       # floor, which is no accident: the floor was raised *to* the release so
-      # both channels gate the same commit. (0.4.1 = 9463 and 0.4.0 = 9058
-      # predate fixes the floor exists for.)
+      # both channels gate the same commit. (1.0.0 = 9994 predates fixes the
+      # floor exists for.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("1.0.0")
+      MINIMUM_RELEASE = Gem::Version.new("1.0.1")
 
       class << self
         # `lightpanda version` prints one of two shapes, and the gem supports

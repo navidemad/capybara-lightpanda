@@ -20,11 +20,6 @@ describe "evaluate_script with a cyclic result" do
   end
 
   it "returns CyclicObject for the window" do
-    build = session.driver.browser.nightly_build
-    unless build && build >= Gem::Version.new("10255")
-      skip "window serializes as a node below nightly 10255 (upstream #3831)"
-    end
-
     assert_same cyclic, session.evaluate_script("window")
   end
 
