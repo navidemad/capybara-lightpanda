@@ -639,25 +639,13 @@ module Capybara
           hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
           // A link to a scheme the browser can't fetch (mailto:, tel:, sms:…)
-          // goes to an external app in Chrome and the page stays. Below
-          // upstream #3940 (build 10536) the link's own activation instead
-          // turns `mailto:a@b.com` into `http://mailto:a@b.com/` and loads
-          // b.com (1.0.0), or loses the execution context on a failed `tel:`
-          // navigation (10261–10535). Cancel that default from a window
-          // listener added for this one dispatch: it runs after the page's
-          // own listeners, which still see an uncancelled click.
+          // goes to an external app in Chrome and the page stays. The link's
+          // own activation is a no-op for it since upstream #3940 (10536, in
+          // the floor); don't navigate to it ourselves either.
           var link = hit.closest ? hit.closest('a[href]') : null;
           var scheme = link && /^\\s*([a-z][a-z0-9+.-]*):/i.exec(link.getAttribute('href'));
           var external = !!scheme && !/^(https?|about|blob|data|file|javascript)$/i.test(scheme[1]);
-          var view = hit.ownerDocument.defaultView;
-          var keepPage = function (e) { if (e === clickEvt) e.preventDefault(); };
-          if (external && view) view.addEventListener('click', keepPage);
-          var notCancelled;
-          try {
-            notCancelled = hit.dispatchEvent(clickEvt);
-          } finally {
-            if (external && view) view.removeEventListener('click', keepPage);
-          }
+          var notCancelled = hit.dispatchEvent(clickEvt);
           if (external || !notCancelled || clickEvt.defaultPrevented) return;
           var tag = hit.tagName;
           // A `javascript:` link never navigates: the click's own activation

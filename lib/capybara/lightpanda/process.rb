@@ -271,7 +271,7 @@ module Capybara
       #     `on*` attributes, so javascripts/event_handlers.js is gone — jQuery
       #     1.x sees `'onchange' in window` natively.
       #   #3940 (10536) a link to a non-fetchable scheme (mailto:, tel:) is a
-      #     no-op that keeps the document, so CLICK_JS need not cancel the
+      #     no-op that keeps the document, so CLICK_JS no longer cancels the
       #     click's default from a window listener.
       #   #3755 / #3849 (10049 / 10310, ours / upstream) exceptions from timers,
       #     rAF, inline handlers and microtasks reach `window.onerror`, so
