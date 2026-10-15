@@ -103,6 +103,25 @@ describe "Capybara::Lightpanda keyboard editing" do
     assert_equal "hell", field.value
   end
 
+  # Typed text is committed to `change` listeners on blur, before `blur`, as in
+  # Chrome (upstream #3952, 10575). Below it `send_keys("x", :tab)` fired input
+  # and blur only, so an "on edit, update the row" handler bound to change
+  # never ran after keystrokes. `Node#set` is no help here: it dispatches its
+  # own change and never goes through a blur.
+  it "Tab after typing fires change before blur" do
+    session.execute_script(<<~JS)
+      window.__events = [];
+      var f = document.getElementById('field');
+      ['change', 'blur'].forEach(function (t) {
+        f.addEventListener(t, function () { window.__events.push(t + ':' + f.value); });
+      });
+    JS
+
+    session.find(:css, "#field").send_keys("x", :tab)
+
+    assert_equal %w[change:abcx blur:abcx], session.evaluate_script("window.__events")
+  end
+
   # A <textarea> whose text comes only from its child text node had no
   # assigned value, so `select()` reset the caret to 0 instead of selecting
   # (upstream #3422, build 9229).
