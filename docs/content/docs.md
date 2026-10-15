@@ -104,12 +104,12 @@ For any shared or CI environment, pin a tagged release:
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "1.0.0"   # a tag from lightpanda-io/browser/releases
+  binary.required_version = "1.0.1"   # a tag from lightpanda-io/browser/releases
 end
 ```
 
 A pin is downloaded once into its own version-scoped file
-(`~/.cache/lightpanda/lightpanda-1.0.0`), is never refreshed on age, and is
+(`~/.cache/lightpanda/lightpanda-1.0.1`), is never refreshed on age, and is
 never satisfied by a nightly left over from an earlier run. Cache that directory
 in CI and the browser becomes as reproducible as your `Gemfile.lock`.
 
@@ -119,7 +119,7 @@ at it. The gem never downloads when that is set, so the
 browser changes only when you replace the artifact.
 
 The driver enforces the floor on both channels and refuses to start below it —
-nightly build ≥ 9994, or release ≥ 1.0.0. The error names the version it found
+nightly build ≥ 10641, or release ≥ 1.0.1. The error names the version it found
 and how to move off it. The check runs on every path into the driver, including
 a browser you started yourself ([external browser](#external-browser)).
 

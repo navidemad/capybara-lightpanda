@@ -2,34 +2,22 @@
 
 require_relative "../test_helper"
 
-# Upstream fixes that are in the nightly but above the gem's floor (1.0.0 =
-# 9994 still has the bugs): lightpanda-io/browser#3755, #3757, #3759, #3849,
-# #3874. Each test skips below the build that fixed it, so it runs on the
-# rolling nightly and pins the behavior the gem's users get there. Drop the
-# gates when the floor moves past them (the next tagged release).
-describe "Lightpanda fixes above the floor" do
+# Upstream fixes the gem's floor (1.0.1 = 10641) guarantees and nothing else
+# defends: lightpanda-io/browser#3755, #3757, #3759, #3849, #3874. Each one
+# pins the behavior users get, so a floor regression fails here first.
+describe "Lightpanda fixes in the floor" do
   let(:session) { TestSessions::Lightpanda }
   let(:browser) { session.driver.browser }
 
   after { session.reset_session! }
-
-  def require_build(build, why)
-    current = browser.nightly_build
-    return if current && current >= Gem::Version.new(build)
-
-    skip "needs nightly >= #{build} (#{why}); running #{browser.version}"
-  end
 
   def page_error_messages(count)
     Capybara::Lightpanda::Utils::Wait.until(timeout: 2) { browser.page_errors.size >= count }
     browser.page_errors.map { |e| e[:message] }
   end
 
-  describe "page_errors from callbacks (#3755, build 10049)" do
-    before do
-      session.visit("/lightpanda/callback_errors")
-      require_build(10_049, "#3755")
-    end
+  describe "page_errors from callbacks (#3755, 10049)" do
+    before { session.visit("/lightpanda/callback_errors") }
 
     # Below 10049 these exceptions only bumped an internal counter, so a
     # handler dying in a setTimeout (Stimulus debounce, Turbo callbacks) left
@@ -42,11 +30,8 @@ describe "Lightpanda fixes above the floor" do
     end
   end
 
-  describe "closed popover (#3757, build 10052)" do
-    before do
-      session.visit("/lightpanda/callback_errors")
-      require_build(10_052, "#3757")
-    end
+  describe "closed popover (#3757, 10052)" do
+    before { session.visit("/lightpanda/callback_errors") }
 
     # Below 10052 a never-shown popover read as visible, so Capybara matched
     # its content and has_no_text? failed on a page Chrome shows clean.
@@ -59,11 +44,8 @@ describe "Lightpanda fixes above the floor" do
     end
   end
 
-  describe "page_errors from a microtask (#3849, build 10310)" do
-    before do
-      session.visit("/lightpanda/callback_errors")
-      require_build(10_310, "#3849")
-    end
+  describe "page_errors from a microtask (#3849, 10310)" do
+    before { session.visit("/lightpanda/callback_errors") }
 
     # Below 10310 V8's microtask checkpoint swallowed the exception, so a
     # promise-chain handler (Turbo, Stimulus values callbacks) dying there
@@ -74,11 +56,8 @@ describe "Lightpanda fixes above the floor" do
     end
   end
 
-  describe "Ctrl+A selects a field's text (#3874, build 10366)" do
-    before do
-      session.visit("/lightpanda/callback_errors")
-      require_build(10_366, "#3874")
-    end
+  describe "Ctrl+A selects a field's text (#3874, 10366)" do
+    before { session.visit("/lightpanda/callback_errors") }
 
     # The usual "clear the field, then type" idiom. Below 10366 Ctrl+A did
     # nothing, so the field ended as "hello worlnew" instead of "new".
@@ -89,11 +68,8 @@ describe "Lightpanda fixes above the floor" do
     end
   end
 
-  describe "send_keys inside an iframe (#3759, build 10057)" do
-    before do
-      session.visit("/lightpanda/with_input_frame")
-      require_build(10_057, "#3759")
-    end
+  describe "send_keys inside an iframe (#3759, 10057)" do
+    before { session.visit("/lightpanda/with_input_frame") }
 
     # Below 10057 Input.insertText targeted the top frame's activeElement,
     # which never becomes the <iframe>: the keys vanished without an error.

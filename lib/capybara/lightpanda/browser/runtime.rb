@@ -271,10 +271,10 @@ module Capybara
         # Cheaper than walking properties and good enough for shared specs. Releases
         # the original handle so long-lived sessions don't accumulate leaked objectIds.
         #
-        # V8 refuses to return a cyclic object by value. Through 1.0.0 every
+        # V8 refuses to return a cyclic object by value. Below 10255 every
         # Zig-backed object, `window` included, came back as a node; since
-        # upstream #3831 (build 10255) `window` lands here and raised. Both it
-        # and a plain self-referencing object now return CyclicObject.
+        # upstream #3831 (in the floor) `window` lands here and raised. Both it
+        # and a plain self-referencing object return CyclicObject.
         def serialize_remote_object(object_id)
           json = page_command(
             "Runtime.callFunctionOn",

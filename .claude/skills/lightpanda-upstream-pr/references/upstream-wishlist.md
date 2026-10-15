@@ -27,7 +27,7 @@ Use this file when:
 
 ## A. Bugs to fix upstream
 
-> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
+> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41, A57–A59, A62) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
 
 ### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801 OPEN; #1832 CLOSED 2026-04-09)
 
@@ -213,32 +213,6 @@ Use this file when:
 - **Drop-on-fix**: the explicit `place_caret` calls in that file become redundant.
 - **Upstream issue**: #3419, **Upstream PR**: #3420 — **MERGED 2026-09-06, build 9223** (verified 2026-10-03). In the floor since the 2026-10-03 bump to 9994; `keyboard_editing_test.rb` pins set-then-Backspace without `place_caret`. Fix moves the caret in `Input.setValue` (guarded by `selectionAvailable()`, using the *sanitized* length) and `TextArea.setValue` (unguarded). `setUserValue` delegates to it, and the `text_entry.zig` arms that need a specific caret assign the selection after the call, so they are unaffected; `innerInsert`'s `.none` arm (append) now correctly leaves the caret after the inserted text. Verified: reproducer at `browser:repro/a56-value-setter-caret/` (`lightpanda fetch --dump html`, no CDP client) exits 1 on nightly 9204 and 0 on the branch build; the same 11 checks all pass in Chrome 149 headless.
 
-### A57. Closed `[popover]` reads as visible — Capybara matches content of a never-shown popover
-
-- **Today (verified 2026-10-03 on nightly 10033)**: `StyleManager.matchesUaDisplayNoneRule` (the single UA display:none truth shared by `getComputedStyle().display` and `checkVisibility()`) handles `[hidden]`, `input[type=hidden]`, `dialog:not([open])` and closed `<details>` children, but not `[popover]:not(:popover-open)`. A `<div popover>` that was never shown reports `checkVisibility() === true` and `display: "block"`. The Popover API itself works (`showPopover()`, `:popover-open` matches after).
-- **Want**: add `[popover]:not(:popover-open) { display: none }` to that function (HTML Rendering §15.3.1), next to the `dialog` arm — same shape as #3269.
-- **Real-world impact**: native-popover menus/tooltips (increasingly common in Rails + Stimulus apps) are "visible" before they open — `have_content` false positives, `Capybara::Ambiguous` against a second copy of the same link, clicks on items Chrome would refuse with `ElementNotFound`.
-- **Gem workaround**: none yet; would live in `_lightpanda.isVisible` (`javascripts/predicates.js`) as an ancestor walk for `[popover]:not(:popover-open)`.
-- **Drop-on-fix**: that walk, if added.
-- **Upstream issue**: #3756, **Upstream PR**: #3757 (open as of 2026-10-03). Fix: a `[popover]` arm in `matchesUaDisplayNoneRule`, which now takes the `Frame` (open popovers live on the frame's document); fixture `ua_closed_popover_is_hidden` in `tests/element/check_visibility.html`. Repro `browser:repro/closed-popover-hidden/` (`fetch --dump html`).
-
-### A58. Uncaught exceptions outside event listeners never reach `window`'s `error` event — `page_errors` misses them
-
-- **Today (verified 2026-10-03 on release 1.0.0 and nightly 10033)**: an exception thrown from a `setTimeout` callback, a `requestAnimationFrame` callback, a `queueMicrotask` callback or an inline `onclick="…"` handler fires no `error` event on `window`; only exceptions from `addEventListener` listeners (`EventManagerBase.zig#reportException`) and from top-level classic scripts are reported. Chrome reports all of them ("report an exception", HTML §8.1.4.6).
-- **Want**: route those callback paths through the same report-the-exception step (`Window.reportError` / `EventManagerBase.reportException`).
-- **Real-world impact**: the gem's `page_errors` (and any suite asserting "no JS errors" through `window.onerror`) sees only listener errors — most real app errors (timers, Stimulus `connect()` via microtasks, rAF animation code) pass silently.
-- **Gem workaround**: none possible from JS — the exception never surfaces to page script.
-- **Drop-on-fix**: nothing to remove; `test/features/page_errors_test.rb` gains timer/rAF/inline-handler examples.
-- **Upstream issue**: #3754, **Upstream PR**: #3755 (open as of 2026-10-03). Covers timers, rAF, requestIdleCallback, inline `on*` handlers (attribute + property, `EventManager.callInlineHandler`) and directly dispatched property handlers (`window.onmessage`, `EventManagerBase.dispatchDirect`); new `GlobalScope.reportError` routes to window/worker. **`queueMicrotask` deliberately left out** — V8's microtask checkpoint swallows the exception; needs an isolate message listener (follow-up). Fixture: `reportsCallbackExceptions` in `tests/event/report_error.html`. Repro `browser:repro/report-callback-exceptions/` (`fetch --dump html --wait-script`).
-
-### A59. Keyboard input doesn't reach the focused element inside an iframe
-
-- **Today (verified 2026-10-03 on nightly 10033)**: with focus on an `<input>` inside an iframe, `Input.insertText` / `Input.dispatchKeyEvent` deliver to the top document's `activeElement` (the `<iframe>`/`<body>`), so nothing is typed. Chrome routes keyboard input to the focused frame's focused element.
-- **Want**: resolve the key target by descending through focused frames (`activeElement` is an iframe → use its `contentDocument.activeElement`, recursively).
-- **Real-world impact**: `send_keys` inside `within_frame` types nothing (rich-text editors in iframes, embedded payment/login forms). `fill_in`/`set` still work (JS `.value`).
-- **Gem workaround**: none for real keystrokes.
-- **Upstream issue**: #3758, **Upstream PR**: #3759 (open as of 2026-10-03). Two halves: `Element.focus` now focuses the containing `<iframe>` in the parent frame (HTML focus chain — the parent's `activeElement` becomes the iframe, which `tests/frames/cross_realm_focus.html` used to call "not modeled"), and the Input domain resolves keys through `user_input.focusedFrame`. CDP test `cdp.input: keyboard input goes to the focused element inside an iframe`. Repro `browser:repro/keyboard-focused-frame/` (raw `ws`, `serve --load-resources iframe`).
-
 ### A60. Removing an iframe doesn't discard its browsing context
 
 - **Today (verified 2026-10-11 on 1.0.0 and nightly 10426, `lightpanda fetch`)**: after `iframe.remove()`, `contentWindow`/`contentDocument` still return the old window/document, the old document's `defaultView` is still its window, `win.closed` stays `false`, the parent's `window.length` still counts it, the child's timers keep firing, and re-inserting the iframe loads no new document (one `load`, same document). Chrome 149 on the same page: `null`/`null`/`null`/`true`/`0`, timers stopped, re-insertion loads a fresh document. `Frame.removeNode`'s disconnect walk has no `IFrame` branch; the child `Frame` lives until the parent's `deinit`.
@@ -255,15 +229,6 @@ Use this file when:
 - **Gem workaround**: `javascripts/event_handlers.js` defines every `on*` name found on `HTMLElement.prototype` that `window`/`document` lack, with IDL semantics (getter → handler or null, a function registers one listener kept in place across reassignment, `return false` cancels). Pinned by `test/features/global_event_handlers_test.rb`.
 - **Drop-on-fix**: delete `event_handlers.js` and its `AutoScripts::PARTS` entry once the floor covers the fix; keep the test.
 - **Upstream issue**: #3956, **Upstream PR**: #3958 (open as of 2026-10-14). The PR leaves `oncopy`/`oncut`/`onpaste`, `onfullscreen*` and `ontouch*` off `window` (Chrome 155 parity: `'ontouchstart' in window` is false on desktop), so `event_handlers.js` should stop adding those nine names to `window` too. Repro: `lightpanda fetch --dump html` page comparing `HTMLElement.prototype`'s `on*` names with `window`/`document` — 89/93 missing on 1.0.0 and 10552, 0/0 on Chrome 155 (`oncopy`/`oncut`/`onpaste` are DocumentAndElementEventHandlers, not on Window).
-
-### A62. A user-edited text field fires no `change` when it loses focus
-
-- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552)**: type into an `<input>` with CDP keystrokes (`Input.insertText`/`dispatchKeyEvent`), press Tab: `focus`, trusted `input`, `blur` fire and focus moves on, but no `change`. Chrome fires `change` on commit (blur or Enter) when the value differs from the one at focus (HTML "the change event", user-edited text controls). Upstream only fires `change` for checkbox/radio activation (`EventManager.zig` `ActivationState.restore`) and file selection (`Input.selectFiles`).
-- **Real-world impact**: any "on edit, update the row" handler bound to `change` never runs after `send_keys`. Solidus's return-authorization form ticks a row's checkbox from `$(input).on('change')` after `send_keys [1, :tab]` — 1 real-apps baseline entry. `Node#set` is unaffected (the gem dispatches `change` itself).
-- **Want**: record the value when a text control gains focus (or mark it dirty on a user edit) and fire a trusted bubbling `change` on blur/Enter if it changed.
-- **Gem workaround**: possible but not taken — a `focusin`/`focusout` pair in the injected bundle could synthesize the event, at the risk of double-firing once upstream implements it. Prefer the upstream fix.
-- **Upstream issue**: #3957 (filed 2026-10-14). Repro: raw-`ws` CDP client, `Input.insertText` + Tab key — Chrome 155 records `focus, input, change, blur`, Lightpanda `focus, input, blur`.
-- **Upstream PR**: #3952 — **third-party** (jayhemnani9910, opened 2026-10-13, the day *before* our issue; open as of 2026-10-14). Don't open a second one. Chrome's model: the first user edit remembers the value before it (`_value_before_edit` on `Input`/`TextArea`, `text_entry.zig`), `dispatchBlur` and Enter's implicit submission fire `change` first if the value now differs; script-set values never count. Its body had no `Closes #3957`; we asked for it in a comment. Verified 2026-10-14 on its head 6a8dfde04: #3957's repro exits 0 with Chrome's exact sequence, `TEST_FILTER=cdp.input` (68) passes. The real-apps Solidus spec behind this item also needed a gem fix — `send_keys [1, :tab]` typed nothing because `Keyboard#type` dropped Integer keys — and passes only with both.
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 
