@@ -27,7 +27,7 @@ Use this file when:
 
 ## A. Bugs to fix upstream
 
-> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41, A57–A59, A62) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
+> Resolved/retracted A-items (A1–A9, A13–A21, A24–A35, A41, A57–A59, A61, A62) have been removed from this file; numbering is preserved (no renumbering) to keep cross-references stable. **A11 and A12 are kept as gem-side documentation only**: their tracking issues closed upstream but the gem retains the helpers as defense-in-depth (the underlying race + crash classes are inherent to the design).
 
 ### A10. `Page.loadEventFired` unreliable on complex JS pages (#1801 OPEN; #1832 CLOSED 2026-04-09)
 
@@ -220,15 +220,6 @@ Use this file when:
 - **Real-world impact**: an element held from a removed frame keeps answering instead of going stale; a removed frame's timers/requests keep running and can hold network-idle waits.
 - **Gem workaround**: none. Gem #153's frame-scoped `ObsoleteNode` guard (`Node#wrap_with_attached_guard`) keys on `defaultView === null`, so it catches a *navigated* frame's old nodes but not a *removed* frame's.
 - **Upstream issue**: #3912 (filed 2026-10-11, issue only — the teardown shape is a lifetime decision, left to the maintainers). Repro `browser:repro/iframe-removed-browsing-context/` (`lightpanda fetch`, no CDP client).
-
-### A61. Window and Document lack most GlobalEventHandlers — jQuery 1.x shims `change`/`submit` and delegated handlers go dead
-
-- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552; main `dd2cd5d7f` unchanged)**: `HtmlElement` (`webapi/element/Html.zig`) declares the full GlobalEventHandlers set (~99 `handlerAccessor`s), but `Window.zig` declares only `onload`/`onpageshow`/`onpopstate`/`onhashchange`/`onerror`/`onblur`/`onfocus`/`onresize`/`onscroll`/`onclick`/`onmessage`/`on(un)handledrejection` and `Document.zig` only `onselectionchange`/`onclick`/touch. So `'onchange' in window`, `'onsubmit' in window`, `'oninput' in window`, `'onkeydown' in window` are all `false`; Chrome says `true` (HTML puts GlobalEventHandlers on HTMLElement, Document and Window alike).
-- **Real-world impact**: jQuery 1.x computes `support.change = 'onchange' in window` (same for `submit`) at load. False → it installs its IE `beforeactivate`/`propertychange` shims, and every *delegated* change/submit handler plus every direct one on an *ancestor* stops firing although the native event bubbles fine. Backbone views (`events: {'change .x': …}`) sit on exactly that. Solidus 4.x admin (jQuery 1.12.4): the country → state swap, the payment form's card handling, the shipping-calculator picker and the product search all died silently — 4 real-apps baseline entries (5 on nightly) pass once the names exist.
-- **Want**: give `Window` and `Document` the same GlobalEventHandlers accessors `HtmlElement` has (a shared list, so the three can't drift).
-- **Gem workaround**: `javascripts/event_handlers.js` defines every `on*` name found on `HTMLElement.prototype` that `window`/`document` lack, with IDL semantics (getter → handler or null, a function registers one listener kept in place across reassignment, `return false` cancels). Pinned by `test/features/global_event_handlers_test.rb`.
-- **Drop-on-fix**: delete `event_handlers.js` and its `AutoScripts::PARTS` entry once the floor covers the fix; keep the test.
-- **Upstream issue**: #3956, **Upstream PR**: #3958 (open as of 2026-10-14). The PR leaves `oncopy`/`oncut`/`onpaste`, `onfullscreen*` and `ontouch*` off `window` (Chrome 155 parity: `'ontouchstart' in window` is false on desktop), so `event_handlers.js` should stop adding those nine names to `window` too. Repro: `lightpanda fetch --dump html` page comparing `HTMLElement.prototype`'s `on*` names with `window`/`document` — 89/93 missing on 1.0.0 and 10552, 0/0 on Chrome 155 (`oncopy`/`oncut`/`onpaste` are DocumentAndElementEventHandlers, not on Window).
 
 ### B5. `Input.dispatchKeyEvent` modifier flags / keyCode / caret movement
 

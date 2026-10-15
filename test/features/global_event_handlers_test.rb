@@ -11,7 +11,8 @@ require_relative "../test_helper"
 # told they don't, it swaps in IE-only shims and no delegated or ancestor
 # handler ever runs, although the native event bubbles fine. On Solidus's admin
 # that broke the country → state swap, the payment form and the calculator
-# picker (real-apps, 2026-10-14). `event_handlers.js` defines the missing names.
+# picker (real-apps, 2026-10-14). Our upstream #3958 (10613, in the floor) gave
+# Window and Document the full set; the gem used to polyfill it.
 describe "Capybara::Lightpanda GlobalEventHandlers on window and document" do
   let(:session) { TestSessions::Lightpanda }
 
@@ -26,8 +27,13 @@ describe "Capybara::Lightpanda GlobalEventHandlers on window and document" do
     assert support["submit"], "'onsubmit' in window is false: jQuery 1.x would shim submit"
   end
 
+  # Chrome 155 on desktop has none of these on window, and feature detection
+  # reads them: `'ontouchstart' in window` is how libraries spot a touch device.
   it "adds nothing Chrome lacks on window" do
     refute session.evaluate_script("window.support.focusin")
+    %w[ontouchstart oncopy onpaste onfullscreenchange].each do |name|
+      refute session.evaluate_script("'#{name}' in window"), "window.#{name} exists; Chrome has none on desktop"
+    end
   end
 
   it "runs window.onchange and document.onchange for a change that bubbles up" do
