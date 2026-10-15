@@ -268,7 +268,7 @@ module Capybara
       # 2026-10-16 bump 9994 -> 10641 (= release 1.0.1, the new lockstep cap).
       # Retired or ungated by it:
       #   #3958 (10613, ours) Window and Document carry the GlobalEventHandlers
-      #     `on*` attributes, so javascripts/event_handlers.js can go — jQuery
+      #     `on*` attributes, so javascripts/event_handlers.js is gone — jQuery
       #     1.x sees `'onchange' in window` natively.
       #   #3940 (10536) a link to a non-fetchable scheme (mailto:, tel:) is a
       #     no-op that keeps the document, so CLICK_JS need not cancel the
