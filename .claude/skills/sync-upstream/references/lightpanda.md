@@ -109,6 +109,8 @@ git fetch origin && git pull --ff-only origin main
 git rev-parse HEAD  # record this sha — goes into the report
 ```
 
+**Skip the build when a release is tagged at `main` HEAD** (1.0.1 was, 2026-10-15): validate against the published artifact instead — `gh release download <tag> --repo lightpanda-io/browser --pattern 'lightpanda-aarch64-macos'` into the scratchpad. It is exactly what release-channel users run, and a release binary prints a bare semver, so `browser.nightly_build` is `nil`: any test gated on it takes its below-the-build path there, which is the point of validating on it before a floor bump.
+
 **Skip the build if up to date.** If `zig-out/bin/lightpanda` exists and its mtime is newer than the HEAD commit's author date, the binary already matches `main` — reuse it. Otherwise:
 
 ```bash
@@ -125,9 +127,10 @@ After the build, **do not run specs unprompted**. Print a one-line handoff for t
 Built lightpanda from main (HEAD <sha>, V8 <archive name>).
 To validate the workaround-removal recommendations, run:
 
-  LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+  LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda CLEAR=1 bundle exec rake test:incremental
+  LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:shared:parallel
 
-(spec:incremental can take 10+ min — your call.)
+(the full run takes 10+ min — your call.)
 ```
 
 Record the HEAD sha in the report's **Workarounds to re-evaluate** entries so the validation context is reproducible.

@@ -72,8 +72,8 @@ module Capybara
         oid && build_node(oid)
       end
 
-      # Capybara's Session#send_keys routes to Driver#send_keys; Cuprite's pattern
-      # is to fan that out to whatever element currently has focus.
+      # Capybara's Session#send_keys routes to Driver#send_keys; fan that out
+      # to whatever element currently has focus.
       def send_keys(*keys)
         active_element&.send_keys(*keys)
       end
@@ -107,7 +107,7 @@ module Capybara
       # -- Network Inspection --
 
       # Network tracker (lazily auto-enabled). Exposes `traffic`, `clear`,
-      # `wait_for_idle`, header overrides, etc. Cuprite parity.
+      # `wait_for_idle`, header overrides, etc.
       def network
         browser.network
       end
@@ -124,7 +124,7 @@ module Capybara
       # Files downloaded since the session started (absolute paths). Capture is
       # on whenever a destination exists (the :save_path driver option, else
       # Capybara.save_path) and the server sends `Content-Disposition:
-      # attachment`. Ferrum/Cuprite expose downloads on the driver too.
+      # attachment`. Ferrum exposes downloads on its browser too.
 
       def downloads
         browser.downloads.files
@@ -286,18 +286,18 @@ module Capybara
       end
 
       # capybara-screenshot's fallback for unregistered drivers calls
-      # `driver.render(path)` (the Cuprite/Ferrum spelling). Without the alias
-      # every failed test in a capybara-screenshot suite logged
-      # "Screenshot could not be saved: undefined method 'render'".
+      # `driver.render(path)`. Without the alias every failed test in a
+      # capybara-screenshot suite logged "Screenshot could not be saved:
+      # undefined method 'render'".
       alias render save_screenshot
 
-      # -- Headers (Cuprite-compatible driver surface) --
+      # -- Headers (driver surface) --
       # Delegates to Network, which lazily enables the Network domain. The
       # overrides do NOT survive reset!: disposing the BrowserContext takes
       # setExtraHTTPHeaders with it, so Network#reset drops its cached copy
       # rather than report headers the browser stopped sending (pinned by
-      # network_test.rb "clears extra_headers"). Cuprite exposes these on the
-      # driver, and real suites call them there (page.driver.headers = ...).
+      # network_test.rb "clears extra_headers"). Real suites call these on the
+      # driver (page.driver.headers = ...).
 
       def headers
         browser.network.extra_headers
@@ -313,9 +313,9 @@ module Capybara
 
       # -- Lifecycle --
 
-      # Thin Cuprite-style wrapper. The interesting work — disposing the
-      # BrowserContext (cookies, storage, all targets) and starting a fresh
-      # one — happens in Browser#reset.
+      # Thin wrapper. The interesting work — disposing the BrowserContext
+      # (cookies, storage, all targets) and starting a fresh one — happens in
+      # Browser#reset.
       #
       # Rescue is the gem hierarchy plus raw IO escapees only — NOT
       # StandardError: reset! runs between every test, so a blanket rescue
@@ -345,11 +345,10 @@ module Capybara
         true
       end
 
-      # Expanded error list for Capybara retry logic (Cuprite pattern).
-      # MouseEventFailed is in Cuprite's list, but Lightpanda has no
-      # rendering engine and the gem dispatches clicks through JS — the
-      # underlying CDP Input.dispatchMouseEvent path doesn't run, so
-      # MouseEventFailed is never raised.
+      # Expanded error list for Capybara retry logic. MouseEventFailed is left
+      # out: Lightpanda has no rendering engine and the gem dispatches clicks
+      # through JS — the underlying CDP Input.dispatchMouseEvent path doesn't
+      # run, so MouseEventFailed is never raised.
       def invalid_element_errors
         [
           NodeNotFoundError,
@@ -391,7 +390,7 @@ module Capybara
 
       # Unwrap arguments before sending to the browser. Capybara::Node::Element wraps
       # our Lightpanda::Node — pull `.base` out so `serialize_argument` can build
-      # `{objectId: …}` for the CDP payload. Cuprite's `native_args` pattern.
+      # `{objectId: …}` for the CDP payload.
       def native_args(args)
         args.map { |a| a.is_a?(Capybara::Node::Element) ? a.base : a }
       end
@@ -399,7 +398,7 @@ module Capybara
       # Lightpanda's `Network.setCookie` requires either `domain` or `url`
       # (storage.zig → Cookie.parseDomain). When the caller doesn't supply one,
       # use the host of the current page if any, else `Capybara.app_host`,
-      # else loopback. Cuprite parity — lets pre-visit cookie setup just work.
+      # else loopback. Lets pre-visit cookie setup just work.
       def default_domain
         candidate = (@started && safe_uri_host(browser.current_url)) ||
                     safe_uri_host(Capybara.app_host)

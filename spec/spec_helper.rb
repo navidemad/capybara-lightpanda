@@ -98,8 +98,8 @@ RSpec.configure do |config|
       # changed by a user edit (as opposed to a change made by a script)"
       # (HTML §4.10.5.3.1). Node#set writes `.value` from JS, and since
       # upstream #3379 (build 9083) Lightpanda tracks that distinction
-      # (`_user_edited`), exactly like Chrome; Selenium/Cuprite pass only
-      # because they type real keystrokes.
+      # (`_user_edited`), exactly like Chrome; drivers that type real keystrokes pass
+      # only because of that.
       /#has_field with valid should be false if field is invalid/,
       # Node #obscured? sub-tests requiring viewport / overlap detection.
       /node #obscured\? should see elements outside the viewport as obscured/,

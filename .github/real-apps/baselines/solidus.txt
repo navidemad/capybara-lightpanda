@@ -1,11 +1,5 @@
-./spec/features/admin/configuration/shipping_methods_spec.rb # Shipping Methods update can change the calculator
-./spec/features/admin/orders/customer_details_spec.rb # Customer Details editing an order selected country has no state changes state field to text input
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when customers have same country but different state changes the bill address state accordingly
 ./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when one customer address have only textual state changes the bill address state accordingly
-./spec/features/admin/orders/payments_spec.rb # Payments with an differently named payment method is able to create a new payment
-./spec/features/admin/orders/payments_spec.rb # Payments with no prior payments with a credit card payment method is able to create a new credit card payment with valid information
-./spec/features/admin/orders/return_authorizations_spec.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows
 ./spec/features/admin/orders/shipments_spec.rb # Shipments when split shipment can split item
 ./spec/features/admin/products/edit/taxons_spec.rb # Product Display Order managing display order should allow an admin to manage display order (taxons)
-./spec/features/admin/products/products_spec.rb # Products as admin user searching products should be able to search deleted products by their properties
 ./spec/features/admin/store_credits_spec.rb # Store credits admin displaying a store credit details page lets edit store credit's memo

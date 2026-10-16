@@ -5,7 +5,7 @@ Role: **peer Capybara CDP driver** (built on Ferrum). Defines what's *idiomatic*
 
 Rules destination: `.claude/rules/ruby-cdp-peers.md` (Cuprite section)
 
-Activity baseline (verify each sync — these go stale): moderately active. ~8 commits in 2026 then quiet stretches. Last release **v0.17 (2025-05-11)**, no 2026 release yet. Treat as **lower-priority** secondary sync — check it but don't block on it.
+Activity baseline (verify each sync — these go stale): moderately active. ~8 commits in 2026 then quiet stretches. Last release **v0.18 (2026-09-03)**; `main` merges in bursts (five PRs on 2026-10-15). Treat as **lower-priority** secondary sync — check it but don't block on it.
 
 ## What to read before reconning
 

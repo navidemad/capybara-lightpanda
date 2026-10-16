@@ -1,5 +1,5 @@
 name: "Beta feedback — something didn't work"
-description: A spec failed, hung, or behaved differently than Cuprite. Tell us what we should look at.
+description: A spec failed, hung, or behaved differently than on your previous driver. Tell us what we should look at.
 title: "[beta] "
 labels: ["beta-feedback"]
 body:
@@ -14,7 +14,7 @@ body:
     attributes:
       label: What broke?
       description: One or two sentences — the symptom is enough. The repro goes below.
-      placeholder: "`expect(page).to have_css('#user-menu')` times out on the dashboard spec, only with `BROWSER=lightpanda`. Same spec passes on Cuprite."
+      placeholder: "`expect(page).to have_css('#user-menu')` times out on the dashboard spec, only with `BROWSER=lightpanda`. Same spec passes on our previous driver."
     validations:
       required: true
 
@@ -35,11 +35,11 @@ body:
       required: false
 
   - type: textarea
-    id: cuprite-parity
+    id: driver-parity
     attributes:
-      label: Cuprite parity check
-      description: Did the same spec pass on Cuprite (or another driver) with no other changes?
-      placeholder: "Yes — passes on Cuprite, fails on lightpanda. Switching is one env var."
+      label: Parity check
+      description: Did the same spec pass on another driver with no other changes?
+      placeholder: "Yes — passes on our previous driver, fails on lightpanda. Switching is one env var."
     validations:
       required: true
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`drag_to` keeps every `dragover` inside the viewport on recent nightlies.** From nightly 10661, Lightpanda moves element positions with the page scroll, and its `scrollIntoView` ignores `block: 'center'` and scrolls the target to the top of the window. The HTML5 drag simulation centers the target that way, so the element being dragged could end up above the window, and the first `dragover` reported a negative `clientY`, which a sortable list or a dropzone that hit-tests on coordinates would misread. The driver now centers the target itself, as Chrome does.
+
 ## [0.14.2] - 2026-10-14
 
 ### Fixed

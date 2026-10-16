@@ -7,24 +7,24 @@ only if it is pointed at the right files and told what has already been tried.
 
 ## What is actually left
 
-14 baseline failures as of the 2026-10-12 refresh (run 38261324053, gem 0.14.1
-on that day's nightly), all attributed in `causes.yml`. The refresh dropped 83
-entries, including whole clusters this file used to call permanent:
-`layout-measuring-js` (38, "never fixable") and `multipart-content-loss` (A45)
-both cleared. Nobody has checked which upstream change cleared them, so don't
-read either as understood.
+8 baseline failures as of the 2026-10-16 refresh (run 38886066850, main
+277ef3b on that day's nightly), all attributed in `causes.yml`. That refresh
+retired `jquery1-change-shim` (5) and `no-change-on-blur` (1), both fixed
+upstream in the 1.0.1 floor (#3958, #3952). The 2026-10-12 refresh (run
+38261324053) had dropped 83 entries, including whole clusters this file used
+to call permanent: `layout-measuring-js` (38, "never fixable") and
+`multipart-content-loss` (A45) both cleared. Nobody has checked which
+upstream change cleared those two, so don't read either as understood.
 
 | Lot | N | Reality |
 | --- | --- | --- |
-| `jquery1-change-shim` | 5 | Fixed in the gem (`event_handlers.js`, 2026-10-14). Drops at the next refresh; upstream wishlist A61. |
-| `no-change-on-blur` | 1 | Gem half fixed (Integer keys, 2026-10-14); upstream half is wishlist A62, fixed by open third-party PR #3952. Drops once #3952 ships in a nightly. |
 | `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
 | `selenium-textarea-text` | 1 | `likely` — the spec relies on Selenium's visible text including a textarea's child text. |
 | `customer-switch-refill` | 2 | Open, `unknown`. |
 | `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
 | `select2-v3-flow`, `js-component-not-rendering` | 2 | Open, one entry each. |
 
-Once the jquery1 entries drop, the open work is the 6 entries in the last three rows (A62 is filed upstream as #3957; third-party PR #3952 fixes it).
+The open work is the 6 entries in the last three rows.
 
 ---
 
@@ -93,7 +93,7 @@ Run once per cluster. Substitute the slug.
 >    inferred from reading the spec's source.
 > 2. It has a disposition: a gem fix, an upstream issue with a CDP-only
 >    reproducer (never Ruby/Capybara — see the `lightpanda-upstream-pr` skill),
->    or "inherent" with a dual-driver note.
+>    or "inherent", recorded in `docs/content/docs.md`'s limits.
 > 3. `causes.yml` is updated: confidence, `reference`, and `next_step` removed
 >    or replaced.
 > 4. A finding is written in the format above.

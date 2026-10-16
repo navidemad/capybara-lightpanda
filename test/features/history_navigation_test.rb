@@ -55,17 +55,11 @@ describe "Driver#go_back / #go_forward" do
     end
   end
 
-  # Entries whose paths differ (Turbo Drive visits, router pushState): through
-  # 1.0.0 Lightpanda's history traversal treated any non-fragment difference as
+  # Entries whose paths differ (Turbo Drive visits, router pushState): below
+  # 10239 Lightpanda's history traversal treated any non-fragment difference as
   # cross-document and reloaded from the server (#3726). Our upstream #3763
-  # (build 10239) traverses within the document by entry. Ungate when the
-  # floor passes 10239.
+  # (10239, in the floor) traverses within the document by entry.
   it "keeps the document between pushState entries with different paths" do
-    browser = session.driver.browser
-    unless browser.nightly_build && browser.nightly_build >= Gem::Version.new("10239")
-      skip "needs nightly >= 10239 (lightpanda-io/browser#3763); running #{browser.version}"
-    end
-
     session.visit("/lightpanda/history")
     session.execute_script(<<~JS)
       window.__marker = "kept";

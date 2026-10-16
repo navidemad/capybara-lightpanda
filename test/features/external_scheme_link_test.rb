@@ -5,13 +5,13 @@ require_relative "../test_helper"
 # Clicking a mailto: or tel: link keeps the page, as in Chrome (which hands the
 # URL to an external app).
 #
-# WHY THIS MATTERS: below Lightpanda #3940 (build 10536) the link's own
-# activation navigates. On 1.0.0 — the release floor — `mailto:someone@host`
-# became `http://mailto:someone@host/`, so the test left the page and fetched
-# whatever host the address named; on nightlies 10261–10535 a `tel:` click lost
-# the execution context and raised NoExecutionContextError after the full
-# timeout. CLICK_JS cancels that default from a window listener that runs after
-# the page's own, so page code still sees an uncancelled click.
+# WHY THIS MATTERS: below Lightpanda #3940 (10536, now in the floor) the link's
+# own activation navigated: on 1.0.0 `mailto:someone@host` became
+# `http://mailto:someone@host/`, so the test left the page and fetched whatever
+# host the address named; on nightlies 10261–10535 a `tel:` click lost the
+# execution context and raised NoExecutionContextError after the full timeout.
+# CLICK_JS must also not navigate to such a link itself, and must not cancel the
+# click, so page code still sees an uncancelled one.
 describe "Capybara::Lightpanda clicks on links to external schemes" do
   let(:session) { TestSessions::Lightpanda }
 

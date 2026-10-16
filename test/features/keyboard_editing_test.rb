@@ -18,7 +18,7 @@ require_relative "../test_helper"
 # spec that "types then corrects" passes by leaving the wrong value in place.
 #
 # The caret is placed explicitly where an example depends on it. The floor
-# (build 9994) also guarantees our upstream fixes for the rest of the editing
+# (build 10641) also guarantees our upstream fixes for the rest of the editing
 # story — `.value =` moves the caret to the end (#3420), a <textarea> seeded by
 # its child text can be selected (#3422) and a cancelled `beforeinput` vetoes
 # the edit (#3414) — each pinned below.
@@ -101,6 +101,25 @@ describe "Capybara::Lightpanda keyboard editing" do
     field.send_keys(:backspace)
 
     assert_equal "hell", field.value
+  end
+
+  # Typed text is committed to `change` listeners on blur, before `blur`, as in
+  # Chrome (upstream #3952, 10575). Below it `send_keys("x", :tab)` fired input
+  # and blur only, so an "on edit, update the row" handler bound to change
+  # never ran after keystrokes. `Node#set` is no help here: it dispatches its
+  # own change and never goes through a blur.
+  it "Tab after typing fires change before blur" do
+    session.execute_script(<<~JS)
+      window.__events = [];
+      var f = document.getElementById('field');
+      ['change', 'blur'].forEach(function (t) {
+        f.addEventListener(t, function () { window.__events.push(t + ':' + f.value); });
+      });
+    JS
+
+    session.find(:css, "#field").send_keys("x", :tab)
+
+    assert_equal %w[change:abcx blur:abcx], session.evaluate_script("window.__events")
   end
 
   # A <textarea> whose text comes only from its child text node had no

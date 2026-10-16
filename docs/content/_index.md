@@ -2,12 +2,11 @@
 title: "Capybara::Lightpanda"
 ---
 
-If you already drive Capybara with `cuprite`, the architecture you've chosen is right — same `page.driver` surface, same Capybara semantics, same DSL. `capybara-lightpanda` is the headless companion that runs alongside it, not a rewrite of how you write tests.
+`capybara-lightpanda` is a Capybara driver, not a new way to write tests: same DSL, same Capybara semantics, same `page.driver` surface. Your specs stay as they are.
 
 ```ruby
-# Gemfile — same group, additional gem
+# Gemfile
 group :test do
-  gem "cuprite" # keep for visual specs / pixel diffs
   gem "capybara-lightpanda"
 end
 ```
@@ -33,9 +32,9 @@ curl -L -o lightpanda https://github.com/lightpanda-io/browser/releases/download
 chmod +x lightpanda
 ```
 
-### Run both, gated by `BROWSER=lightpanda`
+### Switch with `BROWSER=lightpanda`
 
-The dual-driver pattern lets your CI keep cuprite for the few specs that need pixels while everything else runs on lightpanda. One env var, no rewrites:
+Gate the driver on an env var while you try it out. Your current setup stays the default, nothing gets rewritten:
 
 ```ruby
 # spec/support/capybara.rb (or test/support/...)
@@ -45,27 +44,23 @@ if ENV["BROWSER"] == "lightpanda"
   Capybara.default_driver    = :lightpanda
   Capybara.javascript_driver = :lightpanda
 else
-  # your existing cuprite (or selenium-chrome) setup
+  # your existing driver setup
 end
 ```
 
 ```bash
-# fast headless lane — DOM, forms, Turbo, network, cookies
 BROWSER=lightpanda bundle exec rails test test/system/
-
-# pixel lane — visual specs, screenshots, layout-dependent assertions
-bundle exec rails test test/system/
 ```
 
 <aside class="md-callout md-callout--rollback" role="note">
   <span class="md-callout__glyph" aria-hidden="true">↺</span>
   <span class="md-callout__body">
     <strong>Rollback is the env var.</strong>
-    Drop <code>BROWSER=lightpanda</code> and your suite returns to Cuprite. <code>Gemfile.lock</code> is the only persistent change — no Capybara registration is touched outside the <code>if</code> branch above.
+    Drop <code>BROWSER=lightpanda</code> and your suite returns to your current driver. <code>Gemfile.lock</code> is the only persistent change — no Capybara registration is touched outside the <code>if</code> branch above.
   </span>
 </aside>
 
-In **GitHub Actions** the dual-lane pattern is two short jobs that share a checkout.<br>Drop the binary in once and gate on the env var:
+In **GitHub Actions**, drop the binary in once and set the env var:
 
 ```yaml
 # .github/workflows/system_tests.yml
@@ -83,19 +78,11 @@ jobs:
           chmod +x /usr/local/bin/lightpanda
       - run: bundle exec rails test test/system/
         env: { BROWSER: lightpanda }
-
-  visual:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ruby/setup-ruby@v1
-        with: { ruby-version: "3.3", bundler-cache: true }
-      - run: bundle exec rails test test/system/ # cuprite / chrome lane
 ```
 
 ### `page.driver` — same surface
 
-If your specs already call into `page.driver` (cookies, network, debug, headers), most of those calls work identically because the API mirrors what cuprite users expect:
+If your specs already call into `page.driver` (cookies, network, debug, headers), most of those calls work as you'd expect from a CDP driver:
 
 ```ruby
 # Cookies — same names, same shape

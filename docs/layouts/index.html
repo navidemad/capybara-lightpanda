@@ -75,18 +75,15 @@
             A Capybara driver that speaks CDP to
             <a href="https://github.com/lightpanda-io/browser" rel="noopener"
               >Lightpanda</a
-            >
-            — the same way <code>cuprite</code> speaks CDP to Chromium. If
-            you've already shipped a Rails app on Cuprite, the architecture is
-            identical; only the binary at the other end of the WebSocket
-            changes.
+            >, a headless browser built for automation. Same Capybara DSL,
+            same <code>page.driver</code> surface; only the binary at the other
+            end of the WebSocket changes.
           </p>
 
           <p class="hero__positioning">
-            <span>Keep <code>cuprite</code> for visual specs.</span>
             <span
-              >Run <strong>capybara-lightpanda</strong> for the headless
-              rest.</span
+              >Run your system tests on
+              <strong>capybara-lightpanda</strong>.</span
             >
             <span>Stop fighting flaky <em>Turbo Drive</em> specs.</span>
             <span class="hero__positioning-foot">Only the driver changes.</span>
@@ -304,138 +301,18 @@
     </section>
 
     <section
-      class="swap wrap wrap--wide"
-      id="stack"
-      aria-labelledby="swap-title"
+      class="start wrap wrap--wide"
+      id="get-started"
+      aria-labelledby="start-title"
     >
       <header class="section__head">
         <span class="section__no">02</span>
-        <h2 class="section__title" id="swap-title">
-          <span class="section__title-text">The split</span>
+        <h2 class="section__title" id="start-title">
+          <span class="section__title-text">Drop it in</span>
         </h2>
         <p class="section__deck">
-          Three Capybara drivers, one DSL.
-          <strong>selenium-webdriver</strong> speaks WebDriver,
-          <strong>cuprite</strong> speaks CDP — both drive a full Chromium
-          for real rendering. <strong>capybara-lightpanda</strong> speaks
-          CDP on Lightpanda, a fraction of the weight when you don't need
-          pixels.
-        </p>
-      </header>
-
-      <div class="swap__compare">
-        <div class="swap__shared">
-          <p class="swap__shared-tag">
-            <span class="swap__shared-glyph" aria-hidden="true">§</span>
-            Shared · same Capybara API on all three
-          </p>
-          <div class="swap__shared-card">
-            <span class="swap__shared-name">Capybara</span>
-            <span class="swap__shared-sub"
-              >visit · click · fill_in · assert_selector · …</span
-            >
-          </div>
-        </div>
-
-        <div class="swap__split" aria-hidden="true">
-          <span class="swap__split-rule"></span>
-          <span class="swap__split-label">the split happens below</span>
-          <span class="swap__split-rule"></span>
-        </div>
-
-        <div class="swap__lanes">
-          <article
-            class="stack stack--before"
-            aria-label="Selenium stack"
-          >
-            <header class="stack__head">
-              <span class="stack__tag">WebDriver + visual</span>
-              <span class="stack__weight">~ 300 MB&nbsp;RSS / test</span>
-            </header>
-            <ol class="stack__layers">
-              <li class="layer layer--mid">
-                selenium-webdriver
-                <span class="layer__pill">chromedriver</span>
-              </li>
-              <li class="layer layer--heavy">
-                <span class="layer__name">Chromium</span>
-                <span class="layer__sub"
-                  >multi-process · Blink · V8 · Skia · …</span
-                >
-              </li>
-            </ol>
-            <p class="stack__note">
-              WebDriver hop through chromedriver. Cross-browser ecosystem;
-              the heaviest of the three.
-            </p>
-          </article>
-
-          <article
-            class="stack stack--before"
-            aria-label="Cuprite stack"
-          >
-            <header class="stack__head">
-              <span class="stack__tag">Headless + visual</span>
-              <span class="stack__weight">~ 280 MB&nbsp;RSS / test</span>
-            </header>
-            <ol class="stack__layers">
-              <li class="layer layer--mid">
-                cuprite <span class="layer__pill">ferrum&nbsp;CDP</span>
-              </li>
-              <li class="layer layer--heavy">
-                <span class="layer__name">Chromium</span>
-                <span class="layer__sub"
-                  >multi-process · Blink · V8 · Skia · …</span
-                >
-              </li>
-            </ol>
-            <p class="stack__note">
-              Boots Chromium directly over CDP. Faster than WebDriver,
-              real rendering preserved.
-            </p>
-          </article>
-
-          <article
-            class="stack stack--after"
-            aria-label="capybara-lightpanda stack"
-          >
-            <header class="stack__head">
-              <span class="stack__tag stack__tag--accent">Headless only</span>
-              <span class="stack__weight">~ 17 MB&nbsp;RSS / test</span>
-            </header>
-            <ol class="stack__layers">
-              <li class="layer layer--mid">
-                capybara-lightpanda
-                <span class="layer__pill">CDP&nbsp;client</span>
-              </li>
-              <li class="layer layer--light">
-                <span class="layer__name">Lightpanda</span>
-                <span class="layer__sub">Zig · V8 · html5ever · libcurl</span>
-              </li>
-            </ol>
-            <p class="stack__note">
-              A single binary. No rendering engine. JS where you need it.
-            </p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section
-      class="pair wrap wrap--wide"
-      id="pair-with-cuprite"
-      aria-labelledby="pair-title"
-    >
-      <header class="section__head">
-        <span class="section__no">03</span>
-        <h2 class="section__title" id="pair-title">
-          <span class="section__title-text">Pair with Cuprite</span>
-        </h2>
-        <p class="section__deck">
-          Drop in alongside cuprite, gate the lanes with one env var. Keep
-          cuprite where you need pixels, run
-          <strong>capybara-lightpanda</strong>
-          where you don't — and roll back by unsetting
+          One Gemfile line, one <code>driven_by</code>, one env var to switch
+          over — and you roll back by unsetting
           <code>BROWSER=lightpanda</code>. Honest numbers from a real Rails 8
           suite below.
         </p>
@@ -446,215 +323,12 @@
     </section>
 
     <section
-      class="matrix wrap wrap--wide"
-      id="capabilities"
-      aria-labelledby="matrix-title"
-    >
-      <header class="section__head">
-        <span class="section__no">04</span>
-        <h2 class="section__title" id="matrix-title">
-          <span class="section__title-text">What works, what doesn't</span>
-        </h2>
-        <p class="section__deck">
-          Lightpanda is a headless browser by design —
-          <strong>no layout, no paint, no compositor.</strong><br />Here's the
-          <strong>honest</strong> matrix for system-test authors.
-        </p>
-      </header>
-
-      <div class="matrix__grid">
-        <table class="matrix__table">
-          <thead>
-            <tr>
-              <th scope="col">Capability</th>
-              <th scope="col"><code>cuprite</code></th>
-              <th scope="col" class="matrix__th--us">
-                <code>lightpanda</code>
-              </th>
-              <th scope="col">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="matrix__group">
-              <td colspan="4">
-                Performance — where lightpanda earns its place
-              </td>
-            </tr>
-            <tr class="matrix__row--accent">
-              <th scope="row">Memory per session</th>
-              <td>~280&nbsp;MB</td>
-              <td><strong>~17&nbsp;MB</strong></td>
-              <td>
-                <span class="matrix__win">16× less</span>
-                measured, chapter 03
-              </td>
-            </tr>
-            <tr class="matrix__row--accent">
-              <th scope="row">Cold-start time</th>
-              <td>~1.5&nbsp;s</td>
-              <td><strong>&lt;200&nbsp;ms</strong></td>
-              <td>
-                <span class="matrix__win">7× faster</span>
-                per worker process
-              </td>
-            </tr>
-
-            <tr class="matrix__group">
-              <td colspan="4">Core test surface — at parity</td>
-            </tr>
-            <tr>
-              <th scope="row">Visit, click, fill, submit, navigate, history</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>core Capybara surface</td>
-            </tr>
-            <tr>
-              <th scope="row">CSS + XPath selectors</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>XPath native via <code>Document.evaluate</code></td>
-            </tr>
-            <tr>
-              <th scope="row">Cookies, headers, status codes, redirects</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>request + response headers, <code>status_code</code></td>
-            </tr>
-            <tr>
-              <th scope="row">Turbo Drive, Frames, Stimulus</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <th scope="row">
-                <code>execute_script</code> / <code>evaluate_script</code>
-              </th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <th scope="row">iframes, frame switching</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <th scope="row">
-                File uploads
-                <span class="muted">(<code>input[type=file]</code>)</span>
-              </th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><code>attach_file</code> · build ≥6672</td>
-            </tr>
-            <tr>
-              <th scope="row">
-                File downloads
-                <span class="muted">(<code>send_file</code>)</span>
-              </th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>
-                streamed on <code>Content-Disposition</code> · build ≥7545
-              </td>
-            </tr>
-
-            <tr class="matrix__group">
-              <td colspan="4">
-                Browser-engine features — keep cuprite on those specific tests
-                if you need these
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">JS dialogs</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="partial" aria-label="partial">~</span></td>
-              <td>
-                <code>accept_modal</code> / <code>dismiss_modal</code> incl.
-                prompt text; matched by message, not type
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">
-                Viewport &amp; <code>@media</code>, resize
-              </th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td>
-                <code>window_size</code> / <code>resize_to</code> — resize, then
-                visit
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">
-                Scroll, full <code>getComputedStyle</code>
-              </th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="partial" aria-label="partial">~</span></td>
-              <td>CSSOM landed; no layout</td>
-            </tr>
-            <tr>
-              <th scope="row">Hover menus</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="partial" aria-label="partial">~</span></td>
-              <td>
-                <code>mouseover</code> + <code>mouseenter</code> fire, so JS menus
-                open; CSS <code>:hover</code> reveals don't
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Second tab or window</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="dash" aria-label="not supported">—</span></td>
-              <td>
-                one target per connection — drive a second Capybara session
-                instead
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Web Workers</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="partial" aria-label="partial">~</span></td>
-              <td>limited APIs</td>
-            </tr>
-            <tr>
-              <th scope="row">Real screenshots</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="dash" aria-label="out of scope">—</span></td>
-              <td>no compositor (by design)</td>
-            </tr>
-            <tr>
-              <th scope="row">Visual regression / pixel tests</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="dash" aria-label="out of scope">—</span></td>
-              <td>keep cuprite for these</td>
-            </tr>
-            <tr>
-              <th scope="row">Service Workers, WebAuthn</th>
-              <td><span class="check" aria-label="yes">✓</span></td>
-              <td><span class="dash" aria-label="out of scope">—</span></td>
-              <td>browser-engine territory</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p class="matrix__foot">
-        Need pixels? Keep <code>cuprite</code> for visual specs and let
-        <code>lightpanda</code> own the rest.<br />You can run both side by side
-        — only the driver changes.
-      </p>
-    </section>
-
-    <section
       class="beta wrap wrap--wide"
       id="join-beta"
       aria-labelledby="beta-title"
     >
       <header class="section__head">
-        <span class="section__no">05</span>
+        <span class="section__no">03</span>
         <h2 class="section__title" id="beta-title">
           <span class="section__title-text">Help us ship 1.0</span>
         </h2>
@@ -711,7 +385,7 @@ end` "ruby" "" }}
             <span class="beta__rollback-glyph" aria-hidden="true">↺</span>
             <span
               ><strong>Rollback in 30&nbsp;s.</strong> Drop the env var — your
-              suite goes back to Cuprite. <code>Gemfile.lock</code> is the only
+              suite goes back to your current driver. <code>Gemfile.lock</code> is the only
               persistent change.</span
             >
           </p>
@@ -736,7 +410,7 @@ end` "ruby" "" }}
               <span class="beta__q-no" aria-hidden="true">Q2</span>
               <span class="beta__q-text"
                 >Any <strong>Turbo Stream / Turbo Frame</strong> behavior that
-                diverged from Cuprite?</span
+                surprised you?</span
               >
             </li>
             <li class="beta__q">
@@ -824,16 +498,10 @@ end` "ruby" "" }}
           <a href="#why"><span>01</span><em>Why</em></a>
         </li>
         <li>
-          <a href="#stack"><span>02</span><em>Split</em></a>
+          <a href="#get-started"><span>02</span><em>Start</em></a>
         </li>
         <li>
-          <a href="#pair-with-cuprite"><span>03</span><em>Pair</em></a>
-        </li>
-        <li>
-          <a href="#capabilities"><span>04</span><em>Matrix</em></a>
-        </li>
-        <li>
-          <a href="#join-beta"><span>05</span><em>Beta</em></a>
+          <a href="#join-beta"><span>03</span><em>Beta</em></a>
         </li>
       </ol>
       <span class="hero__index-arrow" aria-hidden="true">↓</span>
@@ -907,7 +575,7 @@ end` "ruby" "" }}
       (function () {
         if (!("IntersectionObserver" in window)) return;
         var targets = document.querySelectorAll(
-          ".section__head, .why__manifesto, .why__pillars > *, .why__stats > *, .why__source, .swap__shared, .swap__split, .swap__lanes > *, .matrix__col, .beta__try, .beta__ask, .endrail__inner",
+          ".section__head, .why__manifesto, .why__pillars > *, .why__stats > *, .why__source, .beta__try, .beta__ask, .endrail__inner",
         );
         targets.forEach(function (el) {
           el.classList.add("reveal");

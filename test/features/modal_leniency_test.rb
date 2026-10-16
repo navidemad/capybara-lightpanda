@@ -5,8 +5,8 @@ require_relative "../test_helper"
 # Modal type leniency: `accept_alert` must accept a `confirm()` dialog.
 #
 # Selenium cannot distinguish alerts from confirms (both are "alerts"), and
-# Cuprite's dialog handler accepts whatever fires — so real suites wrap
-# `data-confirm` deletes in `accept_alert` (solidus admin does exactly this)
+# other CDP drivers' dialog handlers accept whatever fires — so real suites
+# wrap `data-confirm` deletes in `accept_alert` (solidus admin does exactly this)
 # and pass on those drivers. The gem's `find_modal` therefore matches dialogs
 # by message text only and ignores the reported type.
 describe "Capybara::Lightpanda modal type leniency" do

@@ -166,11 +166,11 @@ describe "Capybara::Lightpanda errors" do
     end
   end
 
-  # Cuprite/Ferrum drop-in compatibility surface: never raised by this gem,
-  # but suites migrating from those drivers may reference these classes in
+  # Drop-in compatibility surface: never raised by this gem, but suites
+  # migrating from other Capybara CDP drivers may reference these classes in
   # rescue lists — they must keep existing and keep their peer shape.
   describe "peer-compatibility error classes" do
-    it "MouseEventFailed parses position and selector from a cuprite-style message" do
+    it "MouseEventFailed parses position and selector from a peer-driver-style message" do
       node = mock("node")
       error = Capybara::Lightpanda::MouseEventFailed.new(node, "at position (100, 200) selector: #btn")
       assert_equal({ x: 100, y: 200 }, error.position)

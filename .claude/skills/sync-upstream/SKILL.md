@@ -209,10 +209,11 @@ If a finding has a clear next code change (workaround removal, pattern adoption)
 For each recommended workaround removal, also output the exact validation command for the user to run before any cleanup, and pause:
 
 ```
-LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:incremental
+LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda CLEAR=1 bundle exec rake test:incremental
+LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle exec rake spec:shared:parallel
 ```
 
-Don't run it yourself — `spec:incremental` is long-running and the user decides when to validate.
+Don't run them yourself — they are long-running and the user decides when to validate.
 
 ## Step 8: Persist state for the next run
 
