@@ -61,7 +61,7 @@ repros and explicit scope questions, awaiting maintainer ack before any PR.
 |------|--------|------------|
 | **Multi-tab / multi-threading in one process** | Blog: explicitly "working on that feature"; prerequisite for B15 (`window.open` independent CDP targets → `:windows`) | Design the session pool so one-process-N-tabs slots in later; watch upstream branches. Changes parallel-worker economics (one process per CI host instead of per worker) |
 | **Geometry softening** | `offsetParent` (#2695), `scroll/scrollTo/scrollBy` (#2672) — first moves into "inherent limitation" territory (C2/C3) | Re-probe capability flags against nightlies periodically; section C may not stay closed |
-| **Request interception** | Shipped upstream (Feb) | Gem feature: Cuprite-style URL blocklist/allowlist (skip analytics/CDN in tests) — expected by Cuprite migrators |
+| **Request interception** | Shipped upstream (Feb) | Gem feature: URL blocklist/allowlist (skip analytics/CDN in tests) |
 | **File downloads (B16)** | External PR #2722 open; our design issue #2701 awaiting maintainer call | Review the PR against the gem's `:download` needs; don't duplicate |
 | **Maintainer stability work** | Arena-leak sweep (#2673/#2650/#2670), CDP-disconnect worker robustness (#2648), TCP timeout 2s→10s (#2651), script-ordering (#2688/#2675 → bears on A10) | No action — passively reduces A10/A12 flake class. Re-verify A10 frequency on new nightlies |
 

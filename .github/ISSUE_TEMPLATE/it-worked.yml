@@ -22,10 +22,10 @@ body:
     id: numbers
     attributes:
       label: Numbers
-      description: Tests run · time on Cuprite vs lightpanda · memory if you measured.
+      description: Tests run · time on your previous driver vs lightpanda · memory if you measured.
       placeholder: |
         184 / 184 passed
-        Cuprite:    62.4 s · ~290 MB / worker
+        Before:     62.4 s · ~290 MB / worker
         Lightpanda: 18.7 s · ~19 MB / worker
         CI runner: GitHub Actions ubuntu-latest, parallelism 4 → 12
 
@@ -33,10 +33,10 @@ body:
     id: scope
     attributes:
       label: What's running on lightpanda?
-      description: Whole suite? A subset? Anything you kept on Cuprite (visual / file-upload / screenshots)?
+      description: Whole suite? A subset? Anything you kept off it (visual / screenshots)?
       placeholder: |
         - All non-visual specs run on lightpanda
-        - Kept Cuprite for 6 visual-regression specs and 2 file-upload flows
+        - 6 visual-regression specs stay on the previous driver
     validations:
       required: false
 

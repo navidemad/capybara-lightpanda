@@ -95,14 +95,14 @@ end
 
 The gem's default `:lightpanda` registration reads this configuration, so `Capybara.javascript_driver = :lightpanda` and `driven_by(:lightpanda)` both pick it up — no driver re-registration needed.
 
-**Don't pass options through `driven_by`.** `driven_by :lightpanda, options: { port: … }` is silently ignored — Rails only forwards `options:` for its built-in drivers (selenium, cuprite, rack_test, playwright) and drops them for everything else. Use `Capybara::Lightpanda.configure` and keep `driven_by :lightpanda` bare.
+**Don't pass options through `driven_by`.** `driven_by :lightpanda, options: { port: … }` is silently ignored — Rails only forwards `options:` for its built-in drivers and drops them for everything else. Use `Capybara::Lightpanda.configure` and keep `driven_by :lightpanda` bare.
 
 ## What we expect to fail (don't file these)
 
 These are browser-level limitations of Lightpanda itself, not bugs in the gem. The driver raises `Capybara::NotImplementedError` so you can `skip` cleanly.
 
 - **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` returns a hardcoded 1920×1080 PNG.
-- **Visual regression / pixel tests** — same reason; keep these on Cuprite.
+- **Visual regression / pixel tests** — same reason.
 - **Scroll, pixel geometry, full `getComputedStyle`** — no layout engine. `@media` / `matchMedia` *do* work and evaluate against the `window_size` you configure; what's missing is reflow, so `getBoundingClientRect` stays synthetic.
 - **Service Workers, SharedWorker** — not implemented; Web Worker support is partial ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
 - **WebAuthn / passkeys** — not implemented.
@@ -128,12 +128,12 @@ end
 When you file feedback, three signals matter most:
 
 1. **Auth flows** — sign-in, sign-up, password reset, 2FA, magic links. End-to-end.
-2. **Turbo Stream / Turbo Frame divergences** — anything that behaves differently than Cuprite, especially around morphing (`turbo-rails` ≥ 8.0).
+2. **Turbo Stream / Turbo Frame divergences** — anything that behaves differently than on your current driver, especially around morphing (`turbo-rails` ≥ 8.0).
 3. **CI memory headroom** — how much did you free up, and could you raise parallelism on the same runner?
 
 ## How to file
 
-- **Something broke** → [Beta feedback issue template](https://github.com/navidemad/capybara-lightpanda/issues/new?template=beta-feedback.yml). Repro snippet + Cuprite parity check is the gold standard.
+- **Something broke** → [Beta feedback issue template](https://github.com/navidemad/capybara-lightpanda/issues/new?template=beta-feedback.yml). Repro snippet + a parity check on your previous driver is the gold standard.
 - **It worked** → [Beta success template](https://github.com/navidemad/capybara-lightpanda/issues/new?template=it-worked.yml). Numbers if you measured. Optional public credit.
 - **Want to talk first** → [Discussions](https://github.com/navidemad/capybara-lightpanda/discussions). Drop your suite size + Rails/Turbo versions in the intake thread.
 - **Bug is upstream** (CDP method missing, JS API not implemented) → [lightpanda-io/browser](https://github.com/lightpanda-io/browser/issues). Cross-link from your issue here so we can track.
@@ -155,7 +155,6 @@ The known matrix of in-flight upstream work that affects this gem is tracked in 
 
 ## What's _not_ on the roadmap
 
-- A pixel-rendering layer. Lightpanda is headless by design. If you need real rendering, keep Cuprite for those specs and run both side-by-side — that's the supported path.
-- Replacing Cuprite. The dual-driver pattern is the recommendation.
+- A pixel-rendering layer. Lightpanda is headless by design.
 
 Thanks for testing. Real numbers from real suites are what gets us to `1.0`.
