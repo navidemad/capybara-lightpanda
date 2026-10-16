@@ -8,7 +8,7 @@ require_relative "../test_helper"
 # `execute_script` / `evaluate_script` / `evaluate_async_script` target the top
 # document unless told otherwise, so inside `within_frame` they read and
 # mutated the page around the frame: `evaluate_script("location.href")` gave
-# the page URL. Chrome drivers (Selenium, Cuprite) run them in the frame.
+# the page URL. Chrome drivers run them in the frame.
 # Capybara's shared battery never scripts inside a frame, so nothing caught
 # it. The scripts now carry the frame's default execution context.
 describe "Capybara::Lightpanda scripts inside within_frame" do

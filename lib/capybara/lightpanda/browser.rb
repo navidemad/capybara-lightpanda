@@ -187,7 +187,7 @@ module Capybara
       end
 
       # Download destination: explicit :save_path option wins, else
-      # Capybara.save_path (Cuprite parity). nil => downloads stay off.
+      # Capybara.save_path. nil => downloads stay off.
       def configured_download_path
         @options.save_path ||
           (defined?(Capybara) && Capybara.respond_to?(:save_path) ? Capybara.save_path : nil)
@@ -687,9 +687,10 @@ module Capybara
       # After a click that navigated, the next action must not run before the
       # new page's JS has wired its handlers: Stimulus, Bootstrap's data-api
       # and Turbo load as module scripts, which run after the document commits
-      # and before DOMContentLoaded. Cuprite waits for the load event. The
-      # event is awaited briefly, then document.readyState is polled for the
-      # rest of the budget, as #go_to does (lightpanda-io/browser#1801: page
+      # and before DOMContentLoaded. Chrome-based drivers wait for the load
+      # event. The event is awaited briefly, then document.readyState is
+      # polled for the rest of the budget, as #go_to does
+      # (lightpanda-io/browser#1801: page
       # events may never come). Never raises: a page that never settles costs
       # the timeout once, then the action returns as it did before.
       DOCUMENT_READY_EVENT_WAIT = 2

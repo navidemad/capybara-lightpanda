@@ -285,7 +285,7 @@ describe Capybara::Lightpanda::Cookies do
       assert_kind_of Enumerator, cookies.each
     end
 
-    # Ferrum/Cuprite spelling — real suites read cookies by name off the
+    # Ferrum spelling — real suites read cookies by name off the
     # driver (`browser.cookies["session_id"]`), so the subscript must work.
     it "looks up a cookie by name via [] and returns nil when absent" do
       assert_equal "1", cookies["a"].value

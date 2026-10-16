@@ -48,7 +48,7 @@ User typically names the item directly ("fix A14"). If they don't:
 - Ask which one, OR
 - Suggest the next from the recommended order (Step 0a) and confirm.
 
-**Refuse and explain** if the user names a Section C item — those are inherent (no rendering engine). Recommend running cuprite for that lane instead. For items that may already be addressed (already fixed, open PR by us), the duplicate check in Step 1b will catch them — don't hardcode their state here.
+**Refuse and explain** if the user names a Section C item — those are inherent (no rendering engine): specs that depend on them need a real browser, not this gem. For items that may already be addressed (already fixed, open PR by us), the duplicate check in Step 1b will catch them — don't hardcode their state here.
 
 ### Step 0a: Recommended order if the user is undecided
 

@@ -8,7 +8,7 @@ require_relative "../test_helper"
 # a sniff that watched only Runtime.executionContextsCleared returned on the
 # OLD page whenever the server took longer than the sniff window — and
 # `current_url` / `assert_current_path(wait: 0)` read the page being left.
-# Cuprite/Ferrum wait here; suites migrating from them rely on it.
+# Chrome-based drivers wait here; suites migrating from them rely on it.
 #
 # The /lightpanda/nav_wait/* routes sleep TestApp::NAV_WAIT_DELAY (0.3 s),
 # well past the sniff window.
@@ -45,8 +45,8 @@ describe "Node#click waits for the navigation it starts" do
 
   # The new document is committed (fresh execution context) before its module
   # scripts run. Returning there let the next click land before the page's
-  # JS had wired its handlers, and the click was silently lost. Cuprite
-  # waits for the load event.
+  # JS had wired its handlers, and the click was silently lost. Chrome-based
+  # drivers wait for the load event.
   it "waits for the new page's module scripts after a link click" do
     session.find(:css, "#module-link").click
     session.find(:css, "#armed").click

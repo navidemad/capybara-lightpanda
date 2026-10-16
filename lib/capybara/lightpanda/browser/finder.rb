@@ -37,8 +37,8 @@ module Capybara
 
         # Ancestor chain of `remote_object_id` from parentNode up to (but
         # excluding) `document`, returned as an array of remote object IDs.
-        # Mirrors Cuprite's JS `parents` helper. Same `with_default_context_wait`
-        # wrapping as `find_within` — same race window applies.
+        # Same `with_default_context_wait` wrapping as `find_within` — same
+        # race window applies.
         def parents_of(remote_object_id)
           with_default_context_wait do
             result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
@@ -50,8 +50,8 @@ module Capybara
 
         # Sentinel string thrown from FIND_*_JS when querySelectorAll rejects a
         # malformed selector, so the Ruby side can convert JavaScriptError into
-        # Capybara::Lightpanda::InvalidSelector. Cuprite uses a JS subclass for
-        # the same purpose; a plain prefixed string keeps our inline JS simple.
+        # Capybara::Lightpanda::InvalidSelector. A plain prefixed string keeps
+        # our inline JS simple.
         INVALID_SELECTOR_MARKER = "LIGHTPANDA_INVALID_SELECTOR:"
 
         # The find algorithms exist in three dispatch contexts — element-scoped

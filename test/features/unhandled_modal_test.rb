@@ -5,7 +5,7 @@ require_relative "../test_helper"
 # A JS dialog nobody pre-armed is resolved by Lightpanda's silent default
 # (confirm → cancel, prompt → null, alert → dismissed). Left unreported, a
 # runaway `confirm` cancels the action and the spec still passes green — the
-# false negative Cuprite's `raise_on_unhandled_modal` (PR #320) exists for.
+# false negative `raise_on_unhandled_modal` exists for.
 # The gem warns by default and raises when the option is on; a properly
 # wrapped dialog does neither.
 describe "Capybara::Lightpanda unhandled modals" do
