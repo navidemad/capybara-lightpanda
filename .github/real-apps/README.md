@@ -43,12 +43,10 @@ the run's failure message. `check_baseline.rb` prints the per-cause tally and
 lists anything matching no cause:
 
 ```
-solidus: 338 examples, 11 failed (baseline 11) — 0 new, 0 fixed
+solidus: 338 examples, 5 failed (baseline 5) — 0 new, 0 fixed
 
 Known failures by cause:
-  jquery1-change-shim            5  (confirmed)
   customer-switch-refill         2  (unknown)
-  no-change-on-blur              1  (confirmed)
   selenium-only-api              1  (confirmed)
   select2-v3-flow                1  (likely)
   selenium-textarea-text         1  (likely)

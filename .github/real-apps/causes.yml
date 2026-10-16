@@ -28,45 +28,10 @@
 # layout-measuring-js, select-optgroup-invisible, multipart-content-loss,
 # form-method-dialog and axe-and-html-validation. The 2026-10-14 diagnosis
 # replaced address-state-not-toggled, ajax-partial-not-applied and
-# search-returns-nothing with the causes it proved.
-
-jquery1-change-shim:
-  confidence: confirmed
-  summary: >-
-    FIXED IN THE GEM by javascripts/event_handlers.js; these entries drop at the
-    next baseline refresh. Lightpanda gives window and document almost none of
-    the GlobalEventHandlers on* attributes, so 'onchange' in window is false.
-    Solidus's admin runs jQuery 1.12.4, which reads that at load, swaps in its
-    IE change/submit shims, and from then on no delegated or ancestor change
-    handler fires although the native event bubbles: Backbone's
-    events: {change: ...} on the address view never sees the country change,
-    so no /api/states request goes out. Proven on a booted app 2026-10-14:
-    capture/bubble listeners on every ancestor saw the event, jQuery handlers
-    on .js-billing-address did not, and the polyfill turned 4 of these green on
-    1.0.0 and all 5 on nightly 10552 (the card-type entry also needs our
-    upstream #3776, 10080, for the hidden input's value to reach its attribute).
-  reference: "upstream lightpanda-io/browser#3956, wishlist A61"
-  patterns:
-    - 'customer_details_spec\.rb # Customer Details editing an order selected country has no state'
-    - 'payments_spec\.rb # Payments'
-    - 'configuration/shipping_methods_spec\.rb # Shipping Methods update can change the calculator'
-    - 'products_spec\.rb # Products as admin user searching products'
-
-no-change-on-blur:
-  confidence: confirmed
-  summary: >-
-    The spec sends `send_keys [1, :tab]` to a refund-amount field, expecting
-    the row's checkbox to tick from a jQuery change handler. Two gaps, both
-    needed: the gem dropped the Integer key and sent only the Tab (fixed in
-    the gem 2026-10-14, Keyboard#type types any non-Symbol key's to_s like
-    Selenium), and Lightpanda fires input and blur for the edit but never
-    change when the field loses focus (verified 2026-10-14 on 1.0.0 and
-    nightly 10552). Third-party PR #3952 fixes the latter: with both fixes
-    the spec passes (verified 2026-10-14 on its head 6a8dfde04), with either
-    one alone it fails.
-  reference: "upstream lightpanda-io/browser#3957 (fix: PR #3952), wishlist A62"
-  patterns:
-    - 'return_authorizations_spec\.rb # ReturnAuthorizations when the user can manage return authorizations create automatically checks edited rows'
+# search-returns-nothing with the causes it proved. The 2026-10-16 refresh
+# (run 38886066850) retired jquery1-change-shim (window's GlobalEventHandlers,
+# upstream #3958) and no-change-on-blur (change on blur, upstream #3952), both
+# in the 1.0.1 floor.
 
 selenium-textarea-text:
   confidence: likely
@@ -87,7 +52,7 @@ customer-switch-refill:
     refill the bill address, including the state control (a state_id select
     for a country with states, a state_name input for one without). The field
     the spec waits for never becomes visible. The country -> state swap itself
-    works once jquery1-change-shim is fixed, so the gap is in the
+    works since window got its GlobalEventHandlers (#3958), so the gap is in the
     customer-select path (onSelectCustomer -> model.set(bill_address)).
   next_step: >-
     Boot solidus, run new_order_spec.rb "when changing customer" with
