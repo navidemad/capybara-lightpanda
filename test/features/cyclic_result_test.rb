@@ -3,8 +3,8 @@
 require_relative "../test_helper"
 
 # A script result that references itself can't be returned by value. Ferrum
-# (so Cuprite) returns a CyclicObject placeholder; suites migrating from them
-# compare against it rather than rescuing. Before this, `window` raised
+# returns a CyclicObject placeholder; suites built on Ferrum compare
+# against it rather than rescuing. Before this, `window` raised
 # "Object reference chain is too long" from nightly 10255 (upstream #3831) and
 # came back as a dead Element below it; a self-referencing object raised on
 # every build.

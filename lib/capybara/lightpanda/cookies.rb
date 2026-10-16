@@ -76,7 +76,7 @@ module Capybara
       def get(name)
         find { |cookie| cookie.name == name }
       end
-      # Ferrum/Cuprite spelling: `browser.cookies["session_id"]`.
+      # Ferrum spelling: `browser.cookies["session_id"]`.
       alias [] get
 
       # Returns whether the browser accepted the cookie (ferrum parity).

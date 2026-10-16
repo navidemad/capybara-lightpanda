@@ -5,7 +5,7 @@ require "spec_helper"
 # Runs Capybara's cross-driver shared spec suite against Lightpanda.
 #
 # This exercises ~200 shared examples from Capybara itself — the same
-# tests that Selenium, Cuprite, Apparition, and Rack::Test must pass.
+# tests every Capybara driver (Selenium, Rack::Test, …) must pass.
 # We skip categories that Lightpanda cannot support (no rendering engine,
 # no modal dialogs, no multi-window, etc.) via capybara_skip.
 

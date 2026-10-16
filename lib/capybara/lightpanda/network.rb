@@ -92,7 +92,7 @@ module Capybara
 
       # Setting extra headers also lazily enables the Network domain. Without
       # this, headers were silently ignored until the caller separately ran
-      # `network.enable` (or `wait_for_network_idle`). Cuprite/Ferrum parity.
+      # `network.enable` (or `wait_for_network_idle`).
       def headers=(headers)
         enable
         @extra_headers = headers

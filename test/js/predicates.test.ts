@@ -47,7 +47,7 @@ test("isContentEditable: false with no contenteditable anywhere", () => {
 // --- isDisabled --------------------------------------------------------------
 // Capybara's Node#disabled? is more permissive than CSS :disabled — an <option>
 // inside a disabled <select> reports disabled even though it doesn't match
-// :disabled per spec. Mirrors Cuprite so the shared specs pass.
+// :disabled per spec. The Capybara shared specs expect it.
 
 test("isDisabled: an element matching :disabled is disabled", () => {
   const { predicates, document } = makeDom('<input id="t" disabled>');
@@ -59,7 +59,7 @@ test("isDisabled: an enabled element is not disabled", () => {
   expect(predicates.isDisabled(document.getElementById("t"))).toBe(false);
 });
 
-test("isDisabled: <option> inside a disabled <select> is disabled (the Cuprite quirk)", () => {
+test("isDisabled: <option> inside a disabled <select> is disabled (not :disabled per spec)", () => {
   // This is the case CSS :disabled misses; the ancestor walk is the whole point.
   const { predicates, document } = makeDom(
     '<select disabled><option id="t">a</option></select>',

@@ -222,7 +222,7 @@ describe Capybara::Lightpanda::Network do
   end
 
   describe "header setters" do
-    # Cuprite/Ferrum parity: callers expect `network.headers = {…}` to "just
+    # Callers expect `network.headers = {…}` to "just
     # work" without remembering to flip `enable` on first. Previously the
     # CDP setExtraHTTPHeaders call landed before Network.enable and could be
     # silently dropped depending on browser state.

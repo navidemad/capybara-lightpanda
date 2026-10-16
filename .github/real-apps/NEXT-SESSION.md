@@ -93,7 +93,7 @@ Run once per cluster. Substitute the slug.
 >    inferred from reading the spec's source.
 > 2. It has a disposition: a gem fix, an upstream issue with a CDP-only
 >    reproducer (never Ruby/Capybara — see the `lightpanda-upstream-pr` skill),
->    or "inherent" with a dual-driver note.
+>    or "inherent", recorded in `docs/content/docs.md`'s limits.
 > 3. `causes.yml` is updated: confidence, `reference`, and `next_step` removed
 >    or replaced.
 > 4. A finding is written in the format above.

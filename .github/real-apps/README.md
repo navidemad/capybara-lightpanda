@@ -11,7 +11,7 @@ against actual production-shape codebases.
 ├── README.md                   # this file
 ├── causes.yml                  # why each baseline failure fails
 └── patches/
-    ├── forem.patch             # was on Cuprite
+    ├── forem.patch             # was on Chrome over CDP
     ├── solidus.patch           # was on Selenium
     ├── spree.patch             # was on Selenium
     ├── decidim.patch           # was on Selenium

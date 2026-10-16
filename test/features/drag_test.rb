@@ -7,9 +7,9 @@ require_relative "../test_helper"
 # pins the gem-specific contract those specs can't see:
 #
 # - the legacy (coordinate-mouse) path raises NotImplementedError LOUDLY —
-#   a suite migrating from Selenium/Cuprite must learn the drag didn't happen,
+#   a suite migrating from a Chrome driver must learn the drag didn't happen,
 #   not get a silent no-op and a green-looking test;
-# - Cuprite's legacy-path kwargs (`steps:`, `scroll:`) are tolerated, so a
+# - legacy-path kwargs (`steps:`, `scroll:`) are tolerated, so a
 #   migrated `drag_to(target, steps: 5)` doesn't ArgumentError before the
 #   HTML5 simulation even runs.
 describe "Capybara::Lightpanda::Node#drag_to" do
@@ -32,7 +32,7 @@ describe "Capybara::Lightpanda::Node#drag_to" do
     assert_match(/html5: true/, err.message)
   end
 
-  it "ignores Cuprite's legacy-path kwargs instead of raising ArgumentError" do
+  it "ignores legacy-path kwargs instead of raising ArgumentError" do
     session.find(:css, "#drag_source")
            .drag_to(session.find(:css, "#dropzone"), steps: 5, scroll: false)
 
