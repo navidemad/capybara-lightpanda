@@ -6,7 +6,8 @@
 #                           -e "should allow me to make a split"
 #
 # Every argument after the target goes to rspec verbatim, so `-e`, `:LINE`,
-# `--seed`, `--fail-fast` all work.
+# `--seed`, `--fail-fast` all work. A Minitest target (`runner: minitest` in the
+# matrix) hands them to `bin/rails test` instead (`-n "/pattern/"`, `file:LINE`).
 #
 # Each run writes to $ROOT/artifacts/<timestamp>/:
 #   rspec.log                  the console output
@@ -55,7 +56,7 @@ else
   IFS=' ' read -r -a SPECS <<< "$RA_SPEC"
 fi
 
-log "running     rspec ${SPECS[*]}"
+log "running     $RA_RUNNER ${SPECS[*]}"
 log "cwd         $APP/$RA_SPEC_DIR"
 log "artifacts   $RUN"
 
@@ -69,19 +70,27 @@ set +e
   export LIGHTPANDA_CACHE_TIME=0
   export LIGHTPANDA_PROBE_DIR="$RUN"
 
-  # `-r probe.rb` is the whole instrumentation: no Gemfile entry, no
-  # spec_helper edit, nothing left behind in the app checkout.
-  tool_exec bundle exec rspec \
-    --require "$SCRIPT_DIR/probe.rb" \
-    --format progress \
-    --format json --out "$RUN/report.json" \
-    "${SPECS[@]}"
+  if [ "$RA_RUNNER" = "minitest" ]; then
+    # The target's patch loads .github/real-apps/minitest_report.rb when
+    # REAL_APPS_REPORT is set, so report.json has the shape CI compares.
+    # probe.rb hooks RSpec, so a Minitest run gets no per-failure artifacts.
+    PARALLEL_WORKERS=1 REAL_APPS_REPORT="$RUN/report.json" \
+      tool_exec bin/rails test "${SPECS[@]}"
+  else
+    # `-r probe.rb` is the whole instrumentation: no Gemfile entry, no
+    # spec_helper edit, nothing left behind in the app checkout.
+    tool_exec bundle exec rspec \
+      --require "$SCRIPT_DIR/probe.rb" \
+      --format progress \
+      --format json --out "$RUN/report.json" \
+      "${SPECS[@]}"
+  fi
 ) 2>&1 | tee "$RUN/rspec.log"
 RSPEC_EXIT="${PIPESTATUS[0]}"
 set -e
 
 echo
-log "rspec exit=$RSPEC_EXIT"
+log "$RA_RUNNER exit=$RSPEC_EXIT"
 
 # --- Baseline comparison ------------------------------------------------------
 # GITHUB_WORKSPACE is what check_baseline.rb anchors absolute file_paths on, so

@@ -337,6 +337,15 @@ Three independent issues:
 - **Drop-on-fix**: `scrollCenterIntoView` → back to Selenium's verbatim `target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'})` once the fix is in the floor.
 - **Upstream issue**: not filed yet.
 
+### A64. CSS Nesting unsupported — nested rules dropped from the cascade and the CSSOM
+
+- **Today (verified 2026-10-14 on 1.0.0 and nightly 10552)**: `.a { &.b {…} }`, `.a { .child {…} }` and `.a { @media (…) {…} }` never reach the cascade or the CSSOM (`CSSStyleRule.cssRules` is `undefined`), and the declaration right after a nested rule is lost too (`DeclarationsIterator` skips to the next top-level `;`). Chrome 120+, Firefox 117+ and Safari 17.2+ support CSS Nesting.
+- **Real-world impact**: no-build stylesheets (Propshaft, 37signals apps) reveal content from nested rules. Campfire's `.message { visibility: hidden; &.message--formatted { visibility: visible } }` hides every message: 15 of its 27 system tests (`css-nesting-dropped` in `.github/real-apps/causes.yml`).
+- **Want**: CSS Nesting §3 resolution (`&` → `:is(parent)`, relative selectors), nested `@media`/`@layer` applied to the parent selector, nested rules in `CSSStyleRule.cssRules`.
+- **Gem workaround**: none possible.
+- **Drop-on-fix**: nothing in the gem; refresh the Campfire real-apps baseline (the 15 entries drop).
+- **Upstream issue**: #3961, **Upstream PRs**: #3963 (parser: end nested rules at their own block) and #3962 (cascade: support nesting), all filed 2026-10-14 by us, open as of 2026-10-16. Verified on the branch build (10560): the repro (`browser:repro/css-nesting/`, `lightpanda fetch --dump html`) exits 0, and the Campfire suite goes from 24 to 9 failures. Gaps left on purpose: declarations after a nested rule fold into the parent rule (no `CSSNestedDeclarations`), top-level `&`, nested `@supports`/`@container`, `parentRule` still `null`.
+
 ## C. Inherent limitations (out of scope — no rendering engine)
 
 These exist because Lightpanda has no rendering engine, no compositor, no real layout. They are by design: specs that depend on them need a real browser, not this gem.

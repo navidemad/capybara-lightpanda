@@ -109,3 +109,73 @@ decidim-account-js:
     hidden state is not recognised as hidden.
   patterns:
     - 'account_spec\.rb # Account when on the account page update avatar'
+
+campfire-clipboard-event:
+  confidence: confirmed
+  summary: >-
+    Campfire's paste helper builds `new ClipboardEvent("paste", …)` from
+    execute_script, and Lightpanda has no ClipboardEvent constructor
+    (ReferenceError on 1.0.0 and nightly 10552). DataTransfer exists since
+    #2671, so only the event interface is missing.
+  patterns:
+    - 'ClipboardEvent is not defined'
+
+campfire-lexxy-prompt-menu:
+  confidence: unknown
+  summary: >-
+    Typing "@" in the Lexxy (Lexical) composer never opens the mention menu,
+    so `.lexxy-prompt-menu__item` never appears. Still fails with the
+    CSS-nesting fix applied (local upstream build 10560, 2026-10-14), so it
+    is not that. Probably the same keyboard gap as campfire-lexxy-keyboard.
+  next_step: >-
+    Boot the app and check whether Lexxy's prompt plugin sees the "@"
+    (beforeinput / selection) through Input.insertText.
+  patterns:
+    - 'lexxy-prompt-menu__item'
+
+campfire-lexxy-composer-state:
+  confidence: unknown
+  summary: >-
+    Two Lexxy composer flows lose content. The per-room draft is empty when
+    the user comes back to the room, and a "~~Claude~~" message renders
+    without an <s> element. Both still fail with the CSS-nesting fix applied
+    (local upstream build 10560, 2026-10-14).
+  next_step: >-
+    Boot the app and watch Lexxy's draft storage and markdown transform.
+  patterns:
+    - 'test_an_unsent_message_is_kept_as_a_draft'
+    - 'test_markdown_strikethrough_survives_sanitization'
+
+campfire-lexxy-keyboard:
+  confidence: likely
+  summary: >-
+    `composer_editor.click` + `send_keys(text)` then Enter in the Lexxy
+    (Lexical) contenteditable sends nothing. On the current nightly these two
+    also hit css-nesting-dropped (every message is hidden), but with the
+    nesting fix applied (local upstream build 10560, 2026-10-14) the fixture
+    messages show and the typed one is still missing. So the text never
+    reaches Lexical, or Enter never submits.
+  next_step: >-
+    Boot the app with the nesting fix and check what Lexical's editor state
+    holds after send_keys (Input.insertText into a contenteditable).
+  patterns:
+    - 'test_enter_sends_the_message_when_the_toolbar_is_collapsed'
+    - 'test_enter_adds_a_newline_in_rich_text_mode'
+
+css-nesting-dropped:
+  confidence: confirmed
+  summary: >-
+    Lightpanda drops native CSS nested rules (`.a { … &.b { … } }`,
+    `.a { .b { … } }`) from the stylesheet and the cascade. Campfire's
+    messages.css sets `.message { visibility: hidden }` and only reveals a
+    message from the nested `&.message--formatted { visibility: visible }`,
+    so every message, fixture or freshly sent, reads as invisible: its body
+    matches with text "" and `#message_<id>` is "unable to find visible".
+    Reproduced 2026-10-14 on 1.0.0 and nightly 10552 with a three-rule page.
+    `cssRules` keeps only the parent rule. A local upstream build with nesting
+    support (10560, 2026-10-14) turns all 15 green.
+  reference: "upstream lightpanda-io/browser#3961 (fix: PRs #3963 + #3962), wishlist A64"
+  patterns:
+    - 'Unable to find visible css "#(message|boost)_\d+"'
+    - 'visible css "\.message'
+    - 'visible css "\.message__body-content--editing"'

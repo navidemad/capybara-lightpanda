@@ -113,6 +113,9 @@ LOCAL_OVERRIDES = {
     "notes" => "MySQL app: expects root/root on 127.0.0.1 (alonetone's " \
                "database.example.yml test section).",
   },
+  # SQLite app. Redis mirrors Campfire's own CI service (Resque's initializer
+  # reads REDIS_URL); the system suite runs on ActionCable's `test` adapter.
+  "campfire" => { "services" => "redis" },
 }.freeze
 
 def matrix
@@ -149,6 +152,7 @@ emit("RA_SPEC_DIR", entry["spec_dir"])
 emit("RA_DB_CREATE", entry["db_create"] ? "true" : "false")
 emit("RA_PRE_SPEC", override["pre_spec"] || entry["pre_spec"] || "")
 emit("RA_SPEC", entry["spec"])
+emit("RA_RUNNER", entry["runner"] || "rspec")
 emit("RA_SERVICES", override["services"] || "")
 emit("RA_NATIVE", override["native"] || "")
 emit("RA_BUNDLE_CONFIG", override["bundle_config"] || "")

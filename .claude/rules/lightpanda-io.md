@@ -187,7 +187,7 @@ LP.configureCDP              LP.getContentSignal
 | Issue | Impact | Description |
 |---|---|---|
 | #3852 | Binary | The 1.0.0 and 1.0.1 `aarch64-linux` binaries need glibc 2.38 (built on `ubuntu-24.04-arm`; x86_64 needs 2.35), so Debian 12 / Ubuntu 22.04 arm64 can't start them. |
-| #3961 | Visibility | Native CSS nesting unsupported: nested rules are dropped from the cascade and CSSOM, so a nested `display: none` doesn't hide and Capybara matches the element. Our PRs #3963 (parser) + #3962 (cascade), open. |
+| #3961 | Visibility | Native CSS nesting unsupported: nested rules are dropped from the cascade and CSSOM, so a nested `display: none` doesn't hide and Capybara matches the element. Our PRs #3963 (parser) + #3962 (cascade), open; wishlist A64. Hides every Campfire message (`css-nesting-dropped`, 15 real-apps entries). |
 | #3978 | Uploads | `FormData.get()`/`getAll()`/iteration return a file entry as its name, a string (verified 2026-10-15 on 1.0.1). Submitting the FormData itself uploads the bytes; JS that copies entries into a new FormData (filename sent instead of bytes) or reads `file.size`/`type` breaks. |
 | (not filed, wishlist A63) | Drag | `Element.scrollIntoView()` ignores its options (`_ = opts`) and always aligns the element's top. Since #3658 (10661, above the floor) rects follow the scroll, so `scrollIntoView({block: 'center'})` can push nearby elements out of the viewport. `HTML5_DRAG_JS` centers with its own `scrollCenterIntoView` (verified 2026-10-16 on 10661). |
 
