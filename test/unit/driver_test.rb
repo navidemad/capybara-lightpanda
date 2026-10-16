@@ -48,7 +48,7 @@ describe Capybara::Lightpanda::Driver do
     end
 
     # capybara-screenshot's fallback for unregistered drivers calls
-    # `driver.render(path)` (Cuprite/Ferrum spelling). Without the alias every
+    # `driver.render(path)`. Without the alias every
     # failing test in a capybara-screenshot suite logged a NoMethodError warn.
     it "responds to render as an alias of save_screenshot" do
       browser.expects(:screenshot).with(path: "/tmp/x.png")
@@ -56,9 +56,9 @@ describe Capybara::Lightpanda::Driver do
     end
   end
 
-  # Cuprite exposes header writers on the driver (`page.driver.headers = ...`);
-  # real suites call them there. The driver delegates to Network, which owns
-  # lazy Network-domain enablement and reset behavior.
+  # Real suites call header writers on the driver (`page.driver.headers = ...`).
+  # The driver delegates to Network, which owns lazy Network-domain enablement
+  # and reset behavior.
   describe "headers delegation" do
     let(:driver) { Capybara::Lightpanda::Driver.allocate }
     let(:browser) { mock("Browser") }

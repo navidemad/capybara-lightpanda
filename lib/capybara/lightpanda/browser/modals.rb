@@ -57,8 +57,8 @@ module Capybara
         # Surface a dialog that opened with no pre-arm. Called from the main
         # thread after every action that can open one (Browser#wait_for_idle,
         # #go_to). Warns by default; raises when the driver was built with
-        # `raise_on_unhandled_modal: true` (Cuprite's option name). Either way
-        # the dialog is already gone — Lightpanda's default resolved it.
+        # `raise_on_unhandled_modal: true`. Either way the dialog is already
+        # gone — Lightpanda's default resolved it.
         def check_unhandled_modal!
           entry = @modal_messages_mutex.synchronize do
             e = @unhandled_modal
@@ -74,11 +74,12 @@ module Capybara
         end
 
         # `type` is accepted for the error message only: like Selenium (where
-        # alert/confirm are indistinguishable) and Cuprite (whose dialog handler
-        # accepts whatever fires), we deliberately do NOT reject a dialog whose
-        # reported type differs from the one Capybara asked for. Real suites
-        # wrap `data-confirm` deletes in `accept_alert` (e.g. solidus admin) and
-        # expect it to work; only the message text is matched.
+        # alert/confirm are indistinguishable) and other CDP drivers (whose
+        # dialog handler accepts whatever fires), we deliberately do NOT
+        # reject a dialog whose reported type differs from the one Capybara
+        # asked for. Real suites wrap `data-confirm` deletes in `accept_alert`
+        # (e.g. solidus admin) and expect it to work; only the message text is
+        # matched.
         def find_modal(type, text: nil, wait: options.timeout)
           regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
           last_seen_message = nil

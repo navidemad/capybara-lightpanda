@@ -3,8 +3,8 @@
 require_relative "../test_helper"
 
 # A script result that references itself can't be returned by value. Ferrum
-# (so Cuprite) returns a CyclicObject placeholder; suites migrating from them
-# compare against it rather than rescuing. Before this, `window` raised
+# returns a CyclicObject placeholder; suites built on Ferrum compare
+# against it rather than rescuing. Before this, `window` raised
 # "Object reference chain is too long" from nightly 10255 (upstream #3831) and
 # came back as a dead Element below it; a self-referencing object raised on
 # every build.
@@ -20,11 +20,6 @@ describe "evaluate_script with a cyclic result" do
   end
 
   it "returns CyclicObject for the window" do
-    build = session.driver.browser.nightly_build
-    unless build && build >= Gem::Version.new("10255")
-      skip "window serializes as a node below nightly 10255 (upstream #3831)"
-    end
-
     assert_same cyclic, session.evaluate_script("window")
   end
 

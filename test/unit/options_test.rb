@@ -29,7 +29,7 @@ describe Capybara::Lightpanda::Options do
 
     # window_size is applied for real (Browser#set_viewport ->
     # Emulation.setDeviceMetricsOverride), so the default deliberately mirrors
-    # Lightpanda's own Viewport.default rather than Cuprite's 1024x768 —
+    # Lightpanda's own Viewport.default, not the 1024x768 some drivers use —
     # otherwise wiring the option up would have silently shrunk the viewport of
     # every existing suite and flipped `@media` branches under it.
     it "defaults window_size to Lightpanda's native viewport" do
@@ -57,7 +57,7 @@ describe Capybara::Lightpanda::Options do
       end
     end
 
-    it "accepts headless for cuprite compatibility" do
+    it "accepts headless for drop-in compatibility" do
       assert_equal true, options.headless
     end
 
@@ -113,7 +113,7 @@ describe Capybara::Lightpanda::Options do
       end
     end
 
-    it "defaults raise_on_unhandled_modal to false (warn, Cuprite parity) and round-trips it" do
+    it "defaults raise_on_unhandled_modal to false (warn) and round-trips it" do
       assert_equal false, Capybara::Lightpanda::Options.new.raise_on_unhandled_modal
       strict = Capybara::Lightpanda::Options.new(raise_on_unhandled_modal: true)
       assert_equal true, Capybara::Lightpanda::Options.new(strict.to_h).raise_on_unhandled_modal

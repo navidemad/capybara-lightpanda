@@ -106,11 +106,11 @@ module Capybara
       end
     end
 
-    # --- Cuprite/Ferrum drop-in compatibility surface ---
+    # --- Drop-in compatibility surface ---
     # This gem never raises the three classes below (no coordinate-based
     # mouse path, no multi-page API, no page-status tracking). They mirror
-    # the peer taxonomy (Cuprite's MouseEventFailed, Ferrum's
-    # NoSuchPageError/StatusError) so suites migrating from those drivers
+    # the error taxonomy of other Capybara CDP drivers (MouseEventFailed, plus
+    # Ferrum's NoSuchPageError/StatusError) so suites migrating from them
     # don't NameError on rescue lists that reference them.
     class MouseEventFailed < BrowserError
       attr_reader :node, :selector, :position

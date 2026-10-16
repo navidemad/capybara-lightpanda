@@ -3,7 +3,7 @@
    slow breathing pulse: scaleX from a hairline tick to a wider band while
    the ruby glow brightens at peak. scaleX keeps the work on the GPU
    compositor — no per-frame layout. */
-:is(.why, .swap, .pair, .matrix, .beta, .chapter)::after {
+:is(.why, .start, .beta, .chapter)::after {
   content: "";
   position: absolute;
   top: -1px;
@@ -34,7 +34,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.why, .swap, .pair, .matrix, .beta, .chapter)::after {
+  :is(.why, .start, .beta, .chapter)::after {
     animation: none;
     left: 50%;
     width: 80px;

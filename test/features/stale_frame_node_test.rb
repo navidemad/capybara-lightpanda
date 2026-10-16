@@ -54,6 +54,21 @@ describe "Capybara::Lightpanda nodes held across a frame navigation" do
     refute node.exists?
   end
 
+  # Removing the <iframe> discards its document too (upstream #3939, 10544):
+  # `defaultView` turns null, so the same guard catches a node held from a
+  # frame the page took away. Before #3939 the removed frame lived on and the
+  # node kept answering from it.
+  it "raises ObsoleteNode for a node of a removed frame" do
+    session.visit("/lightpanda/with_versioned_frame")
+
+    node = nil
+    session.within_frame("versioned-frame") { node = session.find(:css, "#version").base }
+    session.execute_script("document.getElementById('versioned-frame').remove()")
+
+    assert_raises(Capybara::Lightpanda::ObsoleteNode) { node.visible_text }
+    refute node.exists?
+  end
+
   it "keeps a node from a script-built document usable" do
     session.visit("/lightpanda/js_test")
 

@@ -892,6 +892,34 @@ class TestApp
     HTML
   end
 
+  # A drag inside a page taller than the viewport: the source sits right
+  # above the dropzone, so centering the dropzone can't scroll anywhere, and
+  # every dragover's client position must stay inside the viewport.
+  get "/lightpanda/drag_scroll_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Drag Scroll Test</title></head>
+        <body>
+          <div id="drag_source" draggable="true">Drag me</div>
+          <div id="dropzone">Drop here</div>
+          <div style="height: 4000px">tall page</div>
+          <div id="log"></div>
+          <script>
+            var dz = document.getElementById('dropzone');
+            dz.addEventListener('dragover', function(e) {
+              e.preventDefault();
+              var line = document.createElement('p');
+              line.className = 'dragover';
+              line.textContent = e.clientX + ',' + e.clientY;
+              document.getElementById('log').appendChild(line);
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   # Hover target. `.reveal` is hidden and CSS-revealed only on `.box:hover`
   # (which Lightpanda can't satisfy — no pointer state), while a JS `mouseover`
   # listener records into `#log` (which Node#hover's event dispatch DOES drive).

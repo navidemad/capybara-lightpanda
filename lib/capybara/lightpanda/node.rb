@@ -18,7 +18,7 @@ module Capybara
       end
 
       # Capybara::Driver::Node#native returns the constructor's second argument,
-      # which here is the raw CDP objectId — a String. So the Selenium/Cuprite
+      # which here is the raw CDP objectId — a String. So the Selenium
       # idiom `element.native.send_keys(...)` (solidus's
       # return_authorizations_spec.rb does exactly that) died with
       # "undefined method 'send_keys' for an instance of String". This driver
@@ -112,7 +112,7 @@ module Capybara
         self.class.new(driver, result["objectId"])
       end
 
-      # Smart property/attribute getter (Cuprite pattern).
+      # Smart property/attribute getter.
       # Returns resolved URLs for src/href, raw attributes otherwise.
       def [](name)
         call(PROPERTY_OR_ATTRIBUTE_JS, name.to_s)
@@ -165,10 +165,10 @@ module Capybara
       def scroll_to(*); end
       def scroll_by(*); end
 
-      # Dispatch an arbitrary DOM event by name. Mirrors Cuprite's Node#trigger
-      # — picks the right Event constructor for known mouse/focus/form names
-      # and falls back to a generic Event for everything else (so callers can
-      # fire custom events like `node.trigger('lp:custom')`).
+      # Dispatch an arbitrary DOM event by name. Picks the right Event
+      # constructor for known mouse/focus/form names and falls back to a
+      # generic Event for everything else (so callers can fire custom events
+      # like `node.trigger('lp:custom')`).
       def trigger(event)
         call(TRIGGER_JS, event.to_s)
       end
@@ -194,10 +194,10 @@ module Capybara
       # on this element, so HTML5 dropzones see the payload via
       # `event.dataTransfer`.
       #
-      # Files reach the page the way Cuprite's #316 does it: a hidden
-      # `<input type=file>` is attached to this element's document,
-      # `DOM.setFileInputFiles` points it at the paths (the browser reads the
-      # bytes off disk itself), and the drop JS moves `input.files` into the
+      # Files reach the page through a hidden `<input type=file>`: it is
+      # attached to this element's document, `DOM.setFileInputFiles` points it
+      # at the paths (the browser reads the bytes off disk itself), and the
+      # drop JS moves `input.files` into the
       # DataTransfer and removes the input. Previously the bytes were base64'd
       # into the `Runtime.callFunctionOn` message, which capped a drop at
       # ~70 MB under `--cdp-max-message-size` and pinned every byte in Ruby;
@@ -216,14 +216,14 @@ module Capybara
       end
 
       # Maps Capybara's documented drop_modifiers aliases onto the DragEvent
-      # init keys (`ctrlKey`, `metaKey`, ...). Same table as Cuprite's #315.
+      # init keys (`ctrlKey`, `metaKey`, ...).
       DRAG_MODIFIER_ALIASES = { control: :ctrl, command: :meta, cmd: :meta }.freeze
 
       # Capybara's `Element#drag_to` — HTML5 half only. HTML5_DRAG_JS replays
-      # Capybara's own Selenium HTML5_DRAG_DROP_SCRIPT (the same source
-      # Cuprite's drag.js ports): dragstart on the draggable ancestor, then
-      # dragenter -> 2x dragover -> dragleave/drop -> dragend, setTimeout-paced,
-      # sharing one DataTransfer so `setData` in the page's dragstart handler is
+      # Capybara's own Selenium HTML5_DRAG_DROP_SCRIPT: dragstart on the
+      # draggable ancestor, then dragenter -> 2x dragover -> dragleave/drop ->
+      # dragend, setTimeout-paced, sharing one DataTransfer so `setData` in
+      # the page's dragstart handler is
       # readable at drop. Runs through `evaluate_async` (the script signals
       # completion via the appended callback), so the drag has fully played out
       # before this method returns.
@@ -235,8 +235,8 @@ module Capybara
       # Selenium presses a real button, then apply the same
       # prevented-or-no-draggable-ancestor test.
       #
-      # `steps:`/`scroll:` (Cuprite's legacy-path knobs) are accepted and
-      # ignored so suites migrating from cuprite don't ArgumentError.
+      # `steps:`/`scroll:` (legacy mouse-path knobs of other CDP drivers) are
+      # accepted and ignored so suites migrating from them don't ArgumentError.
       def drag_to(other, html5: nil, delay: 0.05, drop_modifiers: [], **)
         keys = Array(drop_modifiers).map { |m| DRAG_MODIFIER_ALIASES.fetch(m.to_sym, m.to_sym).to_s }
         html5 = !call(LEGACY_DRAG_CHECK_JS) if html5.nil?
@@ -318,7 +318,7 @@ module Capybara
       end
 
       # Ancestor chain from `parentNode` up to (but not including) `document`,
-      # returned as Lightpanda::Node wrappers. Mirrors Cuprite's `Node#parents`.
+      # returned as Lightpanda::Node wrappers.
       def parents
         oids = driver.browser.parents_of(@remote_object_id)
         oids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
@@ -446,8 +446,8 @@ module Capybara
 
       # ISO 8601 week-of-year, "%G" giving the ISO week-numbering year so that
       # the last days of December that belong to week 1 of the next year are
-      # rendered with the correct year. Matches Cuprite's `Node#set` for week
-      # inputs and what the user would type into a `<input type=week>` field.
+      # rendered with the correct year. Matches what the user would type into
+      # a `<input type=week>` field.
       def format_week_value(value)
         return value.to_s if value.is_a?(String) || !value.respond_to?(:to_date)
 
@@ -492,7 +492,7 @@ module Capybara
         self.class.new(driver, oid)
       end
 
-      # Whitespace-normalized text (Cuprite pattern). Capybara's text matchers compare
+      # Whitespace-normalized text. Capybara's text matchers compare
       # against this, and Lightpanda's textContent preserves source-template whitespace
       # differently than Chrome — without normalization, multi-line fixtures fail
       # `text: "Line\nLine"` matchers.
@@ -639,25 +639,13 @@ module Capybara
           hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
           var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
           // A link to a scheme the browser can't fetch (mailto:, tel:, sms:…)
-          // goes to an external app in Chrome and the page stays. Below
-          // upstream #3940 (build 10536) the link's own activation instead
-          // turns `mailto:a@b.com` into `http://mailto:a@b.com/` and loads
-          // b.com (1.0.0), or loses the execution context on a failed `tel:`
-          // navigation (10261–10535). Cancel that default from a window
-          // listener added for this one dispatch: it runs after the page's
-          // own listeners, which still see an uncancelled click.
+          // goes to an external app in Chrome and the page stays. The link's
+          // own activation is a no-op for it since upstream #3940 (10536, in
+          // the floor); don't navigate to it ourselves either.
           var link = hit.closest ? hit.closest('a[href]') : null;
           var scheme = link && /^\\s*([a-z][a-z0-9+.-]*):/i.exec(link.getAttribute('href'));
           var external = !!scheme && !/^(https?|about|blob|data|file|javascript)$/i.test(scheme[1]);
-          var view = hit.ownerDocument.defaultView;
-          var keepPage = function (e) { if (e === clickEvt) e.preventDefault(); };
-          if (external && view) view.addEventListener('click', keepPage);
-          var notCancelled;
-          try {
-            notCancelled = hit.dispatchEvent(clickEvt);
-          } finally {
-            if (external && view) view.removeEventListener('click', keepPage);
-          }
+          var notCancelled = hit.dispatchEvent(clickEvt);
           if (external || !notCancelled || clickEvt.defaultPrevented) return;
           var tag = hit.tagName;
           // A `javascript:` link never navigates: the click's own activation
@@ -695,9 +683,9 @@ module Capybara
         }
       JS
 
-      # Mirrors Cuprite's trigger map. Picks the right Event constructor based
-      # on the event name so listeners that key on `event instanceof MouseEvent`
-      # / `instanceof SubmitEvent` see what they expect; everything else goes
+      # Picks the right Event constructor based on the event name so listeners
+      # that key on `event instanceof MouseEvent` / `instanceof SubmitEvent`
+      # see what they expect; everything else goes
       # through a generic Event so custom names ("turbo:load", "lp:custom")
       # still dispatch. Each constructor is feature-detected (`typeof X !==
       # 'undefined'`) before use so a missing IDL on Lightpanda falls back
@@ -778,8 +766,8 @@ module Capybara
 
       # Ported near-verbatim from Capybara's Selenium driver
       # (capybara/selenium/extensions/html5_drag.rb, HTML5_DRAG_DROP_SCRIPT) —
-      # the same source Cuprite's #315 drag.js ports — kept close to ease
-      # future syncs. Upstream quirks preserved deliberately: `rectPt.top` in
+      # kept close to ease future syncs. Upstream quirks preserved
+      # deliberately: `rectPt.top` in
       # pointOnRect (DOMPoint has no .top, that branch just falls through), the
       # undeclared `key` loop variable, and `callback.call(true)`. The
       # `source.draggable` reads are native — the HTMLElement.draggable IDL
@@ -788,7 +776,27 @@ module Capybara
       # Coordinates come from getBoundingClientRect, which Lightpanda
       # synthesizes without layout — dropzones reading clientX/Y get
       # plausible-but-synthetic (integer since #3259) numbers.
+      #
+      # One deliberate deviation: the target is centered by
+      # `scrollCenterIntoView`, not `scrollIntoView({block: 'center'})`.
+      # Lightpanda's scrollIntoView ignores its options and aligns the
+      # element's top with the viewport's, and since upstream #3658 (nightly
+      # 10661) rects follow the scroll, so a source just above the target
+      # left the viewport and the first dragover carried a negative clientY.
+      # The helper does what Chrome does (element center at viewport center,
+      # clamped to the scrollable range), measuring against the root's rect
+      # so it holds whether or not the build's rects follow the scroll.
+      # Pinned by `drag_test.rb`.
       HTML5_DRAG_JS = <<~JS
+        function scrollCenterIntoView(el) {
+          var doc = el.ownerDocument, win = doc.defaultView;
+          var rect = el.getBoundingClientRect();
+          var root = doc.documentElement.getBoundingClientRect();
+          var x = rect.left - root.left + rect.width / 2 - win.innerWidth / 2;
+          var y = rect.top - root.top + rect.height / 2 - win.innerHeight / 2;
+          win.scrollTo(Math.max(0, x), Math.max(0, y));
+        }
+
         function rectCenter(rect){
           return new DOMPoint(
             (rect.left + rect.right)/2,
@@ -828,7 +836,7 @@ module Capybara
         }
 
         function dragEnterTarget() {
-          target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'});
+          scrollCenterIntoView(target);
           var targetRect = target.getBoundingClientRect();
           var sourceCenter = rectCenter(source.getBoundingClientRect());
 
@@ -1085,7 +1093,7 @@ module Capybara
       # same node (`node #path returns xpath which points to itself`), so this
       # emits `/HTML/BODY/DIV[2]/P[1]` rather than the CSS-ish
       # `html > body > div:nth-of-type(2) > p` it used to. Chrome exposes no
-      # native equivalent either; Cuprite hand-rolls the same walk.
+      # native equivalent either.
       #
       # Every step is indexed, including single children: `P[1]` and `P` select
       # the same node, but the explicit index keeps the output stable if a

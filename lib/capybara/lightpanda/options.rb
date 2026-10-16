@@ -20,10 +20,11 @@ module Capybara
       # `Capybara::Lightpanda.configure { |c| c.port = 9222 }` when external
       # tooling needs a known address.
       DEFAULT_PORT = 0
-      # Mirrors Lightpanda's own `Viewport.default` (1920x1080) rather than
-      # Cuprite's 1024x768. window_size is applied for real now (see below), so
-      # a 1024x768 default would silently shrink the viewport of every existing
-      # suite and flip `@media` branches under them. Matching the browser's
+      # Mirrors Lightpanda's own `Viewport.default` (1920x1080), not the
+      # 1024x768 some drivers default to. window_size is applied for real now
+      # (see below), so a 1024x768 default would silently shrink the viewport
+      # of every existing suite and flip `@media` branches under them.
+      # Matching the browser's
       # native default keeps `window_size` truthful AND leaves default
       # behavior byte-identical to before it was wired up.
       DEFAULT_WINDOW_SIZE = [1920, 1080].freeze
@@ -36,16 +37,17 @@ module Capybara
       # no rendering engine, so getBoundingClientRect stays synthetic and
       # nothing reflows. Sizing down will not make an off-viewport element
       # report as obscured.
-      # headless is accepted for Cuprite drop-in compatibility but inert —
+      # headless is accepted so suites migrating from other drivers keep
+      # working, but is inert —
       # headless is the only mode Lightpanda runs in.
-      # save_path: directory for downloaded files (Cuprite parity). nil falls
+      # save_path: directory for downloaded files. nil falls
       # back to Capybara.save_path at create_page time; downloads stay off when
       # both are nil (Browser#create_page only opts in when a path exists).
       # raise_on_unhandled_modal: a JS dialog that opens with no
       # accept_modal/dismiss_modal pre-arm in flight is resolved by Lightpanda's
       # silent default (confirm → cancel, prompt → null, alert → dismissed), so
       # a runaway confirm cancels the action and the spec can still pass. false
-      # (default, Cuprite parity) warns on stderr; true raises
+      # (default) warns on stderr; true raises
       # UnhandledModalError from the action that opened it.
       # load_images: adds `image` to the `--load-resources` value so `<img>`
       # elements are fetched over the network (upstream #3230, build >= 8834,

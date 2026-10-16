@@ -8,7 +8,7 @@ require_relative "../test_helper"
 # a sniff that watched only Runtime.executionContextsCleared returned on the
 # OLD page whenever the server took longer than the sniff window — and
 # `current_url` / `assert_current_path(wait: 0)` read the page being left.
-# Cuprite/Ferrum wait here; suites migrating from them rely on it.
+# Chrome-based drivers wait here; suites migrating from them rely on it.
 #
 # The /lightpanda/nav_wait/* routes sleep TestApp::NAV_WAIT_DELAY (0.3 s),
 # well past the sniff window.
@@ -45,8 +45,8 @@ describe "Node#click waits for the navigation it starts" do
 
   # The new document is committed (fresh execution context) before its module
   # scripts run. Returning there let the next click land before the page's
-  # JS had wired its handlers, and the click was silently lost. Cuprite
-  # waits for the load event.
+  # JS had wired its handlers, and the click was silently lost. Chrome-based
+  # drivers wait for the load event.
   it "waits for the new page's module scripts after a link click" do
     session.find(:css, "#module-link").click
     session.find(:css, "#armed").click
@@ -103,22 +103,16 @@ describe "Node#click waits for the navigation it starts" do
 
   # A failed navigation emits neither a new context nor
   # Page.frameStoppedLoading — only Network.loadingFailed. Missing it would
-  # hang every such click for the full driver timeout (10 s here). Where the
-  # click ends differs by build: through 10260 the old document stays; from
-  # upstream #3843 (10261) an error document is committed at the failed URL,
-  # as Chrome does.
+  # hang every such click for the full driver timeout (10 s here). Since
+  # upstream #3843 (10261, in the floor) an error document is committed at the
+  # failed URL, as Chrome does.
   it "does not block on a navigation whose request fails" do
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     session.find(:css, "#refused").click
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
 
     assert_operator elapsed, :<, 1, "failed-navigation click took #{(elapsed * 1000).round} ms"
-    build = session.driver.browser.nightly_build
-    if build && build >= Gem::Version.new("10261")
-      session.assert_current_path("/unreachable", wait: 0)
-      assert session.has_text?("Navigation failed")
-    else
-      session.assert_current_path("/lightpanda/nav_wait", wait: 0)
-    end
+    session.assert_current_path("/unreachable", wait: 0)
+    assert session.has_text?("Navigation failed")
   end
 end
