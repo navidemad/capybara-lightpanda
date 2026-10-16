@@ -62,6 +62,7 @@ Page.reload                  Page.loadEventFired (event)
 Page.addScriptToEvaluateOnNewDocument                    Page.getLayoutMetrics
 Page.captureScreenshot       Page.javascriptDialogOpening (event)
 Page.frameStartedNavigating (event)                      Page.frameStoppedLoading (event)
+Page.domContentEventFired (event)
 Runtime.enable               Runtime.evaluate
 Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
 Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
