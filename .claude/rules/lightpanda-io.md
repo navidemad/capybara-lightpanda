@@ -188,6 +188,7 @@ LP.configureCDP              LP.getContentSignal
 | #3852 | Binary | The 1.0.0 and 1.0.1 `aarch64-linux` binaries need glibc 2.38 (built on `ubuntu-24.04-arm`; x86_64 needs 2.35), so Debian 12 / Ubuntu 22.04 arm64 can't start them. |
 | #3961 | Visibility | Native CSS nesting unsupported: nested rules are dropped from the cascade and CSSOM, so a nested `display: none` doesn't hide and Capybara matches the element. Our PRs #3963 (parser) + #3962 (cascade), open. |
 | #3978 | Uploads | `FormData.get()`/`getAll()`/iteration return a file entry as its name, a string (verified 2026-10-15 on 1.0.1). Submitting the FormData itself uploads the bytes; JS that copies entries into a new FormData (filename sent instead of bytes) or reads `file.size`/`type` breaks. |
+| (not filed, wishlist A63) | Drag | `Element.scrollIntoView()` ignores its options (`_ = opts`) and always aligns the element's top. Since #3658 (10661, above the floor) rects follow the scroll, so `scrollIntoView({block: 'center'})` can push nearby elements out of the viewport. `HTML5_DRAG_JS` centers with its own `scrollCenterIntoView` (verified 2026-10-16 on 10661). |
 
 **Gem-side defenses we keep regardless of upstream**: the `readyState` fallback in `Browser#go_to` (#1801 closed 2026-09-17 on "seems fixed on main", no PR/repro), `handle_navigation_crash` (#2173 closed as usage error), `Browser#with_default_context_wait` + `NoExecutionContextError` in `invalid_element_errors` (#2400 fixed by #3397, 9238 — still cheap defense-in-depth).
 

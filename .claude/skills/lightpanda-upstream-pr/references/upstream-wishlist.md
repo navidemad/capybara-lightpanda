@@ -326,6 +326,17 @@ Three independent issues:
 
 ---
 
+
+### A63. `Element.scrollIntoView()` ignores its options — always aligns the element's top with the viewport's
+
+- **Today (found 2026-10-16 on nightly 10661, `webapi/Element.zig#scrollIntoView`)**: the body starts with `_ = opts;` and scrolls the window to the element's faux-layout top (`scrollTo(0, max(0, y))`), whatever `block`/`inline` say. `{block: 'center'}`, `{block: 'end'}`, `{block: 'nearest'}` and `scrollIntoView(false)` all behave like `block: 'start'`, and the window's x is reset to 0. Chrome/CSSOM View: `center` puts the element's center at the viewport's, `end` its bottom at the viewport's bottom, `nearest` doesn't scroll an element already in view, each clamped to the scrollable range.
+- **Why it surfaced now**: #3658 (10661, `fix/scroll-aware-rects`) made client rects viewport-relative. Before it the scroll happened but rects ignored it; now an element above the scrolled-to target gets a negative `top`.
+- **Real-world impact**: Capybara's Selenium HTML5 drag script (which `Node#drag_to` replays) calls `target.scrollIntoView({block: 'center'})`, then reads the source's rect. On `/with_js` the target sits at y≈310 in a 1390px page: Chrome doesn't scroll (center would need a negative scroll), Lightpanda scrolls 310px and the first dragover fires at clientY −48. Broke `#drag_to HTML5 should set clientX/Y in dragover events` on main CI 2026-10-16.
+- **Want**: honor `ScrollIntoViewOptions.block`/`inline` (`start`/`center`/`end`/`nearest`) and the boolean `alignToTop`, clamped to the scrollable range, keeping the other axis where it is.
+- **Gem workaround**: `HTML5_DRAG_JS` centers the target with its own `scrollCenterIntoView` (root-relative rect math, so it holds with and without scroll-aware rects). Pinned by `drag_test.rb` ("keeps every dragover's client position inside the viewport").
+- **Drop-on-fix**: `scrollCenterIntoView` → back to Selenium's verbatim `target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'})` once the fix is in the floor.
+- **Upstream issue**: not filed yet.
+
 ## C. Inherent limitations (out of scope — no rendering engine)
 
 These exist because Lightpanda has no rendering engine, no compositor, no real layout. They are by design: specs that depend on them need a real browser, not this gem.
