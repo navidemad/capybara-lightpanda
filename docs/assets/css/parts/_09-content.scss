@@ -1,5 +1,5 @@
 /* ---------- content (markdown body) ---------- */
-/* nested inside .pair.wrap.wrap--wide which already provides gutters,
+/* nested inside .start.wrap.wrap--wide which already provides gutters,
    so .content adds no extra inline padding of its own. */
 .content {
   padding-inline: 0;
@@ -136,9 +136,7 @@
 #migrate,
 #benchmark,
 #install,
-#stack,
-#pair-with-cuprite,
-#capabilities {
+#get-started {
   scroll-margin-top: 80px;
 }
 

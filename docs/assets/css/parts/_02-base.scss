@@ -12,9 +12,7 @@ html {
 
 .hero,
 .why,
-.swap,
-.pair,
-.matrix,
+.start,
 .endrail,
 .chapter {
   scroll-margin-top: var(--nav-h);
@@ -38,7 +36,7 @@ html {
 /* ---------- shared chapter chrome ---------- */
 /* echoes the .endrail divider treatment so every chapter opens with a
    hairline + centered ruby ribbon and shares the same vertical breathing. */
-:is(.why, .swap, .pair, .matrix, .beta, .chapter) {
+:is(.why, .start, .beta, .chapter) {
   position: relative;
   padding-block: clamp(80px, 10vh, 160px);
   border-top: 1px solid var(--ink-line);

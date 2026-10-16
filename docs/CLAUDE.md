@@ -13,22 +13,22 @@ bin/website        # repo root — runs `mise exec -- hugo server --disableFastR
 ## Layout
 
 - `hugo.toml` — site config. `disableKinds` strips taxonomy/RSS/sitemap; the only output is `home = ["HTML"]`. `markup.goldmark.renderer.unsafe = true` is required so the inline HTML in `content/_index.md` renders.
-- `content/_index.md` — markdown for the `Pair with Cuprite` section (chapter 03). It's injected into `layouts/index.html` via `{{ .Content }}` inside `<main id="main" class="content">`. The rest of the page lives in `index.html`, not in markdown.
+- `content/_index.md` — markdown for the `Drop it in` section (chapter 02, `#get-started`). It's injected into `layouts/index.html` via `{{ .Content }}` inside `<main id="main" class="content">`. The rest of the page lives in `index.html`, not in markdown.
 - `content/docs.md` — the documentation page, rendered at `/docs/` through `_default/single.html` and linked from `nav.html` (both the "Docs" link and the "Install" CTA, which targets `docs/#install`). It is the only place install/config/API reference lives — keep it in sync with `lib/`, and cross-check `#pinning` against `Process::MINIMUM_NIGHTLY_BUILD` / `MINIMUM_RELEASE` whenever the floor moves.
-- `layouts/index.html` — the entire homepage (hero, why, swap, pair, matrix, beta, footer, chapter index). All page-level JS lives inline at the bottom of this file. **One file, ~1200 lines** — that's intentional, not tech debt to clean up.
+- `layouts/index.html` — the entire homepage (hero, why, start, beta, footer, chapter index). All page-level JS lives inline at the bottom of this file. **One file, ~1200 lines** — that's intentional, not tech debt to clean up.
 - `layouts/partials/head.html` — meta + Google Fonts preconnect + SCSS pipeline (dart-sass → minify+fingerprint in prod).
 - `layouts/partials/nav.html` — top nav.
 - `layouts/_default/single.html` + `_markup/render-{heading,table}.html` — markdown rendering hooks (anchor links on headings, wrapped tables).
 
 ## SCSS conventions
 
-`assets/css/main.scss` is the entry point. It `@use`s 25 numbered partials in `parts/_NN-name.scss`. **Cascade order is preserved by the numeric prefix — do not reorder lightly.** When adding a new partial:
+`assets/css/main.scss` is the entry point. It `@use`s 24 numbered partials (08 and 12 are retired numbers — don't reuse them) in `parts/_NN-name.scss`. **Cascade order is preserved by the numeric prefix — do not reorder lightly.** When adding a new partial:
 
-1. Pick the next free number (currently 26).
-2. Create `parts/_26-foo.scss`.
-3. Add `@use "parts/26-foo" as *;` at the bottom of `main.scss`.
+1. Pick the next free number (currently 27).
+2. Create `parts/_27-foo.scss`.
+3. Add `@use "parts/27-foo" as *;` at the bottom of `main.scss`.
 
-Each partial owns one section/component (hero, why, swap, matrix, beta, endrail, etc.) — keep them scoped to that BEM block.
+Each partial owns one section/component (hero, why, beta, endrail, etc.) — keep them scoped to that BEM block.
 
 ## Inline JS in index.html
 

@@ -89,7 +89,7 @@ end
 | `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
 | `logger` | `nil` | An IO (or `Capybara::Lightpanda::Logger`) that receives raw CDP traffic. `LIGHTPANDA_DEBUG=1` wires `$stdout` |
 | `raise_on_unhandled_modal` | `false` | A JS dialog that opens with no `accept_*`/`dismiss_*` wrapper in flight is resolved by Lightpanda's default (confirm → cancel, prompt → `null`, alert → dismissed), so a runaway `confirm` cancels the action and the spec still passes. `false` prints a warning naming the dialog text; `true` raises `Capybara::Lightpanda::UnhandledModalError` from the click or `visit` that opened it |
-| `headless` | `true` | Accepted for Cuprite drop-in compatibility, and inert — headless is the only mode Lightpanda has |
+| `headless` | `true` | Accepted so option sets written for other drivers keep working, and inert — headless is the only mode Lightpanda has |
 
 ### Pinning the browser version { #pinning }
 
@@ -151,9 +151,7 @@ end
 
 ## Setup recipes { #setup }
 
-### Single driver (Lightpanda everywhere)
-
-For projects that don't depend on rendered visuals:
+### Register the driver
 
 ```ruby
 require "capybara-lightpanda"
@@ -162,80 +160,10 @@ Capybara.default_driver = :lightpanda
 Capybara.javascript_driver = :lightpanda
 ```
 
-### What belongs on which driver
+### Behind an env var
 
-Route by what the spec *asserts*, not by what it touches. A spec belongs on
-Cuprite (or whatever full browser you run today) when it depends on:
-
-- screenshots or visual-regression comparison
-- pixel geometry — `rect`, spatial finders (`near:`, `above:`), `obscured?` for
-  off-viewport elements
-- scrolling as an assertion (infinite scroll, sticky-header behavior)
-- a second tab or window — `open_new_window`, `within_window`, OAuth popups
-- UI revealed purely by CSS `:hover`
-- coordinate (non-HTML5) drag — `drag_by`, or `drag_to` on sources that aren't
-  HTML5-draggable (mouse-driven libraries like SortableJS in fallback mode)
-
-Everything else — navigation, forms, Turbo, AJAX, auth, file upload and
-download, iframes, `@media`-gated responsive variants — runs on Lightpanda. In
-the suites we've measured that's the large majority, which is where the memory
-and parallelism win comes from.
-
-### Dual driver, per spec { #dual-per-spec }
-
-The steady state: both drivers registered, each spec routed by metadata. This is
-what the homepage means by "route the minority to Cuprite."
-
-RSpec system specs — opt out with `visual: true`:
-
-```ruby
-# spec/support/capybara.rb
-require "capybara-lightpanda"
-
-RSpec.configure do |config|
-  config.before(:each, type: :system) do |example|
-    driven_by(example.metadata[:visual] ? :cuprite : :lightpanda)
-  end
-end
-```
-
-```ruby
-it "renders the chart", :visual do   # → Cuprite
-it "creates an invoice" do           # → Lightpanda
-```
-
-Plain Capybara feature specs (no Rails system-test layer) switch the driver
-directly, and must reset it afterwards or the choice leaks into the next
-example:
-
-```ruby
-RSpec.configure do |config|
-  config.before(:each, type: :feature) do |example|
-    Capybara.current_driver = example.metadata[:visual] ? :cuprite : :lightpanda
-  end
-  config.after(:each, type: :feature) { Capybara.use_default_driver }
-end
-```
-
-Rails + Minitest routes by base class instead of metadata:
-
-```ruby
-# test/application_system_test_case.rb
-class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
-  driven_by :lightpanda
-end
-
-# The handful that need real pixels inherit from this one instead.
-class VisualSystemTestCase < ActionDispatch::SystemTestCase
-  driven_by :cuprite
-end
-```
-
-### Dual driver, whole suite (A/B the two)
-
-For the first evaluation run — flip the entire suite with an env var and compare
-results and wall-clock against your current driver, without touching a single
-spec:
+To try the driver without touching a single spec, gate it on an env var so your
+existing driver stays the default:
 
 ```ruby
 if ENV["BROWSER"] == "lightpanda"
@@ -247,19 +175,15 @@ if ENV["BROWSER"] == "lightpanda"
 
   Capybara.default_driver = :lightpanda
   Capybara.javascript_driver = :lightpanda
-else
-  # existing Cuprite setup
-  Capybara.default_driver = :cuprite
 end
 ```
 
 ```bash
-# fast headless run
 BROWSER=lightpanda bundle exec rspec spec/system/
-
-# default (Chrome via Cuprite)
-bundle exec rspec spec/system/
 ```
+
+What the driver can't do (screenshots, pixel geometry, a second window, CSS
+`:hover`) is listed under [known limitations](#limits).
 
 ### Login helper via cookies
 
@@ -354,8 +278,8 @@ it.
 
 ## Beyond the Capybara DSL { #driver-api }
 
-Everything below hangs off `page.driver` and mirrors the Cuprite/Ferrum spelling
-where one exists.
+Everything below hangs off `page.driver` and keeps the method names CDP-based
+Capybara drivers already use where one exists.
 
 ### Downloads
 
@@ -475,11 +399,11 @@ These are upstream Lightpanda limits, not driver bugs:
 
 | Surface | Status |
 |---|---|
-| Screenshots | No compositor, so there is nothing to capture. `save_screenshot` (and its `render` alias) is accepted and writes a blank image rather than raising, so Rails' screenshot-on-failure teardown doesn't bury the real failure |
+| Screenshots | No compositor, so there is nothing to capture, and visual-regression comparison is out of scope. `save_screenshot` (and its `render` alias) is accepted and writes a blank image rather than raising, so Rails' screenshot-on-failure teardown doesn't bury the real failure |
 | `scroll_to` | No-op. Lightpanda tracks a scroll position but `getBoundingClientRect` isn't scroll-aware, so `:top` / `:center` / element-relative alignment have no meaning |
 | `resize` | Wired — `page.current_window.resize_to(w, h)` drives the same viewport `window_size` does. **Resize, then visit**: the cascade is fixed at parse time, so `@media` rules don't re-resolve for a document already on screen |
 | CSS `:hover` | Never matches — there is no pointer, so no hover state enters the cascade. `hover` *does* dispatch real `mouseover` + `mouseenter` events, so a menu opened by a JS listener (every Stimulus `mouseenter->` action, Floating UI, tippy) works; one revealed only by a `:hover` CSS rule does not. A dropdown that "isn't there" after `hover` is usually this |
-| Tabs and windows | One window per session. `open_new_window` / `close_window` raise `NotSupportedByDriverError` and `switch_to_window` raises `NoSuchPageError` — upstream serves a single target per CDP connection ([browser#1962](https://github.com/lightpanda-io/browser/issues/1962)). Drive a second page in its own Capybara session, or route those specs to Cuprite |
+| Tabs and windows | One window per session. `open_new_window` / `close_window` raise `NotSupportedByDriverError` and `switch_to_window` raises `NoSuchPageError` — upstream serves a single target per CDP connection ([browser#1962](https://github.com/lightpanda-io/browser/issues/1962)). Drive a second page in its own Capybara session |
 | Shadow DOM | `shadow_root` and `tag_name` on a root work, and finding inside an open shadow root works. `Node#path` doesn't cross shadow boundaries, so Capybara's `:shadow_dom` shared specs stay opted out — treat shadow DOM as usable but not certified |
 | Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
@@ -487,26 +411,25 @@ These are upstream Lightpanda limits, not driver bugs:
 | User agent | `Lightpanda/1.0` — no Chrome/Safari token, and Mozilla-styled UA overrides are rejected by design. App-side UA bot detection flags the driver as a bot; allowlist `Lightpanda` in your test environment |
 | Complex Stimulus controllers | Some may not execute fully |
 
-External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--enable-external-stylesheets` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. Breakpoints resolve at whatever `window_size` you configure, so a suite that runs mobile-width specs can register a second driver at `[375, 812]`. The catch is that the viewport is JS-visible only: nothing reflows, so a spec that asserts on pixel-level layout, scrolling, or that an element is visually obscured still belongs on Cuprite — that's what the dual-driver pattern above is for.
+External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--load-resources stylesheet` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. Breakpoints resolve at whatever `window_size` you configure, so a suite that runs mobile-width specs can register a second driver at `[375, 812]`. The catch is that the viewport is JS-visible only: nothing reflows, so a spec that asserts on pixel-level layout, scrolling, or that an element is visually obscured can't pass here.
 
 ## Validated against real apps { #validation }
 
 Capability tables are self-reported, so here is the other kind of evidence: CI
 patches six production Rails codebases to run *their own* specs on this driver,
-against a pinned upstream SHA, weekly and on demand. Each was on a different
-driver before the swap, so
-[the patches](https://github.com/navidemad/capybara-lightpanda/tree/main/.github/real-apps/patches)
-double as worked migration examples — including the Gemfile and driver-registration
-diff for a Selenium, Cuprite and Playwright starting point.
+against a pinned upstream SHA, weekly and on demand.
+[The patches](https://github.com/navidemad/capybara-lightpanda/tree/main/.github/real-apps/patches)
+double as worked migration examples, Gemfile and driver-registration diff
+included.
 
-| App | Migrated from | Specs exercised | Known failures |
-|---|---|---|---|
-| [mastodon](https://github.com/mastodon/mastodon) | Playwright | `home`, `log_in`, `log_out` system specs | **0** |
-| [alonetone](https://github.com/sudara/alonetone) | Playwright | `pages`, `account_requests`, `users` features | **0** |
-| [spree](https://github.com/spree/spree) | Selenium | admin: getting-started, settings, API keys, … | 1 |
-| [forem](https://github.com/forem/forem) | Cuprite | `homepage`, `comments`, `articles`, `authentication` system specs | 11 |
-| [decidim](https://github.com/decidim/decidim) | Selenium | `accesslist`, `account` system specs | 16 |
-| [solidus](https://github.com/solidusio/solidus) | Selenium | all of `spec/features/admin` | 68 |
+| App | Specs exercised | Known failures |
+|---|---|---|
+| [mastodon](https://github.com/mastodon/mastodon) | `home`, `log_in`, `log_out` system specs | **0** |
+| [alonetone](https://github.com/sudara/alonetone) | `pages`, `account_requests`, `users` features | **0** |
+| [spree](https://github.com/spree/spree) | admin: getting-started, settings, API keys, … | 1 |
+| [forem](https://github.com/forem/forem) | `homepage`, `comments`, `articles`, `authentication` system specs | 11 |
+| [decidim](https://github.com/decidim/decidim) | `accesslist`, `account` system specs | 16 |
+| [solidus](https://github.com/solidusio/solidus) | all of `spec/features/admin` | 68 |
 
 These are deliberate spec subsets, not whole suites — chosen to cover the
 interactive surface without a 40-minute job. Every known failure is catalogued in
@@ -533,7 +456,7 @@ also why triaging your own suite goes faster than the raw count suggests.
 | Binary download fails, or a `WebMock`/`VCR` error during it | The first-run download is being caught by your HTTP stubs. Pre-provision from an unstubbed process — `bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'` — then set `LIGHTPANDA_CACHE_TIME=0` so the warm copy is never refreshed mid-suite |
 | `DeadBrowserError` | The browser process died mid-command, usually an upstream crash on the page under test. The driver respawns and retries once; a reproducible one is worth an issue with the URL |
 | `NoExecutionContextError` | The JS context was swapped mid-command — a child iframe navigating invalidates the main frame's context upstream. The driver retries on context re-creation and Capybara reloads the element, so persistent cases mean the page churns iframes faster than the retry window |
-| `ElementNotFound` on a menu item after `hover` | CSS `:hover` reveals nothing here. JS-driven menus do open (`mouseover` + `mouseenter` are dispatched); a `:hover`-only menu needs Cuprite. See [limitations](#limits) |
+| `ElementNotFound` on a menu item after `hover` | CSS `:hover` reveals nothing here. JS-driven menus do open (`mouseover` + `mouseenter` are dispatched); a `:hover`-only menu can't open. See [limitations](#limits) |
 | `ElementNotFound` on a menu item after `click` | Often the menu closed itself: a `click@window->close` listener registered up front sees the opening click bubble and closes in the same dispatch. The [dropdown example](#examples) reproduces this and the variant that works |
 | Something is slow, or hangs on one page | `LIGHTPANDA_DEBUG=1` streams raw CDP traffic to `$stdout`, and `page.driver.browser.console_logs` surfaces page-side JS errors. `page.driver.network.traffic` shows what never came back |
 
@@ -554,7 +477,7 @@ covers what to include.
 | `Capybara::Lightpanda::Network` | Counts in-flight requests from `Network.requestWillBeSent` / `responseReceived` — backs `status_code`, `response_headers`, `wait_for_network_idle`, and the header overrides |
 | `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking), `errors.js` (uncaught-exception capture behind `page_errors`) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
 
-The driver speaks the same CDP dialect Cuprite and Ferrum use, so most patterns from those projects translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
+The driver speaks standard CDP and its client follows [Ferrum](https://github.com/rubycdp/ferrum)'s design, so most patterns from that project translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 
 ## Examples { #examples }
 
