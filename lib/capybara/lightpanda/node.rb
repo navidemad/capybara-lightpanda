@@ -776,7 +776,27 @@ module Capybara
       # Coordinates come from getBoundingClientRect, which Lightpanda
       # synthesizes without layout — dropzones reading clientX/Y get
       # plausible-but-synthetic (integer since #3259) numbers.
+      #
+      # One deliberate deviation: the target is centered by
+      # `scrollCenterIntoView`, not `scrollIntoView({block: 'center'})`.
+      # Lightpanda's scrollIntoView ignores its options and aligns the
+      # element's top with the viewport's, and since upstream #3658 (nightly
+      # 10661) rects follow the scroll, so a source just above the target
+      # left the viewport and the first dragover carried a negative clientY.
+      # The helper does what Chrome does (element center at viewport center,
+      # clamped to the scrollable range), measuring against the root's rect
+      # so it holds whether or not the build's rects follow the scroll.
+      # Pinned by `drag_test.rb`.
       HTML5_DRAG_JS = <<~JS
+        function scrollCenterIntoView(el) {
+          var doc = el.ownerDocument, win = doc.defaultView;
+          var rect = el.getBoundingClientRect();
+          var root = doc.documentElement.getBoundingClientRect();
+          var x = rect.left - root.left + rect.width / 2 - win.innerWidth / 2;
+          var y = rect.top - root.top + rect.height / 2 - win.innerHeight / 2;
+          win.scrollTo(Math.max(0, x), Math.max(0, y));
+        }
+
         function rectCenter(rect){
           return new DOMPoint(
             (rect.left + rect.right)/2,
@@ -816,7 +836,7 @@ module Capybara
         }
 
         function dragEnterTarget() {
-          target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'});
+          scrollCenterIntoView(target);
           var targetRect = target.getBoundingClientRect();
           var sourceCenter = rectCenter(source.getBoundingClientRect());
 
