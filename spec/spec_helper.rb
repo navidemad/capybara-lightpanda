@@ -131,11 +131,24 @@ RSpec.configure do |config|
       /node #drag_to HTML5 should work with SortableJS/,
     ].freeze
 
-    if browser_limitation_patterns.any? { |re| description =~ re }
+    # Shared specs asserting what Capybara's Selenium drag script did rather
+    # than what a browser does. Node#drag_to ends a drag with `drop` if the
+    # target accepted it, otherwise `dragleave`, never both; this spec wants
+    # both events from one drag.
+    non_browser_behavior_patterns = [
+      %r{node #drag_to HTML5 should preserve clientX/Y from last dragover event},
+    ].freeze
+
+    skip_reason = {
+      browser_limitation_patterns => "Lightpanda browser limitation",
+      non_browser_behavior_patterns => "Expects behavior browsers don't have (dragleave together with drop)",
+    }.find { |patterns, _| patterns.any? { |re| description =~ re } }&.last
+
+    if skip_reason
       if audit_skips
         metadata[:skip_audit] = true
       else
-        metadata[:skip] = "Lightpanda browser limitation"
+        metadata[:skip] = skip_reason
       end
       next
     end

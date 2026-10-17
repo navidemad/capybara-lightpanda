@@ -221,10 +221,10 @@ module Capybara
 
       # Capybara's `Element#drag_to` — HTML5 half only. HTML5_DRAG_JS replays
       # Capybara's own Selenium HTML5_DRAG_DROP_SCRIPT: dragstart on the
-      # draggable ancestor, then dragenter -> 2x dragover -> dragleave/drop ->
-      # dragend, setTimeout-paced, sharing one DataTransfer so `setData` in
-      # the page's dragstart handler is
-      # readable at drop. Runs through `evaluate_async` (the script signals
+      # draggable ancestor, then dragenter -> 2x dragover -> drop (accepted)
+      # or dragleave (refused) -> dragend, setTimeout-paced, sharing one
+      # DataTransfer so `setData` in the page's dragstart handler is readable
+      # at drop. Runs through `evaluate_async` (the script signals
       # completion via the appended callback), so the drag has fully played out
       # before this method returns.
       #
@@ -764,12 +764,18 @@ module Capybara
         }
       JS
 
-      # Ported near-verbatim from Capybara's Selenium driver
+      # Ported from Capybara's Selenium driver
       # (capybara/selenium/extensions/html5_drag.rb, HTML5_DRAG_DROP_SCRIPT) —
-      # kept close to ease future syncs. Upstream quirks preserved
-      # deliberately: `rectPt.top` in
-      # pointOnRect (DOMPoint has no .top, that branch just falls through), the
-      # undeclared `key` loop variable, and `callback.call(true)`. The
+      # kept close to ease future syncs. Unlike the original, a drag ends the
+      # way it does in a browser: `drop` if the target accepted it (cancelled
+      # the last dragover), otherwise `dragleave`, never both. Selenium's
+      # script fired `dragleave` before `drop`, and Pragmatic drag and drop
+      # reads a relatedTarget-less `dragleave` as the drag leaving the window,
+      # so the drop landed on nothing. Two port bugs are fixed too:
+      # pointOnRect read `rectPt.top` (a DOMPoint has none, so a target
+      # entered from above or below got the source's center as its entry
+      # point), and `key` leaked as a global. Cuprite made the same changes
+      # (rubycdp/cuprite#343). The
       # `source.draggable` reads are native — the HTMLElement.draggable IDL
       # shipped upstream in #3257 (build 8793, guaranteed by the floor; the
       # `_lightpanda.isDraggable` polyfill was retired with that bump).
@@ -821,7 +827,7 @@ module Capybara
           }
 
           if (pt.y <= rectPt.y) { // top side
-            var minYx = (rectPt.top - pt.y) / slope + pt.x;
+            var minYx = (rect.top - pt.y) / slope + pt.x;
             if (rect.left <= minYx && minYx <= rect.right)
               return new DOMPoint(minYx, rect.top);
           }
@@ -841,7 +847,7 @@ module Capybara
           var sourceCenter = rectCenter(source.getBoundingClientRect());
 
           for (var i = 0; i < drop_modifier_keys.length; i++) {
-            key = drop_modifier_keys[i];
+            var key = drop_modifier_keys[i];
             if (key == "control"){
               key = "ctrl"
             }
@@ -864,18 +870,14 @@ module Capybara
           var dragOverOpts = Object.assign({clientX: targetCenter.x, clientY: targetCenter.y}, opts);
           var dragOverEvent = new DragEvent('dragover', dragOverOpts);
           target.dispatchEvent(dragOverEvent);
-          window.setTimeout(dragLeave, step_delay, dragOverEvent.defaultPrevented, dragOverOpts);
+          window.setTimeout(dragEnd, step_delay, dragOverEvent.defaultPrevented, dragOverOpts);
         }
 
-        function dragLeave(drop, dragOverOpts) {
-          var dragLeaveOptions = Object.assign({}, opts, dragOverOpts);
-          var dragLeaveEvent = new DragEvent('dragleave', dragLeaveOptions);
-          target.dispatchEvent(dragLeaveEvent);
-          if (drop) {
-            var dropEvent = new DragEvent('drop', dragLeaveOptions);
-            target.dispatchEvent(dropEvent);
-          }
-          var dragEndEvent = new DragEvent('dragend', dragLeaveOptions);
+        function dragEnd(drop, dragOverOpts) {
+          var dragEndOptions = Object.assign({}, opts, dragOverOpts);
+          var dropOrLeaveEvent = new DragEvent(drop ? 'drop' : 'dragleave', dragEndOptions);
+          target.dispatchEvent(dropOrLeaveEvent);
+          var dragEndEvent = new DragEvent('dragend', dragEndOptions);
           source.dispatchEvent(dragEndEvent);
           callback.call(true);
         }
