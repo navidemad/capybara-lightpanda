@@ -920,6 +920,37 @@ class TestApp
     HTML
   end
 
+  # How a drag ends: `#accepting` cancels dragover (accepts the drop),
+  # `#refusing` doesn't. Each logs every drag event it sees, in order.
+  get "/lightpanda/drag_end_test" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Drag End Test</title></head>
+        <body>
+          <div id="drag_source" draggable="true">Drag me</div>
+          <div id="accepting">Accepts drops</div>
+          <div id="refusing">Refuses drops</div>
+          <div id="log"></div>
+          <script>
+            ['accepting', 'refusing'].forEach(function(id) {
+              var zone = document.getElementById(id);
+              ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(type) {
+                zone.addEventListener(type, function(e) {
+                  if (type === 'dragover' && id === 'accepting') e.preventDefault();
+                  var line = document.createElement('p');
+                  line.className = id + ' ' + type;
+                  line.textContent = type;
+                  document.getElementById('log').appendChild(line);
+                });
+              });
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   # Hover target. `.reveal` is hidden and CSS-revealed only on `.box:hover`
   # (which Lightpanda can't satisfy — no pointer state), while a JS `mouseover`
   # listener records into `#log` (which Node#hover's event dispatch DOES drive).
