@@ -5,7 +5,7 @@ Role: **peer Ruby CDP client** — defines what's _idiomatic_ for a Ruby gem tal
 
 Rules destination: `.claude/rules/ruby-cdp-peers.md` (Ferrum section)
 
-Activity baseline (verify each sync — these go stale): very active. ~40 commits Feb–Apr 2026, last release **v0.19.0 (2026-10-15)**. Treat as primary peer-gem sync target.
+Activity baseline (verify each sync — these go stale): very active. ~40 commits Feb–Apr 2026, last release **v0.19.1 (2026-10-16)**. Treat as primary peer-gem sync target.
 
 ## What to read before reconning
 
