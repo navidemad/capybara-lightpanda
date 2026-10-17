@@ -214,12 +214,31 @@ module Capybara
           raise TimeoutError, "WebSocket handshake timed out after #{@options.handshake_timeout}s"
         end
 
+        # A JS string can hold a lone UTF-16 surrogate ("😀".slice(0, 1));
+        # Lightpanda escapes it as `\ud83d`, which Ruby's json rejects.
+        # Dropping that frame left its command waiting out the full timeout,
+        # so retry once with every lone surrogate replaced by U+FFFD — what
+        # Chrome and Ferrum (#648) hand back for the same value.
         def parse_message(data)
           JSON.parse(data, max_nesting: false)
         rescue JSON::ParserError => e
-          warn_parse_failure(e.message)
+          begin
+            JSON.parse(replace_lone_surrogates(data), max_nesting: false)
+          rescue JSON::ParserError
+            warn_parse_failure(e.message)
 
-          nil
+            nil
+          end
+        end
+
+        # Alternation order matters: a valid lead+trail pair is consumed
+        # whole, then a lone surrogate, then any other escape (`\\`, `\"`,
+        # a non-surrogate `\uXXXX`) is skipped as-is — scanning left to
+        # right so `\\ud800` (an escaped backslash, then text) survives.
+        SURROGATE_ESCAPE = /\\u[dD][89abAB]\h{2}\\u[dD][c-fC-F]\h{2}|(\\u[dD][89a-fA-F]\h{2})|\\./m
+
+        def replace_lone_surrogates(data)
+          data.gsub(SURROGATE_ESCAPE) { |escape| Regexp.last_match(1) ? "\\uFFFD" : escape }
         end
 
         # Dedupe identical parse-failure warnings per WebSocket instance.

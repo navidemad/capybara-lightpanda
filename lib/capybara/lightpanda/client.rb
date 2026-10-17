@@ -149,7 +149,10 @@ module Capybara
         message = error["message"]
 
         case message
-        when /No node with given id found/i
+        # A node from a previous document passed as an *argument* (bound as
+        # `this` it answers "Cannot find context" below). Ferrum #647.
+        when /No node with given id found/i,
+             /Argument should belong to the same JavaScript world as target object/i
           raise NodeNotFoundError, message
         when /Cannot find context with specified id/i,
              /Execution context was destroyed/i,
