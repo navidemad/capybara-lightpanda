@@ -32,28 +32,36 @@ test("findHints: keeps a node whose text is only in textContent (visible: :all q
   expect((predicates.findHints(nodes, { texts: ["hidden"] }) as any[]).length).toBe(1);
 });
 
-test("findHints: reads NBSP and zero-width marks the way filter_text does", () => {
+test("findHints: retains Unicode candidates for authoritative text filtering", () => {
   const { predicates, nodes } = items("<li>a b c​d</li>");
   const kept = predicates.findHints(nodes, { texts: ["a b", "cd"] }) as any[];
   expect(kept.length).toBe(1);
 });
 
-test("findHints: one cache per kept node, aligned with the nodes", () => {
-  const { predicates, nodes, setVisible } = items("<li>x</li><li>y</li>");
-  setVisible(nodes[1], false);
-  const kept = predicates.findHints(nodes, { visible: true });
-  expect(hintsOf(kept)).toEqual([
-    { tag_name: "li", visible: true },
-    { tag_name: "li", visible: false },
-  ]);
+
+test("findHints: caches only immutable tag names", () => {
+  const { predicates, nodes } = items("<li>x</li><li>y</li>");
+  const kept = predicates.findHints(nodes, { visible: true, position: true, styles: ["display"] });
+  expect(hintsOf(kept)).toEqual([{ tag_name: "li" }, { tag_name: "li" }]);
 });
 
-test("findHints: a failing hint returns the nodes unhinted, never a verdict", () => {
-  const { predicates, nodes } = items("<li>x</li>");
-  (nodes[0] as any).getBoundingClientRect = () => {
-    throw new Error("boom");
-  };
-  const kept = predicates.findHints(nodes, { position: true }) as any;
-  expect(kept.length).toBe(1);
+test("findHints: a failure after filtering returns the original unhinted nodes", () => {
+  const { predicates, nodes } = items("<li>needle</li><li>other</li>");
+  Object.defineProperty(nodes[0], "tagName", { get() { throw new Error("boom"); } });
+  const kept = predicates.findHints(nodes, { texts: ["needle"] }) as any;
+  expect(kept === nodes).toBe(true);
+  expect(kept.length).toBe(2);
   expect(kept.__lightpandaHints).toBeUndefined();
+});
+
+test("findHints: large lazy searches never read every candidate's text", () => {
+  const { predicates, nodes } = items("<li>needle</li>".repeat(513));
+  let reads = 0;
+  for (const node of nodes) {
+    Object.defineProperty(node, "innerText", { get() { reads++; return "needle"; } });
+    Object.defineProperty(node, "textContent", { get() { reads++; return "needle"; } });
+  }
+  const kept = predicates.findHints(nodes, { texts: ["needle"] }) as any[];
+  expect(kept.length).toBe(nodes.length);
+  expect(reads).toBe(0);
 });

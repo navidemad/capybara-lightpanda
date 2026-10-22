@@ -19,15 +19,10 @@ module Capybara
       end
 
       # Capybara's finder hints → the spec `_lightpanda.findHints` answers.
-      # tag_name is always answered (one property read, and Capybara reads
-      # initial_cache[:tag_name] before asking the node).
-      def self.hint_spec(uses_visibility: false, texts: nil, styles: nil, position: false, **)
-        spec = {}
-        spec[:visible] = true if uses_visibility
-        spec[:texts] = texts.map(&:to_s) if texts&.any?
-        spec[:styles] = styles.keys.map(&:to_s) if styles.is_a?(Hash)
-        spec[:position] = true if position
-        spec
+      # Only tag_name is cached (when the bounded helper runs); Capybara reads
+      # initial_cache[:tag_name] before asking the node.
+      def self.hint_spec(texts: nil, **)
+        texts&.any? ? { texts: texts.map(&:to_s) } : {}
       end
 
       # Capybara::Driver::Node#native returns the constructor's second argument,

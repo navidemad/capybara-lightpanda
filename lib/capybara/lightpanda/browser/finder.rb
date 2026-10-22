@@ -215,11 +215,6 @@ module Capybara
           end
         end
 
-        HINT_KEYS = {
-          "tag_name" => :tag_name, "visible" => :visible, "position" => :position, "style" => :style,
-        }.freeze
-        private_constant :HINT_KEYS
-
         # One cache per node, keyed the way Capybara reads #initial_cache. A
         # missing, malformed or mis-sized payload yields empty caches, so
         # Capybara asks each node itself — never a wrong answer.
@@ -231,12 +226,13 @@ module Capybara
           hints.map { |h| symbolize_hint(h) }
         end
 
-        # An unknown key means a findHints this code doesn't know: drop that
-        # node's cache rather than hand Capybara something it can't read.
+        # Capybara may consume these after a DOM mutation during lazy Result
+        # enumeration. Accept only well-typed immutable answers, never mutable
+        # visibility/style/position or a payload from an incompatible helper.
         def symbolize_hint(hint)
-          return {} unless hint.is_a?(Hash) && (hint.keys - HINT_KEYS.keys).empty?
+          return {} unless hint.is_a?(Hash) && hint.keys == ["tag_name"] && hint["tag_name"].is_a?(String)
 
-          hint.to_h { |k, v| [HINT_KEYS[k], v] }
+          { tag_name: hint["tag_name"] }
         end
 
         def decode_hints(raw)
