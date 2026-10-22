@@ -232,6 +232,14 @@ describe Capybara::Lightpanda::Driver do
       session.assert_selector(:css, "#result", text: "submit-fired:SubmitEvent")
     end
 
+    # Listeners that branch on e.inputType (masked inputs, editors) read
+    # undefined off a plain Event and treat the trigger as no edit at all.
+    it "dispatches an InputEvent with the inputType typing sends" do
+      session.visit("/lightpanda/trigger_test")
+      session.find(:css, "#focusable").trigger(:input)
+      session.assert_selector(:css, "#result", text: "input-fired:InputEvent:insertText")
+    end
+
     it "dispatches an arbitrary custom event by name" do
       session.visit("/lightpanda/trigger_test")
       session.find(:css, "#custom-target").trigger("lp:custom")

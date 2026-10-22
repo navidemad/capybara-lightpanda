@@ -61,6 +61,10 @@ class TestApp
                 : 'submit-fired:Event';
               document.getElementById('result').textContent = marker;
             });
+            document.getElementById('focusable').addEventListener('input', function(e) {
+              var kind = (typeof InputEvent !== 'undefined' && e instanceof InputEvent) ? 'InputEvent' : 'Event';
+              document.getElementById('result').textContent = 'input-fired:' + kind + ':' + e.inputType;
+            });
             document.getElementById('custom-target').addEventListener('lp:custom', function() {
               document.getElementById('result').textContent = 'custom-fired';
             });

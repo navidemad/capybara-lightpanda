@@ -703,6 +703,9 @@ module Capybara
             event = new FocusEvent(name, init);
           } else if (name === 'submit' && typeof SubmitEvent !== 'undefined') {
             event = new SubmitEvent(name, init);
+          } else if (name === 'input' && typeof InputEvent !== 'undefined') {
+            // inputType is what typing sends; a plain Event leaves it undefined.
+            event = new InputEvent(name, { bubbles: true, cancelable: false, inputType: 'insertText' });
           } else {
             event = new Event(name, init);
           }
