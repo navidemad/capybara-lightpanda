@@ -10,10 +10,17 @@ module Capybara
         # Find elements in the current context (top frame or active frame).
         # Returns an array of remote object ID strings.
         def find(method, selector)
+          find_hinted(method, selector).map(&:first)
+        end
+
+        # Like #find, but with Capybara's finder hints answered in the same
+        # round-trip (see `_lightpanda.findHints`). Returns `[objectId, cache]`
+        # pairs; `cache` is {} when `spec` is nil or the page couldn't answer.
+        def find_hinted(method, selector, spec = nil)
           if @frame_stack.empty?
-            find_in_document(method, selector)
+            find_in_document(method, selector, spec)
           else
-            find_in_frame(method, selector)
+            find_in_frame(method, selector, spec)
           end
         end
 
@@ -27,9 +34,14 @@ module Capybara
         # `NoExecutionContextError`. `find_in_document` and `find_in_frame`
         # already use the same wrapper; `find_within` was the odd one out.
         def find_within(remote_object_id, method, selector)
+          find_within_hinted(remote_object_id, method, selector).map(&:first)
+        end
+
+        def find_within_hinted(remote_object_id, method, selector, spec = nil)
           with_default_context_wait do
-            result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, return_by_value: false)
-            extract_node_object_ids(result)
+            result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, spec,
+                                      return_by_value: false)
+            extract_hinted_nodes(result)
           end
         rescue JavaScriptError => e
           raise_invalid_selector(e, method, selector)
@@ -42,7 +54,7 @@ module Capybara
         def parents_of(remote_object_id)
           with_default_context_wait do
             result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
-            extract_node_object_ids(result)
+            extract_hinted_nodes(result).map(&:first)
           end
         end
 
@@ -90,32 +102,39 @@ module Capybara
         # JS function for finding elements within a node.
         # Works in any execution context (top frame or iframe).
         FIND_WITHIN_JS = <<~JS.freeze
-          function(method, selector) {
-            if (method === 'xpath') {
-              #{format(XPATH_FIND_FRAGMENT, doc: 'this.ownerDocument', root: 'this', selector: 'selector')}
-            }
-            #{format(CSS_FIND_FRAGMENT, target: 'this', selector: 'selector')}
+          function(method, selector, spec) {
+            var self = this;
+            var nodes = (function() {
+              if (method === 'xpath') {
+                #{format(XPATH_FIND_FRAGMENT, doc: 'self.ownerDocument', root: 'self', selector: 'selector')}
+              }
+              #{format(CSS_FIND_FRAGMENT, target: 'self', selector: 'selector')}
+            })();
+            return spec ? _lightpanda.findHints(nodes, spec) : nodes;
           }
         JS
         private_constant :FIND_WITHIN_JS
 
         # JS function for finding elements in an iframe's contentDocument.
         FIND_IN_FRAME_JS = <<~JS.freeze
-          function(method, selector) {
+          function(method, selector, spec) {
             var doc;
             try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
             if (!doc) return [];
-            if (method === 'xpath') {
-              #{format(XPATH_FIND_FRAGMENT, doc: 'doc', root: 'doc', selector: 'selector')}
-            }
-            #{format(CSS_FIND_FRAGMENT, target: 'doc', selector: 'selector')}
+            var nodes = (function() {
+              if (method === 'xpath') {
+                #{format(XPATH_FIND_FRAGMENT, doc: 'doc', root: 'doc', selector: 'selector')}
+              }
+              #{format(CSS_FIND_FRAGMENT, target: 'doc', selector: 'selector')}
+            })();
+            return spec ? _lightpanda.findHints(nodes, spec) : nodes;
           }
         JS
         private_constant :FIND_IN_FRAME_JS
 
         # Walks `parentNode` from `this` up to (but excluding) `document`,
         # returning the chain as a JS array. Each entry is an element node so
-        # `extract_node_object_ids` can wrap them as Lightpanda::Nodes.
+        # `extract_hinted_nodes` can wrap them as Lightpanda::Nodes.
         PARENTS_JS = <<~JS
           function() {
             var nodes = [];
@@ -129,7 +148,7 @@ module Capybara
         JS
         private_constant :PARENTS_JS
 
-        def find_in_document(method, selector)
+        def find_in_document(method, selector, spec)
           with_default_context_wait do
             # Coerce Symbol selectors (e.g. Capybara warning path lets `have_css(:p)`
             # through) to a string before quoting. Symbol#inspect returns `:p`,
@@ -143,19 +162,21 @@ module Capybara
                        else
                          format(CSS_FIND_FRAGMENT, target: "document", selector: selector_literal)
                        end
-            result = evaluate_with_ref("(function() { #{fragment} })()")
-            extract_node_object_ids(result)
+            nodes = "(function() { #{fragment} })()"
+            nodes = "_lightpanda.findHints(#{nodes}, #{JSON.generate(spec)})" if spec
+            result = evaluate_with_ref(nodes)
+            extract_hinted_nodes(result)
           end
         rescue JavaScriptError => e
           raise_invalid_selector(e, method, selector)
         end
 
-        def find_in_frame(method, selector)
+        def find_in_frame(method, selector, spec)
           with_default_context_wait do
             frame_node = @frame_stack.last
-            result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector,
+            result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector, spec,
                                       return_by_value: false)
-            extract_node_object_ids(result)
+            extract_hinted_nodes(result)
           end
         rescue JavaScriptError => e
           raise_invalid_selector(e, method, selector)
@@ -169,26 +190,60 @@ module Capybara
           raise js_error
         end
 
-        # Extract individual node objectIds from a remote array reference.
+        # Extract `[objectId, cache]` pairs from a remote array reference. The
+        # hints, when findHints ran, are a JSON string on the array's own
+        # `__lightpandaHints` property, read from the same getProperties call.
         # `ensure release_object` so the outer array handle is freed even when
         # property walking raises — without this, a transient CDP error during
         # property enumeration leaks one V8 handle per failed find call.
-        def extract_node_object_ids(result)
+        def extract_hinted_nodes(result)
           return [] unless result && result["objectId"]
 
           outer_id = result["objectId"]
           begin
             props = get_object_properties(outer_id)
             properties = props["result"] || []
-            properties
-              .select { |p| p["name"] =~ /\A\d+\z/ }
-              .sort_by { |p| p["name"].to_i }
-              .filter_map { |p| p.dig("value", "objectId") }
+            ids = properties
+                  .select { |p| p["name"] =~ /\A\d+\z/ }
+                  .sort_by { |p| p["name"].to_i }
+                  .filter_map { |p| p.dig("value", "objectId") }
+            ids.zip(parse_hints(properties, ids.size))
           rescue Error
             []
           ensure
             release_object(outer_id)
           end
+        end
+
+        HINT_KEYS = {
+          "tag_name" => :tag_name, "visible" => :visible, "position" => :position, "style" => :style,
+        }.freeze
+        private_constant :HINT_KEYS
+
+        # One cache per node, keyed the way Capybara reads #initial_cache. A
+        # missing, malformed or mis-sized payload yields empty caches, so
+        # Capybara asks each node itself — never a wrong answer.
+        def parse_hints(properties, count)
+          raw = properties.find { |p| p["name"] == "__lightpandaHints" }&.dig("value", "value")
+          hints = decode_hints(raw)
+          return Array.new(count) { {} } unless hints&.size == count
+
+          hints.map { |h| symbolize_hint(h) }
+        end
+
+        # An unknown key means a findHints this code doesn't know: drop that
+        # node's cache rather than hand Capybara something it can't read.
+        def symbolize_hint(hint)
+          return {} unless hint.is_a?(Hash) && (hint.keys - HINT_KEYS.keys).empty?
+
+          hint.to_h { |k, v| [HINT_KEYS[k], v] }
+        end
+
+        def decode_hints(raw)
+          hints = raw.is_a?(String) ? JSON.parse(raw) : nil
+          hints.is_a?(Array) ? hints : nil
+        rescue JSON::ParserError
+          nil
         end
       end
     end

@@ -11,10 +11,23 @@ module Capybara
       # `frame_scoped`: the node lives in an iframe's document — it was found
       # while a frame was switched to, or from another frame-scoped node. See
       # #wrap_with_attached_guard for what that changes.
-      def initialize(driver, remote_object_id, frame_scoped: false)
-        super(driver, remote_object_id)
+      def initialize(driver, remote_object_id, initial_cache = {}, frame_scoped: false)
+        super(driver, remote_object_id, initial_cache)
         @remote_object_id = remote_object_id
         @frame_scoped = frame_scoped
+        @tag_name = initial_cache[:tag_name]
+      end
+
+      # Capybara's finder hints → the spec `_lightpanda.findHints` answers.
+      # tag_name is always answered (one property read, and Capybara reads
+      # initial_cache[:tag_name] before asking the node).
+      def self.hint_spec(uses_visibility: false, texts: nil, styles: nil, position: false, **)
+        spec = {}
+        spec[:visible] = true if uses_visibility
+        spec[:texts] = texts.map(&:to_s) if texts&.any?
+        spec[:styles] = styles.keys.map(&:to_s) if styles.is_a?(Hash)
+        spec[:position] = true if position
+        spec
       end
 
       # Capybara::Driver::Node#native returns the constructor's second argument,
@@ -324,14 +337,12 @@ module Capybara
         oids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
       end
 
-      def find_xpath(selector)
-        object_ids = driver.browser.find_within(@remote_object_id, "xpath", selector)
-        object_ids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
+      def find_xpath(selector, **hints)
+        find_hinted("xpath", selector, hints)
       end
 
-      def find_css(selector)
-        object_ids = driver.browser.find_within(@remote_object_id, "css", selector)
-        object_ids.map { |oid| self.class.new(driver, oid, frame_scoped: @frame_scoped) }
+      def find_css(selector, **hints)
+        find_hinted("css", selector, hints)
       end
 
       # Equality compares the underlying DOM node via backendNodeId, the only
@@ -367,6 +378,11 @@ module Capybara
       end
 
       private
+
+      def find_hinted(method, selector, hints)
+        driver.browser.find_within_hinted(@remote_object_id, method, selector, self.class.hint_spec(**hints))
+              .map { |oid, cache| self.class.new(driver, oid, cache, frame_scoped: @frame_scoped) }
+      end
 
       def implicit_submit
         call(IMPLICIT_SUBMIT_JS)

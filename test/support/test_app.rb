@@ -56,6 +56,21 @@ class TestApp
     HTML
   end
 
+  get "/lightpanda/finder_hints" do
+    items = (1..300).map do |i|
+      (i % 3).zero? ? %(<li style="display:none">Item #{i}</li>) : "<li>Item #{i}</li>"
+    end
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <ul id="list">#{items.join}</ul>
+          <p id="spaced">Spaced&nbsp;out words</p>
+        </body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/trigger_test" do
     <<~HTML
       <!DOCTYPE html>
