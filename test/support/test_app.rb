@@ -41,6 +41,21 @@ class TestApp
   # Attaches focus / blur / change / submit / custom listeners that mark the
   # DOM so Node#trigger dispatch can be observed.
 
+  get "/lightpanda/shadow_obscured" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <div id="host" style="width:200px;height:200px"></div>
+          <script>
+            document.getElementById('host').attachShadow({ mode: 'open' }).innerHTML =
+              '<button style="width:100px;height:100px">Shadow</button>';
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/trigger_test" do
     <<~HTML
       <!DOCTYPE html>
