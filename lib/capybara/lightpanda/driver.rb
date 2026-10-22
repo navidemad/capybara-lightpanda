@@ -78,14 +78,14 @@ module Capybara
         active_element&.send_keys(*keys)
       end
 
-      def find_xpath(selector)
-        object_ids = browser.find("xpath", selector)
-        object_ids.map { |oid| build_node(oid) }
+      # Accepting `**hints` is what makes Capybara send them (it checks the
+      # arity); Node.hint_spec turns them into the answers the find returns.
+      def find_xpath(selector, **hints)
+        browser.find_hinted("xpath", selector, Node.hint_spec(**hints)).map { |oid, cache| build_node(oid, cache) }
       end
 
-      def find_css(selector)
-        object_ids = browser.find("css", selector)
-        object_ids.map { |oid| build_node(oid) }
+      def find_css(selector, **hints)
+        browser.find_hinted("css", selector, Node.hint_spec(**hints)).map { |oid, cache| build_node(oid, cache) }
       end
 
       # Inside `within_frame` these run in the frame's document, as in Chrome.
@@ -373,8 +373,8 @@ module Capybara
 
       # A node found while a frame is switched to lives in that frame's
       # document, which Node#call checks for a frame navigation.
-      def build_node(oid)
-        Node.new(self, oid, frame_scoped: browser.frame_stack.any?)
+      def build_node(oid, initial_cache = {})
+        Node.new(self, oid, initial_cache, frame_scoped: browser.frame_stack.any?)
       end
 
       # Every window method takes a handle because Capybara's Window objects
