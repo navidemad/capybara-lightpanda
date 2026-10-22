@@ -288,6 +288,9 @@ module Capybara
       # skipped on 1.0.1 although it carried the fix: ungate, don't re-gate.
       MINIMUM_NIGHTLY_BUILD = Gem::Version.new("10641")
 
+      # Lines of browser output #output keeps (ferrum keeps the same 100).
+      OUTPUT_LINES = 100
+
       # Second, equivalent floor for the *release* channel.
       #
       # Tagged releases are built with `-Dversion=<tag>`, which resolves to a
@@ -370,6 +373,17 @@ module Capybara
         @stderr_r = nil
         @stderr_w = nil
         @finalizer_registered = false
+        @output = []
+        @output_partial = {}
+        @output_mutex = Mutex.new
+      end
+
+      # The last OUTPUT_LINES lines Lightpanda wrote to stdout/stderr, oldest
+      # first, across restarts of this Process. Kept for diagnostics: a crash
+      # or panic only ever shows up there, and from build 10783 so do page
+      # errors (`page_error` scope, WARN). Mirrors ferrum's Process::Output.
+      def output
+        @output_mutex.synchronize { @output.dup }
       end
 
       def start
@@ -438,7 +452,7 @@ module Capybara
             next unless ready
 
             ready[0].each do |io|
-              io.read_nonblock(4096)
+              record_output(io, io.read_nonblock(4096))
             rescue IO::WaitReadable
               # No data
             rescue EOFError
@@ -449,6 +463,18 @@ module Capybara
           rescue IOError
             break
           end
+        end
+      end
+
+      # Split per pipe so a line cut across two reads is kept whole, and a
+      # stdout fragment never glues onto a stderr one.
+      def record_output(io, chunk)
+        text = chunk.dup.force_encoding(Encoding::UTF_8).scrub
+        @output_mutex.synchronize do
+          *lines, rest = "#{@output_partial[io]}#{text}".split("\n", -1)
+          @output_partial[io] = rest
+          @output.concat(lines)
+          @output.shift(@output.size - OUTPUT_LINES) if @output.size > OUTPUT_LINES
         end
       end
 
@@ -521,6 +547,7 @@ module Capybara
             ready[0].each do |io|
               chunk = io.read_nonblock(1024)
               output << chunk
+              record_output(io, chunk)
 
               if (match = output.match(READY_PATTERN))
                 @ws_url = "ws://#{match[1]}/"

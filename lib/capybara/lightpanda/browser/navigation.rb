@@ -90,7 +90,16 @@ module Capybara
 
           return unless @client.closed?
 
-          raise DeadBrowserError, "Lightpanda crashed navigating to #{url}"
+          raise DeadBrowserError, "Lightpanda crashed navigating to #{url}#{crash_output}"
+        end
+
+        # The browser's own last words, when we spawned it: a panic or an
+        # assertion only ever shows up on its stderr.
+        def crash_output
+          lines = @process&.output&.last(20)
+          return "" if lines.nil? || lines.empty?
+
+          "\nLast Lightpanda output:\n#{lines.join("\n")}"
         end
 
         def safe_current_url
