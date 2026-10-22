@@ -3,11 +3,10 @@
 require_relative "../test_helper"
 
 # Browser#page_errors — uncaught page exceptions, which console_logs structurally
-# cannot see. Lightpanda emits no Runtime.exceptionThrown (wishlist B19), so a
-# handler dying on a TypeError leaves no CDP trace at all; the failure then
-# surfaces far away as ElementNotFound on whatever the handler was supposed to
-# produce. That is how the solidus taxon-tree failure presented, and diagnosing
-# it needed a hand-injected window error listener.
+# cannot see. A handler dying on a TypeError leaves nothing in console_logs;
+# the failure then surfaces far away as ElementNotFound on whatever the handler
+# was supposed to produce. That is how the solidus taxon-tree failure
+# presented, and diagnosing it needed a hand-injected window error listener.
 #
 # javascripts/errors.js now ships that listener. These tests pin the contract:
 # the exception lands in page_errors, it does NOT land in console_logs, and the
@@ -73,6 +72,25 @@ describe "Capybara::Lightpanda::Browser#page_errors" do
     rejection = browser.page_errors.find { |e| e[:kind] == "unhandledrejection" }
     refute_nil rejection, "rejection not captured: #{browser.page_errors.inspect}"
     assert_match(/rejected on purpose/, rejection[:message])
+  end
+
+  # A rejection the page handles in the same tick is not an error. Builds below
+  # 10904 report it anyway (and only a floor bump fixes that), so this pins the
+  # behavior the B19 swap to Runtime.exceptionThrown must keep.
+  it "ignores a rejection handled in the same tick" do
+    build = browser.nightly_build
+    unless build && build >= Gem::Version.new("10904")
+      skip "same-tick handled rejections are reported below build 10904"
+    end
+
+    session.execute_script(<<~JS)
+      (async function () { throw new Error("handled async throw"); })().catch(function () {});
+      Promise.reject(new Error("handled same tick")).catch(function () {});
+      Promise.reject(new Error("really unhandled"));
+    JS
+    wait_for_page_errors
+
+    assert_equal(["really unhandled"], browser.page_errors.map { |e| e[:message] })
   end
 
   it "clears on session reset and on clear_page_errors" do
