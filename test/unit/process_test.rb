@@ -307,4 +307,34 @@ describe Capybara::Lightpanda::Process do
       assert_nil process.send(:pids_listening_on, 9222)
     end
   end
+
+  # A crash or a panic only shows up on the browser's own output, and the drain
+  # thread used to throw it away. #output is what DeadBrowserError quotes.
+  describe "#output" do
+    let(:out) { Object.new }
+    let(:err) { Object.new }
+
+    it "keeps a line cut across two reads whole, per pipe" do
+      process.send(:record_output, out, "info(page): navigate url=ht")
+      process.send(:record_output, err, "warn(page_error): Uncaught TypeError\n")
+      process.send(:record_output, out, "tp://x/\n")
+
+      assert_equal ["warn(page_error): Uncaught TypeError", "info(page): navigate url=http://x/"], process.output
+    end
+
+    it "keeps only the last OUTPUT_LINES lines" do
+      limit = Capybara::Lightpanda::Process::OUTPUT_LINES
+      process.send(:record_output, err, (1..(limit + 5)).map { |i| "line #{i}\n" }.join)
+
+      assert_equal limit, process.output.size
+      assert_equal "line 6", process.output.first
+      assert_equal "line #{limit + 5}", process.output.last
+    end
+
+    it "survives bytes that aren't UTF-8" do
+      process.send(:record_output, err, "bad \xff byte\n".b)
+
+      assert_equal ["bad \uFFFD byte"], process.output
+    end
+  end
 end
