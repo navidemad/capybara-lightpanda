@@ -553,8 +553,15 @@ module Capybara
         page_command("LP.configureLoading", subFrame: true, worker: true)
       end
 
+      # Registration only covers documents created *after* it, and the target
+      # already holds its about:blank document. Evaluate the bundle there too,
+      # or a session that runs `find`/`click` before its first `visit` (DOM built
+      # by execute_script, or right after reset_session!) hits
+      # `ReferenceError: _lightpanda is not defined`. The bundle's own
+      # `if (window._lightpanda) return;` guard makes the second run a no-op.
       def register_auto_scripts
         page_command("Page.addScriptToEvaluateOnNewDocument", source: AutoScripts::JS)
+        page_command("Runtime.evaluate", expression: AutoScripts::JS)
       end
 
       # Apply the `window_size` option as a JS-visible viewport: it drives
