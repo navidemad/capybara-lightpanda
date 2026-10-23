@@ -18,7 +18,7 @@ require_relative "../test_helper"
 # spec that "types then corrects" passes by leaving the wrong value in place.
 #
 # The caret is placed explicitly where an example depends on it. The floor
-# (build 10641) also guarantees our upstream fixes for the rest of the editing
+# (build 10965) also guarantees our upstream fixes for the rest of the editing
 # story — `.value =` moves the caret to the end (#3420), a <textarea> seeded by
 # its child text can be selected (#3422) and a cancelled `beforeinput` vetoes
 # the edit (#3414) — each pinned below.

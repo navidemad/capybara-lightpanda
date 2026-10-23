@@ -286,7 +286,23 @@ module Capybara
       #   #3952 (10575) typed text fires `change` when committed by blur/Enter.
       # A `nightly_build` gate is nil on a release binary, so every such test
       # skipped on 1.0.1 although it carried the fix: ungate, don't re-gate.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("10641")
+      #
+      # 2026-10-23 bump 10641 -> 10965 (= release 1.0.2, the new lockstep cap;
+      # CSS nesting #3962 at 10976 and blank-page timers #4148 at 11012 stay
+      # above it). Rides along:
+      #   #4096 (10904) Runtime.exceptionThrown for unhandled rejections, and
+      #     `unhandledrejection` no longer fires for a rejection handled in
+      #     the same tick — errors.js stops reporting those false positives;
+      #     page_errors_test.rb drops its nightly_build gate. With #4115
+      #     (10910, an iframe's exception carries its context id) this
+      #     unblocks the B19 swap off errors.js.
+      #   #3997 (10685) the scheduler rework: a MessageChannel task loop no
+      #     longer delays a pending fetch tenfold (#4042), which held
+      #     wait_for_idle.
+      #   #3658 (10657) client rects follow the scroll and
+      #     DOM.scrollIntoViewIfNeeded is real — HTML5_DRAG_JS centers the
+      #     drop target itself because scrollIntoView ignores `block`.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("10965")
 
       # Lines of browser output #output keeps (ferrum keeps the same 100).
       OUTPUT_LINES = 100
@@ -298,16 +314,16 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 1.0.1 (2026-10-15) is build 10641 — exactly the nightly
+      # nightly floor. 1.0.2 (2026-10-23) is build 10965 — exactly the nightly
       # floor, which is no accident: the floor was raised *to* the release so
-      # both channels gate the same commit. (1.0.0 = 9994 predates fixes the
+      # both channels gate the same commit. (1.0.1 = 10641 predates fixes the
       # floor exists for.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("1.0.1")
+      MINIMUM_RELEASE = Gem::Version.new("1.0.2")
 
       class << self
         # `lightpanda version` prints one of two shapes, and the gem supports

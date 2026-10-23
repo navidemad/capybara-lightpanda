@@ -119,7 +119,7 @@ at it. The gem never downloads when that is set, so the
 browser changes only when you replace the artifact.
 
 The driver enforces the floor on both channels and refuses to start below it —
-nightly build ≥ 10641, or release ≥ 1.0.1. The error names the version it found
+nightly build ≥ 10965, or release ≥ 1.0.2. The error names the version it found
 and how to move off it. The check runs on every path into the driver, including
 a browser you started yourself ([external browser](#external-browser)).
 

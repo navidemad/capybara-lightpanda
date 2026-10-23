@@ -57,7 +57,7 @@ driven_by :lightpanda
 > Lightpanda is a headless agentic browser, not a layout engine. External `<link rel="stylesheet">` **are** fetched and applied (the gem enables this by default), and `@media` / `window.matchMedia()` evaluate against the `window_size` you configure — so a mobile-only CTA gated by `@media (max-width: …)` resolves at the width you ask for. What's missing is *layout*: nothing reflows, `getBoundingClientRect` stays synthetic, and there is no real scroll. Specs that assert on pixel geometry, scrolling, or screenshots can't pass here, nor can the two that catch people out: a second browser tab and a menu revealed purely by CSS `:hover`. See [known limitations](https://navidemad.github.io/capybara-lightpanda/docs/#limits).
 
 > [!TIP]
-> For reproducible CI, pin the browser: `Capybara::Lightpanda::Binary.required_version = "1.0.1"` (the tagged release the gem's current floor is pinned to — nightly build 10641 is that release's commit). Without a pin the driver tracks Lightpanda's rolling `nightly` tag, which moves under you. See [Pinning the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
+> For reproducible CI, pin the browser: `Capybara::Lightpanda::Binary.required_version = "1.0.2"` (the tagged release the gem's current floor is pinned to — nightly build 10965 is that release's commit). Without a pin the driver tracks Lightpanda's rolling `nightly` tag, which moves under you. See [Pinning the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
 
 ## Credits
 

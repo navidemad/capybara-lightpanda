@@ -2,7 +2,7 @@
 
 require_relative "../test_helper"
 
-# Upstream fixes the gem's floor (1.0.1 = 10641) guarantees and nothing else
+# Upstream fixes the gem's floor (1.0.2 = 10965) guarantees and nothing else
 # defends: lightpanda-io/browser#3755, #3757, #3759, #3849, #3874. Each one
 # pins the behavior users get, so a floor regression fails here first.
 describe "Lightpanda fixes in the floor" do
