@@ -75,14 +75,9 @@ describe "Capybara::Lightpanda::Browser#page_errors" do
   end
 
   # A rejection the page handles in the same tick is not an error. Builds below
-  # 10904 report it anyway (and only a floor bump fixes that), so this pins the
-  # behavior the B19 swap to Runtime.exceptionThrown must keep.
+  # 10904 reported it anyway (upstream #4096, in the 10965 floor), so this pins
+  # the behavior the B19 swap to Runtime.exceptionThrown must keep.
   it "ignores a rejection handled in the same tick" do
-    build = browser.nightly_build
-    unless build && build >= Gem::Version.new("10904")
-      skip "same-tick handled rejections are reported below build 10904"
-    end
-
     session.execute_script(<<~JS)
       (async function () { throw new Error("handled async throw"); })().catch(function () {});
       Promise.reject(new Error("handled same tick")).catch(function () {});

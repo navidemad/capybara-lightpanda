@@ -37,19 +37,11 @@ module Capybara
         #
         # The source is a passive listener pair in javascripts/errors.js
         # reporting over the console.debug sentinel channel, not
-        # Runtime.exceptionThrown: Lightpanda emits that event for unhandled
-        # rejections only from build 10904, above the floor. The listeners see
+        # Runtime.exceptionThrown, which covers unhandled rejections from build
+        # 10904 (in the floor; moving to it is wishlist B19). The listeners see
         # what reaches `window`: exceptions a framework catches itself
         # (Stimulus's handleError, any try/catch) never arrive, and a
         # cross-origin script collapses to "Script error." with no detail.
-        #
-        # Below 10904 (1.0.1 included) Lightpanda also fires
-        # `unhandledrejection` for a rejection the page handles in the same
-        # tick — `f().catch(g)` on an async function that throws, or
-        # `Promise.reject(e).catch(h)` — and never follows with
-        # `rejectionhandled`, so such entries are false positives that page JS
-        # cannot tell apart. Treat an "unhandledrejection" entry on those
-        # builds as a lead, not a verdict.
         def page_errors
           @page_errors_mutex.synchronize { @page_errors.dup }
         end

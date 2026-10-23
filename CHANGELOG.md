@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+> **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.2** or a nightly build ≥ 10965. The driver refuses anything older and names the version it found. Pin `1.0.2` for a reproducible browser.
+
 ### Fixed
+
+- **`page_errors` no longer lists rejections the page handled.** On Lightpanda 1.0.1, a promise rejected and caught in the same tick (`asyncFn().catch(handler)`, `Promise.reject(e).catch(handler)`) still showed up in `page_errors` as an unhandled rejection. The new browser floor fixes this.
 
 - **`drag_to` keeps every `dragover` inside the viewport on recent nightlies.** From nightly 10661, Lightpanda moves element positions with the page scroll, and its `scrollIntoView` ignores `block: 'center'` and scrolls the target to the top of the window. The HTML5 drag simulation centers the target that way, so the element being dragged could end up above the window, and the first `dragover` reported a negative `clientY`, which a sortable list or a dropzone that hit-tests on coordinates would misread. The driver now centers the target itself, as Chrome does.
 
