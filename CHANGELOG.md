@@ -1,18 +1,30 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.0] - 2026-10-23
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.2** or a nightly build ≥ 10965. The driver refuses anything older and names the version it found. Pin `1.0.2` for a reproducible browser.
+
+### Added
+
+- **The driver keeps Lightpanda's recent output.** `browser.process.output` returns the browser's last 100 lines of output. When the browser crashes during a navigation, the `DeadBrowserError` message quotes the last 20 of those lines, so the crash is no longer silent.
 
 ### Changed
 
 - **`page_errors` now reads the browser's own exception reports.** It used to rely on a script the driver injected into every page to listen for errors. It now reads `Runtime.exceptionThrown`, the event Chrome clients use, which Lightpanda emits from 1.0.2. The entries look the same as before. Two differences: an error that the page cancels itself (an `error` listener calling `preventDefault()`) is no longer listed, as in Chrome; and the driver no longer adds a listener script to your pages.
+- **Finding elements by text is much faster.** `find("li", text: "…")` used to ask the browser about every candidate one by one. Visibility and text are now checked inside the find itself: on a list of 300 items, that's 4 round-trips instead of about 500.
 
 ### Fixed
 
 - **`page_errors` no longer lists rejections the page handled.** On Lightpanda 1.0.1, a promise rejected and caught in the same tick (`asyncFn().catch(handler)`, `Promise.reject(e).catch(handler)`) still showed up in `page_errors` as an unhandled rejection. The new browser floor fixes this.
-
-- **`drag_to` keeps every `dragover` inside the viewport on recent nightlies.** From nightly 10661, Lightpanda moves element positions with the page scroll, and its `scrollIntoView` ignores `block: 'center'` and scrolls the target to the top of the window. The HTML5 drag simulation centers the target that way, so the element being dragged could end up above the window, and the first `dragover` reported a negative `clientY`, which a sortable list or a dropzone that hit-tests on coordinates would misread. The driver now centers the target itself, as Chrome does.
+- **`find` and `click` work before the first `visit`.** On a fresh session, or right after `reset_session!`, finding an element built with `execute_script` raised `ReferenceError: _lightpanda is not defined`.
+- **Delegated `change` and `submit` handlers fire again under jQuery 1.x.** jQuery 1.x checks at load time whether the browser supports these events on `window`. Lightpanda used to fail that check, so jQuery switched to its old Internet Explorer workaround and no delegated `change` or `submit` handler ever ran (Solidus admin, Backbone-era apps). The new browser floor fixes this; no code change required on your end.
+- **`send_keys` types numbers, as Selenium does.** `send_keys [1, :tab]` used to drop the `1` silently and send only the Tab.
+- **An HTML5 drag ends with `drop` or `dragleave`, never both.** `drag_to` fired `dragleave` and then `drop` on a target that accepted the drag. Libraries such as Pragmatic drag and drop read that `dragleave` as the drag leaving the window and dropped onto nothing.
+- **`drag_to` keeps every `dragover` inside the viewport on recent nightlies.** From nightly 10661, the target could end up above the window, so the first `dragover` reported a negative `clientY`, which sortable lists and dropzones that hit-test on coordinates misread. The driver now centers the target itself, as Chrome does.
+- **Elements inside a shadow root are no longer reported as obscured.** `obscured?` reported every shadow DOM element as covered by its own host.
+- **`trigger(:input)` sends a real `InputEvent`.** Listeners that read `event.inputType` got `undefined`; they now get `"insertText"`, as when typing.
+- **`evaluate_script` no longer times out on a string that ends in half an emoji.** The result was dropped and the call waited for the full timeout. The broken character now comes back as `�`.
+- **Passing an element from a previous page to `execute_script` lets Capybara find it again.** It used to raise a plain `BrowserError`; Capybara now treats the element as obsolete and finds it again in the new page.
 
 ## [0.14.2] - 2026-10-14
 
