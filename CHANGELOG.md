@@ -4,6 +4,10 @@
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.2** or a nightly build ≥ 10965. The driver refuses anything older and names the version it found. Pin `1.0.2` for a reproducible browser.
 
+### Changed
+
+- **`page_errors` now reads the browser's own exception reports.** It used to rely on a script the driver injected into every page to listen for errors. It now reads `Runtime.exceptionThrown`, the event Chrome clients use, which Lightpanda emits from 1.0.2. The entries look the same as before. Two differences: an error that the page cancels itself (an `error` listener calling `preventDefault()`) is no longer listed, as in Chrome; and the driver no longer adds a listener script to your pages.
+
 ### Fixed
 
 - **`page_errors` no longer lists rejections the page handled.** On Lightpanda 1.0.1, a promise rejected and caught in the same tick (`asyncFn().catch(handler)`, `Promise.reject(e).catch(handler)`) still showed up in `page_errors` as an unhandled rejection. The new browser floor fixes this.

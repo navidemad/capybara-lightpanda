@@ -35,13 +35,13 @@ module Capybara
         # them would also start failing every suite that already asserts
         # console_logs holds no errors.
         #
-        # The source is a passive listener pair in javascripts/errors.js
-        # reporting over the console.debug sentinel channel, not
-        # Runtime.exceptionThrown, which covers unhandled rejections from build
-        # 10904 (in the floor; moving to it is wishlist B19). The listeners see
-        # what reaches `window`: exceptions a framework catches itself
-        # (Stimulus's handleError, any try/catch) never arrive, and a
-        # cross-origin script collapses to "Script error." with no detail.
+        # The source is Runtime.exceptionThrown, as in Chrome: Lightpanda emits
+        # it for an uncaught exception (#3905, build 10450) and an unhandled
+        # rejection (#4096, 10904), in iframes too (#4115, 10910). What it
+        # reports is what reaches `window` uncancelled: an exception a framework
+        # catches itself (Stimulus's handleError, any try/catch) never arrives,
+        # nor does one a page `error` listener cancels with preventDefault. The
+        # driver's own scripts raise JavaScriptError instead and never land here.
         def page_errors
           @page_errors_mutex.synchronize { @page_errors.dup }
         end
@@ -49,6 +49,63 @@ module Capybara
         def clear_page_errors
           @page_errors_mutex.synchronize { @page_errors.clear }
         end
+
+        REJECTION_TEXT = "Uncaught (in promise)"
+        private_constant :REJECTION_TEXT
+
+        # Cap the stack: a deep recursion stack can be megabytes, and the buffer
+        # keeps up to PAGE_ERRORS_LIMIT of them.
+        STACK_LIMIT = 4_000
+        private_constant :STACK_LIMIT
+
+        # One Runtime.exceptionThrown event as a page_errors entry. The shape is
+        # the one javascripts/errors.js produced from the DOM `error` /
+        # `unhandledrejection` events before this event replaced it, so suites
+        # written against it keep working:
+        # - message: an Error's "Name: message" (the description up to its
+        #   first stack frame), or a thrown primitive's value. A rejection's
+        #   message drops the "Name: " prefix, as `reason.message` did.
+        # - line/column: 1-based like ErrorEvent's lineno/colno (CDP counts
+        #   from 0), and nil for a rejection, which carries no location.
+        # - stack: the Error's description, which is its stack, or nil for a
+        #   thrown primitive. Lightpanda sends no structured stackTrace.
+        def self.page_error_entry(params)
+          details = params["exceptionDetails"] || {}
+          exception = details["exception"] || {}
+          rejection = details["text"] == REJECTION_TEXT
+          stack = exception["subtype"] == "error" ? exception["description"].to_s : nil
+
+          {
+            kind: rejection ? "unhandledrejection" : "error",
+            message: page_error_message(exception, stack, rejection),
+            url: details["url"].to_s,
+            line: rejection ? nil : one_based(details["lineNumber"]),
+            column: rejection ? nil : one_based(details["columnNumber"]),
+            stack: stack&.slice(0, STACK_LIMIT),
+            timestamp: params["timestamp"],
+          }
+        end
+
+        def self.one_based(position)
+          position + 1 if position
+        end
+
+        def self.page_error_message(exception, stack, rejection)
+          return primitive_text(exception) unless stack
+
+          summary = stack.split(/\n\s+at /, 2).first
+          prefix = "#{exception['className']}: "
+          rejection && summary.start_with?(prefix) ? summary.delete_prefix(prefix) : summary
+        end
+
+        # What String(value) gave for a thrown or rejected non-Error.
+        def self.primitive_text(exception)
+          return exception["value"].nil? ? "null" : exception["value"].to_s if exception.key?("value")
+
+          [exception["unserializableValue"], exception["description"], exception["type"]]
+            .find { |v| v.is_a?(String) && !v.empty? }.to_s
+        end
+        private_class_method :page_error_message, :one_based, :primitive_text
 
         private
 
@@ -82,9 +139,6 @@ module Capybara
         TURBO_SENTINEL_PREFIX = "__lightpanda_turbo_"
         private_constant :TURBO_SENTINEL_PREFIX
 
-        PAGE_ERROR_SENTINEL_PREFIX = "__lightpanda_page_error_"
-        private_constant :PAGE_ERROR_SENTINEL_PREFIX
-
         # The Turbo activity tracker signals busy/idle via console.debug
         # sentinels (see subscribe_to_turbo_signals); every consoleAPICalled
         # consumer must filter them out of user-facing output.
@@ -92,17 +146,12 @@ module Capybara
           value.is_a?(String) && value.start_with?(TURBO_SENTINEL_PREFIX)
         end
 
-        # javascripts/errors.js reports uncaught page errors over the same
-        # console.debug channel, prefix + JSON payload.
-        def page_error_sentinel?(value)
-          value.is_a?(String) && value.start_with?(PAGE_ERROR_SENTINEL_PREFIX)
-        end
-
         # Anything the injected bundle emits for the driver's own benefit. Every
-        # consoleAPICalled consumer filters on this, not on one prefix — missing
-        # a sentinel here leaks driver plumbing into user-facing output.
+        # consoleAPICalled consumer filters on this, not on one prefix — a new
+        # sentinel added to turbo_sentinel?'s side only would leak driver
+        # plumbing into user-facing output.
         def driver_sentinel?(value)
-          turbo_sentinel?(value) || page_error_sentinel?(value)
+          turbo_sentinel?(value)
         end
 
         # Oldest entries are dropped past this cap so a chatty page can't grow
@@ -112,20 +161,12 @@ module Capybara
         # Ring-buffer every console.* call for `Browser#console_logs`. Separate
         # from subscribe_to_console_logs (which streams to an optional IO logger)
         # so capture works without any logger configured. Driver sentinels are
-        # plumbing, not page output: the Turbo ones are dropped, and the
-        # page-error ones are rerouted to @page_errors instead.
+        # plumbing, not page output, so they are dropped.
         def subscribe_to_console_capture
           on("Runtime.consoleAPICalled") do |params|
             args = params["args"]
             next unless args.is_a?(Array)
-
-            first = args.first&.dig("value")
-            next if turbo_sentinel?(first)
-
-            if page_error_sentinel?(first)
-              record_page_error(first, params["timestamp"])
-              next
-            end
+            next if driver_sentinel?(args.first&.dig("value"))
 
             entry = {
               type: params["type"],
@@ -141,28 +182,10 @@ module Capybara
         # loop (a rejected fetch on an interval) must not grow this unbounded.
         PAGE_ERRORS_LIMIT = 1_000
 
-        # Parse one `__lightpanda_page_error_<json>` sentinel into @page_errors.
-        # A payload that won't parse is still worth surfacing — dropping it would
-        # turn "the page threw" into silence, which is the whole failure mode
-        # this exists to end — so it lands with the raw text as the message.
-        def record_page_error(sentinel, timestamp)
-          json = sentinel.delete_prefix(PAGE_ERROR_SENTINEL_PREFIX)
-          fields = begin
-            JSON.parse(json)
-          rescue JSON::ParserError
-            { "kind" => "error", "message" => json }
+        def subscribe_to_page_errors
+          on("Runtime.exceptionThrown") do |params|
+            push_capped(@page_errors, @page_errors_mutex, Console.page_error_entry(params), PAGE_ERRORS_LIMIT)
           end
-
-          entry = {
-            kind: fields["kind"] || "error",
-            message: fields["message"].to_s,
-            url: fields["url"].to_s,
-            line: fields["line"],
-            column: fields["column"],
-            stack: fields["stack"],
-            timestamp: timestamp,
-          }
-          push_capped(@page_errors, @page_errors_mutex, entry, PAGE_ERRORS_LIMIT)
         end
 
         def push_capped(buffer, mutex, entry, limit)

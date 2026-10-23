@@ -8,9 +8,10 @@ require_relative "../test_helper"
 # was supposed to produce. That is how the solidus taxon-tree failure
 # presented, and diagnosing it needed a hand-injected window error listener.
 #
-# javascripts/errors.js now ships that listener. These tests pin the contract:
-# the exception lands in page_errors, it does NOT land in console_logs, and the
-# sentinel never leaks into user-facing console output.
+# Browser::Console now reads Runtime.exceptionThrown, as Chrome clients do. These
+# tests pin the contract: the exception lands in page_errors, it does NOT land in
+# console_logs, and the entry keeps the shape the earlier window-listener source
+# produced (1-based line/column, "Name: message", nil location on a rejection).
 describe "Capybara::Lightpanda::Browser#page_errors" do
   let(:session) { TestSessions::Lightpanda }
   let(:browser) { session.driver.browser }
@@ -44,34 +45,31 @@ describe "Capybara::Lightpanda::Browser#page_errors" do
 
     # The separation is the design decision, not an accident: Chrome models an
     # exception as exceptionThrown rather than consoleAPICalled, and suites
-    # already assert console_logs holds no errors.
-    assert_empty browser.console_logs.select { |m| m[:type] == "error" },
-                 "an uncaught exception leaked into console_logs: #{browser.console_logs.inspect}"
-  end
-
-  it "never leaks the sentinel into console_logs" do
-    session.find(:css, "#thrower").click
-    wait_for_page_errors
-
-    leaked = browser.console_logs.select { |m| m[:text].to_s.include?("__lightpanda_page_error_") }
-    assert_empty leaked, "driver sentinel leaked into console_logs: #{leaked.inspect}"
+    # already assert console_logs holds no errors. The fixture logs nothing, so
+    # anything here is the exception leaking through.
+    assert_empty browser.console_logs, "an uncaught exception leaked into console_logs"
   end
 
   it "captures an unhandled promise rejection" do
     session.find(:css, "#rejecter").click
-
-    # Rejection reporting is a separate upstream code path from `error`, and
-    # Lightpanda may not implement `unhandledrejection` at all — in which case
-    # the listener simply never fires. Skip rather than fail: the `error` half
-    # above is the contract this feature is for, and a hard failure here would
-    # block the suite on an upstream gap we don't control.
-    unless Capybara::Lightpanda::Utils::Wait.until(timeout: 2) { browser.page_errors.any? }
-      skip "Lightpanda did not deliver unhandledrejection on this build"
-    end
+    wait_for_page_errors
 
     rejection = browser.page_errors.find { |e| e[:kind] == "unhandledrejection" }
     refute_nil rejection, "rejection not captured: #{browser.page_errors.inspect}"
-    assert_match(/rejected on purpose/, rejection[:message])
+    # `reason.message`, not "Error: …": the shape suites matched before the swap.
+    assert_equal "rejected on purpose", rejection[:message]
+    assert_match(/rejected on purpose/, rejection[:stack])
+  end
+
+  # The driver's own scripts report failure by raising, so a suite that rescues
+  # a JavaScriptError must not also find it in page_errors.
+  it "keeps driver script failures out of page_errors" do
+    assert_raises(Capybara::Lightpanda::JavaScriptError) { session.execute_script("throw new Error('driver boom')") }
+    assert_raises(Capybara::Lightpanda::JavaScriptError) { session.evaluate_script("(() => { throw new Error('eval boom') })()") }
+    session.find(:css, "#thrower").click
+    wait_for_page_errors
+
+    assert_equal 1, browser.page_errors.size, browser.page_errors.inspect
   end
 
   # A rejection the page handles in the same tick is not an error. Builds below
@@ -86,6 +84,29 @@ describe "Capybara::Lightpanda::Browser#page_errors" do
     wait_for_page_errors
 
     assert_equal(["really unhandled"], browser.page_errors.map { |e| e[:message] })
+  end
+
+  # Frames are where embedded widgets (payment forms, editors) live, and their
+  # exceptions are just as invisible to console_logs. Lightpanda reports them
+  # under the frame's own execution context (#4115), on the page's session.
+  it "captures an exception thrown inside an iframe" do
+    session.visit("/lightpanda/with_frame")
+    session.within_frame("test-frame") do
+      session.execute_script("setTimeout(function() { throw new Error('frame boom'); }, 0)")
+    end
+    wait_for_page_errors
+
+    assert_equal(["Error: frame boom"], browser.page_errors.map { |e| e[:message] })
+  end
+
+  # A thrown string has no Error wrapper: its value is the whole message, and
+  # there is no stack to report.
+  it "reports a thrown primitive as its value" do
+    session.execute_script("setTimeout(function() { throw 'plain boom'; }, 0)")
+    wait_for_page_errors
+
+    error = browser.page_errors.first
+    assert_equal ["error", "plain boom", nil], [error[:kind], error[:message], error[:stack]]
   end
 
   it "clears on session reset and on clear_page_errors" do

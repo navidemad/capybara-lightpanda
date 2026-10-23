@@ -342,27 +342,26 @@ the driver keeps them apart too:
 
 ```ruby
 page.driver.browser.page_errors
-# => [{kind: "error", message: "Cannot read properties of undefined (reading 'id')",
+# => [{kind: "error", message: "TypeError: Cannot read properties of undefined (reading 'id')",
 #      url: "http://app.test/assets/taxonomy.js", line: 94, column: 22,
 #      stack: "TypeError: …", timestamp: 1753449600.0}]
 ```
 
-`kind` is `"error"` or `"unhandledrejection"`. Same lifecycle as `console_logs`:
-capped at 1,000, cleared on reset, and `clear_page_errors` empties it mid-test.
+`kind` is `"error"` or `"unhandledrejection"`; a rejection's `message` is the
+reason's message and it carries no `line`/`column`. Same lifecycle as
+`console_logs`: capped at 1,000, cleared on reset, and `clear_page_errors`
+empties it mid-test. Exceptions from iframes land here too.
 
-This matters more here than on other drivers, because Lightpanda implements no
-`Runtime.exceptionThrown` at all — without this the exception reaches *nothing*.
-A handler dying on a `TypeError` leaves every buffer empty while the page quietly
-stops doing what it was going to do, and the failure surfaces somewhere else
-entirely as `ElementNotFound` on whatever the handler was supposed to produce.
-That is a genuinely expensive hour when you don't know to look for it.
+Check it when a step fails for no visible reason. A handler dying on a
+`TypeError` leaves `console_logs` empty while the page quietly stops doing what
+it was going to do, and the failure surfaces somewhere else entirely as
+`ElementNotFound` on whatever the handler was supposed to produce.
 
-The capture is a passive `window` listener injected with the driver's own
-bundle, so know what it can't see: an exception a framework catches itself never
-reaches `window` (Stimulus routes action errors through its own `handleError`),
-and a cross-origin script collapses to `"Script error."` with no detail. Partial,
-but the alternative is nothing at all. It disappears the day upstream emits the
-event, without the API changing.
+The buffer is fed by `Runtime.exceptionThrown`, as on Chrome, so know what it
+can't see: an exception a framework catches itself (Stimulus routes action
+errors through its own `handleError`) or a page `error` listener cancels with
+`preventDefault()` never arrives. Your own `execute_script` and
+`evaluate_script` failures raise `JavaScriptError` instead of landing here.
 
 Selenium-shaped helpers that
 shared Rails suites copy around work too: `browser.logs.get(:browser)` returns
@@ -475,7 +474,7 @@ covers what to include.
 | `Capybara::Lightpanda::Node` | DOM operations via `Runtime.callFunctionOn` with object-id binding |
 | `Capybara::Lightpanda::Cookies` | `Enumerable` over `Network.getAllCookies` (every origin in the context), plus `setCookie` / `deleteCookies` / bulk `clearBrowserCookies`, and a YAML `store` / `load` round-trip |
 | `Capybara::Lightpanda::Network` | Counts in-flight requests from `Network.requestWillBeSent` / `responseReceived` — backs `status_code`, `response_headers`, `wait_for_network_idle`, and the header overrides |
-| `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking), `errors.js` (uncaught-exception capture behind `page_errors`) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
+| `lib/capybara/lightpanda/javascripts/*.js` | The injected `_lightpanda` bundle, split by concern — `turbo.js` (Turbo activity tracking) and `predicates.js` (`isVisible`, `isObscured`, `isDisabled`, `isContentEditable`, `visibleText`), wired by `attach.js` and assembled into one IIFE by `AutoScripts`, then registered once per session via `Page.addScriptToEvaluateOnNewDocument` |
 
 The driver speaks standard CDP and its client follows [Ferrum](https://github.com/rubycdp/ferrum)'s design, so most patterns from that project translate directly. Where Lightpanda diverges from Chromium, the driver papers over it.
 

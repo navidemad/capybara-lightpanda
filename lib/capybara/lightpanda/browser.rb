@@ -165,6 +165,7 @@ module Capybara
         @turbo_event.set
         subscribe_to_console_logs
         subscribe_to_console_capture
+        subscribe_to_page_errors
         subscribe_to_execution_context
         subscribe_to_navigation
         subscribe_to_document_ready
