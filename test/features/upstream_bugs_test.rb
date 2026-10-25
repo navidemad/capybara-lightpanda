@@ -116,9 +116,13 @@ describe "Upstream Lightpanda bug repros & workarounds" do
       session.assert_selector(:css, "#dialog-close")
     end
 
-    it "showModal on an already-open dialog throws InvalidStateError per spec" do
+    # Per spec, showModal() throws only for a dialog open *non-modally*; on one
+    # already open as a modal it returns silently (Chrome parity from upstream
+    # #4164, 11050 — below it Lightpanda threw for both). Opening with show()
+    # keeps the assertion true on every build the gem supports.
+    it "showModal on a dialog opened by show() throws InvalidStateError per spec" do
       session.visit("/lightpanda/upstream/dialog")
-      session.find(:css, "#open-modal").click
+      session.find(:css, "#open-show").click
       threw = session.evaluate_script(<<~JS)
         (function() {
           try { document.getElementById('d').showModal(); return null; }

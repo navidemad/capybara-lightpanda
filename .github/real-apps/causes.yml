@@ -158,6 +158,7 @@ campfire-lexxy-keyboard:
   next_step: >-
     Boot the app with the nesting fix and check what Lexical's editor state
     holds after send_keys (Input.insertText into a contenteditable).
+  reference: "upstream lightpanda-io/browser#4181 (Input.insertText inserts nothing into a contenteditable; fix PR #4182)"
   patterns:
     - 'test_enter_sends_the_message_when_the_toolbar_is_collapsed'
     - 'test_enter_adds_a_newline_in_rich_text_mode'
