@@ -1,5 +1,3 @@
-./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when customers have same country but different state changes the bill address state accordingly
-./spec/features/admin/orders/new_order_spec.rb # New Order when changing customer when one customer address have only textual state changes the bill address state accordingly
 ./spec/features/admin/orders/shipments_spec.rb # Shipments when split shipment can split item
 ./spec/features/admin/products/edit/taxons_spec.rb # Product Display Order managing display order should allow an admin to manage display order (taxons)
 ./spec/features/admin/store_credits_spec.rb # Store credits admin displaying a store credit details page lets edit store credit's memo
