@@ -178,7 +178,9 @@ module Capybara
       # generic Event for everything else (so callers can fire custom events
       # like `node.trigger('lp:custom')`).
       def trigger(event)
-        call(TRIGGER_JS, event.to_s)
+        name = event.to_s
+        call(TRIGGER_JS, name)
+        driver.browser.wait_for_idle if name == "click"
       end
 
       def set(value, **_options)
