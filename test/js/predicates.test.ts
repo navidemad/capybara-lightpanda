@@ -144,3 +144,52 @@ test("isObscured: visibility:hidden short-circuits to obscured", () => {
   expect(predicates.isObscured(document.getElementById("t"))).toBe(true);
 });
 
+
+// The hit-test APIs are controlled inputs: the policy under test is whether
+// a shadow host hit is enough evidence that its child can receive a pointer.
+function shadowHitTest() {
+  const dom = makeDom('<div id="host"></div><div id="outside"></div>');
+  const host = dom.document.getElementById("host")!;
+  const root = host.attachShadow({ mode: "open" });
+  root.innerHTML = '<button id="target">Act</button><div id="cover"></div>';
+  const target = root.querySelector("#target")!;
+  target.getBoundingClientRect = () => ({ left: 10, top: 10, width: 20, height: 20 }) as DOMRect;
+  dom.document.elementFromPoint = () => host;
+  return { ...dom, host, root, target };
+}
+
+test("isObscured: an overlay in the same shadow tree must prevent a pointer action", () => {
+  const { predicates, root, target } = shadowHitTest();
+  root.elementFromPoint = () => root.querySelector("#cover");
+  expect(predicates.isObscured(target)).toBe(true);
+});
+
+test("isObscured: a shadow descendant remains actionable when its own root hits it", () => {
+  const { predicates, root, target } = shadowHitTest();
+  root.elementFromPoint = () => target;
+  expect(predicates.isObscured(target)).toBe(false);
+});
+
+test("isObscured: an outside overlay cannot be bypassed by a clear shadow-root hit", () => {
+  const { predicates, document, root, target } = shadowHitTest();
+  document.elementFromPoint = () => document.getElementById("outside");
+  root.elementFromPoint = () => target;
+  expect(predicates.isObscured(target)).toBe(true);
+});
+
+test("isObscured: older browsers retain the host fallback when shadow hit testing is absent", () => {
+  const { predicates, root, target } = shadowHitTest();
+  Object.defineProperty(root, "elementFromPoint", { value: undefined });
+  expect(predicates.isObscured(target)).toBe(false);
+});
+
+test("isObscured: a clear inner root cannot bypass an overlay in the outer shadow tree", () => {
+  const { predicates, root, target } = shadowHitTest();
+  const innerHost = root.ownerDocument.createElement("div");
+  root.appendChild(innerHost);
+  const innerRoot = innerHost.attachShadow({ mode: "open" });
+  innerRoot.appendChild(target);
+  root.elementFromPoint = () => root.querySelector("#cover");
+  innerRoot.elementFromPoint = () => target;
+  expect(predicates.isObscured(target)).toBe(true);
+});
