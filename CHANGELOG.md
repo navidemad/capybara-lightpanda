@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0] - 2026-10-26
+
+### Fixed
+
+- **`trigger(:click)` waits for the page it loads.** Calling `element.trigger(:click)` on a link or submit button returned before the new page arrived, so the next step ran against the old page. It now waits the way `click` does.
+- **Clicking a `<a download>` link no longer cancels the download on recent nightlies.** From nightly 11097 (and the upcoming 1.1 release line), Lightpanda starts the download itself when a link has a `download` attribute. The driver then also went to the same URL, which cancelled the download and replaced the page. The driver now leaves the download to the browser. Older browsers behave as before.
+- **`obscured?` sees overlays inside a shadow root.** On browsers that can hit-test inside shadow trees (recent nightlies), an element covered by another element in the same shadow root now counts as obscured; before, it was always reported as not obscured. Older browsers give the same answer as before.
+
 ## [0.15.0] - 2026-10-23
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.2** or a nightly build ≥ 10965. The driver refuses anything older and names the version it found. Pin `1.0.2` for a reproducible browser.
