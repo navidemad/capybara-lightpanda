@@ -1,1 +1,0 @@
-./spec/system/comments/like_button_state_after_reply_spec.rb # Like button and tooltip after replying keeps the like footer visible and clears replying state on parent after submitting a reply

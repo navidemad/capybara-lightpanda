@@ -102,3 +102,17 @@ index 6860b14..f109b7b 100644
 -  )
 -end
 +require "capybara-lightpanda"
+diff --git a/spec/system/articles/feeds/basic_spec.rb b/spec/system/articles/feeds/basic_spec.rb
+--- a/spec/system/articles/feeds/basic_spec.rb
++++ b/spec/system/articles/feeds/basic_spec.rb
+@@ -20,7 +20,9 @@ RSpec.describe Articles::Feeds::Basic, js: true do
+       expect(page).to have_selector(selector, visible: :visible)
+       create(:user_block, blocker: user, blocked: hot_story.user, config: "default")
+       visit root_path
+-      expect(page).to have_selector(selector, visible: :hidden)
++      # The feed may omit the blocked article server-side or hide a cached one
++      # in JavaScript. Neither path may leave the blocked author's card visible.
++      expect(page).to have_no_selector(selector, visible: :visible)
+     end
+   end
+ end
