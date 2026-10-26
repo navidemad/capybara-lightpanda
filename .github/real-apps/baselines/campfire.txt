@@ -1,12 +1,4 @@
-./test/system/boosting_messages_test.rb # BoostingMessagesTest#test_boost_by_another_user_preserves_the_input_state
-./test/system/boosting_messages_test.rb # BoostingMessagesTest#test_boosting_a_message
-./test/system/boosting_messages_test.rb # BoostingMessagesTest#test_deleting_a_boost
-./test/system/boosting_messages_test.rb # BoostingMessagesTest#test_message_update_preserves_the_input_state
 ./test/system/composer_test.rb # ComposerTest#test_an_unsent_message_is_kept_as_a_draft_while_hopping_between_rooms
-./test/system/composer_test.rb # ComposerTest#test_arrow_up_edits_my_last_message_when_the_composer_is_empty
-./test/system/composer_test.rb # ComposerTest#test_editing_a_formatted_trix_message_keeps_its_formatting
-./test/system/composer_test.rb # ComposerTest#test_editing_a_legacy_trix_message_keeps_its_mention_and_embed
-./test/system/composer_test.rb # ComposerTest#test_editing_a_message_whose_mention_was_saved_under_Trix_keeps_the_mention
 ./test/system/composer_test.rb # ComposerTest#test_editing_a_message_with_a_mention_keeps_the_mention
 ./test/system/composer_test.rb # ComposerTest#test_enter_adds_a_newline_in_rich_text_mode_and_meta+enter_sends
 ./test/system/composer_test.rb # ComposerTest#test_enter_sends_the_message_when_the_toolbar_is_collapsed
@@ -14,11 +6,4 @@
 ./test/system/composer_test.rb # ComposerTest#test_mentioning_a_user_with_@_inserts_a_mention_attachment
 ./test/system/composer_test.rb # ComposerTest#test_pasting_a_URL_unfurls_an_opengraph_preview
 ./test/system/composer_test.rb # ComposerTest#test_pasting_a_table_sends_it_as_a_table
-./test/system/composer_test.rb # ComposerTest#test_replying_quotes_the_original_message_with_attribution
-./test/system/message_id_spoofing_test.rb # MessageIdSpoofingTest#test_a_distinct_client_message_id_never_alters_the_victim_message
-./test/system/message_id_spoofing_test.rb # MessageIdSpoofingTest#test_a_reused_client_message_id_cannot_hijack_the_victim_message
-./test/system/sending_messages_test.rb # SendingMessagesTest#test_deleting_messages
-./test/system/sending_messages_test.rb # SendingMessagesTest#test_editing_messages
-./test/system/sending_messages_test.rb # SendingMessagesTest#test_sending_messages_between_two_users
 ./test/system/unfurling_links_test.rb # UnfurlingLinksTest#test_a_quote_in_the_opengraph_image_URL_cannot_add_attributes_to_the_preview
-./test/system/unread_rooms_test.rb # UnreadRoomsTest#test_sending_messages_between_two_users
