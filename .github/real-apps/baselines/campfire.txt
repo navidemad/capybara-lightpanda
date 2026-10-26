@@ -1,8 +1,4 @@
 ./test/system/composer_test.rb # ComposerTest#test_an_unsent_message_is_kept_as_a_draft_while_hopping_between_rooms
-./test/system/composer_test.rb # ComposerTest#test_editing_a_message_with_a_mention_keeps_the_mention
-./test/system/composer_test.rb # ComposerTest#test_enter_adds_a_newline_in_rich_text_mode_and_meta+enter_sends
-./test/system/composer_test.rb # ComposerTest#test_enter_sends_the_message_when_the_toolbar_is_collapsed
-./test/system/composer_test.rb # ComposerTest#test_markdown_strikethrough_survives_sanitization
 ./test/system/composer_test.rb # ComposerTest#test_mentioning_a_user_with_@_inserts_a_mention_attachment
 ./test/system/composer_test.rb # ComposerTest#test_pasting_a_URL_unfurls_an_opengraph_preview
 ./test/system/composer_test.rb # ComposerTest#test_pasting_a_table_sends_it_as_a_table
