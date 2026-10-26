@@ -12,10 +12,10 @@ module Capybara
     # `Browser.downloadProgress`. We mirror those into a completed-files list +
     # a blocking `wait`, the way ferrum's Downloads does.
     #
-    # IMPORTANT: the trigger is `Content-Disposition: attachment`, NOT MIME
-    # type. A `text/csv` (or any) response without that header is rendered as a
-    # normal navigation, not downloaded — which is why Capybara's MIME-triggered
-    # `:download` shared spec stays in capybara_skip.
+    # Navigation downloads require Content-Disposition: attachment, not just a
+    # MIME type. New browsers also honor an anchor's download attribute (build
+    # 11097 / 1.1 release line); Node#click lets that native activation finish.
+    # Capybara's MIME-only :download shared spec still stays in capybara_skip.
     #
     # Structure deliberately mirrors Network (same browser ref, same mutex +
     # subscribe/unsubscribe lifecycle, same reset-after-disposeBrowserContext

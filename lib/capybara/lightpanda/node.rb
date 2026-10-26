@@ -135,7 +135,7 @@ module Capybara
       end
 
       def click(_keys = [], **_options)
-        call(CLICK_JS)
+        call(CLICK_JS, native_anchor_downloads?)
         driver.browser.wait_for_idle
       end
 
@@ -376,6 +376,18 @@ module Capybara
 
       private
 
+      # Below #4124 a download attribute suppresses native activation entirely,
+      # so the manual navigation is still needed for attachment responses.
+      # The API has no feature marker: keep the floor path through 1.0.x and
+      # enable native download activation on build 11097 / the 1.1 release line.
+      def native_anchor_downloads?
+        browser = driver.browser
+        build = browser.nightly_build
+        return build >= Gem::Version.new("11097") if build
+
+        browser.release && browser.release >= Gem::Version.new("1.1.0")
+      end
+
       def find_hinted(method, selector, hints)
         driver.browser.find_within_hinted(@remote_object_id, method, selector, self.class.hint_spec(**hints))
               .map { |oid, cache| self.class.new(driver, oid, cache, frame_scoped: @frame_scoped) }
@@ -595,7 +607,7 @@ module Capybara
       # 6167 as duplicate `turbo:submit-start` events; the first request
       # gets aborted by the second and Turbo never renders the response.
       CLICK_JS = <<~JS
-        function() {
+        function(nativeAnchorDownloads) {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
           // Emulate coordinate hit-testing without a layout engine. In a real
           // browser a pointer click on a container lands on its frontmost
@@ -660,6 +672,11 @@ module Capybara
           var external = !!scheme && !/^(https?|about|blob|data|file|javascript)$/i.test(scheme[1]);
           var notCancelled = hit.dispatchEvent(clickEvt);
           if (external || !notCancelled || clickEvt.defaultPrevented) return;
+          // Native activation has already started the download. Navigating
+          // again cancels it and replaces the document. Keep the complete
+          // synthetic event sequence and its cancellation, but stop here on
+          // browsers that support the download attribute.
+          if (nativeAnchorDownloads && link && link.hasAttribute('download')) return;
           var tag = hit.tagName;
           // A `javascript:` link never navigates: the click's own activation
           // behavior has already run its code. Assigning it to location.href
