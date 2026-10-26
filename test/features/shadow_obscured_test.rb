@@ -32,5 +32,4 @@ describe "Node#obscured? inside a shadow root" do
 
     assert_predicate button, :obscured?
   end
-
 end
