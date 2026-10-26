@@ -30,7 +30,7 @@ export interface Predicates {
   isDisabled(el: unknown): boolean;
   isContentEditable(el: unknown): boolean;
   visibleText(el: unknown): string;
-  [name: string]: (el: unknown) => unknown;
+  [name: string]: (el: unknown, ...args: unknown[]) => unknown;
 }
 
 // Every top-level `function NAME(...)` declared in predicates.js. Derived from
