@@ -84,7 +84,7 @@ LP.handleJavaScriptDialog    LP.configureLoading (limitation #6)    LP.version
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
-Page.getNavigationHistory    Page.navigateToHistoryEntry (reloads even a pushState entry — Browser#back uses history.back())
+Page.getNavigationHistory    Page.navigateToHistoryEntry (same-document traversal fixed by #3903, 11113; below it reloads — keep history.back() until the floor covers it)
 Page.removeScriptToEvaluateOnNewDocument
 DOM.querySelector            DOM.querySelectorAll (finds go through JS in Runtime.callFunctionOn)
 Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
@@ -96,6 +96,7 @@ DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResult
 DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchTouchEvent (#3816, 10479)
+Input.setInterceptDrags      Input.dispatchDragEvent (#4228, 11246; external text drag only, no files or native dragstart)
 Page.frameDetached (event, #3939, 10544 — removed iframes)
 Network.setCookies (batch)   Network.getResponseBody     Network.setBlockedURLs
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
@@ -138,7 +139,7 @@ LP.configureCDP              LP.getContentSignal
 
 3. **JavaScript context reset on every navigation** — ad-hoc `Runtime.evaluate` state is gone (the `_lightpanda` bundle is re-injected by `addScriptToEvaluateOnNewDocument`). A node handle from the previous top-level document fails two ways (verified 2026-10-17 on 1.0.1): bound as `this` → `Cannot find context with specified id` (`NoExecutionContextError`, retried by Capybara); passed as an *argument* → `Argument should belong to the same JavaScript world as target object`, which `client.rb#handle_error` maps to `NodeNotFoundError` (PR #184, Ferrum #647).
 
-4. **`HTMLElement.isContentEditable` still returns false** — `src/browser/webapi/element/Html.zig#getIsContentEditable`; keep `javascripts/predicates.js#isContentEditable`'s ancestor walk. This is separate from text editing: #4182 (11101) adds trusted `Input.insertText`/keypress insertion into editing hosts. Verified 2026-10-26 on published nightly 11106: text becomes `typed`, native getter stays false. Open issue #4208 tracks the getter. `Node#set` still writes `innerHTML`; do not infer full Lexical support from the insertion fix.
+4. **`HTMLElement.isContentEditable`** — native getter was fixed in #4210 (11229), above the 1.0.2/10965 floor; retain the gem helper for older browsers. #4210 also treats invalid `contenteditable` values as inherited and ignores SVG attributes; our helper treats any non-`false` attribute as editable, so those cases need targeted investigation. #4182 (11101) added trusted text insertion; `Node#set` still writes `innerHTML`.
 
 5. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (build ≥6353)
    - The gem passes `--load-resources stylesheet` unconditionally (`Process#build_args`; `image` is appended to the same comma-separated value under `load_images:`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct. Cost: one synchronous CSS fetch per `<link>`. A sheet over **2 MiB** (4 MiB from #3889, 10375) is dropped whole — `error` event, none of its rules apply — so an unminified dev-mode bundle past the cap leaves `display: none` menus/tabs visible.
@@ -158,7 +159,8 @@ LP.configureCDP              LP.getContentSignal
 
 | Issue | Impact | Description |
 |---|---|---|
-| #4208 | Editing | Native `isContentEditable` stays false even after #4182 adds text insertion; gem helper remains necessary. |
+| #4263 | Hit testing | Fixed inset overlays can have synthetic bounds and fail to cover a button; #4264 is open. |
+| #4251 | Keyboard | Ctrl+Backspace/Delete and Ctrl+Arrow do not perform word editing. |
 | #3852 | Binary | The 1.0.0 and 1.0.1 `aarch64-linux` binaries need glibc 2.38 (built on `ubuntu-24.04-arm`; x86_64 needs 2.35), so Debian 12 / Ubuntu 22.04 arm64 can't start them. |
 | (not filed, wishlist A63) | Drag | `Element.scrollIntoView()` ignores its options (`_ = opts`) and always aligns the element's top. Since #3658 (10657, in the floor) rects follow the scroll, so `scrollIntoView({block: 'center'})` can push nearby elements out of the viewport. `HTML5_DRAG_JS` centers with its own `scrollCenterIntoView` (verified 2026-10-16 on 10661). |
 

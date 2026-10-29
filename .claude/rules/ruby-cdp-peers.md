@@ -11,7 +11,7 @@ Maintained by the `sync-upstream` skill (Ferrum / Cuprite targets). Don't write 
 Repo: https://github.com/rubycdp/ferrum
 Role: peer Ruby CDP client. Active, idiomatic; primary peer-gem reference.
 
-**Last reviewed**: 2026-10-26; Ferrum **v0.19.1**, `main` `fb7d85803f` (#673 merged, unreleased). Open queue: #680 (writer thread / JRuby), #674 (click wait), #672 (PDF child detach, immune: main-frame-only sniff), #665 (Chrome touch/viewport reset, no corresponding command here).
+**Last reviewed**: 2026-10-29; Ferrum **v0.20.0**, `main` `3bae1680` (#680 and #672 merged). Open queue: #674 (click wait), #685 (out-of-process frame idle tracking; our navigation sniff is main-frame-only).
 
 - **#670 isolated worlds — N/A**: `_lightpanda` must live in the page world, since node handles are main-world objects and Lightpanda runs `callFunctionOn` in the top document's context (`CLAUDE.md`).
 
@@ -51,7 +51,7 @@ Settled, don't re-audit:
 
 ### Transport audit (verified 2026-10-26)
 
-- **JRuby reader guard is load-bearing** — `client/web_socket.rb#start_reader_thread` waits for readability before `readpartial` and starts only after the handshake. `script/audit_websocket.rb` passes an idle-reader handshake and 100 messages from four senders with concurrent pings/pongs on MRI 4.0.9 and JRuby 10.1.2.0 (Ruby 4.0, Temurin 21.0.13, websocket-driver 0.8.1). Removing only the readiness guard in a temporary source copy makes the JRuby probe hang past its 15-second watchdog. Ferrum #680's proposed writer queue is not adopted; this exercises the reported lock interaction without claiming universal JRuby safety.
+- **JRuby reader guard is load-bearing** — `client/web_socket.rb#start_reader_thread` waits for readability before `readpartial` and starts only after the handshake. `script/audit_websocket.rb` passes an idle-reader handshake and 100 messages from four senders with concurrent pings/pongs on MRI 4.0.9 and JRuby 10.1.2.0 (Ruby 4.0, Temurin 21.0.13, websocket-driver 0.8.1). Removing only the readiness guard in a temporary source copy makes the JRuby probe hang past its 15-second watchdog. Ferrum #680's writer queue is not adopted; this exercises the reported lock interaction without claiming universal JRuby safety.
 - **Command timeout excludes sending** — `client.rb#command` starts `pending.value!(timeout)` after `send_message` returns. A controlled 100 ms send delay still returns a successful response after 105 ms with `timeout: 0.01`. `web_socket.rb#write` bounds time without progress, not the whole write; time waiting for `@driver_mutex` is also outside the response budget. Existing stalled-peer tests pass, but this is not a hard end-to-end deadline. A future absolute-deadline change needs an explicit policy for queued versus partly written frames and connection-health timeouts; keep it separate from a speculative #680 port.
 
 ### Outstanding adoption candidates
@@ -61,7 +61,7 @@ Settled, don't re-audit:
 
 ### Diverged on purpose
 
-- **Page exceptions stay out of the console buffer** — Ferrum #658 (main, unreleased) converged on our `Browser#console_logs` shape (ring buffer of 1000, cleared on reset) but folds `Runtime.exceptionThrown` and `Log.entryAdded` into the same `page.console` collection (`error?`). We keep exceptions in `Browser#page_errors`, apart from `consoleAPICalled` (Chrome's event split, Playwright/Puppeteer's `pageerror`), and suites that assert `console_logs` holds no errors depend on it. Messages stay plain hashes, not a `Message` class.
+- **Page exceptions stay out of the console buffer** — Ferrum #658 converged on our `Browser#console_logs` shape (ring buffer of 1000, cleared on reset) but folds `Runtime.exceptionThrown` and `Log.entryAdded` into the same `page.console` collection (`error?`). We keep exceptions in `Browser#page_errors`, apart from `consoleAPICalled` (Chrome's event split, Playwright/Puppeteer's `pageerror`), and suites that assert `console_logs` holds no errors depend on it. Messages stay plain hashes, not a `Message` class.
 - **`Node#wait_for_stop_moving` does not raise `NodeMovingError`** — Ferrum raises if the element is still moving after `attempts`. Lightpanda has no real animation/rendering loop, so "movement" between samples is just JS style mutation; if it hasn't settled in `MOVING_WAIT_ATTEMPTS` polls, the caller is better off proceeding silently with the last rect than failing the test. Comment in `node.rb` documents this.
 - **`Node#click` dispatches synthetic `mousedown`→`mouseup`→`click` `MouseEvent`s from JS, not CDP `Input.dispatchMouseEvent`** — Ferrum dispatches mouse events through CDP and computes content quads (hence its `CoordinatesNotFoundError`). Lightpanda has no real layout, so coordinate-based clicks don't help; `CLICK_JS` in `node.rb` walks down to the element a centered pointer would hit, dispatches the three events, and drives `<a href>` navigation itself via `location.href` (fragment-only targets just set `location.hash`). No `Element.click()` on that path — Lightpanda's click-in-progress flag (#3210) never engages; `IMPLICIT_SUBMIT_JS`/checkbox toggling do call `.click()`, from outside any handler.
 - **No public coordinate Mouse API** — `ferrum/mouse.rb` ↔ `keyboard.rb`/`node.rb`: browser scroll positions exist, but synthetic geometry cannot supply real pointer targeting; keyboard input remains supported.
@@ -76,7 +76,7 @@ Settled, don't re-audit:
 Repo: https://github.com/rubycdp/cuprite
 Role: peer Capybara CDP driver (built on Ferrum). Lower-priority secondary reference.
 
-**Last reviewed**: 2026-10-26; Cuprite **v0.19**, `main` `5e9dd37e10` unchanged. Open queue: #347 (finder hints), #350 (new Ferrum JS API; primitive-only property fallback and click-trigger navigation already covered here).
+**Last reviewed**: 2026-10-29; Cuprite **v0.19**, `main` `a9cc52c7` (#350 merged). Open queue: #347 (finder hints).
 
 - **#346 `Driver#downloads`** — converged on ours. **#344** drop modifiers on the mouse drag — N/A (our `drag_to` is HTML5-only).
 
