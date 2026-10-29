@@ -1,86 +1,46 @@
 # Lightpanda Browser Reference
 
-Upstream repo: https://github.com/lightpanda-io/browser
-License: AGPL-3.0 | Status: Beta (stability and coverage improving)
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-10-29 at `8f2c8185c97e3cc98de07f164e7eb3d9e2dd9020` (build 11280).
 
-Current floors: `Process::MINIMUM_NIGHTLY_BUILD = 10965` or `Process::MINIMUM_RELEASE = 1.0.2` (the same commit). Keep both channels in lockstep; `process.rb` records the rationale. Release binaries have no `nightly_build`, so build-gated tests take their below-build branch even when the release contains a fix. Gate only above-floor behavior and remove gates at a floor bump.
+## Version and transport constraints
 
-**Upstream behavior changes the gem compensates for** (users run the rolling nightly, so these are not gated by the floor; each pinned by `test/features/pointer_focus_test.rb` + `test/js/pointer-focus.test.ts`):
-- #3702 (9968) dropped `focus()` from `handleClick`, and an *untrusted* `mousedown` never runs the focus default → `CLICK_JS` focuses `_lightpanda.pointerFocusTarget(hit)` itself after an uncancelled mousedown (label → its control, contenteditable → outermost editing host, disabled skipped), or blurs the active element when the press hits nothing focusable. Without it `click` then `page.send_keys` typed into `<body>`.
-- #3424 (9234) made `Input.insertText` insert *at the caret*, and an attribute-seeded `value=` leaves the caret at 0 → `SEND_KEYS_FOCUS_JS` moves the caret to the end of a field that did not already have focus (WebDriver Element Send Keys / chromedriver). A field that already has focus keeps its caret — tests placing a caret must `focus()` first.
-- #3592 (9646) made `focus()` a no-op on non-focusable elements → `SEND_KEYS_FOCUS_JS` blurs the previous field so keys go to the body instead of landing there.
-- #3502 (9424) stopped the `value` getter from skipping disabled options, exposing that both `sel.value =` and `option.selected = true` select a disabled option (per spec) → `SELECT_OPTION_JS` returns early on `_lightpanda.isDisabled(this)`.
-- #3379 (9083) applies `tooShort`/`tooLong` only to *user-edited* values (HTML spec) → `#has_field … valid` is skipped in `spec_helper.rb` as spec-correct (`Node#set` writes `.value` from JS).
+- Floors: `Process::MINIMUM_NIGHTLY_BUILD = 10965`, `MINIMUM_RELEASE = 1.0.2`, the same commit. `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
+- A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten.
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release checked: 1.0.2 (2026-10-23).
+- Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
+- WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin.
 
-## Architecture
+## CDP commands used by the gem
 
-- Written in **Zig 0.17** (since #3760, 10077 — a local `main` build needs Zig 0.17), JS execution via **V8**
-- HTML parsing: **html5ever** (standards-compliant, handles malformed HTML)
-- HTTP: **libcurl** (custom headers, proxies, TLS control)
-- CSS: **CSSOM** — `insertRule`/`deleteRule`/`replace`/`replaceSync`, `checkVisibility` matches all active stylesheets. `@layer` support came in two halves — rules inside an `@layer` block *participate* in the cascade from #2719 (build ≥8160), and their *layer rank* is honored from #2983 (build ≥8281). Both are in the floor; don't cite 8160 alone as "`@layer` works". No full layout/paint/compositing
-- Platforms: Linux and macOS on x86_64 and aarch64 (see Binary Distribution), Windows via WSL2
+All **32 distinct literal commands** below are admitted by the dispatch enums both at the audited SHA and at release `1.0.2`; the current handlers/routes were inspected. Call sites are under `lib/capybara/lightpanda/`; internal command/page_command wrappers were inspected, including multiline calls. Runtime's enum admits evaluate/callFunctionOn/getProperties/releaseObject and forwards them through `sendInspector` → `BrowserContext.callInspector` → V8, rather than separate Zig handlers.
 
-## CDP Server
+| Domain | Commands |
+|---|---|
+| Browser | `setDownloadBehavior` |
+| DOM | `describeNode`, `setFileInputFiles` |
+| Emulation | `setDeviceMetricsOverride` |
+| Input | `dispatchKeyEvent`, `insertText` |
+| LP | `configureLoading`, `getMarkdown`, `handleJavaScriptDialog`, `version` |
+| Network | `clearBrowserCookies`, `deleteCookies`, `disable`, `enable`, `getAllCookies`, `setCookie`, `setExtraHTTPHeaders` |
+| Page | `addScriptToEvaluateOnNewDocument`, `captureScreenshot`, `enable`, `getLayoutMetrics`, `navigate`, `reload` |
+| Runtime | `callFunctionOn`, `enable`, `evaluate`, `getProperties`, `releaseObject` |
+| Target | `attachToTarget`, `createBrowserContext`, `createTarget`, `disposeBrowserContext` |
 
-Launched with `lightpanda serve --host 127.0.0.1 --port 9222`. Clients connect via WebSocket at `ws://127.0.0.1:9222`. Compatible with Puppeteer, Playwright (partial), and chromedp.
+`LP.getMarkdown` is used by `driver.rb#markdown`. Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The `Network.setBlockedURLs` string in selenium_compat.rb is a documentation example, not a built-in call.
 
-**WS handshake (#3173/#3256, in the floor)**: an upgrade request carrying any `Origin` header is 403'd, and `Host` must be an IP literal, the exact lowercase `localhost:<port>`, or (#3803, 10133) the name passed to an explicit `--advertise-host` — bare `localhost`, `LOCALHOST:<port>` and `localhost.evil.com:<port>` still 403. The gem's spawn path is immune (it connects to the `address=` the server logs, and websocket-driver 0.8.1 sends no `Origin`); a user-supplied `ws_url:` may say `localhost:<port>` — pinned by `test/features/ws_url_host_test.rb`. A client that must send `Origin` needs the server started with `--remote-allow-origins` (#3990, 10670, in the floor; Chrome's flag).
-
-### Implemented CDP Domains (22 total)
-
-| Domain | File | Notes |
-|---|---|---|
-| **Accessibility** | accessibility.zig | AXNode support. Not used by this gem. |
-| **Audits** | audits.zig | `enable` / `disable` stubs only. Not used by this gem. |
-| **Browser** | browser.zig | Basic browser-level commands |
-| **Console** | console.zig | `Console.messageAdded` event available; `console.*` also mirrored to `Runtime.consoleAPICalled` when `Runtime.enable` is on (the gem's Turbo tracker uses the latter). |
-| **CSS** | css.zig | CSSOM: `insertRule`/`deleteRule`/`replace`/`replaceSync`; `checkVisibility` matches all stylesheets; CDP `CSS.getComputedStyleForNode` not yet implemented |
-| **DOM** | dom.zig | 16 methods: `getDocument`, `querySelector`, `querySelectorAll`, `performSearch`, `resolveNode`, `describeNode`, `getBoxModel`, `getOuterHTML`, etc. |
-| **Emulation** | emulation.zig | `setUserAgentOverride` works (rejects `Mozilla`-containing UAs by design — go-rod workaround, #2704 closed as intended). `setDeviceMetricsOverride` drives `window.innerWidth`/`innerHeight`, `matchMedia`/`@media` evaluation, and `Page.getLayoutMetrics` — a JS-visible viewport, still no real layout. `mobile`/`scale` accepted-and-warned; `deviceScaleFactor` honored since #3231 (≥8815, 0 = don't override — feeds the screenshot renderer's scale). Both override setters re-evaluate every page's `MediaQueryList` and fire a real `change` only where `matches` flipped (#3378, in the floor; `addListener`/`removeListener` map to `change`), so `Driver#resize_window_to` makes breakpoint-listening JS run mid-test. **JS side only** — the loaded document's `@media` cascade does not re-resolve until the next navigation (resize-then-`visit` is the documented shape; verified 2026-09-06 on 9213). Pinned (both halves) by `viewport_test.rb`. Also `setEmulatedMedia`, `setFocusEmulationEnabled`, `setTouchEmulationEnabled`, `setGeolocationOverride`/`clearGeolocationOverride` + `navigator.geolocation` (#3233, ≥8755) |
-| **Fetch** | fetch.zig | Network interception: `enable`, `disable`, `continueRequest`, `failRequest`, `fulfillRequest`, `continueWithAuth`; events: `requestPaused` (also at the response stage since #3928, 10570), `authRequired` |
-| **Input** | input.zig | `dispatchMouseEvent`, `dispatchKeyEvent`, `insertText` |
-| **Inspector** | inspector.zig | Inspector lifecycle |
-| **Log** | log.zig | `Log.entryAdded` for a ≥400 response or a failed load, Chrome's `source: "network"` shape, from #4097 (10901). Not used by this gem — `Network#traffic` already records both. |
-| **LP** | lp.zig | Lightpanda-specific extensions: `getMarkdown`, `getSemanticTree`, `getInteractiveElements`, `getNodeDetails`, `getStructuredData`, `getContentSignal`, `detectForms`, `clickNode`, `fillNode`, `scrollNode`, `waitForSelector`, `handleJavaScriptDialog` (pre-arm), `configureLoading` (per-session loading toggles; params `{subFrame, worker, externalStylesheets, images}` — `images` since #3230, ≥8834. **Load-bearing from #3305, ≥8946**: `{subFrame: true}` is how the gem must re-enable iframes, see limitation #6), `configureCDP`, `version` |
-| **Network** | network.zig | Cookies (`getAllCookies`, `clearBrowserCookies` bulk both work), request/response interception, `setUserAgentOverride`, `setBlockedURLs`, `getRequestPostData` + `postData` on Request (#3150, ≥8572, bodies ≤64 KB). Header precedence since #3200/#3203 (≥8671): `fixed` (`Sec-Ch-Ua*`, never overridable) > `cli` (`--http-header`, `--user-agent`) > `cdp` (`setExtraHTTPHeaders`, the gem's `Network#headers=`) > script-set > default — so a CDP-set `User-Agent` is honored unless it contains `Mozilla` (`validateUserAgent`, every path). Cache-control surface (`clearBrowserCache`, `setCacheDisabled`, `requestServedFromCache`) unused — `Driver#reset!` disposes the BrowserContext. `Network#build_response_handler` matches the navigation response by the remembered document `requestId` (`response.type` is also readable since #3037). Worker requests ride the page session, so a worker's in-flight fetch counts toward `pending_connections`. **Redirects (#3175, in the floor)**: every followed hop emits its own `requestWillBeSent` with the same `requestId` and a `redirectResponse` payload; the 3xx never gets a `responseReceived` (Chrome semantics). `Network#build_request_handler` closes the previous entry from `redirectResponse` (Ferrum's `subscribe_request_will_be_sent` shape) without feeding `last_navigation_response` (so `status_code` stays the final hop's), and responses resolve onto the *last open* entry for the id — keep both, or one redirect strands a `response: nil` entry and every `wait_for_network_idle` burns its full timeout (probed 2026-08-18 on nightly 8688). Since #3267 (≥8880) a cross-origin redirect hop drops the `Authorization` header (Chrome/fetch semantics; other custom headers, including the gem's `Network#headers=`, still follow) — a suite that authenticates by header and redirects across origins loses the credential on the hop. **Since 1.0.0-era builds**: response header *names* are lowercased (#3624, 9734 — `Browser#response_headers`'s `Headers` downcases, so `['Content-Type']` still works; raw `traffic[..][:response][:headers]` keys are lowercase); `Origin` sent on form/fetch POSTs (#3460, 9302 — Rails origin check now actually runs); `Sec-Fetch-Site/Mode/Dest` sent to trustworthy URLs only (#3564, 9600 — measured `none`/`same-origin` correctly for navigate, form POST, `location.href`, fetch); a 301/302/303 that switches to GET drops body headers (#3526, 9478); `X-Frame-Options` enforced on iframes (#3605, 9704 — Rails' default `SAMEORIGIN` blocks cross-origin `within_frame`, Chrome parity). |
-| **Page** | page.zig | Navigation, events, screenshots (real text-render PNG since #3231, ≥8815; hardcoded 1920x1080 placeholder below), `reload`, `addScriptToEvaluateOnNewDocument`, `getNavigationHistory`/`navigateToHistoryEntry`, `javascriptDialogOpening` + `lifecycleEvent` + `navigatedWithinDocument` events. `handleJavaScriptDialog` deliberately errors — use `LP.handleJavaScriptDialog`. **Failed navigations commit an error document since #3843 (10261)**: a root navigation that fails before a response (refused, DNS, TLS) used to leave the old document in place; it now commits "Navigation failed\n\nReason: CouldntConnect" at the *failed* URL (opaque origin), so `current_url` is the unreachable URL afterwards — pinned by `click_navigation_wait_test.rb`'s refused case. Cancelled navigations (`window.stop()`, `Fetch.failRequest`) still keep the old document. |
-| **Performance** | performance.zig | Performance metrics |
-| **Runtime** | runtime.zig | JS evaluation, object inspection. Only Nodes carry `subtype: "node"` since #3831 (10255); below it every Zig-backed object did, so `evaluate_script` of `location`/`window`/a `DOMRect` came back as a bogus `Capybara::Node::Element`. From 10255 `location`/`DOMRect` serialize to Hashes and `window` raises `BrowserError: Object reference chain is too long` (`runtime.rb#unwrap_call_result` → `returnByValue`); thrown `DOMException`s carry their `Name: message` description. Verified 2026-10-10 on nightly 10379. |
-| **Security** | security.zig | Security state |
-| **Storage** | storage.zig | Storage state; `createContext` with storage state fails (#1550) |
-| **Target** | target.zig | Target/session management. Frame IDs scoped to the connection-lifetime `Browser`; not gem-relevant since we don't keep targetId-keyed state across `Driver#reset!`. |
-| **webMCP** | webmcp.zig | Lightpanda Model Context Protocol surface. Not used by this gem. |
-| **Debugger** / **IO** | debugger.zig, io.zig | `Debugger` started in #3944 (10560); `IO` reads CDP streams. Not used by this gem. |
-
-### CDP Methods Used by This Gem
+### Subscribed events (14 distinct names)
 
 ```
-Target.createTarget          Target.attachToTarget
-Target.createBrowserContext  Target.disposeBrowserContext
-Page.enable                  Page.navigate
-Page.reload                  Page.loadEventFired (event)
-Page.addScriptToEvaluateOnNewDocument                    Page.getLayoutMetrics
-Page.captureScreenshot       Page.javascriptDialogOpening (event)
-Page.frameStartedNavigating (event)                      Page.frameStoppedLoading (event)
-Page.domContentEventFired (event)
-Runtime.enable               Runtime.evaluate
-Runtime.callFunctionOn       Runtime.getProperties       Runtime.releaseObject
-Runtime.executionContextCreated (event)                  Runtime.executionContextsCleared (event)
-Runtime.consoleAPICalled (event)       Runtime.exceptionThrown (event)
-DOM.describeNode             DOM.setFileInputFiles
-Input.dispatchKeyEvent       Input.insertText
-Network.getAllCookies        Network.setCookie
-Network.deleteCookies        Network.clearBrowserCookies
-Network.enable               Network.disable
-Network.setExtraHTTPHeaders  Network.requestWillBeSent (event)
-Network.responseReceived (event)                         Network.loadingFailed (event)
-Browser.setDownloadBehavior  Browser.downloadWillBegin (event)
-Browser.downloadProgress (event)
-Emulation.setDeviceMetricsOverride
-LP.handleJavaScriptDialog    LP.configureLoading (limitation #6)    LP.version
+Browser.downloadProgress Browser.downloadWillBegin
+Network.loadingFailed Network.requestWillBeSent Network.responseReceived
+Page.domContentEventFired Page.frameStartedNavigating Page.frameStoppedLoading Page.javascriptDialogOpening Page.loadEventFired
+Runtime.consoleAPICalled Runtime.exceptionThrown Runtime.executionContextCreated Runtime.executionContextsCleared
 ```
 
-### Available CDP Methods (not yet used by this gem)
+Emission sites: `domains/browser.zig` (downloads), `network.zig` (requests/responses/failures), `page.zig` (navigation/dialogs/context clearing), `runtime.zig` (console/exceptions). `Runtime.executionContextCreated` comes from V8's inspector via `Inspector.contextCreated`; a missing literal emitter in Zig is not missing support. Presence is a source check, not a guarantee of event timing: keep the readyState fallback.
+
+### Available CDP methods (not yet used by this gem)
+
 
 ```
 Page.createIsolatedWorld     Page.getFrameTree
@@ -100,7 +60,7 @@ Input.setInterceptDrags      Input.dispatchDragEvent (#4228, 11246; external tex
 Page.frameDetached (event, #3939, 10544 — removed iframes)
 Network.setCookies (batch)   Network.getResponseBody     Network.setBlockedURLs
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
-Network.requestServedFromCache (event)                    Network.getRequestPostData (#3150, ≥8572)
+Network.requestServedFromCache (event)                    Network.getRequestPostData
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
 DOM.enable                   CSS.enable
 Fetch.enable                 Fetch.disable
@@ -110,172 +70,66 @@ Target.closeTarget           Target.getBrowserContexts
 Target.getTargets            Target.getTargetInfo        Target.setAutoAttach
 Target.setDiscoverTargets (stub)  Target.activateTarget (stub)
 Target.attachToBrowserTarget Target.detachFromTarget     Target.sendMessageToTarget
-Browser.grantPermissions / setPermission / resetPermissions (#2727)
+Browser.grantPermissions / setPermission / resetPermissions
 Browser.setWindowBounds (noop)  Browser.getWindowForTarget (fixed windowId)
 Emulation.clearDeviceMetricsOverride  Emulation.setEmulatedMedia
 Emulation.setFocusEmulationEnabled    Emulation.setTouchEmulationEnabled
-Emulation.setGeolocationOverride      Emulation.clearGeolocationOverride (#3233, ≥8755)
+Emulation.setGeolocationOverride      Emulation.clearGeolocationOverride
 LP.getSemanticTree           LP.getInteractiveElements
 LP.getStructuredData         LP.waitForSelector
-LP.getMarkdown               LP.getNodeDetails
+LP.getNodeDetails
 LP.detectForms               LP.clickNode
 LP.fillNode                  LP.scrollNode
 LP.configureCDP              LP.getContentSignal
 ```
 
-## Known Bugs and Limitations
+## Constraints the driver must preserve
 
-### Critical for This Gem
+- **Navigation:** `Page.loadEventFired` can be absent; keep `go_to`'s readyState polling. A refused/DNS/TLS root navigation commits an error document at the failed URL; cancelled navigation keeps the old document. Click waits must follow main-frame navigation start and document readiness, not just context clearing or Turbo idle.
+- **History:** same-document `Page.navigateToHistoryEntry` was fixed by #3903 (11113), above the floor; keep history.back/forward until covered and validated. Read URLs from location rather than tracking them from frame events.
+- **Frames:** `callFunctionOn` executes in the top context even with an iframe node as `this`; use `this.ownerDocument/defaultView`. Frame scripts compile through the frame's own eval while accepting top-context handles. #4192's listener-world fix does not establish that this constraint changed or resolve issue #3833.
+- **Node handles:** old-document `this` can raise NoExecutionContextError; old nodes passed as arguments can raise a cross-world error mapped to NodeNotFoundError. Only actual nodes have subtype node; ordinary objects serialize by value and cyclic values can be refused.
+- **Modals:** form method=dialog closes the ancestor dialog without navigation; a closed dialog subtree is invisible, which the Spree/Turbo confirm flow depends on. Use LP.handleJavaScriptDialog before the action. Page.handleJavaScriptDialog deliberately errors. One pre-arm slot is consumed once; do not raise from the event-dispatch thread.
+- **Resources:** CLI resource loading defaults off. Process passes `--load-resources stylesheet` (+ image when requested); create_page sends LP.configureLoading with subFrame/worker true. Keep iframe/worker configuration on the existing per-context CDP path; the frame-loading/build-args tests prevent CLI/CDP drift.
+- **External CSS:** loaded synchronously into the cascade; oversized sheets are dropped whole (2 MiB below #3889/10375, 4 MiB above). A large development sheet can expose normally hidden menus.
+- **Viewport:** Emulation changes innerWidth/Height, matchMedia and layout metrics; rects remain approximate. Resizing fires MediaQueryList changes, but stylesheet @media cascade was only re-resolved after navigation in the verified viewport tests. Default 1920×1080 mirrors the browser; changing it shifts existing media branches.
+- **Hit testing:** retain owning-frame and outer-to-inner shadow checks. ShadowRoot hit testing needs #4184 (11071); 1.0.2 uses the host fallback. Native shadow visibility excludes unslotted light DOM/replaced slot fallback above #4190 (11082).
+- **Styles/text:** checkVisibility uses active stylesheets and UA rules, including hidden inputs, closed details and popovers. getComputedStyle does not resolve arbitrary cascade properties; do not replace native visibility with a JS cascade walk. Position/offsetParent obey stylesheet position only above #4142 (11006). Screenshots are text-layout PNGs, not visual-regression output; printToPDF remains fake.
+- **Scrolling:** positions exist and rects follow window scroll, but element/window scrolling and alignment do not model a real layout. Keep scroll_to/scroll_by no-ops and the scroll skip. Short pages clamp at zero, so scrolling to the bottom may emit no event.
+- **Pointer focus:** untrusted mousedown does not focus; CLICK_JS must focus the enabled target (labels resolve to controls, contenteditable to the editing host), or blur when appropriate. A non-focusable send_keys target must blur the previous field.
+- **Text caret:** Input.insertText inserts at the caret; SEND_KEYS_FOCUS_JS moves it to the end only for a newly focused field. Preserve an already-focused caret. Ctrl/Meta chords omit text to avoid inserting stray characters; use keyDown, not rawKeyDown.
+- **Keyboard:** trusted Enter/Space can activate controls; cancelled keypress suppresses Enter submit. Backspace/Delete emit beforeinput/input; blur/Enter commits change. Keys within frames target the frame's active field. JS-written values do not satisfy user-edited tooShort/tooLong validation. Selecting a disabled option is legal in native IDL, so SELECT_OPTION_JS must reject it.
+- **Contenteditable:** native getter fixed by #4210 (11229), above the floor; keep the helper for older binaries. Invalid values inherit and SVG attributes do not enable editing upstream, but our helper accepts any non-false attribute: investigate these cases. Trusted text insertion needs #4182 (11101); Node#set still writes innerHTML.
+- **Errors:** page_errors stays separate from console_logs. Runtime.exceptionThrown is absent when page error is cancelled, for handled same-tick rejections and for driver Runtime failures. No stackTrace; line/column are zero-based; rejections have 0/0 and no URL. Console object arguments have descriptions but no value; keep primitive sentinels and console_arg_text fallback.
+- **Network:** redirects repeat requestId with redirectResponse and no intermediate responseReceived. Close each previous hop and resolve responses onto the last open entry, or idle waits strand pending traffic. Cross-origin hops drop Authorization; response names are lowercase. Worker fetches count in page traffic.
+- **Headers/CORS:** fixed Sec-Ch-Ua outranks CLI, then CDP, script and defaults. Mozilla-containing UA overrides are rejected. CORS is on by default; keep it. Blocked requests emit loadingFailed/CorsBlocked without a response; the traffic entry must close. Preflight cache survives context reset.
+- **Cookies:** insecure SameSite=None is refused with success:false; invalid names/values raise -32602. Unspecified SameSite is Lax and omitted from output; legacy stores may need None stripped from insecure cookies. Domain without a leading dot is host-only; HTTPS URL forces Secure. deleteCookies ignores partitionKey.
+- **Reset/teardown:** dispose the context before clearing Network enabled state; replies route by command id, not sessionId. Keep quit_all's socket close before SIGTERM and TERM→3s→KILL escalation for crash/GC paths. A readiness fallback and navigation-crash recovery remain useful even after upstream issue closure.
+- **Files/downloads:** upload/drop paths read files on the browser host via DOM.setFileInputFiles. Downloads retain browser-level events and on-disk tracking. Native anchor download (#4124, 11097) requires skipping manual navigation at the existing version gate; older builds need attachment navigation. MIME-only navigation still does not download.
+- **Drag:** hidden upload input belongs in the dropzone's document; fire dragenter→dragover→drop. HTML5 drag_to ends with drop OR dragleave, never both; coordinate drag_by/non-HTML5 fallback remains unsupported. Input.dispatchDragEvent (#4228, 11246) does not yet support files/native dragstart and does not replace this path.
 
-1. **`Page.loadEventFired` unreliable** — may never fire on complex JS pages (#1801 closed 2026-09-17 on "seems fixed on main", no PR or repro). Keep `Browser#go_to`'s `readyState` polling fallback.
+## Above-floor behavior to keep distinct from 1.0.2
 
-2. **No rendering engine (CSS much improved)**
-   - Screenshots: since #3231 (≥8815) `Page.captureScreenshot` renders a real PNG — a text-layout rendering of the document (Rust-side renderer, bundled DejaVu fonts; honors `clip` + `deviceScaleFactor`; `format` png only; `printToPDF` still fake). Below 8815: hardcoded 1920×1080 placeholder. Not pixel-accurate compositor output — visual regression stays out of scope
-   - `getComputedStyle` resolves inline `style=` declarations, cascade-aware `display`/`visibility` (via StyleManager, so author stylesheets and `@layer` count; `!important` honored since #3653, 9845), `width`/`height` matching `getBoundingClientRect` (which since #3612, 9772, honors stylesheet-declared sizes), custom properties `--*` (#3461, 9319), and CSS **initial** values for `color`/`opacity`/`background-color`. `padding`/`margin`/`border-*-width` default to `0px` and most other properties report their initial value plus a resolved `font-size` (#3906/#3907, 10452/10455); `text-transform` resolves from stylesheets and inheritance (our #3765, 10517). Results are read-only (#3516). `position`, and so `offsetParent`, follows stylesheets only from #4142 (11006, above the floor); below it only an inline `style=` counts.
-   - A never-shown `[popover]` is hidden by the UA `[popover]:not(:popover-open) { display: none }` (our #3757, 10052, in the floor; below it Capybara matched its content). Pinned by `upstream_fixes_test.rb`. Inline keyword comparisons are case-insensitive since #3270 (≥8857). `checkVisibility` matches all active stylesheets
-   - No scroll/resize, no visual regression testing
-   - `getBoundingClientRect` and screenshots have no real layout: rects are synthesized from document/sibling position and return all-zero for non-visible elements
-   - **Viewport IS emulatable**: `Emulation.setDeviceMetricsOverride` drives `window.innerWidth`/`innerHeight`, `matchMedia`/`@media` evaluation, AND `Page.getLayoutMetrics` (no longer hardcoded 1920×1080). This is a JS-visible viewport only — element geometry stays synthetic, so `obscured?`-outside-viewport still can't work. The gem wires its `window_size` option to it in `Browser#set_viewport` (called from `create_page`); `Options::DEFAULT_WINDOW_SIZE` mirrors the browser's native 1920×1080 so the default is a no-op.
+- CSS nesting: #3962 (10976); nested display:none is lost below it.
+- Initial about:blank timers: #4148 (11012); awaiting a timer before visit hangs below it.
+- Dialog conformance: #4164 (11050); showModal on an already-modal dialog is a no-op and close is queued. Do not expect the old InvalidStateError.
+- Cookie eviction: #4138 (11017); Chrome-style limits replace the old 1024-cookie failure. Non-loopback HTTP cannot overwrite Secure cookies above #4125 (10973).
+- stepMismatch validation: #4157 (11032). sendBeacon only sends when beacon resources are enabled (#4144, 11020).
+- onmouseenter/onmouseleave handlers: #4248 (11237); dispatching mouseenter alone did not make property/attribute handlers run on older browsers.
 
-3. **JavaScript context reset on every navigation** — ad-hoc `Runtime.evaluate` state is gone (the `_lightpanda` bundle is re-injected by `addScriptToEvaluateOnNewDocument`). A node handle from the previous top-level document fails two ways (verified 2026-10-17 on 1.0.1): bound as `this` → `Cannot find context with specified id` (`NoExecutionContextError`, retried by Capybara); passed as an *argument* → `Argument should belong to the same JavaScript world as target object`, which `client.rb#handle_error` maps to `NodeNotFoundError` (PR #184, Ferrum #647).
-
-4. **`HTMLElement.isContentEditable`** — native getter was fixed in #4210 (11229), above the 1.0.2/10965 floor; retain the gem helper for older browsers. #4210 also treats invalid `contenteditable` values as inherited and ignores SVG attributes; our helper treats any non-`false` attribute as editable, so those cases need targeted investigation. #4182 (11101) added trusted text insertion; `Node#set` still writes `innerHTML`.
-
-5. **External `<link rel="stylesheet">` fetch — ON by default in the gem** (build ≥6353)
-   - The gem passes `--load-resources stylesheet` unconditionally (`Process#build_args`; `image` is appended to the same comma-separated value under `load_images:`), so `<link rel="stylesheet" href="…">` is fetched synchronously, parsed via `replaceSync`, added to `document.styleSheets`, and contributes to the cascade (`checkVisibility`/`getComputedStyle`). Author-vs-UA `[hidden]` ordering is correct. Cost: one synchronous CSS fetch per `<link>`. A sheet over **2 MiB** (4 MiB from #3889, 10375) is dropped whole — `error` event, none of its rules apply — so an unminified dev-mode bundle past the cap leaves `display: none` menus/tabs visible.
-   - Per-session `LP.configureLoading {externalStylesheets: true}` also exists; the gem uses the CLI flag.
-   - `@media` + `matchMedia` evaluate against the current viewport, which defaults to 1920×1080 but honors `Emulation.setDeviceMetricsOverride` (see limitation #2).
-   - **Capybara impact**: responsive CTA variants gated by an external stylesheet now resolve to a single variant (no more `Capybara::Ambiguous`); externally-loaded responsive specs that previously needed a Chrome driver work on lightpanda.
-
-6. **Iframes and workers are OFF by default from #3305 (build ≥8946) — LIVE, and handled by the gem**
-   - `Config.LoadResources` became a packed struct (`iframe`, `worker`, `stylesheet`, `image`; `beacon` added by #4144, 11020) with **every field defaulting false**, and `Frame.iframeAddedCallback` returns early on `load_resources.iframe == false`. The parser still puts the `<iframe>` in the DOM; no child frame is ever created, so `switch_to_frame` / `within_frame` find nothing.
-   - **The gem's fix is in**: `Browser#configure_loading` sends `LP.configureLoading {subFrame: true, worker: true}` from `create_page` — per-BrowserContext, so it re-runs after every `Driver#reset!`. Kept on CDP rather than adding `iframe,worker` to the CLI `--load-resources` value even now that the floor allows it: the CDP path is already pinned end-to-end by `test/features/frame_loading_test.rb`, and a unit test guards that `build_args` never names iframes/workers so the two mechanisms can't drift apart.
-   - `--load-resources` takes a comma-separated value (`cli.zig` sets each named field of the `LoadResources` packed struct; `full` sets all). The gem sends `stylesheet` or `stylesheet,image`.
-   - Because the gem opts workers back in, worker requests still count toward `wait_for_idle`.
-
-7. **SIGTERM teardown** — the upstream hangs are fixed (#2509/#2511, in the floor), but keep both gem layers: `Browser.track`/`quit_all` closes the WS from one `at_exit` *before* SIGTERM (pinned < 2s by `teardown_test.rb`), and `Process#stop` + the `weak_kill` finalizer escalate TERM → 3s → KILL for the crash / GC-abandon paths.
-
-### Upstream Open Issues That Affect This Gem
+## Upstream open issues that affect this gem
 
 | Issue | Impact | Description |
 |---|---|---|
-| #4263 | Hit testing | Fixed inset overlays can have synthetic bounds and fail to cover a button; #4264 is open. |
-| #4251 | Keyboard | Ctrl+Backspace/Delete and Ctrl+Arrow do not perform word editing. |
-| #3852 | Binary | The 1.0.0 and 1.0.1 `aarch64-linux` binaries need glibc 2.38 (built on `ubuntu-24.04-arm`; x86_64 needs 2.35), so Debian 12 / Ubuntu 22.04 arm64 can't start them. |
-| (not filed, wishlist A63) | Drag | `Element.scrollIntoView()` ignores its options (`_ = opts`) and always aligns the element's top. Since #3658 (10657, in the floor) rects follow the scroll, so `scrollIntoView({block: 'center'})` can push nearby elements out of the viewport. `HTML5_DRAG_JS` centers with its own `scrollCenterIntoView` (verified 2026-10-16 on 10661). |
+| #4263 | Hit testing | Fixed inset overlays retain synthetic bounds; #4264 is open. |
+| #4251 | Keyboard | Ctrl deletion/arrows do not perform word editing. |
+| #3852 | Binary | Release 1.0.0/1.0.1 aarch64-linux needs glibc 2.38, excluding Debian 12/Ubuntu 22.04 arm64. |
+| (wishlist A63) | Drag | scrollIntoView ignores alignment options; HTML5_DRAG_JS centers manually to avoid pushing neighbours offscreen. |
 
-**Gem-side defenses we keep regardless of upstream**: the `readyState` fallback in `Browser#go_to` (#1801 closed 2026-09-17 on "seems fixed on main", no PR/repro), `handle_navigation_crash` (#2173 closed as usage error), `Browser#with_default_context_wait` + `NoExecutionContextError` in `invalid_element_errors` (#2400 fixed by #3397, 9238 — still cheap defense-in-depth).
+## CLI details that affect the gem
 
-**Known flake** (seen 1× in ~25 runs on nightly 10033, 2026-10-03): Capybara's `#switch_to_frame works if the frame is closed` — after `Close Window Now` (the child frame's `onClick` removes its own `<iframe>` from the parent), `#childFrame` was still present for the whole wait. Not caused by `CLICK_JS`'s focus step (0/10 with and without it). If it recurs on main CI, capture `console_logs` and suspect the child frame's `closeWin` not being defined yet when the click lands.
-
-**Isolation invariant**: `Network#reset` clears `@enabled` only after `Target.disposeBrowserContext`; otherwise a reused Network domain may be subscribed twice. CDP replies route by command id, not `sessionId`.
-
-### General Limitations
-
-- Many Web APIs not yet implemented (hundreds remain)
-- Complex JS frameworks may not work (React SSR hydration, heavy SPA)
-- Same-document navigations: `Page.navigatedWithinDocument` IS emitted for `history.pushState`/`replaceState` (#2964, build ≥8143, `navigationType: historyApi`), and for fragment navigations and traversals from our #3901 (10437, closes #2829). The gem is immune either way — `Browser#current_url`/`frame_url` read `window.location.href` via `Runtime.evaluate`, not CDP frame-URL tracking — so keep it that way (don't switch `current_url` to an event-tracked frame URL).
-- `window.scrollTo()`/`scrollBy()` track a scroll position (`window._scroll_pos`, fire `scroll`/`scrollend`) and `Element` exposes `scrollTop`/`scrollLeft`/`scrollIntoView` — BUT element scroll is decoupled from window scroll, and `getBoundingClientRect` is viewport-relative, following the scroll (#3658, 10657, in the floor — which also makes `DOM.scrollIntoViewIfNeeded` real). So position scroll is readable but `:bottom`/`:center` and element-relative alignment are meaningless; the gem keeps `Node#scroll_to`/`scroll_by` as no-ops and `:scroll` stays in `capybara_skip`. Since #3048 (build ≥8305, in the floor) an inner element's `scrollWidth`/`scrollHeight` is `max(clientSize, sum of direct *element* children)` instead of aliasing `clientSize` — enough that measure-then-mutate loops (the infinite-marquee idiom) terminate. Layout mode is not detected, so the numbers bound content extent rather than describe a layout. **Since #3614/#3588 (9899/9659)** `<html>`/`<body>` `scrollHeight`/`offsetHeight` are a synthetic document extent (not 1e8) and `window.scrollTo/By` clamp to `scrollSize − viewport` — on a short page `scrollTo(0, scrollHeight)` doesn't move or fire `scroll`, so an infinite-scroll trigger may never fire. `documentElement.clientHeight` is the viewport in standards mode.
-- `option.selected = true` deselects its siblings in a single `<select>` (#3375, 9071, in the floor), so `SELECT_OPTION_JS` sets it directly — the old `sel.value =` detour picked the *first* option sharing a value. The `_lightpanda.isDisabled(this)` guard stays: both IDL routes select a disabled option per spec.
-- Timers: `MAX_CALLBACKS` (shared by timeouts + intervals + rAF) 8192, repeating 2048 (#3445, 9274). Delays are clamped to `i32` ≥ 0 since #3719 (10027). Non-standard `window.setImmediate` removed in #3784 (10100, Chrome has none).
-- **Uncaught exceptions from timers, rAF, inline `on*` handlers (our #3755, 10049), `queueMicrotask` and observer callbacks (#3849, 10310) reach `window`'s `error` event** — all in the floor and pinned by `upstream_fixes_test.rb`. **`Runtime.exceptionThrown` exists from our #3905 (10450, in the floor)** — emitted from `Window.reportError` when no `error` listener cancels the exception. **Unhandled rejections emit it too (`"Uncaught (in promise)"`) from #4096 (10904, in the floor)**, and an iframe's exception carries the iframe's `executionContextId` from #4115 (10910, in the floor). `Browser#page_errors` reads this event since the B19 swap (2026-10-23, `errors.js` retired). No event for a cancelled `error` (page `preventDefault`) or for the driver's own `Runtime.evaluate`/`callFunctionOn` failures; no `stackTrace` either, only the thrown value's `description`; `lineNumber`/`columnNumber` are 0-based and a rejection sends 0/0 with no `url` (verified 2026-10-23 on 1.0.2). A rejection handled in the same tick emits nothing (#4096), pinned by `page_errors_test.rb`.
-- `window`/`document` carry the full GlobalEventHandlers set from our #3958 (10613, in the floor; closes #3956). Below it `'onchange' in window` was false, so jQuery 1.x shimmed change/submit and every delegated handler went dead (Solidus admin); the gem polyfilled it with `event_handlers.js` until the 1.0.1 bump. Like Chrome 155, `window` has no `ontouch*`/`oncopy`/`oncut`/`onpaste`/`onfullscreen*`. Pinned by `test/features/global_event_handlers_test.rb`.
-- **Typed text fires `change` when committed by blur or Enter** (#3952, 10575, in the floor; closes #3957, wishlist A62; below it `send_keys(…, :tab)` never committed an edit to `change` listeners) — `change` fires before `blur`, pinned by `keyboard_editing_test.rb` (fails on 1.0.0 and 10552). `send_keys` then `Node#set` then blur fires `change` twice (ours, then the pending user edit's); Chrome 155 does the same, so that is parity, not a bug.
-- A click on a link to a non-fetchable scheme (`mailto:`, `tel:` — anything but `http(s)`/`about`/`blob`/`data`/`file`) is a no-op that keeps the document from #3940 (10536, in the floor), Chrome parity. Below it 1.0.0 resolved `mailto:a@b.com` to `http://mailto:a@b.com/` and fetched `b.com`, and nightlies 10261–10535 lost the execution context on `tel:`; `CLICK_JS` cancelled the default from a `window` listener until the 1.0.1 bump. It still skips its own `location.href` for such a link. Pinned by `test/features/external_scheme_link_test.rb`.
-- `Runtime.consoleAPICalled` object args carry no `value` since #3504 (9414) — only primitives do — so `console_logs[:text]` renders `console.log({a:1})` as `Object`, DOM nodes/`undefined` as `""`. Gem's sentinels are primitives (unaffected); `console.rb#console_arg_text` falls back `value → unserializableValue → description → className → type` for both `console_logs[:text]` and the IO logger.
-- Cookies (#3529, 9877; #3514, 9446): `Network.setCookie` with `sameSite: "None"` and no `secure` returns `{success: false}` and drops the cookie — `Cookies#set` returns that boolean (ferrum parity), and `Cookies#load` strips `None` from insecure entries (pre-9877 stores reported every unspecified cookie as `None`) and warns on any refusal. Cookies without SameSite are Lax-by-default (Chrome's 2-min POST exception) and `getAllCookies` omits the field (`Cookie#same_site` → nil). Secure cookies are now sent on `http://127.0.0.1`/`localhost` (loopback is a secure context; `isSecureContext` true there since #3565). **Chrome's cookie validation from #3791 (10212)**: a control char or `;` in the name or value, `=` in the name, or surrounding whitespace now answers `-32602 Sanitizing cookie failed`, so `Cookies#set` *raises* `BrowserError` instead of returning `false` (verified 2026-10-10 on nightly 10379; below 10212 such a cookie was silently stored); a `domain` without a leading dot is host-only (it used to reach subdomains); an `https` `url` forces Secure. #3793 (10214) accepts Chrome-exported `priority`/`sourceScheme`/`sourcePort`/`sameParty` fields.
-- `<template>` custom elements are no longer upgraded before import (#3587/#3409/#3519) — Turbo Streams rely on `importNode(el, true)` of template content; real-apps CI passed on a ≥9719 nightly (2026-09-28), so treat as watched, not broken. #3830 (10241) moved fragment-parsed custom-element constructors after insertion — re-check on the next real-apps run.
-- Audited through **11108** (`origin/main` `adf3cc7c7`, 2026-10-26; published macOS nightly `11106+659958a24`, release 1.0.2 = 10965). **Above the floor** (rolling-nightly users already get them; don't gate a test on them): **`<dialog>` conformance** (#4164, 11050) — `showModal()` on a dialog already open *modally* is a no-op instead of throwing `InvalidStateError` (Chrome parity; it still throws for a dialog opened by `show()` or a disconnected one), `close` fires as a queued task, and `returnValue` is internal state, no longer a `returnvalue` attribute (verified 2026-10-25: `upstream_bugs_test.rb`'s "showModal on an already-open dialog throws" fails on 11068 and passes on 1.0.2); `ShadowRoot.elementFromPoint`/`elementsFromPoint` retarget like `Document`'s (#4184, 11071, in nightly 11106); **native CSS nesting** (our #3963 + #3962, 10820/10976 — closes #3961, wishlist A64; below 10976 a nested `display: none` is dropped and Capybara matches the element — every Campfire message, `css-nesting-dropped` in `causes.yml`); an `http:` non-loopback origin can't set or overwrite a `Secure` cookie (#4125, 10973 — `Network.setCookie` and loopback unaffected); **timers run on the initial `about:blank` page** (#4148, 11012 — below it a script awaiting a `setTimeout` before the first `visit` hangs to the command timeout, `evaluate_async_script` included; verified 2026-10-23: 1.0.2 hangs, 11012 returns in 10 ms); the cookie jar evicts at Chrome's limits (180 per site, 3300 total) instead of failing every later `Set-Cookie` response once 1024 cookies are stored (#4138, 11017); `validity.stepMismatch` is reported, so an off-step value fails `checkValidity()`/`:valid` (#4157, 11032).
-- **Keyboard activation via CDP since #3264 (≥8842, in the floor)**: `Input.dispatchKeyEvent` builds a *trusted* `KeyboardEvent` routed through `frame/user_input.zig`: a printable-or-Enter keydown without ctrl/meta fires `keypress` (cancelling it suppresses Enter's implicit submit), and Enter on `<button>`/`<a href>`/`input[type=button|submit|reset|image]` or Space-keyup on buttons/checkbox/radio synthesizes a trusted activation `click` — so `send_keys(:enter)` submits and `send_keys(:space)` toggles. No double-fire: `Keyboard#send_key_event` sends only `keyDown`/`keyUp` (chars via `Input.insertText`), and `CLICK_JS`'s events are untrusted. **Send `keyDown`, never `rawKeyDown`** — `input.zig` dropped `rawKeyDown` outright below #3716 (10020, not in 1.0.0), which is why every text-less key silently no-oped until the gem's 2026-09-06 fix. Since #3542 (9580) typing follows the `text` param, not `key`, and `keypress` also fires under Ctrl — so `Keyboard#dispatch_modified_char` omits `text` while Ctrl/Meta is held (a chord is a command; `[:ctrl, "a"]` used to type a stray `a`). Pinned by `test/features/keyboard_activation_test.rb`. In the floor: Enter in a text field *clicks* the form's default button instead of submitting directly (#3783, 10154 — its click handlers run, per spec), and Ctrl+A runs `select()` in an `<input>`/`<textarea>` (#3874, 10366 — `send_keys([:control, "a"], :backspace)` clears the field, verified 2026-10-10 on nightly 10379; Meta+A doesn't, Linux parity).
-- **Keyboard editing via CDP since #3298 (≥8937, in the floor)**: a trusted Backspace/Delete keydown on `<input>`/`<textarea>` runs `user_input.zig#editKey` → trusted `beforeinput` → one-character delete (or the selection) → `input`, inputType `deleteContentBackward`/`deleteContentForward`. Pinned by `test/features/keyboard_editing_test.rb`. Our upstream fixes, all in the floor and pinned in the same file: `beforeinput` cancelable so `preventDefault()` vetoes the edit (#3414, 9217 — masked-input libs); `.value =` moves the caret to the end when the value changes (#3420, 9223 — below it `set` then `send_keys(:backspace)` no-ops); `<textarea>` `select()`/`setSelectionRange()` read the child-text default (#3422, 9229); arrows/Home/End move the caret and Shift extends the selection, and `Input.insertText` inserts *at the caret* (#3424, 9234 — the attribute-seeded `value` case is handled by `SEND_KEYS_FOCUS_JS`, see the top). `send_keys` inside an iframe reaches the frame's focused field from our #3759 (10057, in the floor; below it `Input.*` targeted the top frame's `activeElement` and the keys vanished), pinned by `upstream_fixes_test.rb`.
-- `<form method="dialog">` closes its nearest ancestor `<dialog>` (`returnValue` from the submitter, `close` event) without navigating (our #3054), and a closed `<dialog>` with its whole subtree reads as non-visible (#3269). Both in the floor and with no gem-side fallback — the floor is the only defense for Spree 5's `<dialog>`+Turbo-confirm destroy flow. Pinned by `test/features/upstream_bugs_test.rb` (Bug #4).
-- `MutationObserver` available; `window.postMessage` across frames works
-- CORS: **enforced by default since #3654 (9883, in 1.0.0)**. Checked (`request_mode .cors`): `fetch()`, XHR, EventSource, module scripts / `import()`, classic scripts with `crossorigin`. Not checked: classic `<script>`, stylesheets, images, WebSocket. Same-origin = scheme + exact host + port, so `127.0.0.1` vs `localhost` or another port is cross-origin (Chrome parity). Opt-out `--disable-features cors` (fatal `UnknownOption` below 9883; `--experimental-features cors` still parses but is ignored); no per-session CDP switch. The gem passes no flag — keep Chrome parity (suites already running on Chrome satisfy CORS; opting out gives false greens). A blocked request emits `Network.loadingFailed {errorText:"CorsBlocked"}` (no response); `Network` closes the entry from it and keeps `errorText` as `traffic[..][:error]`, so `wait_for_idle` isn't held hostage (pinned by `test/features/network_failure_test.rb`). Blocks are logged only at debug level — nothing in `console_logs`. Preflight cache is process-wide (survives `Driver#reset!`).
-- In-page `WebSocket` API implemented; sends `Origin` on upgrade since build 6736 (PR #2710), so ActionCable's request-forgery check passes and `turbo_stream_for` / solid_cable streams connect without `disable_request_forgery_protection`
-- `window.open` partial support: no `target=window_name`/`_blank`, sub-pages share the parent's lifetime, no CDP-side validation. Useful for sites that call `window.open` defensively for login popups.
-- Workers: dedicated + **SharedWorker** implemented (#2017). Workers run in the same thread as the page with a separate context; individual Worker-scope APIs may still be missing. **Off by default from #3305 (≥8946)** — `--load-resources worker` / `LP.configureLoading {worker: true}` opts back in; the old `--disable-workers` opt-out is now inert. `WorkerNavigator` added #3288 (≥8892).
-- In the floor: **IndexedDB** (in-memory unless `--storage-engine sqlite`), **EventSource/SSE**, `CookieStore`, `ResizeObserver`, the Navigation API, `BroadcastChannel`, `StorageEvent`, `BeforeUnloadEvent`, `TouchEvent`, SVG geometry/animated-value interfaces, `DOMMatrix`/`DOMPoint`.
-- No Service Workers, SharedArrayBuffer
-- No `localStorage`/`sessionStorage` persistence across sessions (in-memory only; `--storage-engine` backs IndexedDB, not Web Storage)
-- File upload — **SUPPORTED since build 6672** (no longer a limitation). `DOM.setFileInputFiles` (PR #2635) populates `input.files` + fires `change`; PR #2654 wires multipart `.file` submission (filename + Content-Type + bytes, RFC 7578). Both halves are guaranteed by the floor. `Node#fill_input` routes `<input type=file>` through `Browser#set_file_input_files`. Paths are read off the machine running Lightpanda (fine for the locally-spawned process). Validated by the Capybara `#attach_file` shared specs (29 examples, 0 failures).
-- **Downloads** — `Browser.setDownloadBehavior {behavior:"allow", downloadPath, eventsEnabled:true}` writes attachment responses on the browser host. #4124 (11097) adds native anchor-download activation, `behavior:"stream"`/`LP.downloadData` and `downloadWillBegin.contentType`. The gem keeps its browser-level events and on-disk tracker. `Node#click` preserves its event/cancellation sequence but skips manual navigation for download anchors on build >=11097 / release >=1.1.0; otherwise that navigation cancels the native download. Earlier builds keep the attachment-navigation fallback. Data URLs, cancellation, child targets and exactly-once events are pinned by `download_test.rb` (verified 2026-10-26). MIME-only navigation still does not download; keep Capybara's :download skip.
-- Drag-and-drop (HTML5 file/data drop) — **SUPPORTED since build 6699** (PR #2671: `DataTransfer`/`DataTransferItem`/`DataTransferItemList` + `DragEvent`). `Node#drop` (Capybara's `Element#drop`) attaches a hidden `<input type=file>` to the dropzone's document, loads it via `DOM.setFileInputFiles` (bytes read off disk on the Lightpanda host, `file.type` sniffed by the browser), moves `input.files` into a `DataTransfer` alongside `{mime => data}` typed items, then fires `dragenter`→`dragover`→`drop` (`DROP_JS`). Geometry-free; no payload-size ceiling in the driver (`--cdp-max-message-size 100 MiB` stays for large `execute_script` bundles). `Node#drag_to` (2026-08-24) runs Capybara's own Selenium HTML5 drag script via `evaluate_async` (`HTML5_DRAG_JS` in `node.rb`) — 11/13 of the `#drag_to HTML5` shared specs pass (the drag ends with `drop` or `dragleave`, never both — PR #185 — so the spec asserting both is skipped) (our #3259 floors MouseEvent coordinate getters Chrome-style; our #3257 ships `HTMLElement.draggable`, read verbatim by the drag scripts); the one remaining skip is SortableJS (mouse-fallback path — Selenium can drive a real mouse, we cannot). Coordinate-based `drag_by` and non-HTML5 `drag_to` raise `NotImplementedError` (no layout).
-
-- **Shadow visibility** — #4190 (11082) excludes unslotted light DOM and replaced slot fallback from `checkVisibility()` and gives them zero rects; `_lightpanda.isVisible` inherits this without a gem change. #4189 (11080) also changes synthetic text widths, so geometry comparisons can move.
-- **Listener worlds** — #4192 (11104) invokes a callback in its own world's context. This does not establish that `Runtime.callFunctionOn` uses an iframe node's context, nor resolve open issue #3833; keep the ownerDocument/frame-script paths.
-- **Real-app validation (2026-10-26, current driver + nightly 11106)** — Campfire 27 examples / 5 failures: three missing ClipboardEvent, one mention-commit selector failure and one per-room draft restoration failure. Both Lexxy Enter flows and markdown strikethrough pass; obsolete nesting/keyboard causes are removed. Forem 228 examples / 0 failures / 18 pending after correcting the blocked-article assertion in its compatibility patch: a blocked card may be absent or hidden, so assert no visible card rather than requiring a hidden node. Unpatched full-suite run reproduces the failure at basic_spec.rb:23; the individual example passes. Baselines lock in these results without accepting new failures.
-
-## CLI Reference
-
-```bash
-# Single-page fetch (stdout output)
-lightpanda fetch [--obey_robots] [--log_format pretty|json] [--log_level info|debug] <url>
-
-# CDP server mode
-lightpanda serve --host 127.0.0.1 --port 9222 [--log_format json]
-
-# Flags — canonical spelling is kebab-case; the parser also accepts the
-# snake_case form of every name (cli.zig toKebabCase), so the gem's
-# `--log_level` keeps working.
---obey-robots                              # Respect robots.txt
---insecure-disable-tls-host-verification   # Skip TLS verification (dev only)
---load-resources <a,b,…>                   # Comma-separated value from
-                                           # iframe|image|stylesheet|worker|beacon (or `full`);
-                                           # repeats OR together. ALL DEFAULT OFF since #3305 (≥8946).
-                                           # Gem passes `stylesheet` (+`,image` under load_images).
-                                           # `beacon` (#4144, 11020): without it navigator.sendBeacon
-                                           # only validates and returns true, nothing is sent.
---cdp-max-message-size <BYTES>             # Inbound CDP WS cap, default 1 MiB (gem: 100 MiB)
-# Deprecated, inert or warn-only since #3305: --enable-external-stylesheets,
-# --disable-subframes, --disable-workers. The gem passes none of them.
---disable-features cors                    # CORS is ON by default since #3654 (≥9883); this opts
-                                           # out (fatal UnknownOption below 9883). The gem passes
-                                           # nothing (Chrome parity). `--experimental-features
-                                           # cors` still parses but is ignored;
-                                           # `--experimental-features serviceworker` gates SWs.
---locale <tag> / --timezone <tz>           # #3466, ≥9309 (fatal below). Gem passes neither.
---http-timeout <ms>                        # Default 15 s since #3432 (≥9258).
---storage-engine none|sqlite               # IndexedDB persistence backend
---storage-sqlite-path <PATH>               # SQLite file (":memory:" allowed)
---user-agent / --user-agent-suffix         # UA control (Mozilla-containing values still rejected)
---http-header "Name: value"                # Sent on every HTTP request (#3187, ≥8717); outranks
-                                           # CDP setExtraHTTPHeaders for the same name
---block-urls / --block-cidrs / --block-private-networks
---ca-cert <PATH> / --ca-path <PATH>        # TLS roots from a PEM file / directory;
-                                           # either one REPLACES the system trust store
---http-cache-dir <PATH>                    # On-disk HTTP cache
---inject-script / --inject-script-file     # CLI-side equivalent of addScriptToEvaluateOnNewDocument
---log-format pretty|json                   # Log output format
---log-level info|debug                     # Verbosity
---log-filter <SCOPE>                       # Renamed from --log-filter-scopes by #3305 (≥8946);
-                                           # the old name still parses with a warning. The gem
-                                           # passes neither — only `LIGHTPANDA_EXTRA_ARGS` can.
-
-# Environment
-LIGHTPANDA_DISABLE_TELEMETRY=true          # Disable usage telemetry
-```
-
-## Binary Distribution
-
-Nightly builds from: `https://github.com/lightpanda-io/browser/releases/download/nightly`
-- **All four arch/OS pairs are published on every channel**: `lightpanda-{x86_64,aarch64}-{linux,macos}`.
-  `Binary::PLATFORMS` maps all four — don't re-narrow it (a two-entry map once raised
-  `UnsupportedPlatformError` on Intel Macs and arm64/Graviton runners).
-- Latest release: **1.0.2 (2026-10-23), build 10965**, commit `c5f7bb29b`. Main uses `1.1.0-dev`; nightlies print `1.1.0-nightly.N+hash`. Release binaries print a bare semver. All channels publish `lightpanda-{aarch64,x86_64}-{linux,macos}`; releases also carry `.deb` packages.
-
-**Two version-string shapes, two gem floors** (verified 2026-07-24): `build.zig`'s
-`resolveVersion` enriches a version with `git rev-list --count HEAD` + short hash
-*only* when it carries a pre-release tag. The release workflow passes
-`-Dversion=<tag>`, which parses as a full semver with no pre-release — so a
-tagged release prints a bare `0.3.5` with **no build counter**, while nightlies
-print `1.0.0-nightly.8285+de85a51d`. `Process#check_minimum_version` therefore
-gates two channels: `MINIMUM_NIGHTLY_BUILD` (build counter) and
-`MINIMUM_RELEASE` (semver). Keep them in lockstep — a release is acceptable
-exactly when its own commit count clears the nightly floor
-(`git rev-list --count <tag>`; 1.0.0 = 9994, 0.4.1 = 9463, 0.4.0 = 9058).
-Only the rolling `nightly` tag is re-published, so **releases are the only
-reproducible pin** — nightlies are not archived.
-
-## Differences from Chrome CDP
-
-Event order and error codes/messages differ from Chrome (match on Lightpanda's own text), and not every method of a domain exists — before adding a CDP call, confirm it in `src/server/cdp/domains/<domain>.zig`. `Network.deleteCookies` silently ignores `partitionKey`.
+- Canonical flags are kebab-case, but snake_case aliases still parse; the gem's log_level remains valid.
+- --cdp-max-message-size is an inbound WS byte cap (browser default 1 MiB, gem 100 MiB).
+- --http-header outranks CDP extra headers; --ca-cert/--ca-path replace the system trust store.
+- --storage-engine sqlite backs IndexedDB, not localStorage/sessionStorage. Web Storage is session-local.
+- LIGHTPANDA_DISABLE_TELEMETRY=true disables telemetry. Other optional flags belong in upstream CLI help, not this reference.
