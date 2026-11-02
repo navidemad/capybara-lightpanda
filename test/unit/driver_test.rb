@@ -85,4 +85,37 @@ describe Capybara::Lightpanda::Driver do
       assert_equal({ "X-Custom" => "1" }, driver.headers)
     end
   end
+
+  # Capybara calls reset! after every touched session, including one whose
+  # launch failed during `visit`. Launching Lightpanda there only to reset it
+  # costs a second full process timeout per failing example (Cuprite #356).
+  describe "#reset!" do
+    let(:driver) { Capybara::Lightpanda::Driver.new(nil) }
+
+    it "does not launch a browser when none has started" do
+      Capybara::Lightpanda::Browser.expects(:new).never
+      driver.reset!
+    end
+
+    it "does not relaunch after the first launch failed" do
+      Capybara::Lightpanda::Browser.expects(:new).once
+                                   .raises(Capybara::Lightpanda::ProcessTimeoutError, "slow launch")
+      assert_raises(Capybara::Lightpanda::ProcessTimeoutError) { driver.browser }
+      driver.reset!
+    end
+
+    it "still resets a browser that has started" do
+      browser = mock("Browser")
+      browser.stubs(:alive?).returns(true)
+      browser.expects(:reset)
+      driver.instance_variable_set(:@browser, browser)
+      driver.reset!
+    end
+
+    it "forgets the visited host even when no browser exists" do
+      driver.instance_variable_set(:@started, true)
+      driver.reset!
+      refute driver.instance_variable_get(:@started)
+    end
+  end
 end
