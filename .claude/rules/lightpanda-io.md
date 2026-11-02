@@ -1,12 +1,12 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-10-29 at `8f2c8185c97e3cc98de07f164e7eb3d9e2dd9020` (build 11280).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-02 at `daa09e7a6` (build 11522).
 
 ## Version and transport constraints
 
 - Floors: `Process::MINIMUM_NIGHTLY_BUILD = 10965`, `MINIMUM_RELEASE = 1.0.2`, the same commit. `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
 - A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten.
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release checked: 1.0.2 (2026-10-23).
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release checked: 1.0.2 (2026-10-23), none newer on 2026-11-02. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt.
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin.
 
@@ -41,8 +41,8 @@ Emission sites: `domains/browser.zig` (downloads), `network.zig` (requests/respo
 
 ### Available CDP methods (not yet used by this gem)
 
-
 ```
+Page.setDocumentContent (#4304, 11433)                    Performance.getMetrics (#4305, 11426)
 Page.createIsolatedWorld     Page.getFrameTree
 Page.getNavigationHistory    Page.navigateToHistoryEntry (same-document traversal fixed by #3903, 11113; below it reloads — keep history.back() until the floor covers it)
 Page.removeScriptToEvaluateOnNewDocument
@@ -93,13 +93,13 @@ LP.configureCDP              LP.getContentSignal
 - **Resources:** CLI resource loading defaults off. Process passes `--load-resources stylesheet` (+ image when requested); create_page sends LP.configureLoading with subFrame/worker true. Keep iframe/worker configuration on the existing per-context CDP path; the frame-loading/build-args tests prevent CLI/CDP drift.
 - **External CSS:** loaded synchronously into the cascade; oversized sheets are dropped whole (2 MiB below #3889/10375, 4 MiB above). A large development sheet can expose normally hidden menus.
 - **Viewport:** Emulation changes innerWidth/Height, matchMedia and layout metrics; rects remain approximate. Resizing fires MediaQueryList changes, but stylesheet @media cascade was only re-resolved after navigation in the verified viewport tests. Default 1920×1080 mirrors the browser; changing it shifts existing media branches.
-- **Hit testing:** retain owning-frame and outer-to-inner shadow checks. ShadowRoot hit testing needs #4184 (11071); 1.0.2 uses the host fallback. Native shadow visibility excludes unslotted light DOM/replaced slot fallback above #4190 (11082).
+- **Hit testing:** retain owning-frame and outer-to-inner shadow checks. ShadowRoot hit testing needs #4184 (11071); 1.0.2 uses the host fallback. Native shadow visibility excludes unslotted light DOM/replaced slot fallback above #4190 (11082). Hit testing ignores stacking/positioning. On recent nightlies (#4371: reported on 11500, not 1.0.1; not bisected, block boxes start at the parent's left edge since #4342, 11478) an empty following block can cover an absolutely positioned sibling's overflow, and isObscured then reports true. CLICK_JS never hit-tests, so clicks are unaffected.
 - **Styles/text:** checkVisibility uses active stylesheets and UA rules, including hidden inputs, closed details and popovers. getComputedStyle does not resolve arbitrary cascade properties; do not replace native visibility with a JS cascade walk. Position/offsetParent obey stylesheet position only above #4142 (11006). Screenshots are text-layout PNGs, not visual-regression output; printToPDF remains fake.
 - **Scrolling:** positions exist and rects follow window scroll, but element/window scrolling and alignment do not model a real layout. Keep scroll_to/scroll_by no-ops and the scroll skip. Short pages clamp at zero, so scrolling to the bottom may emit no event.
 - **Pointer focus:** untrusted mousedown does not focus; CLICK_JS must focus the enabled target (labels resolve to controls, contenteditable to the editing host), or blur when appropriate. A non-focusable send_keys target must blur the previous field.
 - **Text caret:** Input.insertText inserts at the caret; SEND_KEYS_FOCUS_JS moves it to the end only for a newly focused field. Preserve an already-focused caret. Ctrl/Meta chords omit text to avoid inserting stray characters; use keyDown, not rawKeyDown.
 - **Keyboard:** trusted Enter/Space can activate controls; cancelled keypress suppresses Enter submit. Backspace/Delete emit beforeinput/input; blur/Enter commits change. Keys within frames target the frame's active field. JS-written values do not satisfy user-edited tooShort/tooLong validation. Selecting a disabled option is legal in native IDL, so SELECT_OPTION_JS must reject it.
-- **Contenteditable:** native getter fixed by #4210 (11229), above the floor; keep the helper for older binaries. Invalid values inherit and SVG attributes do not enable editing upstream, but our helper accepts any non-false attribute: investigate these cases. Trusted text insertion needs #4182 (11101); Node#set still writes innerHTML.
+- **Contenteditable:** native getter fixed by #4210 (11229), above the floor; keep the helper for older binaries. Invalid values inherit and SVG attributes do not enable editing upstream, but our helper accepts any non-false attribute: investigate these cases. It also ignores `document.designMode`, which makes the body the editing host above #4285/#4286 (11345/11347). Trusted text insertion needs #4182 (11101); Node#set still writes innerHTML.
 - **Errors:** page_errors stays separate from console_logs. Runtime.exceptionThrown is absent when page error is cancelled, for handled same-tick rejections and for driver Runtime failures. No stackTrace; line/column are zero-based; rejections have 0/0 and no URL. Console object arguments have descriptions but no value; keep primitive sentinels and console_arg_text fallback.
 - **Network:** redirects repeat requestId with redirectResponse and no intermediate responseReceived. Close each previous hop and resolve responses onto the last open entry, or idle waits strand pending traffic. Cross-origin hops drop Authorization; response names are lowercase. Worker fetches count in page traffic.
 - **Headers/CORS:** fixed Sec-Ch-Ua outranks CLI, then CDP, script and defaults. Mozilla-containing UA overrides are rejected. CORS is on by default; keep it. Blocked requests emit loadingFailed/CorsBlocked without a response; the traffic entry must close. Preflight cache survives context reset.
@@ -116,14 +116,18 @@ LP.configureCDP              LP.getContentSignal
 - Cookie eviction: #4138 (11017); Chrome-style limits replace the old 1024-cookie failure. Non-loopback HTTP cannot overwrite Secure cookies above #4125 (10973).
 - stepMismatch validation: #4157 (11032). sendBeacon only sends when beacon resources are enabled (#4144, 11020).
 - onmouseenter/onmouseleave handlers: #4248 (11237); dispatching mouseenter alone did not make property/attribute handlers run on older browsers.
+- Closed `<details>` loose text is left out of innerText (#4297, 11340), so visible_text no longer includes it.
+- An unsized iframe is 300×150 and its box is the frame's viewport (#4344, 11490): isObscured reports content below the frame's 150px as obscured, as Chrome does.
+- Parser-inserted inline scripts report document-relative line/column in Runtime.exceptionThrown (#4340, 11502), so page_errors lines match Chrome; dynamic, document.write and `sourceURL` scripts stay script-relative.
 
 ## Upstream open issues that affect this gem
 
 | Issue | Impact | Description |
 |---|---|---|
-| #4263 | Hit testing | Fixed inset overlays retain synthetic bounds; #4264 is open. |
+| #4263 | Hit testing | Fixed inset overlays retain synthetic bounds; fixes #4264/#4293 closed unmerged, maintainer wants the design settled in issues. |
+| #4371 | Hit testing | Nightly regression: an empty block after a positioned element spans the viewport and wins elementFromPoint (1.0.1 OK). |
+| #4298 | Text | innerText line breaks follow the tag, not computed display, so visible_text newlines can differ from Chrome. |
 | #4251 | Keyboard | Ctrl deletion/arrows do not perform word editing. |
-| #3852 | Binary | Release 1.0.0/1.0.1 aarch64-linux needs glibc 2.38, excluding Debian 12/Ubuntu 22.04 arm64. |
 | (wishlist A63) | Drag | scrollIntoView ignores alignment options; HTML5_DRAG_JS centers manually to avoid pushing neighbours offscreen. |
 
 ## CLI details that affect the gem
