@@ -322,7 +322,14 @@ module Capybara
       # turns programmer errors (e.g. a NoMethodError in browser.rb) into a
       # silent quit-and-respawn on every example with zero signal. The warn
       # keeps repeated respawns visible.
+      #
+      # With no browser (never visited, or the launch itself failed) there is
+      # nothing to reset: `browser` would spawn Lightpanda just to reset it,
+      # and a failed launch would cost a second process timeout in teardown.
+      # The next visit launches as usual.
       def reset!
+        return unless @browser
+
         browser.reset
       rescue Error, SystemCallError, IOError => e
         warn "[capybara-lightpanda] reset! failed (#{e.class}: #{e.message}); respawning browser"
