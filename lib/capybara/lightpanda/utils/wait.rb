@@ -42,6 +42,16 @@ module Capybara
         def self.monotonic_time
           ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
         end
+
+        # A point `seconds` from now on the monotonic clock.
+        def self.deadline(seconds)
+          monotonic_time + seconds
+        end
+
+        # Seconds left before `deadline`, never negative.
+        def self.remaining(deadline)
+          [deadline - monotonic_time, 0].max
+        end
       end
     end
   end
