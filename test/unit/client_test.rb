@@ -72,4 +72,50 @@ describe Capybara::Lightpanda::Client do
       assert_equal first, ivar.value
     end
   end
+
+  # `timeout:` is the caller's budget for the whole command. It used to start
+  # only after the frame was sent, so a send slowed by a busy browser or a
+  # contended socket lock added its own duration on top: a 15 s command could
+  # block 30 s.
+  describe "#command deadline" do
+    let(:client) { Capybara::Lightpanda::Client.allocate }
+    let(:pendings) { Concurrent::Hash.new }
+
+    def fake_ws(send_seconds, &on_send)
+      ws = Object.new
+      ws.define_singleton_method(:send_message) do |message, **|
+        sleep send_seconds
+        on_send&.call(message)
+      end
+      ws.define_singleton_method(:closed?) { false }
+      ws
+    end
+
+    before do
+      client.instance_variable_set(:@pendings, pendings)
+      client.instance_variable_set(:@mutex, Mutex.new)
+      client.instance_variable_set(:@command_id, 0)
+      client.instance_variable_set(:@options, Capybara::Lightpanda::Options.new(timeout: 5))
+    end
+
+    it "counts the time spent sending against the command's timeout" do
+      client.instance_variable_set(:@ws, fake_ws(0.4))
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      assert_raises(Capybara::Lightpanda::TimeoutError) { client.command("Page.enable", timeout: 0.5) }
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+      assert_operator elapsed, :<, 0.75, "command took #{elapsed.round(2)}s against a 0.5s timeout"
+    end
+
+    it "still returns a response that arrived while the send used up the budget" do
+      ws = fake_ws(0.3) do |message|
+        id = JSON.parse(message)["id"]
+        pendings[id].set({ "id" => id, "result" => { "ok" => true } })
+      end
+      client.instance_variable_set(:@ws, ws)
+
+      assert_equal({ "ok" => true }, client.command("Page.enable", timeout: 0.2))
+    end
+  end
 end

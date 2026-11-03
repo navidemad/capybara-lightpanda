@@ -175,4 +175,86 @@ describe Capybara::Lightpanda::Client::WebSocket do
       server&.close
     end
   end
+
+  # The write's no-progress wait restarted on every partial write, so a peer
+  # taking a few KB at a time kept a large frame (and the socket lock every
+  # other command needs) busy far past the command's timeout.
+  describe "the command deadline" do
+    def handshake(sock)
+      request = +""
+      request << sock.readpartial(4096) until request.include?("\r\n\r\n")
+      key = request[/Sec-WebSocket-Key: (\S+)/, 1]
+      accept = Digest::SHA1.base64digest("#{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+      sock.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n" \
+                 "Connection: Upgrade\r\nSec-WebSocket-Accept: #{accept}\r\n\r\n")
+    end
+
+    it "gives up on a frame a slowly reading peer is still taking when the deadline passes" do
+      server = TCPServer.new("127.0.0.1", 0)
+      stop = Queue.new
+      accepter = serve_once(server) do |sock|
+        handshake(sock)
+        while stop.empty?
+          sock.read_nonblock(16 * 1024, exception: false)
+          sleep 0.02
+        end
+        sock.close
+      end
+      ws = Capybara::Lightpanda::Client::WebSocket.new("ws://127.0.0.1:#{server.addr[1]}/", options)
+
+      sender = Thread.new do
+        ws.send_message("x" * (64 * 1024 * 1024), timeout: 0.5)
+        :sent
+      rescue StandardError => e
+        e
+      end
+
+      assert sender.join(3), "a trickling peer kept send_message going 3s past a 0.5s timeout"
+      assert_instance_of Capybara::Lightpanda::DeadBrowserError, sender.value
+    ensure
+      sender&.kill
+      stop&.push(true)
+      accepter&.join(2)
+      server&.close
+    end
+
+    # A frame still waiting for the lock has written nothing, so timing it out
+    # must not cost the connection: other commands are fine.
+    it "times out a frame queued behind the socket lock without closing the connection" do
+      server = TCPServer.new("127.0.0.1", 0)
+      release = Queue.new
+      accepter = serve_once(server) do |sock|
+        handshake(sock)
+        release.pop
+        sock.close
+      end
+      ws = Capybara::Lightpanda::Client::WebSocket.new("ws://127.0.0.1:#{server.addr[1]}/", options)
+      lock = ws.instance_variable_get(:@driver_mutex)
+      holding = Queue.new
+      holder = Thread.new do
+        lock.synchronize do
+          holding.push(true)
+          sleep 2
+        end
+      end
+      holding.pop
+
+      sender = Thread.new do
+        ws.send_message("{}", timeout: 0.3)
+        :sent
+      rescue StandardError => e
+        e
+      end
+
+      assert sender.join(1), "send_message waited on the lock past its 0.3s timeout"
+      assert_instance_of Capybara::Lightpanda::TimeoutError, sender.value
+      refute_predicate ws, :closed?
+    ensure
+      holder&.kill
+      sender&.kill
+      release&.push(true)
+      accepter&.join(2)
+      server&.close
+    end
+  end
 end

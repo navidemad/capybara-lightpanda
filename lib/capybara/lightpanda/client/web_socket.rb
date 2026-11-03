@@ -5,6 +5,7 @@ require "socket"
 require "websocket/driver"
 
 require_relative "../utils/attempt"
+require_relative "../utils/wait"
 
 module Capybara
   module Lightpanda
@@ -26,17 +27,27 @@ module Capybara
           connect
         end
 
-        # `timeout` bounds how long the browser may go without taking any of
-        # the frame's bytes (see #write); nil falls back to options.timeout.
-        def send_message(message, timeout: nil)
+        # The frame must be sent by `deadline` (monotonic seconds; Client#command
+        # passes the command's own deadline) or within `timeout` seconds; both
+        # nil fall back to options.timeout. A frame still queued behind the
+        # socket lock at the deadline wrote nothing, so it raises TimeoutError
+        # and the connection stays usable; one cut off mid-write kills the
+        # connection (see #write).
+        def send_message(message, timeout: nil, deadline: nil)
           raise DeadBrowserError, "WebSocket is not open" unless @status == :open
 
+          deadline ||= Utils::Wait.deadline(timeout || @options.timeout)
           @logger&.puts("\n\n▶ #{@logger.elapsed_time} #{message}")
-          @driver_mutex.synchronize do
-            @write_timeout = timeout
+          unless acquire_driver_lock?(deadline)
+            raise TimeoutError, "Frame not sent before its deadline: another frame held the socket"
+          end
+
+          begin
+            @write_deadline = deadline
             @driver.text(message)
           ensure
-            @write_timeout = nil
+            @write_deadline = nil
+            @driver_mutex.unlock
           end
         end
 
@@ -65,11 +76,11 @@ module Capybara
         # on Lightpanda's single thread) would block a plain write forever
         # once the frame outgrows the socket buffers, holding the lock that
         # every other command, the reader's parse and #close need — and the
-        # command timeout only starts after the write returns. So the write
-        # gives up once the browser takes no byte for the timeout; the wait
-        # restarts on every partial write, so a slow but moving peer is fine
-        # (ferrum #644). Close and pong frames have no command timeout and
-        # fall back to options.timeout rather than waiting forever.
+        # command would never time out. So the write gives up at the frame's
+        # deadline even when the peer is still taking bytes: a trickling peer
+        # must not hold the lock past the caller's budget (ferrum #644). Close
+        # and pong frames have no command deadline; they give up once the
+        # browser takes no byte for options.timeout.
         def write(data)
           until data.empty?
             written = @socket.write_nonblock(data, exception: false)
@@ -96,7 +107,9 @@ module Capybara
         private
 
         def wait_for_socket(state)
-          timeout = @write_timeout || @options.timeout
+          timeout = @write_deadline ? Utils::Wait.remaining(@write_deadline) : @options.timeout
+          return false if timeout <= 0
+
           state == :wait_readable ? @socket.wait_readable(timeout) : @socket.wait_writable(timeout)
         end
 
@@ -104,10 +117,28 @@ module Capybara
         # mark it dead (the reader and message threads stop, pending commands
         # are released) and close the socket.
         def abandon_stalled_write
-          timeout = @write_timeout || @options.timeout
+          reason = if @write_deadline
+                     "Browser did not take the whole frame before the command's deadline"
+                   else
+                     "Browser accepted no data for #{@options.timeout}s"
+                   end
           mark_dead(:error)
           close_socket
-          raise DeadBrowserError, "Browser accepted no data for #{timeout}s and is likely stuck; connection closed"
+          raise DeadBrowserError, "#{reason} and is likely stuck; connection closed"
+        end
+
+        # Mutex has no timed lock. Poll try_lock with a short capped backoff:
+        # the lock is normally held for one frame write or one parse.
+        def acquire_driver_lock?(deadline)
+          delay = 0.0005
+          until @driver_mutex.try_lock
+            remaining = Utils::Wait.remaining(deadline)
+            return false if remaining <= 0
+
+            sleep([delay, remaining].min)
+            delay = [delay * 2, 0.01].min
+          end
+          true
         end
 
         def close_socket

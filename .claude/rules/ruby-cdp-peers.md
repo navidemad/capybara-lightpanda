@@ -34,7 +34,7 @@ Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reachi
 
 - `client.rb#next_command_id` locks ids; WebSocket text/close/parse share @driver_mutex. The handshake parse precedes the reader thread. This avoids the two races described by Ferrum #602.
 - JRuby audit (2026-10-26): script/audit_websocket.rb passed an idle reader plus 100 messages from four senders with pings on MRI 4.0.9/JRuby 10.1.2.0 + websocket-driver 0.8.1. Removing the reader-readiness guard hung past 15 s. Ferrum #680's merged writer queue is not a reason to remove that guard; this is a bounded probe, not universal JRuby safety.
-- `client.rb#command` starts response waiting after send; a controlled 100 ms send succeeded after 105 ms with timeout 0.01. Write timeout bounds no-progress, not total duration; mutex wait is outside it. An absolute deadline needs a policy for queued/partly written frames and connection health before implementation.
+- `client.rb#command`'s `timeout` is one deadline for lock wait, write and response. A frame still queued behind `@driver_mutex` at the deadline raises TimeoutError and keeps the connection; a frame cut off mid-write raises DeadBrowserError and closes it (a partial frame can't be reused); a response that landed during the send is still returned. Close/pong frames keep the no-progress `options.timeout`.
 
 ### Outstanding adoption candidates
 

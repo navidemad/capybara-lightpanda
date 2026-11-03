@@ -20,21 +20,26 @@ module Capybara
         start_message_thread
       end
 
+      # `timeout` bounds the whole command: waiting for the socket lock, writing
+      # the frame and waiting for the response all draw on one deadline, so a
+      # slow send can't stretch a command past its budget.
       def command(method, params = {}, async: false, session_id: nil, timeout: nil)
         message = build_message(method, params, session_id: session_id)
         effective_timeout = timeout || @options.timeout
+        deadline = Utils::Wait.deadline(effective_timeout)
 
         if async
-          @ws.send_message(JSON.generate(message), timeout: effective_timeout)
+          @ws.send_message(JSON.generate(message), deadline: deadline)
           return true
         end
 
         pending = Concurrent::IVar.new
         @pendings[message[:id]] = pending
 
-        @ws.send_message(JSON.generate(message), timeout: effective_timeout)
+        @ws.send_message(JSON.generate(message), deadline: deadline)
 
-        response = pending.value!(effective_timeout)
+        # value!(0) still returns a response that landed during the send.
+        response = pending.value!(Utils::Wait.remaining(deadline))
 
         if response.nil?
           raise DeadBrowserError, "Browser closed during #{method}" if @ws.closed?
