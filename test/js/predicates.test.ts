@@ -44,6 +44,44 @@ test("isContentEditable: false with no contenteditable anywhere", () => {
   expect(predicates.isContentEditable(document.getElementById("t"))).toBe(false);
 });
 
+// The HTML contenteditable states: ""/true/plaintext-only edit, false doesn't,
+// and any other value is the inherit state. Node#set writes innerHTML when this
+// says editable, so a wrong answer overwrites a widget that isn't an editor.
+test('isContentEditable: plaintext-only is editable', () => {
+  const { predicates, document } = makeDom('<div contenteditable="plaintext-only"><span id="t">x</span></div>');
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(true);
+});
+
+test("isContentEditable: an invalid value inherits instead of enabling editing", () => {
+  const { predicates, document } = makeDom('<div contenteditable="bogus"><span id="t">x</span></div>');
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(false);
+});
+
+test("isContentEditable: an invalid value inside an editable host stays editable", () => {
+  const { predicates, document } = makeDom(
+    '<div contenteditable><div contenteditable="bogus"><span id="t">x</span></div></div>',
+  );
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(true);
+});
+
+test("isContentEditable: the attribute on an SVG element is ignored", () => {
+  // contenteditable is an HTMLElement attribute; an SVG element's copy is inert.
+  const { predicates, document } = makeDom('<svg><g contenteditable="true"><text id="t">x</text></g></svg>');
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(false);
+});
+
+test("isContentEditable: designMode makes the whole document editable", () => {
+  const { predicates, document } = makeDom('<p><span id="t">x</span></p>');
+  (document as any).designMode = "on";
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(true);
+});
+
+test("isContentEditable: contenteditable=false still opts out under designMode", () => {
+  const { predicates, document } = makeDom('<div contenteditable="false"><span id="t">x</span></div>');
+  (document as any).designMode = "on";
+  expect(predicates.isContentEditable(document.getElementById("t"))).toBe(false);
+});
+
 // --- isDisabled --------------------------------------------------------------
 // Capybara's Node#disabled? is more permissive than CSS :disabled — an <option>
 // inside a disabled <select> reports disabled even though it doesn't match

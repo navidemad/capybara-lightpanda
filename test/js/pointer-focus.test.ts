@@ -48,6 +48,24 @@ test("inside contenteditable, the outermost editing host takes focus", () => {
   ).toBe("host");
 });
 
+test("an invalid contenteditable value is not an editing host", () => {
+  // It inherits: alone it edits nothing, so a press there focuses nothing.
+  expect(target('<div id="d" contenteditable="bogus"><p id="t">x</p></div>', "t")).toBe(null);
+});
+
+test("an invalid value inside an editing host defers to the host", () => {
+  expect(
+    target('<div id="host" contenteditable><div contenteditable="bogus"><p id="t">x</p></div></div>', "t"),
+  ).toBe("host");
+});
+
+test("in a designMode document the body is the editing host", () => {
+  const { predicates, document } = makeDom('<p><span id="t">x</span></p>');
+  (document as any).designMode = "on";
+  const el = predicates.pointerFocusTarget(document.getElementById("t")) as HTMLElement | null;
+  expect(el?.tagName).toBe("BODY");
+});
+
 test("a label press focuses its control, not the label", () => {
   expect(target('<label id="l" for="i"><span id="t">L</span></label><input id="i">', "t")).toBe("i");
 });

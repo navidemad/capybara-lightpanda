@@ -779,6 +779,35 @@ describe Capybara::Lightpanda::Driver do
         editable.set("New content")
         assert_equal "New content", editable.text
       end
+
+      # An invalid contenteditable value is the inherit state, not "editable":
+      # writing innerHTML there would clobber markup the page never let users edit.
+      it "leaves an element with an invalid contenteditable value alone" do
+        element = session.find(:css, "#bogus-editable")
+        element.set("Overwritten")
+        assert_equal "Keep me", element.text
+      end
+
+      it "edits an invalid value that inherits from an editing host" do
+        element = session.find(:css, "#bogus-in-host")
+        element.set("Inherited")
+        assert_equal "Inherited", element.text
+      end
+
+      it "edits a plaintext-only region" do
+        element = session.find(:css, "#plaintext-editable")
+        element.set("Plain")
+        assert_equal "Plain", element.text
+      end
+
+      it "edits any element of a designMode document" do
+        session.execute_script("document.designMode = 'on'")
+        element = session.find(:css, "#plain-paragraph")
+        element.set("Designed")
+        assert_equal "Designed", element.text
+      ensure
+        session.execute_script("document.designMode = 'off'")
+      end
     end
 
     describe "disabled and readonly" do
