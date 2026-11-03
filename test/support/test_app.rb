@@ -203,6 +203,10 @@ class TestApp
             <input type="text" id="readonly-input" name="readonly" readonly value="read only value">
 
             <div id="editable" contenteditable="true">Edit me</div>
+            <div id="bogus-editable" contenteditable="bogus">Keep me</div>
+            <div contenteditable="true"><div id="bogus-in-host" contenteditable="bogus">Edit me too</div></div>
+            <div id="plaintext-editable" contenteditable="plaintext-only">Edit me plainly</div>
+            <p id="plain-paragraph">Not editable</p>
 
             <input type="hidden" id="secret" name="secret" value="hidden_value">
 
