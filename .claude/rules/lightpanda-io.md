@@ -1,12 +1,12 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-02 at `daa09e7a6` (build 11522).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-04 at `3a8c88bbd` (build 11672).
 
 ## Version and transport constraints
 
 - Floors: `Process::MINIMUM_NIGHTLY_BUILD = 10965`, `MINIMUM_RELEASE = 1.0.2`, the same commit. `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
 - A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten.
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release checked: 1.0.2 (2026-10-23), none newer on 2026-11-02. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt.
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release checked: 1.0.2 (2026-10-23), none newer on 2026-11-04. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), 1.0.2 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433).
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin.
 
@@ -43,6 +43,7 @@ Emission sites: `domains/browser.zig` (downloads), `network.zig` (requests/respo
 
 ```
 Page.setDocumentContent (#4304, 11433)                    Performance.getMetrics (#4305, 11426)
+CSS.getComputedStyleForNode (#4377, 11626)
 Page.createIsolatedWorld     Page.getFrameTree
 Page.getNavigationHistory    Page.navigateToHistoryEntry (same-document traversal fixed by #3903, 11113; below it reloads — keep history.back() until the floor covers it)
 Page.removeScriptToEvaluateOnNewDocument
@@ -85,7 +86,7 @@ LP.configureCDP              LP.getContentSignal
 
 ## Constraints the driver must preserve
 
-- **Navigation:** `Page.loadEventFired` can be absent; keep `go_to`'s readyState polling. A refused/DNS/TLS root navigation commits an error document at the failed URL; cancelled navigation keeps the old document. Click waits must follow main-frame navigation start and document readiness, not just context clearing or Turbo idle.
+- **Navigation:** `Page.loadEventFired` can be absent; keep `go_to`'s readyState polling. A refused/DNS/TLS root navigation commits an error document at the failed URL; from #4430 (11651) a Fetch bad-list port (1, 22, 25, 6000…) fails the same way with `net::ERR_UNSAFE_PORT`, before any connection; cancelled navigation keeps the old document. Click waits must follow main-frame navigation start and document readiness, not just context clearing or Turbo idle.
 - **History:** same-document `Page.navigateToHistoryEntry` was fixed by #3903 (11113), above the floor; keep history.back/forward until covered and validated. Read URLs from location rather than tracking them from frame events.
 - **Frames:** `callFunctionOn` executes in the top context even with an iframe node as `this`; use `this.ownerDocument/defaultView`. Frame scripts compile through the frame's own eval while accepting top-context handles. #4192's listener-world fix does not establish that this constraint changed or resolve issue #3833.
 - **Node handles:** old-document `this` can raise NoExecutionContextError; old nodes passed as arguments can raise a cross-world error mapped to NodeNotFoundError. Only actual nodes have subtype node; ordinary objects serialize by value and cyclic values can be refused.
@@ -99,10 +100,10 @@ LP.configureCDP              LP.getContentSignal
 - **Pointer focus:** untrusted mousedown does not focus; CLICK_JS must focus the enabled target (labels resolve to controls, contenteditable to the editing host), or blur when appropriate. A non-focusable send_keys target must blur the previous field.
 - **Text caret:** Input.insertText inserts at the caret; SEND_KEYS_FOCUS_JS moves it to the end only for a newly focused field. Preserve an already-focused caret. Ctrl/Meta chords omit text to avoid inserting stray characters; use keyDown, not rawKeyDown.
 - **Keyboard:** trusted Enter/Space can activate controls; cancelled keypress suppresses Enter submit. Backspace/Delete emit beforeinput/input; blur/Enter commits change. Keys within frames target the frame's active field. JS-written values do not satisfy user-edited tooShort/tooLong validation. Selecting a disabled option is legal in native IDL, so SELECT_OPTION_JS must reject it.
-- **Contenteditable:** native getter fixed by #4210 (11229), above the floor; keep the helper for older binaries. `predicates.js#contentEditableState` mirrors upstream `Element.contentEditableState`: HTML elements only, invalid values inherit, then `document.designMode` decides (its body is the editing host, #4285/#4286, 11345/11347). Trusted text insertion needs #4182 (11101); Node#set still writes innerHTML.
+- **Contenteditable:** native getter fixed by #4210 (11229), above the floor; keep the helper for older binaries. `predicates.js#contentEditableState` mirrors upstream `Element.contentEditableState`: HTML elements only, invalid values inherit, then `document.designMode` decides (its body is the editing host, #4285/#4286, 11345/11347). Trusted text insertion needs #4182 (11101), Backspace/Delete and Ctrl+A in an editing host #4415 (11610); Node#set still writes innerHTML.
 - **Errors:** page_errors stays separate from console_logs. Runtime.exceptionThrown is absent when page error is cancelled, for handled same-tick rejections and for driver Runtime failures. No stackTrace; line/column are zero-based; rejections have 0/0 and no URL. Console object arguments have descriptions but no value; keep primitive sentinels and console_arg_text fallback.
 - **Network:** redirects repeat requestId with redirectResponse and no intermediate responseReceived. Close each previous hop and resolve responses onto the last open entry, or idle waits strand pending traffic. Cross-origin hops drop Authorization; response names are lowercase. Worker fetches count in page traffic.
-- **Headers/CORS:** fixed Sec-Ch-Ua outranks CLI, then CDP, script and defaults. Mozilla-containing UA overrides are rejected. CORS is on by default; keep it. Blocked requests emit loadingFailed/CorsBlocked without a response; the traffic entry must close. Preflight cache survives context reset.
+- **Headers/CORS:** fixed Sec-Ch-Ua outranks CLI, then CDP, script and defaults. Mozilla-containing UA overrides are rejected. CORS is on by default; keep it. Blocked requests emit loadingFailed/CorsBlocked without a response; the traffic entry must close. From #4242 (11663) fetch/XHR hide cross-origin response headers not listed in Access-Control-Expose-Headers. Preflight cache survives context reset.
 - **Cookies:** insecure SameSite=None is refused with success:false; invalid names/values raise -32602. Unspecified SameSite is Lax and omitted from output; legacy stores may need None stripped from insecure cookies. Domain without a leading dot is host-only; HTTPS URL forces Secure. deleteCookies ignores partitionKey.
 - **Reset/teardown:** dispose the context before clearing Network enabled state; replies route by command id, not sessionId. Keep quit_all's socket close before SIGTERM and TERM→3s→KILL escalation for crash/GC paths. A readiness fallback and navigation-crash recovery remain useful even after upstream issue closure.
 - **Files/downloads:** upload/drop paths read files on the browser host via DOM.setFileInputFiles. Downloads retain browser-level events and on-disk tracking. Native anchor download (#4124, 11097) requires skipping manual navigation at the existing version gate; older builds need attachment navigation. MIME-only navigation still does not download.

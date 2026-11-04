@@ -4,7 +4,7 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-02; release v0.20.1, main `d55a2612`. Open #674 (click wait), #685 (out-of-process iframe idle tracking).
+https://github.com/rubycdp/ferrum — reviewed 2026-11-04; release v0.20.1, main `944be713`. Open #674 (click wait), #685 (out-of-process iframe idle tracking), #696 (coordinate click fallback, N/A without a mouse path).
 
 Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once, and no header setter touches the UA); inverted `Node#moving?` (ours compares rects correctly; delay stays 10 ms, `LIGHTPANDA_NODE_MOVING_WAIT`); `go_to(on_timeout: :raise)` (ours falls back to readyState polling). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide (getAllCookies on our BrowserContext).
 
@@ -54,7 +54,7 @@ Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reachi
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-02; release v0.20, main `baff7af4`. Open #347 (finder hints), #356 (reset!/quit must not launch a browser that never started). #353 reading the window's url/title converges on ours (`location.href` via Runtime.evaluate).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-04; release v0.20, main `701df642`. Open #347 (finder hints), #356 (reset!/quit must not launch a browser that never started; ours since #208), #360 (ObsoleteNode when a node detaches before the click hit test; ours is immune: the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests). #353 reading the window's url/title converges on ours (`location.href` via Runtime.evaluate).
 
 ### Adopted
 
