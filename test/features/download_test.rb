@@ -37,17 +37,8 @@ describe "Capybara::Lightpanda downloads" do
 
     assert_includes session.driver.downloads, downloaded_file
   end
-  describe "native anchor downloads" do
-    before do
-      browser = session.driver.browser
-      available = if browser.nightly_build
-                    browser.nightly_build >= Gem::Version.new("11097")
-                  else
-                    browser.release >= Gem::Version.new("1.1.0")
-                  end
-      skip "native anchor downloads need Lightpanda build 11097" unless available
-    end
 
+  describe "native anchor downloads" do
     it "downloads data without navigating and runs each click handler exactly once" do
       session.execute_script(<<~JS)
         var link = document.getElementById('dl');
