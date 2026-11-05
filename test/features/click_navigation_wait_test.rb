@@ -114,5 +114,9 @@ describe "Node#click waits for the navigation it starts" do
     assert_operator elapsed, :<, 1, "failed-navigation click took #{(elapsed * 1000).round} ms"
     session.assert_current_path("/unreachable", wait: 0)
     assert session.has_text?("Navigation failed")
+    # A real refused connection, not a port the browser blocks before
+    # connecting (net::ERR_UNSAFE_PORT from upstream #4430): TestApp::REFUSED_PORT.
+    failure = session.driver.browser.network.traffic.reverse.find { |entry| entry[:url].to_s.end_with?("/unreachable") }
+    assert_equal "CouldntConnect", failure&.dig(:error)
   end
 end
