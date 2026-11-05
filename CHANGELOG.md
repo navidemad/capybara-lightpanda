@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.0] - 2026-11-05
+
+> **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.3** or a nightly build ≥ 11647. The driver refuses anything older and names the version it found. Pin `1.0.3` for a reproducible browser.
+
+### Changed
+
+- **`<a download>` links download natively on Lightpanda 1.0.3.** The driver used to wait for a 1.1 release before letting the browser handle a link's `download` attribute itself, so on 1.0.3 it also went to the link's URL. Every supported browser now handles it natively, and the driver leaves the download to it.
+
+### Fixed
+
+- **`reset_session!` no longer starts a browser just to reset it.** Resetting a session that never opened a page used to launch Lightpanda first. When that launch failed, the reset waited for the full process timeout a second time.
+- **Contenteditable elements are detected as browsers detect them.** `contenteditable="plaintext-only"` now counts as editable. An unrecognised value such as `contenteditable="bogus"` now inherits from its parent instead of making the element editable. A page with `document.designMode = "on"` is editable throughout. SVG elements are ignored. This affects which element a click focuses and where `send_keys` types.
+- **A stalled browser can no longer hang a command past its timeout.** The timeout used to cover only the wait for the reply, so a browser that had stopped reading could hold the call much longer while it was still being sent. Sending and waiting now share one deadline.
+
 ## [0.16.0] - 2026-10-26
 
 ### Fixed
