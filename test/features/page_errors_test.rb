@@ -73,7 +73,7 @@ describe "Capybara::Lightpanda::Browser#page_errors" do
   end
 
   # A rejection the page handles in the same tick is not an error. Builds below
-  # 10904 reported it anyway (upstream #4096, in the 10965 floor), so this pins
+  # 10904 reported it anyway (upstream #4096, in the floor), so this pins
   # the behavior the B19 swap to Runtime.exceptionThrown must keep.
   it "ignores a rejection handled in the same tick" do
     session.execute_script(<<~JS)

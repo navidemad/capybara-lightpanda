@@ -302,7 +302,19 @@ module Capybara
       #   #3658 (10657) client rects follow the scroll and
       #     DOM.scrollIntoViewIfNeeded is real — HTML5_DRAG_JS centers the
       #     drop target itself because scrollIntoView ignores `block`.
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("10965")
+      #
+      # 2026-11-05 bump 10965 -> 11647 (= release 1.0.3, the new lockstep cap;
+      # the bad-port block #4430 at 11651, CORS exposed headers #4242 at 11663
+      # and the x86_64 macOS CPU baseline #4450 at 11672 stay above it).
+      # Retired or ungated by it:
+      #   #4124 (11097) native anchor downloads — Node#click no longer asks a
+      #     version gate before skipping its own navigation for a download
+      #     link; that gate wanted release 1.1.0 although 1.0.3 carries it.
+      # Rides along: CSS nesting #3962 (10976), blank-page timers #4148
+      # (11012), ShadowRoot hit testing #4184 (11071), same-document
+      # navigateToHistoryEntry #3903 (11113), native isContentEditable #4210
+      # (11229), contenteditable Backspace/Delete/Ctrl+A #4415 (11610).
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("11647")
 
       # Lines of browser output #output keeps (ferrum keeps the same 100).
       OUTPUT_LINES = 100
@@ -314,16 +326,16 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 1.0.2 (2026-10-23) is build 10965 — exactly the nightly
+      # nightly floor. 1.0.3 (2026-11-05) is build 11647 — exactly the nightly
       # floor, which is no accident: the floor was raised *to* the release so
-      # both channels gate the same commit. (1.0.1 = 10641 predates fixes the
+      # both channels gate the same commit. (1.0.2 = 10965 predates fixes the
       # floor exists for.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
       # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("1.0.2")
+      MINIMUM_RELEASE = Gem::Version.new("1.0.3")
 
       class << self
         # `lightpanda version` prints one of two shapes, and the gem supports
