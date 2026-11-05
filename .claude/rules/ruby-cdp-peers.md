@@ -4,7 +4,7 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-04; release v0.20.1, main `944be713`. Open #674 (click wait), #685 (out-of-process iframe idle tracking), #696 (coordinate click fallback, N/A without a mouse path).
+https://github.com/rubycdp/ferrum — reviewed 2026-11-05; release v0.20.1, main `e1aca0674f`. #674 merged: `Node#click(wait:)` forwards the navigation watch to `Mouse#click` (`0` returns at once); N/A until Cuprite gives Capybara a way to pass it, and our `node.rb#click` ignores options and sniffs `Browser::SNIFF_WINDOW`. Open #685 (out-of-process iframe idle tracking), #696 (bounding-rect center fallback when content quads fail; immune, no offsetWidth/offsetHeight geometry in lib/ or javascripts/), #697 (Chrome 157 browser_ui targets, N/A).
 
 Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once, and no header setter touches the UA); inverted `Node#moving?` (ours compares rects correctly; delay stays 10 ms, `LIGHTPANDA_NODE_MOVING_WAIT`); `go_to(on_timeout: :raise)` (ours falls back to readyState polling). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide (getAllCookies on our BrowserContext).
 
@@ -39,7 +39,7 @@ Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reachi
 ### Outstanding adoption candidates
 
 - **[tiny]** `ferrum/network/exchange.rb` ↔ `network.rb#traffic`: typed request/response/finished predicates could replace loose hashes if callers need richer diagnostics; not currently adopted.
-- **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events, but adopt another signal only after a real-app failure demonstrates a gap.
+- **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 
 ### Diverged on purpose
 
@@ -54,7 +54,7 @@ Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reachi
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-04; release v0.20, main `701df642`. Open #347 (finder hints), #356 (reset!/quit must not launch a browser that never started; ours since #208), #360 (ObsoleteNode when a node detaches before the click hit test; ours is immune: the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests). #353 reading the window's url/title converges on ours (`location.href` via Runtime.evaluate).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-05; release v0.20, main `701df642` (unchanged since 2026-11-04). Open #347 (finder hints), #356 (reset!/quit must not launch a browser that never started; ours since #208), #360 (ObsoleteNode when a node detaches before the click hit test; ours is immune: the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests). #353 reading the window's url/title converges on ours (`location.href` via Runtime.evaluate).
 
 ### Adopted
 
