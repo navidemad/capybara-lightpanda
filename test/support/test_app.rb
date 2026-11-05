@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "socket"
 require "capybara/spec/test_app"
 
 class TestApp
@@ -1273,6 +1274,13 @@ class TestApp
   # waits for the new document instead of returning on the old one.
   NAV_WAIT_DELAY = 0.3
 
+  # A loopback port nothing listens on, for a navigation that must fail with a
+  # refused connection. Bound then released, so it is free; an ephemeral port is
+  # never on the Fetch bad-port list, which Lightpanda blocks before connecting
+  # since upstream #4430 (11651). Port 1, used before, is on that list, so the
+  # click got net::ERR_UNSAFE_PORT and never tried to connect.
+  REFUSED_PORT = TCPServer.open("127.0.0.1", 0) { |server| server.addr[1] }
+
   get "/lightpanda/nav_wait" do
     <<~HTML
       <!DOCTYPE html>
@@ -1286,7 +1294,7 @@ class TestApp
           <button id="inert">Inert</button>
           <button id="push" onclick="history.pushState({}, '', '/lightpanda/nav_wait/pushed')">Push</button>
           <a id="anchor" href="#section">Anchor</a>
-          <a id="refused" href="http://127.0.0.1:1/unreachable">Refused</a>
+          <a id="refused" href="http://127.0.0.1:#{REFUSED_PORT}/unreachable">Refused</a>
           <a id="module-link" href="/lightpanda/nav_wait/module">Module link</a>
           <a id="turbo-handback-link" href="/lightpanda/nav_wait/slow"
              onclick="document.dispatchEvent(new Event('turbo:before-fetch-request')); setTimeout(function () { document.dispatchEvent(new Event('turbo:before-fetch-response')) }, 20)">Turbo handback link</a>
