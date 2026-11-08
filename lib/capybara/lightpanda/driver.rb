@@ -20,8 +20,16 @@ module Capybara
         @started = false
       end
 
+      # A browser whose CDP connection died still owns a process (running, or a
+      # zombie after a crash), its output pipes and an at_exit registry slot.
+      # Quit it before spawning the replacement, or every respawn leaves one
+      # more Lightpanda running until the suite exits.
       def browser
-        @browser = nil if @browser && !browser_alive?
+        if @browser && !browser_alive?
+          dead = @browser
+          @browser = nil
+          dead.quit
+        end
         @browser ||= Browser.new(@options)
       end
 

@@ -86,6 +86,36 @@ describe Capybara::Lightpanda::Driver do
     end
   end
 
+  # Issue #219. A browser whose CDP connection died still owns its process
+  # (running, or a zombie after a crash) and an at_exit registry slot. Dropping
+  # it without #quit left one more Lightpanda running per respawn.
+  describe "#browser after the connection died" do
+    let(:driver) { Capybara::Lightpanda::Driver.new(nil) }
+
+    it "quits the dead browser before spawning its replacement" do
+      dead = mock("dead Browser")
+      dead.stubs(:alive?).returns(false)
+      replacement = mock("Browser")
+      replacement.stubs(:alive?).returns(true)
+      spawn = sequence("respawn")
+      dead.expects(:quit).in_sequence(spawn)
+      Capybara::Lightpanda::Browser.expects(:new).in_sequence(spawn).returns(replacement)
+      driver.instance_variable_set(:@browser, dead)
+
+      assert_same replacement, driver.browser
+    end
+
+    it "does not quit a browser that is still alive" do
+      live = mock("Browser")
+      live.stubs(:alive?).returns(true)
+      live.expects(:quit).never
+      Capybara::Lightpanda::Browser.expects(:new).never
+      driver.instance_variable_set(:@browser, live)
+
+      assert_same live, driver.browser
+    end
+  end
+
   # Capybara calls reset! after every touched session, including one whose
   # launch failed during `visit`. Launching Lightpanda there only to reset it
   # costs a second full process timeout per failing example (Cuprite #356).

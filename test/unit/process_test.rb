@@ -381,4 +381,58 @@ describe Capybara::Lightpanda::Process do
       assert_equal ["bad \uFFFD byte"], process.output
     end
   end
+
+  # Issue #219. A crashed Lightpanda stays a zombie until it is reaped, and
+  # kill(0) succeeds on a zombie: alive? reported the dead browser as alive,
+  # so Browser#restart_process_if_dead never restarted it and crash recovery
+  # in go_to dialled a dead port. A real child process, because the bug lives
+  # in how the OS reports an exited, unreaped child.
+  describe "after the browser process exits on its own" do
+    before do
+      pid = Process.spawn("sh", "-c", "exit 0", pgroup: true)
+      process.instance_variable_set(:@pid, pid)
+      sleep 0.2 # exited by now, but not reaped: the state a crash leaves behind
+    end
+
+    it "is not alive, so a crashed browser gets restarted" do
+      refute process.alive?
+    end
+
+    it "stops without signalling the reaped pid, which may now be someone else's" do
+      refute process.alive?
+      Capybara::Lightpanda::Process.expects(:terminate).never
+
+      process.stop
+
+      assert_nil process.pid
+    end
+  end
+
+  it "is alive while the child runs" do
+    pid = Process.spawn("sleep", "5", pgroup: true)
+    process.instance_variable_set(:@pid, pid)
+
+    assert process.alive?
+  ensure
+    Process.kill("KILL", pid)
+    Process.wait(pid)
+  end
+
+  # A stopped Process is garbage once Browser drops it. Its finalizer still
+  # held the old pid and TERMed whatever owned that pid by the time GC ran.
+  it "disarms the GC finalizer when stopped" do
+    pid = Process.spawn("sleep", "5", pgroup: true)
+    process.instance_variable_set(:@pid, pid)
+    process.send(:register_finalizer, pid)
+    ObjectSpace.expects(:undefine_finalizer).with(process)
+
+    process.stop
+  ensure
+    begin
+      Process.kill("KILL", pid)
+      Process.wait(pid)
+    rescue Errno::ESRCH, Errno::ECHILD
+      nil
+    end
+  end
 end

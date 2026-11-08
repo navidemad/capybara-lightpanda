@@ -49,13 +49,14 @@ Threads involved:
 | Starting | "address in use" | Idle, then one retry | `stop` + `PortInUseError` → `kill_process_on_port` → `attempt_start` |
 | Starting | `process_timeout` | Idle | `stop` + `ProcessTimeoutError` |
 | Running | crash or signal | Exited | (external) |
-| Running / Exited | `stop` | Idle | `terminate` (TERM, then KILL after `STOP_GRACE_SECONDS`, then reap), `cleanup_pipes` |
+| Running / Exited | `stop` | Idle | `terminate` (TERM, then KILL after `STOP_GRACE_SECONDS`, then reap; skipped once reaped), `disarm_finalizer`, `cleanup_pipes` |
+| Exited | `alive?` | Exited (reaped) | `waitpid(WNOHANG)` returns the pid |
 | any | GC finalizer | (process gone) | `weak_kill` → `terminate` |
 
 Invariants:
 
-- `alive?` is true only in Starting/Running. An Exited child must read as dead: `restart_process_if_dead` depends on it. **Violated:** see D2.
-- Exactly one finalizer per instance, aimed at the latest pid (`register_finalizer`).
+- `alive?` is true only in Starting/Running. An Exited child must read as dead: `restart_process_if_dead` depends on it. `alive?` therefore reaps with `waitpid(WNOHANG)` instead of probing with `kill(0)` (D2, fixed).
+- Exactly one finalizer per instance, aimed at the latest pid (`register_finalizer`), and none after `stop`. A reaped pid is never signalled again, because it may belong to another process by then (D2b, fixed).
 - `stop` is safe in any state and on an already-reaped pid (`reap_within` treats `ECHILD` as reaped).
 
 ## 2. WebSocket transport
@@ -115,7 +116,7 @@ Invariants:
 | From | Event | To | Code |
 |---|---|---|---|
 | New | `start` ok | Started (tracked for `at_exit`) | `start` |
-| New | `start` raises | **leaks** the process and client (D3) | exception escapes `start` |
+| New | `start` raises | Quit (nothing left running) | `start`'s `ensure` → `quit` |
 | Started | `reset` | Disposed → Started | `dispose_browser_context`, `clear_subscriptions`, `clear_session_state`, `create_browser_context`, `create_page` |
 | Started | crash mid-`go_to` | Started (new client and context) | `handle_navigation_crash` → `reconnect` |
 | Started | `quit` | Quit | `quit` |
@@ -126,7 +127,7 @@ Invariants:
 - Every `on(...)` subscription belongs to the current `@client`. `reset` clears them before `create_page` re-adds them, and `reconnect` gets them fresh with the new client.
 - Per-session buffers (console, page errors, modal queue, frames, Network, Downloads) are wiped whenever the context is replaced (`clear_session_state`).
 - `@page_events_enabled` mirrors whether `Page.enable` was sent **on the current connection**. `quit` does not reset it. Lightpanda 1.0.3 still delivers Page events on the reused connection (dialogs and navigations were observed after `quit` → `start`), so this has no visible effect. It is a latent risk: see L1.
-- A Browser that failed to start must leave no process and no socket behind. **Violated:** see D3.
+- A Browser that failed to start leaves no process and no socket behind (D3, fixed).
 
 ## 5. Driver browser slot
 
@@ -136,7 +137,7 @@ Invariants:
 |---|---|---|---|
 | nil | any call through `browser` | alive | `Browser.new` |
 | alive | transport dies | dead | (detected lazily by `browser_alive?`) |
-| dead | any call through `browser` | alive (new instance) | `browser` drops the dead one **without `quit`** (D3) |
+| dead | any call through `browser` | alive (new instance) | `browser` quits the dead one first |
 | alive | `reset!` ok | alive | `Browser#reset` |
 | alive | `reset!` raises a gem/IO error | nil | `quit` + nil |
 | any | `quit` | nil | `Browser#quit` |
@@ -144,7 +145,7 @@ Invariants:
 Invariants:
 
 - At most one Lightpanda process per driver.
-- A replaced browser is always quit, so its process is stopped (TERM, then KILL) and it is untracked. **Violated:** see D3.
+- A replaced browser is always quit, so its process is stopped (TERM, then KILL) and it is untracked (D3, fixed).
 
 ## 6. Navigation tracking events
 
@@ -187,7 +188,7 @@ Invariants:
 
 - One deadline for the whole navigation, so the worst case is 1× timeout.
 - At most one reconnect per `go_to` (the `retried:` flag).
-- `reconnect` restarts the process only when it is really gone. That needs `Process#alive?` to treat a zombie as dead. **Violated:** see D2.
+- `reconnect` restarts the process only when it is really gone. That needs `Process#alive?` to treat a zombie as dead (D2, fixed).
 - A transport already dead **before** `go_to` raises `DeadBrowserError` from the send. This path is not recovered here: `Driver#browser` respawns on the next call.
 
 ## 8. `wait_for_idle` (after click, send_keys, submit, back, forward)
@@ -300,8 +301,9 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | ID | Impact | Machine | Invalid state or transition | Evidence | Issue | Status |
 |---|---|---|---|---|---|---|
 | D1 | High | §9 Turbo, §8 | An aborted Turbo fetch never decrements the counter, so Busy is stuck. Every later click / send_keys / back waits the full timeout | `turbo:before-fetch-request` with no response or error event; two plain clicks took 10.06 s each with `timeout: 10` | [#218](https://github.com/navidemad/capybara-lightpanda/issues/218) | fixed: `turbo.js` fetch tokens; `test/js/turbo.test.ts`, `test/features/turbo_abort_test.rb` |
-| D2 | High | §1 Process, §7 | An exited, unreaped child reads as alive, so `reconnect` never restarts a browser that crashed mid-navigation and raises `DeadBrowserError` instead | `kill -9` then `process.alive?` → `true`; `kill(0)` succeeds on a zombie | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | open |
-| D3 | High | §5 Driver, §4 | A dead browser is replaced without `quit`, so its process keeps running and stays tracked. A failed `start` leaks its process and CDP connection | 2 `lightpanda serve` processes after a respawn, old one alive and tracked; `start` has no cleanup (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | open |
+| D2 | High | §1 Process, §7 | An exited, unreaped child reads as alive, so `reconnect` never restarts a browser that crashed mid-navigation and raises `DeadBrowserError` instead | `kill -9` then `process.alive?` → `true`; `kill(0)` succeeds on a zombie | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `alive?` reaps; `test/unit/process_test.rb`, `test/features/crash_recovery_test.rb` |
+| D2b | Low | §1 Process | After `stop`, the GC finalizer stays armed on the reaped pid and later TERMs whatever process owns that pid by then | `stop` never undefined the finalizer (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `disarm_finalizer`; `test/unit/process_test.rb` |
+| D3 | High | §5 Driver, §4 | A dead browser is replaced without `quit`, so its process keeps running and stays tracked. A failed `start` leaks its process and CDP connection | 2 `lightpanda serve` processes after a respawn, old one alive and tracked; `start` has no cleanup (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `Driver#browser` quits, `start` cleans up; `test/unit/driver_test.rb`, `test/unit/browser_start_test.rb` |
 | D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | open |
 | D4b | Medium | §10 Modal | Armed survives `ModalNotFound`, so the next unwrapped dialog gets the stale answer silently | unwrapped `confirm` returned `true` with no warning after a failed `accept_confirm` | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | open |
 | D5 | Medium | §11 Network | An iframe's Document request becomes "the navigation", so `status_code` reports the iframe | page 200 with a 404 iframe → `status_code == 404` | [#221](https://github.com/navidemad/capybara-lightpanda/issues/221) | open |
