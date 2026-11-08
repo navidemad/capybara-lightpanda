@@ -8,6 +8,11 @@ require "capybara/lightpanda/network"
 class FakeBrowser
   attr_reader :commands, :ops
 
+  # The main frame shares the target's id; Network keys navigations on it.
+  MAIN_FRAME = "MAIN-FRAME"
+
+  def target_id = MAIN_FRAME
+
   def initialize
     @commands = []
     @subscriptions = Hash.new { |h, k| h[k] = [] }
@@ -315,9 +320,10 @@ describe Capybara::Lightpanda::Network do
   # #response_headers. Lightpanda omits `type` on responseReceived, so the
   # match runs through the remembered document requestId.
   describe "navigation response capture" do
-    def fire_request(id, type: nil)
+    def fire_request(id, type: nil, frame_id: FakeBrowser::MAIN_FRAME)
       params = {
         "requestId" => id,
+        "frameId" => frame_id,
         "request" => { "url" => "https://example.test/", "method" => "GET" },
         "timestamp" => 1.0,
       }
@@ -351,6 +357,18 @@ describe Capybara::Lightpanda::Network do
       assert_equal 200, network.last_navigation_response[:status]
     end
 
+    # Issue #221. Iframes load by default and their document requests are
+    # typed "Document" too. The page's status must not become the iframe's.
+    it "ignores an iframe's document request — only the main frame's counts" do
+      network.enable
+      fire_request("doc1", type: "Document")
+      fire_response("doc1", status: 200)
+      fire_request("frame1", type: "Document", frame_id: "CHILD-FRAME")
+      fire_response("frame1", status: 404)
+
+      assert_equal 200, network.last_navigation_response[:status]
+    end
+
     it "clears on reset so the fresh context starts with no phantom status" do
       network.enable
       fire_request("doc1", type: "Document")
@@ -375,6 +393,7 @@ describe Capybara::Lightpanda::Network do
       params = {
         "requestId" => id,
         "type" => "Document",
+        "frameId" => FakeBrowser::MAIN_FRAME,
         "request" => { "url" => url, "method" => "GET" },
         "timestamp" => 1.0,
       }

@@ -262,14 +262,14 @@ Tracker: `@enabled` false ⇄ true, together with the handler triple (`subscribe
 
 Entry: Open (`response` and `error` both nil) → Responded | Failed | Redirected (closed by the next hop's `redirectResponse`).
 
-Navigation capture: `@document_request_id` follows **any** Document request, iframes included (D5). `@last_navigation_response` is cleared when that request starts and filled by its response.
+Navigation capture: `@document_request_id` follows the **main frame's** Document request (`main_frame_document?`: `frameId == target_id`). `@last_navigation_response` is cleared when that request starts and filled by its response.
 
 Invariants:
 
 - Every entry ends: a response, a `loadingFailed`, or the next redirect hop. Otherwise `pending_connections` stays above zero and every `wait_for_idle` burns its whole timeout.
 - The buffer is capped at `TRAFFIC_LIMIT`.
 - `@enabled` is true ⇔ the handlers are subscribed on the current client.
-- `status_code`/`response_headers` describe the top-level document only. **Violated:** iframe Document requests overwrite them, see D5.
+- `status_code`/`response_headers` describe the top-level document only (D5, fixed).
 
 ## 12. Downloads
 
@@ -306,7 +306,7 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | D3 | High | §5 Driver, §4 | A dead browser is replaced without `quit`, so its process keeps running and stays tracked. A failed `start` leaks its process and CDP connection | 2 `lightpanda serve` processes after a respawn, old one alive and tracked; `start` has no cleanup (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `Driver#browser` quits, `start` cleans up; `test/unit/driver_test.rb`, `test/unit/browser_start_test.rb` |
 | D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `arm_modal` drops older dialogs; `test/features/modal_prearm_state_test.rb` |
 | D4b | Medium | §10 Modal | Armed survives `ModalNotFound`, so the next unwrapped dialog gets the stale answer silently | unwrapped `confirm` returned `true` with no warning after a failed `accept_confirm` | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `disarm_modal`; `test/features/modal_prearm_state_test.rb` |
-| D5 | Medium | §11 Network | An iframe's Document request becomes "the navigation", so `status_code` reports the iframe | page 200 with a 404 iframe → `status_code == 404` | [#221](https://github.com/navidemad/capybara-lightpanda/issues/221) | open |
+| D5 | Medium | §11 Network | An iframe's Document request becomes "the navigation", so `status_code` reports the iframe | page 200 with a 404 iframe → `status_code == 404` | [#221](https://github.com/navidemad/capybara-lightpanda/issues/221) | fixed: `Network#main_frame_document?`; `test/unit/network_test.rb`, `test/features/status_code_iframe_test.rb` |
 | D6a | Low | §14 Keyboard | A raising key leaves held modifiers down (`keyDown` with no `keyUp`) | `type` has no `ensure` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
 | D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | `Client#command` checks `@ws.closed?` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
 | D6c | Low | §2 | A stalled close-frame write raises out of `WebSocket#close`, so `Client#close` skips its teardown | `abandon_stalled_write` raises from `@driver.close` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |

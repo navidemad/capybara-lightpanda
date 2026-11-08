@@ -1115,6 +1115,26 @@ class TestApp
     HTML
   end
 
+  # A 200 page embedding an iframe whose document is a 404.
+  get "/lightpanda/with_missing_frame" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Missing Frame</title></head>
+        <body>
+          <h1>Top document</h1>
+          <iframe src="/lightpanda/missing_frame_document"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/missing_frame_document" do
+    status 404
+    headers "X-Frame-Document" => "1"
+    "<p>gone</p>"
+  end
+
   # Pre-arm state across accept/dismiss blocks: an unwrapped alert, a button
   # that opens nothing, and a confirm whose answer the page records.
   get "/lightpanda/modal_prearm" do
