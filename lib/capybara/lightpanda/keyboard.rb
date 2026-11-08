@@ -104,24 +104,42 @@ module Capybara
       # only the Tab went out.
       def type(*keys)
         active_mods = []
-        keys.each do |key|
-          case key
-          when Symbol
-            if MODIFIERS.key?(key)
-              press_modifier(key, active_mods)
+        holding_modifiers(active_mods) do
+          keys.each do |key|
+            case key
+            when Symbol
+              if MODIFIERS.key?(key)
+                press_modifier(key, active_mods)
+              else
+                dispatch_key_with_mods(key, active_mods)
+              end
+            when Array
+              type_with_modifiers(key)
             else
-              dispatch_key_with_mods(key, active_mods)
+              type_text(key, active_mods)
             end
-          when Array
-            type_with_modifiers(key)
-          else
-            type_text(key, active_mods)
           end
         end
-        release_modifiers(active_mods)
       end
 
       private
+
+      # Every modifier keyDown gets its keyUp, even when a key in the chord
+      # raises (an unknown key name, a CDP timeout): otherwise page code that
+      # tracks modifier state sees Shift or Ctrl stuck down. A release that
+      # fails too must not replace the error that explains the failure.
+      def holding_modifiers(active_mods)
+        yield
+      rescue StandardError
+        begin
+          release_modifiers(active_mods)
+        rescue StandardError
+          nil
+        end
+        raise
+      else
+        release_modifiers(active_mods)
+      end
 
       def press_modifier(mod, active_mods)
         return if active_mods.include?(mod)
@@ -166,15 +184,16 @@ module Capybara
         modifiers, rest = keys.partition { |k| k.is_a?(Symbol) && MODIFIERS.key?(k) }
 
         active_mods = []
-        modifiers.each { |m| press_modifier(m, active_mods) }
-        rest.each do |key|
-          if key.is_a?(Symbol)
-            dispatch_key_with_mods(key, active_mods)
-          else
-            type_text(key, active_mods)
+        holding_modifiers(active_mods) do
+          modifiers.each { |m| press_modifier(m, active_mods) }
+          rest.each do |key|
+            if key.is_a?(Symbol)
+              dispatch_key_with_mods(key, active_mods)
+            else
+              type_text(key, active_mods)
+            end
           end
         end
-        release_modifiers(active_mods)
       end
 
       def type_text(key, active_mods)

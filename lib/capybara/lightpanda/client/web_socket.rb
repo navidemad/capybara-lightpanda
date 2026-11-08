@@ -56,19 +56,31 @@ module Capybara
         # connection (status :closed or :error) without closing the socket,
         # and an early return here then left the TCPSocket — one descriptor
         # per crashed browser — open until GC finalized it (ferrum #639).
+        #
+        # A close frame that cannot be written (buffers full, browser not
+        # reading) is given up on, not raised: abandon_stalled_write already
+        # marked the connection dead, and an error escaping here would cut
+        # Client#close short before it released its thread and pending commands.
         def close
           unless @status == :closed
             @status = :closing
             @messages.close
-            @driver_mutex.synchronize { @driver&.close }
+            begin
+              @driver_mutex.synchronize { @driver&.close }
+            rescue DeadBrowserError
+              nil
+            end
             @thread&.join(1) || @thread&.kill
           end
           close_socket
           @status = :closed
         end
 
+        # :closing counts: no reply can arrive once close has begun, and a
+        # command released by it must report the connection gone
+        # (DeadBrowserError), not a timeout that never happened.
         def closed?
-          @status == :closed || @status == :error
+          %i[closed closing error].include?(@status)
         end
 
         # Called by websocket-driver, always under @driver_mutex. A browser

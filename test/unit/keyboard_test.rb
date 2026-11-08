@@ -25,6 +25,34 @@ describe Capybara::Lightpanda::Keyboard do
     browser.events.filter_map { |method, params| params if method == "Input.dispatchKeyEvent" }
   end
 
+  # Issue #222. A key in the chord that raises (an unknown key name here; a
+  # CDP timeout in the wild) used to skip the release: Shift's keyDown went out
+  # with no keyUp, and page code tracking modifier state saw it stuck down.
+  describe "when a key in the chord raises" do
+    it "still releases the held modifiers, then re-raises" do
+      assert_raises(ArgumentError) { keyboard.type(:shift, :no_such_key) }
+
+      assert_equal([%w[keyDown Shift], %w[keyUp Shift]], key_events.map { |e| [e[:type], e[:key]] })
+    end
+
+    it "releases an array group's modifiers too" do
+      assert_raises(ArgumentError) { keyboard.type(%i[ctrl no_such_key]) }
+
+      assert_equal %w[keyUp Control], key_events.last.values_at(:type, :key)
+    end
+
+    it "keeps the original error when the release fails as well" do
+      browser.define_singleton_method(:page_command) do |method, **params|
+        raise Capybara::Lightpanda::DeadBrowserError, "gone" if params[:type] == "keyUp"
+
+        @events << [method, params]
+        {}
+      end
+
+      assert_raises(ArgumentError) { keyboard.type(:shift, :no_such_key) }
+    end
+  end
+
   describe "#type" do
     # MODIFIERS has always advertised :ctrl (Capybara's send_keys spelling),
     # but KEYS lacked the entry — send_keys(:ctrl, "a") crashed with
