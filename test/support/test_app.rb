@@ -1115,6 +1115,23 @@ class TestApp
     HTML
   end
 
+  # Pre-arm state across accept/dismiss blocks: an unwrapped alert, a button
+  # that opens nothing, and a confirm whose answer the page records.
+  get "/lightpanda/modal_prearm" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Modal Pre-arm</title></head>
+        <body>
+          <button id="alert" onclick="alert('earlier alert')">Alert</button>
+          <button id="noop" onclick="void 0">Nothing</button>
+          <button id="delete" onclick="document.getElementById('outcome').textContent = confirm('Delete?') ? 'deleted' : 'kept'">Delete</button>
+          <div id="outcome"></div>
+        </body>
+      </html>
+    HTML
+  end
+
   # -- Download page --
   # A link to an attachment response. Unlike Capybara's own /download.csv
   # (text/csv with NO Content-Disposition, which Lightpanda renders rather than
