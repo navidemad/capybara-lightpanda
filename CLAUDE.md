@@ -51,6 +51,8 @@ bundle exec rubocop -a                # Lint with auto-fix
 - Frame switching stores Node objects in `Browser#frame_stack`. Finding within frames uses `callFunctionOn` on the iframe element to scope to its `contentDocument`. XPath finding in iframes works natively (per-frame `Document.evaluate` from PR #2305).
 - Modal handling uses Lightpanda's pre-arm model (`LP.handleJavaScriptDialog`, PR #2261). `Browser#accept_modal`/`#dismiss_modal` send the LP command BEFORE the action that triggers the dialog; Lightpanda stashes the response and consumes it when the dialog opens. `Page.javascriptDialogOpening` is still subscribed to capture the message text for `find_modal`. We do NOT call `Page.handleJavaScriptDialog` — it deliberately errors with "No dialog is showing" and points clients at the LP method.
 
+- `STATE_MACHINES.md` maps every explicit and implicit state machine (process, transport, session, navigation events, Turbo tracker, modal pre-arm, network, …) with its invariants and transition tables, plus the defects found against them. Update it in the same change whenever lifecycle or event-driven state changes.
+
 ## Lightpanda Browser Limitations
 
 These are browser-level limitations, not fixable in this gem:
