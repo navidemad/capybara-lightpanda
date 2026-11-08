@@ -7,17 +7,27 @@ only if it is pointed at the right files and told what has already been tried.
 
 ## What is actually left
 
-8 baseline failures as of the 2026-10-16 refresh (run 38886066850, main
-277ef3b on that day's nightly), all attributed in `causes.yml`. That refresh
-retired `jquery1-change-shim` (5) and `no-change-on-blur` (1), both fixed
-upstream in the 1.0.1 floor (#3958, #3952). The 2026-10-12 refresh (run
-38261324053) had dropped 83 entries, including whole clusters this file used
-to call permanent: `layout-measuring-js` (38, "never fixable") and
-`multipart-content-loss` (A45) both cleared. Nobody has checked which
-upstream change cleared those two, so don't read either as understood.
+9 baseline failures as of the 2026-11-08 refresh (run 42494980619, main
+54220f0 = 0.17.1 on the 11745 nightly), every one `confirmed` in `causes.yml`
+after booting campfire, decidim and solidus locally the same day. Earlier
+refreshes (2026-10-12, 2026-10-16) retired the big clusters; `git log -p
+causes.yml` has their diagnoses.
 
 | Lot | N | Reality |
 | --- | --- | --- |
+| `campfire-clipboard-event` | 3 | Upstream: no `ClipboardEvent` constructor. Small PR modelled on `DragEvent.zig`. |
+| `campfire-lexxy-composer-state` | 1 | Upstream: a cached `import()` resolves in microtasks, overtaking earlier `setTimeout(0)` (Lexxy's element definition). |
+| `decidim-account-js` | 2 | Page race exposed by Lightpanda's early load (no images) — gem settle-after-visit option to decide; plus upstream: no `xhr.upload` progress events. |
+| `select2-v3-flow` | 1 | Gem: CLICK_JS descent lands on a preselected multi-select choice; then upstream faux-layout makes the form "obscured". |
+| `selenium-textarea-text` | 1 | By design: Selenium-only visible-text semantics. |
+| `selenium-only-api` (`switch_to.alert`) | 1 | By design: Lightpanda pre-arms dialog responses. |
+
+Local harness gotcha (2026-11-08): `spec.sh`'s `LIGHTPANDA_CACHE_TIME=0`
+makes a stale `~/.cache/lightpanda/lightpanda` win over the PATH binary
+`boot.sh` provisioned; point `XDG_CACHE_HOME` at a dir holding a current
+binary until that is fixed.
+
+--- | --- | --- |
 | `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
 | `selenium-textarea-text` | 1 | `likely` — the spec relies on Selenium's visible text including a textarea's child text. |
 | `customer-switch-refill` | 2 | Open, `unknown`. |
