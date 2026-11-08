@@ -210,6 +210,24 @@ describe Capybara::Lightpanda::Binary do
     end
   end
 
+  # Release candidates (upstream #4480) are GitHub prereleases under their own
+  # tag, e.g. 1.0.4-rc1, so pinning one must fetch from that tag's asset URL
+  # and cache under its own filename, never the rolling nightly's.
+  describe ".download with a release-candidate pin" do
+    it "fetches the rc tag's asset into an rc-scoped path" do
+      Dir.mktmpdir do |dir|
+        Capybara::Lightpanda::Binary.install_dir = dir
+        Capybara::Lightpanda::Binary.required_version = "1.0.4-rc1"
+        Capybara::Lightpanda::Binary.stubs(:log)
+        binary = Capybara::Lightpanda::Binary.platform_binary
+        url = "#{Capybara::Lightpanda::Binary::GITHUB_RELEASE_URL}/1.0.4-rc1/#{binary}"
+        Capybara::Lightpanda::Binary.expects(:download_file).with { |u, temp| u == url && File.write(temp, "x") }
+
+        assert_equal File.join(dir, "lightpanda-1.0.4-rc1"), Capybara::Lightpanda::Binary.download
+      end
+    end
+  end
+
   describe ".update without required_version" do
     it "returns the cached binary when fresh" do
       dir = Dir.mktmpdir

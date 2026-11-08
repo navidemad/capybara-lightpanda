@@ -211,6 +211,48 @@ describe Capybara::Lightpanda::Process do
       assert_includes error.message, "release >= #{release_floor}"
     end
 
+    # Release-candidate channel (upstream #4480): tags like 1.0.4-rc1 print
+    # "1.0.4-rc1.<git rev-list --count>+<hash>". Before this branch an RC fell
+    # through both patterns and raised "too old" even when newer than the floor.
+    it "accepts a release candidate at the floor and exposes its build counter" do
+      Open3.stubs(:capture3).returns(["1.0.4-rc1.#{floor}+1b60dcc7a\n", "", nil])
+
+      process.send(:check_minimum_version, "/bin/lp")
+
+      assert_equal floor, process.nightly_build
+      assert_nil process.release, "an RC is not the release it leads up to"
+      assert_equal "1.0.4-rc1.#{floor}+1b60dcc7a", process.version
+    end
+
+    # The x.y.z of an RC names a release that does not exist yet, so it must not
+    # be compared with MINIMUM_RELEASE: only the commit counter says how new
+    # the binary is. A high semver with an old counter is still too old.
+    it "rejects a release candidate below the floor even when its semver is above MINIMUM_RELEASE" do
+      below = floor.segments.first - 1
+      Open3.stubs(:capture3).returns(["9.9.9-rc1.#{below}+1b60dcc7a\n", "", nil])
+      Capybara::Lightpanda::Binary.stubs(:update_hint).returns("hint")
+
+      error = assert_raises(Capybara::Lightpanda::BinaryError) do
+        process.send(:check_minimum_version, "/bin/lp")
+      end
+      assert_includes error.message, "too old"
+      assert_nil process.nightly_build
+    end
+
+    it "rejects malformed rc strings — an RC without its build counter is unidentifiable" do
+      Capybara::Lightpanda::Binary.stubs(:update_hint).returns("hint")
+
+      malformed = ["1.0.4-rc1", "1.0.4-rc.99999+1b60dcc7a", "1.0.4-rc1.99999",
+                   "1.0.4-rcX.99999+1b60dcc7a", "garbage 1.0.4-rc1.99999+1b60dcc7a",]
+      malformed.each do |raw|
+        Open3.stubs(:capture3).returns(["#{raw}\n", "", nil])
+
+        assert_raises(Capybara::Lightpanda::BinaryError, "expected #{raw.inspect} to be rejected") do
+          process.send(:check_minimum_version, "/bin/lp")
+        end
+      end
+    end
+
     # The two floors gate the same trunk, so they must stay in lockstep: a
     # release is acceptable precisely because its own commit count clears
     # MINIMUM_NIGHTLY_BUILD. If a floor bump moves one without the other, the
