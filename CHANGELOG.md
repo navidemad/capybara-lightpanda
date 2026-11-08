@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.1] - 2026-11-08
+
+### Fixed
+
+- **Clicks no longer stall after Turbo cancels a request.** When Turbo aborted a fetch (a newer click or visit replacing it), or a Turbo Stream render was cancelled or raised, the driver kept thinking the page was busy. Every later `click`, `send_keys` or `go_back` then waited the full driver timeout. Each request and each stream render is now counted out exactly once, whatever way it ends.
+- **A crashed browser is restarted instead of failing the next test.** If Lightpanda died during a navigation, the driver didn't notice, and the next `visit` raised `DeadBrowserError`. It now detects the crash and starts a fresh browser. Each restart also used to leave the dead browser's process tracked and running; it is now cleaned up, and a browser that fails partway through startup no longer leaves a process behind.
+- **`accept_alert` / `accept_confirm` only match a dialog opened inside their block.** An earlier, unhandled alert could satisfy a later `accept_alert` whose block opened nothing, so the test passed when it should have failed. And after an `accept_confirm` that timed out, the next unwrapped `confirm` was silently accepted; it is now dismissed and reported like any unexpected dialog.
+- **`status_code` and `response_headers` describe the page, not an iframe.** A page that embedded an iframe returning 404 reported `status_code == 404`, along with the iframe's headers. They now always come from the top-level page.
+- **A failing key in `send_keys` no longer leaves modifiers held down.** If a key in a chord like `[:shift, "a"]` raised, Shift stayed pressed for the rest of the test.
+- **Commands cut off by a dying browser raise `DeadBrowserError`, not `TimeoutError`.** And shutting down a browser that has stopped responding now always finishes, instead of raising partway through.
+- **Lightpanda release candidates are accepted.** An RC build (for example `1.0.4-rc1`) was rejected as "too old" even when it was newer than the required version.
+
 ## [0.17.0] - 2026-11-05
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.3** or a nightly build ≥ 11647. The driver refuses anything older and names the version it found. Pin `1.0.3` for a reproducible browser.
