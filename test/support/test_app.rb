@@ -823,6 +823,30 @@ class TestApp
     HTML
   end
 
+  # A turbo-frame whose fetch is aborted mid-flight: the page points the frame
+  # at a slow endpoint, then removes its src, which makes Turbo cancel the
+  # request (FrameController#sourceURLChanged).
+  get "/lightpanda/probe/turbo_frame_abort" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Turbo Frame Abort</title>
+          <script src="/lightpanda/probe/turbo_dist.js"></script>
+        </head>
+        <body>
+          <turbo-frame id="slow-frame"></turbo-frame>
+          <button id="plain" onclick="document.body.dataset.clicked = '1'">Plain</button>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/probe/slow_frame" do
+    sleep 3
+    '<turbo-frame id="slow-frame">late</turbo-frame>'
+  end
+
   get "/lightpanda/elements" do
     <<~HTML
       <!DOCTYPE html>
