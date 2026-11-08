@@ -2,7 +2,7 @@
 
 Every stateful part of the driver, explicit (a `@status` symbol) or implicit (flags, events, buffers that only make sense together). For each one: its states, the invariants that must hold, and its transitions. **Violated** marks an invariant the code breaks today. **Defects** lists the invalid states or transitions the code could actually reach, with evidence and the issue that tracks them.
 
-Paths are relative to `lib/capybara/lightpanda/`. Symbols are named instead of line numbers, so references don't go stale. Audited 2026-11-08 at `104b3d0` against Lightpanda 1.0.3.
+Paths are relative to `lib/capybara/lightpanda/`. Symbols are named instead of line numbers, so references don't go stale. Initial audit: 2026-11-08 at `104b3d0` against Lightpanda 1.0.3. Follow-up audit: 2026-11-08 against `68958c6`; D7 reproduced deterministically with the shipped JavaScript tracker and Turbo 8.0.23 event semantics.
 
 Threads involved:
 
@@ -27,7 +27,8 @@ Threads involved:
 12. [Downloads](#12-downloads)
 13. [Frame stack](#13-frame-stack-and-frame-scoped-nodes)
 14. [Keyboard modifiers](#14-keyboard-modifiers-one-type-call)
-15. [Defects](#defects): status and issues
+15. [Retry helper and event generations](#15-retry-helper-and-event-generations)
+16. [Defects](#defects): status and issues
 
 ---
 
@@ -219,7 +220,7 @@ JS side: a per-document counter `_pendingTurboOps`. It emits a `__lightpanda_tur
 | fetch | `turbo:before-fetch-request` | the first of: `turbo:before-fetch-response` or `turbo:fetch-request-error` for its target, or `abort` on its `fetchOptions.signal` (once per fetch, via a token) |
 | form submission | `turbo:submit-start` | `turbo:submit-end` |
 | frame render | `turbo:before-frame-render` | `turbo:frame-render` |
-| stream render | `turbo:before-stream-render` | wrapped `render` returns or settles |
+| stream render | wrapped `render` is invoked (a canceled event never starts work) | returns, throws, or settles; only decrements its own generation |
 | (reset) | `turbo:load` | counter := 0, open fetch tokens dropped, idle re-signalled |
 
 Invariants:
@@ -227,6 +228,20 @@ Invariants:
 - Every operation that starts must end exactly once, whatever way it ends. An aborted fetch fires neither response nor error event (Turbo swallows `AbortError`), so the abort signal is what ends it (D1, fixed).
 - The counter never goes below zero (`_turboEnd` guard). A fetch never ends twice (`token.open`).
 - A navigation always re-arms the Ruby event (`executionContextsCleared` → set): a new document has a new counter.
+- A stream invocation releases its count exactly once, including synchronous exceptions and rejected promises. Exceptions still propagate to Turbo's error handler.
+- `turbo:load` advances `_turboGeneration`; an older stream completion cannot release a newer fetch or stream (D7, fixed in this branch).
+
+Stream transitions (async callbacks interleave on the page's single JS thread):
+
+| From | Event | To / counter effect |
+|---|---|---|
+| Announced | event canceled; render not invoked | No operation; no increment |
+| Announced | wrapper invoked | Running; increment, capture generation |
+| Running | synchronous return or throw | Finished; decrement once, preserve result/error |
+| Running | returns promise/thenable | Awaiting settlement |
+| Awaiting settlement | resolve or reject | Finished; decrement once, preserve value/error |
+| Running / Awaiting settlement | `turbo:load` | Stale; reset counter and advance generation |
+| Stale | completion | Finished; no effect on current activity |
 
 ## 10. Modal pre-arm (`browser/modals.rb`)
 
@@ -271,6 +286,14 @@ Invariants:
 - `@enabled` is true ⇔ the handlers are subscribed on the current client.
 - `status_code`/`response_headers` describe the top-level document only (D5, fixed).
 
+| From | Event | To / effect |
+|---|---|---|
+| Disabled | `enable` succeeds | Enabled, handlers installed |
+| Disabled | `enable` raises | Disabled, handlers removed |
+| Enabled | `disable` succeeds / `reset` | Disabled; reset also clears entries |
+| Open request | matching response / failure | Responded / Failed |
+| Open request | redirect request reuses id | Old hop Redirected, new hop Open |
+
 ## 12. Downloads
 
 `downloads.rb`. Tracker: disabled → enabled (only with a save path) → reset. Per download (`guid`): Pending (`downloadWillBegin`) → Completed (path appended to `@files`) | Canceled. `@started` grows monotonically so `wait` can tell that a download began even after the queue drained.
@@ -280,17 +303,58 @@ Invariants:
 - `@pending` only holds downloads that began and have not finished.
 - `reset` drops the handlers and the counters together with the disposed context.
 
+| From | Event | To / effect |
+|---|---|---|
+| Disabled | enable with no path | Disabled |
+| Disabled | enable succeeds / raises | Enabled / Disabled with handlers removed |
+| Enabled | reset | Disabled, pending/files/count cleared |
+| Unknown guid | valid `downloadWillBegin` | Pending; started count increments |
+| Pending | progress completed / canceled | Completed (file recorded) / Canceled |
+| Completed / Canceled / unknown | duplicate terminal progress | Ignored (no pending name) |
+
 ## 13. Frame stack and frame-scoped nodes
 
 `browser.rb#frame_stack`. `switch_to_frame(Node)` pushes, `:parent` pops, `:top` clears. `clear_session_state` and `quit` also clear it. A `Node` found while the stack is non-empty is built `frame_scoped:`, so `Node#call` also checks that its frame document is still the current one.
 
 Invariant: the stack never outlives the context its nodes came from. Every context replacement clears it.
 
+| From | Event | To |
+|---|---|---|
+| Top or nested frame | switch to frame Node | Push Node; nested scope |
+| Nested frame | switch to parent | Pop Node; parent scope |
+| Any scope | switch to top / context replacement / quit | Empty stack; top scope |
+
 ## 14. Keyboard modifiers (one `type` call)
 
 `keyboard.rb`. `active_mods` grows with each modifier `keyDown`, and `release_modifiers` sends a `keyUp` per held modifier in reverse order. Nested arrays have their own scope (`type_with_modifiers`).
 
 Invariant: every modifier `keyDown` gets its `keyUp`, even when a key in the chord raises (`holding_modifiers`; D6a, fixed).
+
+| From | Event | To |
+|---|---|---|
+| No held modifiers | modifier keyDown succeeds | Held; record modifier |
+| Held | nested chord | Inner held scope, then restore outer scope |
+| Held | chord returns or raises | Release in reverse order; propagate original error |
+
+## 15. Retry helper and event generations
+
+`utils/attempt.rb#with_retry`: `attempts` counts rescued failures, not successful calls. Only listed exception classes are retried; the last exception is re-raised when the configured bound is reached. `Browser#with_default_context_wait` uses this with `NoExecutionContextError`, three total tries by default; each try waits for the default-context event first. Navigation crash retries are a separate machine (§7).
+
+| From | Event | To |
+|---|---|---|
+| Ready / Retrying | block returns | Done (return value preserved) |
+| Ready / Retrying | listed error, incremented attempts < max | Sleep configured wait, retry |
+| Ready / Retrying | listed error reaches max, or unlisted error | Failed (propagate) |
+
+`utils/event.rb`: `(set?, iteration)`; reset and iteration reads are synchronized. `reset` increments even if already unset. The counter records resets, not navigation identities.
+
+| From | Event | To |
+|---|---|---|
+| Unset / Set, generation n | reset | Unset, n+1 |
+| Unset / Set, generation n | set | Set, n |
+| Any | wait(timeout) | Returns event outcome; does not consume signal |
+
+Concurrency scope: transport callers share synchronized command IDs and per-command IVars; event callbacks execute serially on dispatch. Subscriber dispatch snapshots callbacks under a mutex, then invokes them outside it: unsubscribe prevents future snapshots but does not cancel an already captured callback. Browser lifecycle methods and frame-stack operations are not serialized for simultaneous user calls. The tables describe their sequential API use plus asynchronous CDP/page events, not a guarantee that sharing one session across caller threads is safe.
 
 ---
 
@@ -300,6 +364,7 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 
 | ID | Impact | Machine | Invalid state or transition | Evidence | Issue | Status |
 |---|---|---|---|---|---|---|
+| D7 | High (stuck busy); Medium (premature idle) | §9 Turbo, §8 | Canceled or synchronously throwing streams leak Busy; an old async stream completion after `turbo:load` decrements newer work | Three Bun regressions fail on `68958c6`: expected pending 0/0/1, observed 1/1/0. Bundled Turbo `StreamElement#render` skips the renderer on canceled events and awaits its result otherwise. Overlapping rejection control also covered | [#229](https://github.com/navidemad/capybara-lightpanda/issues/229) | fixed in this branch: invocation-scoped stream completion and reset generation; `test/js/turbo.test.ts` |
 | D1 | High | §9 Turbo, §8 | An aborted Turbo fetch never decrements the counter, so Busy is stuck. Every later click / send_keys / back waits the full timeout | `turbo:before-fetch-request` with no response or error event; two plain clicks took 10.06 s each with `timeout: 10` | [#218](https://github.com/navidemad/capybara-lightpanda/issues/218) | fixed: `turbo.js` fetch tokens; `test/js/turbo.test.ts`, `test/features/turbo_abort_test.rb` |
 | D2 | High | §1 Process, §7 | An exited, unreaped child reads as alive, so `reconnect` never restarts a browser that crashed mid-navigation and raises `DeadBrowserError` instead | `kill -9` then `process.alive?` → `true`; `kill(0)` succeeds on a zombie | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `alive?` reaps; `test/unit/process_test.rb`, `test/features/crash_recovery_test.rb` |
 | D2b | Low | §1 Process | After `stop`, the GC finalizer stays armed on the reaped pid and later TERMs whatever process owns that pid by then | `stop` never undefined the finalizer (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `disarm_finalizer`; `test/unit/process_test.rb` |
