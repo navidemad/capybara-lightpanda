@@ -122,9 +122,27 @@ module Capybara
         start
       end
 
+      # A step that fails after the process or the connection is up (an old
+      # ws_url browser, a command timing out on a slow machine) must not leave
+      # them behind: Browser.new raises, nobody holds this object to quit it,
+      # and the next attempt would compete with the orphan for the port. The
+      # `ensure` covers Interrupt too.
       def start
         return if @started
 
+        begin
+          connect
+          create_browser_context
+          create_page
+          @started = true
+        ensure
+          quit unless @started
+        end
+
+        self.class.track(self)
+      end
+
+      def connect
         if @options.ws_url?
           @client = Client.new(@options.ws_url, @options)
           check_remote_version
@@ -133,12 +151,6 @@ module Capybara
           @process.start
           @client = Client.new(@process.ws_url, @options)
         end
-
-        create_browser_context
-        create_page
-
-        @started = true
-        self.class.track(self)
       end
 
       # Per-session BrowserContext (Chrome's incognito-profile primitive).
@@ -521,7 +533,7 @@ module Capybara
 
       # Internal lifecycle steps defined above near their topical groups —
       # calling them out of order corrupts session state, so they are not API.
-      private :create_browser_context, :create_page, :clear_session_state,
+      private :connect, :create_browser_context, :create_page, :clear_session_state,
               :enable_page_events
 
       private

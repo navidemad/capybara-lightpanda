@@ -412,6 +412,7 @@ module Capybara
         @stderr_r = nil
         @stderr_w = nil
         @finalizer_registered = false
+        @reaped = false
         @output = []
         @output_partial = {}
         @output_mutex = Mutex.new
@@ -437,20 +438,34 @@ module Capybara
         attempt_start(binary_path)
       end
 
+      # A reaped pid is never signalled: the kernel may already have handed it
+      # (and its process group id) to an unrelated process. The finalizer is
+      # disarmed for the same reason — left armed, it TERMed whatever owned the
+      # stale pid whenever GC got round to this object.
       def stop
         return unless @pid
 
-        self.class.send(:terminate, @pid)
+        self.class.send(:terminate, @pid) unless @reaped
+        disarm_finalizer
         cleanup_pipes
         @pid = nil
       end
 
+      # A crashed Lightpanda is a zombie until someone reaps it, and `kill(0)`
+      # succeeds on a zombie, so probing with a signal reported a dead browser
+      # as alive and Browser#restart_process_if_dead never restarted it. Reap
+      # instead: `waitpid(WNOHANG)` returns the pid once the child has exited.
+      # ECHILD means it was already reaped elsewhere — gone either way.
       def alive?
         return false unless @pid
+        return false if @reaped
 
-        ::Process.kill(0, @pid)
-        true
-      rescue Errno::ESRCH, Errno::EPERM
+        return true unless ::Process.wait(@pid, ::Process::WNOHANG)
+
+        @reaped = true
+        false
+      rescue Errno::ECHILD
+        @reaped = true
         false
       end
 
@@ -471,6 +486,7 @@ module Capybara
         @stderr_r, @stderr_w = IO.pipe
 
         @pid = spawn_process(binary_path)
+        @reaped = false
         register_finalizer(@pid)
 
         @stdout_w.close
@@ -727,9 +743,14 @@ module Capybara
       # `undefine_finalizer + define_finalizer` so the finalizer always
       # references the most recently started process.
       def register_finalizer(pid)
-        ObjectSpace.undefine_finalizer(self) if @finalizer_registered
+        disarm_finalizer
         ObjectSpace.define_finalizer(self, self.class.send(:weak_kill, pid))
         @finalizer_registered = true
+      end
+
+      def disarm_finalizer
+        ObjectSpace.undefine_finalizer(self) if @finalizer_registered
+        @finalizer_registered = false
       end
 
       def cleanup_pipes

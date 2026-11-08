@@ -823,6 +823,22 @@ class TestApp
     HTML
   end
 
+  # Kills the browser serving this request, once: the pid is consumed, so the
+  # driver's retry after crash recovery loads the page normally.
+  class << self
+    attr_accessor :crash_pid
+  end
+
+  get "/lightpanda/probe/crash_browser" do
+    pid = TestApp.crash_pid
+    TestApp.crash_pid = nil
+    if pid
+      Process.kill("KILL", pid)
+      sleep 0.5
+    end
+    "<html><body><p id='recovered'>served</p></body></html>"
+  end
+
   # A turbo-frame whose fetch is aborted mid-flight: the page points the frame
   # at a slow endpoint, then removes its src, which makes Turbo cancel the
   # request (FrameController#sourceURLChanged).
