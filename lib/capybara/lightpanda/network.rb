@@ -10,7 +10,7 @@ module Capybara
 
       attr_reader :browser
 
-      # Status/headers of the last top-level document navigation; nil before
+      # Status/headers of the last main-frame document navigation; nil before
       # the first navigation completes. Backs Browser#status_code /
       # #response_headers. Captured by #subscribe's handlers.
       attr_reader :last_navigation_response
@@ -176,7 +176,7 @@ module Capybara
       # hop, and the redirected requestWillBeSent resets it below anyway.
       def build_request_handler
         lambda do |params|
-          if params["type"] == "Document"
+          if main_frame_document?(params)
             @document_request_id = params["requestId"]
             @last_navigation_response = nil
           end
@@ -233,6 +233,14 @@ module Capybara
             request[:error] = params["errorText"].to_s
           end
         end
+      end
+
+      # Iframes load by default (Browser#configure_loading) and their document
+      # requests are typed "Document" too; counting them made the last iframe's
+      # response the page's status_code. The main frame shares the target's id,
+      # the same test Browser#main_frame_document_request? applies.
+      def main_frame_document?(params)
+        params["type"] == "Document" && params["frameId"] == browser.target_id
       end
 
       # Caller holds @traffic_mutex.
