@@ -207,7 +207,7 @@ Invariants:
 Invariants:
 
 - Only a navigation this action started is awaited (comparison against the prior iteration).
-- No phase can wait on a signal that will never come, or the action pays the full timeout every time. The Turbo phase depends on §9 settling. **Violated:** see D1.
+- No phase can wait on a signal that will never come, or the action pays the full timeout every time. The Turbo phase depends on §9 settling (D1, fixed).
 
 ## 9. Turbo activity (`javascripts/turbo.js` + `@turbo_event`)
 
@@ -215,16 +215,16 @@ JS side: a per-document counter `_pendingTurboOps`. It emits a `__lightpanda_tur
 
 | Operation | Starts on | Ends on |
 |---|---|---|
-| fetch | `turbo:before-fetch-request` | `turbo:before-fetch-response` or `turbo:fetch-request-error`. **An aborted fetch fires neither** (D1) |
+| fetch | `turbo:before-fetch-request` | the first of: `turbo:before-fetch-response` or `turbo:fetch-request-error` for its target, or `abort` on its `fetchOptions.signal` (once per fetch, via a token) |
 | form submission | `turbo:submit-start` | `turbo:submit-end` |
 | frame render | `turbo:before-frame-render` | `turbo:frame-render` |
 | stream render | `turbo:before-stream-render` | wrapped `render` returns or settles |
-| (reset) | `turbo:load` | counter := 0, idle re-signalled |
+| (reset) | `turbo:load` | counter := 0, open fetch tokens dropped, idle re-signalled |
 
 Invariants:
 
-- Every operation that starts must end exactly once, whatever way it ends. An aborted fetch fires neither response nor error event (Turbo swallows `AbortError`), so the abort signal must end it. **Violated:** see D1.
-- The counter never goes below zero (`_turboEnd` guard).
+- Every operation that starts must end exactly once, whatever way it ends. An aborted fetch fires neither response nor error event (Turbo swallows `AbortError`), so the abort signal is what ends it (D1, fixed).
+- The counter never goes below zero (`_turboEnd` guard). A fetch never ends twice (`token.open`).
 - A navigation always re-arms the Ruby event (`executionContextsCleared` → set): a new document has a new counter.
 
 ## 10. Modal pre-arm (`browser/modals.rb`)
@@ -299,7 +299,7 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 
 | ID | Impact | Machine | Invalid state or transition | Evidence | Issue | Status |
 |---|---|---|---|---|---|---|
-| D1 | High | §9 Turbo, §8 | An aborted Turbo fetch never decrements the counter, so Busy is stuck. Every later click / send_keys / back waits the full timeout | `turbo:before-fetch-request` with no response or error event; two plain clicks took 10.06 s each with `timeout: 10` | [#218](https://github.com/navidemad/capybara-lightpanda/issues/218) | open |
+| D1 | High | §9 Turbo, §8 | An aborted Turbo fetch never decrements the counter, so Busy is stuck. Every later click / send_keys / back waits the full timeout | `turbo:before-fetch-request` with no response or error event; two plain clicks took 10.06 s each with `timeout: 10` | [#218](https://github.com/navidemad/capybara-lightpanda/issues/218) | fixed: `turbo.js` fetch tokens; `test/js/turbo.test.ts`, `test/features/turbo_abort_test.rb` |
 | D2 | High | §1 Process, §7 | An exited, unreaped child reads as alive, so `reconnect` never restarts a browser that crashed mid-navigation and raises `DeadBrowserError` instead | `kill -9` then `process.alive?` → `true`; `kill(0)` succeeds on a zombie | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | open |
 | D3 | High | §5 Driver, §4 | A dead browser is replaced without `quit`, so its process keeps running and stays tracked. A failed `start` leaks its process and CDP connection | 2 `lightpanda serve` processes after a respawn, old one alive and tracked; `start` has no cleanup (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | open |
 | D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | open |
