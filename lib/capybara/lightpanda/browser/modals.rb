@@ -93,14 +93,39 @@ module Capybara
           end
           claimed[:message]
         rescue TimeoutError
+          disarm_modal
           raise_modal_not_found(type, text, last_seen_message)
         end
 
         private
 
+        # The dialog find_modal claims must come from the block about to run,
+        # so anything queued before the arm (a dialog nobody wrapped, already
+        # reported as unhandled) is dropped here. Kept, it satisfied the next
+        # accept_* even when that block opened no dialog at all.
         def arm_modal
-          @modal_messages_mutex.synchronize { @modal_armed = true }
+          @modal_messages_mutex.synchronize do
+            @modal_messages.clear
+            @modal_armed = true
+          end
           yield
+        end
+
+        # find_modal gave up while still armed: the block opened no dialog, and
+        # Lightpanda still holds the pre-armed answer for the next one — a
+        # dialog nobody wrapped would get it silently. LP has no command to
+        # clear the slot, so overwrite it with Lightpanda's own default
+        # (confirm false, prompt null) and stop claiming it: that next dialog
+        # then behaves, and is reported, exactly as if nothing had been armed.
+        def disarm_modal
+          armed = @modal_messages_mutex.synchronize do
+            was = @modal_armed
+            @modal_armed = false
+            was
+          end
+          page_command("LP.handleJavaScriptDialog", accept: false) if armed
+        rescue Error
+          nil # the session is gone; ModalNotFound is the error worth raising
         end
 
         LIGHTPANDA_DIALOG_DEFAULTS = {

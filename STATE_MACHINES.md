@@ -239,19 +239,19 @@ Two cooperating slots plus a queue:
 
 | From | Event | To |
 |---|---|---|
-| Idle | `accept_modal` / `dismiss_modal` | Armed. LP slot filled, `@modal_armed`. Older queued dialogs **kept** (D4a) |
+| Idle | `accept_modal` / `dismiss_modal` | Armed. LP slot filled, `@modal_armed`, older queued dialogs dropped (`arm_modal`) |
 | Armed | dialog opens | Idle. Slot consumed on both sides, entry queued |
-| Idle | dialog opens (unwrapped) | Idle. Entry queued, `@unhandled_modal` recorded |
+| Idle | dialog opens (unwrapped) | Idle. Entry queued (the next arm drops it), `@unhandled_modal` recorded |
 | any | `find_modal` claims a matching entry | returns its message |
-| Armed | `find_modal` times out | **stays Armed** on both sides, then `ModalNotFound` (D4b) |
+| Armed | `find_modal` times out | Idle. LP slot neutralised with Lightpanda's default `accept: false`, `@modal_armed` cleared (`disarm_modal`), then `ModalNotFound` |
 | any | `check_unhandled_modal!` | `@unhandled_modal` cleared, then warn or `UnhandledModalError` |
 | any | `clear_session_state` | everything cleared |
 
 Invariants:
 
 - `@modal_armed` ⇔ the LP slot holds a response that Capybara asked for.
-- `find_modal` only returns a dialog that opened after its own arm.
-- A dialog nobody wrapped is reported (warning or `UnhandledModalError`) and gets Lightpanda's default answer, never a stale pre-arm.
+- `find_modal` only returns a dialog that opened after its own arm (D4a, fixed).
+- A dialog nobody wrapped is reported (warning or `UnhandledModalError`) and gets Lightpanda's default answer, never a stale pre-arm (D4b, fixed).
 - `@modal_messages` and `@modal_armed` are only touched under `@modal_messages_mutex` (they are written on dispatch and read on main).
 
 ## 11. Network traffic entry and tracker
@@ -304,8 +304,8 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | D2 | High | §1 Process, §7 | An exited, unreaped child reads as alive, so `reconnect` never restarts a browser that crashed mid-navigation and raises `DeadBrowserError` instead | `kill -9` then `process.alive?` → `true`; `kill(0)` succeeds on a zombie | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `alive?` reaps; `test/unit/process_test.rb`, `test/features/crash_recovery_test.rb` |
 | D2b | Low | §1 Process | After `stop`, the GC finalizer stays armed on the reaped pid and later TERMs whatever process owns that pid by then | `stop` never undefined the finalizer (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `disarm_finalizer`; `test/unit/process_test.rb` |
 | D3 | High | §5 Driver, §4 | A dead browser is replaced without `quit`, so its process keeps running and stays tracked. A failed `start` leaks its process and CDP connection | 2 `lightpanda serve` processes after a respawn, old one alive and tracked; `start` has no cleanup (code reading) | [#219](https://github.com/navidemad/capybara-lightpanda/issues/219) | fixed: `Driver#browser` quits, `start` cleans up; `test/unit/driver_test.rb`, `test/unit/browser_start_test.rb` |
-| D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | open |
-| D4b | Medium | §10 Modal | Armed survives `ModalNotFound`, so the next unwrapped dialog gets the stale answer silently | unwrapped `confirm` returned `true` with no warning after a failed `accept_confirm` | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | open |
+| D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `arm_modal` drops older dialogs; `test/features/modal_prearm_state_test.rb` |
+| D4b | Medium | §10 Modal | Armed survives `ModalNotFound`, so the next unwrapped dialog gets the stale answer silently | unwrapped `confirm` returned `true` with no warning after a failed `accept_confirm` | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `disarm_modal`; `test/features/modal_prearm_state_test.rb` |
 | D5 | Medium | §11 Network | An iframe's Document request becomes "the navigation", so `status_code` reports the iframe | page 200 with a 404 iframe → `status_code == 404` | [#221](https://github.com/navidemad/capybara-lightpanda/issues/221) | open |
 | D6a | Low | §14 Keyboard | A raising key leaves held modifiers down (`keyDown` with no `keyUp`) | `type` has no `ensure` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
 | D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | `Client#command` checks `@ws.closed?` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
