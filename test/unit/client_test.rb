@@ -49,6 +49,34 @@ describe Capybara::Lightpanda::Client do
     end
   end
 
+  # Issue #222. WebSocket#close goes through :closing, and closing the message
+  # queue there wakes every pending command with nil. closed? was false for
+  # :closing, so those callers reported "Command X timed out after 15s" at
+  # once — a timeout that never happened — instead of DeadBrowserError.
+  describe "a command released while the connection is closing" do
+    let(:client) { Capybara::Lightpanda::Client.allocate }
+
+    it "raises DeadBrowserError, not TimeoutError" do
+      ws = Capybara::Lightpanda::Client::WebSocket.allocate
+      ws.instance_variable_set(:@status, :closing)
+      ws.define_singleton_method(:send_message) { |*, **| nil }
+      pendings = Concurrent::Hash.new
+      client.instance_variable_set(:@ws, ws)
+      client.instance_variable_set(:@pendings, pendings)
+      client.instance_variable_set(:@mutex, Mutex.new)
+      client.instance_variable_set(:@command_id, 0)
+      client.instance_variable_set(:@options, Capybara::Lightpanda::Options.new(timeout: 5))
+      releaser = Thread.new do
+        sleep 0.05 until pendings.any?
+        client.send(:fail_pending_commands)
+      end
+
+      assert_raises(Capybara::Lightpanda::DeadBrowserError) { client.command("Page.enable") }
+    ensure
+      releaser&.join(1)
+    end
+  end
+
   describe "#handle_message" do
     let(:client) { Capybara::Lightpanda::Client.allocate }
     let(:pendings) { Concurrent::Hash.new }

@@ -150,6 +150,30 @@ describe Capybara::Lightpanda::Client::WebSocket do
       server&.close
     end
 
+    # Issue #222. With the socket buffers full, the close frame itself
+    # stalls; abandon_stalled_write then raised DeadBrowserError out of
+    # #close, and Client#close skipped joining its thread, clearing
+    # subscriptions and releasing pending commands. Closing must complete.
+    it "completes #close when the close frame cannot be written" do
+      server = TCPServer.new("127.0.0.1", 0)
+      release = Queue.new
+      accepter = stalled_peer(server, release)
+      ws = Capybara::Lightpanda::Client::WebSocket.new(
+        "ws://127.0.0.1:#{server.addr[1]}/", Capybara::Lightpanda::Options.new(handshake_timeout: 2, timeout: 0.3)
+      )
+      socket = ws.instance_variable_get(:@socket)
+      chunk = "x" * 65_536
+      loop { break unless socket.write_nonblock(chunk, exception: false).is_a?(Integer) }
+
+      ws.close
+
+      assert_predicate ws, :closed?
+    ensure
+      release&.push(true)
+      accepter&.join(2)
+      server&.close
+    end
+
     it "lets #close through once a stalled write gives up, instead of waiting on the lock forever" do
       server = TCPServer.new("127.0.0.1", 0)
       release = Queue.new

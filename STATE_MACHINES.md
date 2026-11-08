@@ -80,8 +80,8 @@ Invariants:
 
 - **Dead implies the queue is closed.** Every path into `:closed`/`:error` goes through `mark_dead`, which sets the status *before* closing `@messages`. A woken waiter therefore already sees `closed?`.
 - `send_message` requires `:open`, and every frame write and parse holds `@driver_mutex`.
-- `closed?` covers every state in which no reply can still arrive. **Violated:** `:closing` reads as open, see D6b.
-- `close` always completes and releases the socket, even when writing the close frame fails. **Violated:** see D6c.
+- `closed?` covers every state in which no reply can still arrive, `:closing` included (D6b, fixed).
+- `close` always completes and releases the socket, even when writing the close frame fails: a stalled close frame is given up on, not raised (D6c, fixed).
 
 ## 3. Client command
 
@@ -100,7 +100,7 @@ Invariants:
 
 - One deadline covers lock wait, write and reply (`Utils::Wait.deadline`).
 - Registering before sending means a reply can never beat its IVar. `mark_dead` sets the status before `fail_pending_commands` runs, so a command registered after the release still fails fast on `send_message`'s `:open` check.
-- A `nil` reply means the connection is gone, and the error must say so (`DeadBrowserError`). **Violated** during `close`: see D6b.
+- A `nil` reply means the connection is gone, and the error must say so (`DeadBrowserError`), during `close` too (D6b, fixed).
 
 ## 4. Browser session
 
@@ -290,7 +290,7 @@ Invariant: the stack never outlives the context its nodes came from. Every conte
 
 `keyboard.rb`. `active_mods` grows with each modifier `keyDown`, and `release_modifiers` sends a `keyUp` per held modifier in reverse order. Nested arrays have their own scope (`type_with_modifiers`).
 
-Invariant: every modifier `keyDown` gets its `keyUp`, even when a key in the chord raises. **Violated:** see D6a.
+Invariant: every modifier `keyDown` gets its `keyUp`, even when a key in the chord raises (`holding_modifiers`; D6a, fixed).
 
 ---
 
@@ -307,9 +307,9 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | D4a | Medium | §10 Modal | A dialog queued before the arm satisfies `find_modal`, so `accept_*` passes when its block opened nothing | `accept_alert { noop }` returned `"first"` from an earlier unwrapped alert | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `arm_modal` drops older dialogs; `test/features/modal_prearm_state_test.rb` |
 | D4b | Medium | §10 Modal | Armed survives `ModalNotFound`, so the next unwrapped dialog gets the stale answer silently | unwrapped `confirm` returned `true` with no warning after a failed `accept_confirm` | [#220](https://github.com/navidemad/capybara-lightpanda/issues/220) | fixed: `disarm_modal`; `test/features/modal_prearm_state_test.rb` |
 | D5 | Medium | §11 Network | An iframe's Document request becomes "the navigation", so `status_code` reports the iframe | page 200 with a 404 iframe → `status_code == 404` | [#221](https://github.com/navidemad/capybara-lightpanda/issues/221) | fixed: `Network#main_frame_document?`; `test/unit/network_test.rb`, `test/features/status_code_iframe_test.rb` |
-| D6a | Low | §14 Keyboard | A raising key leaves held modifiers down (`keyDown` with no `keyUp`) | `type` has no `ensure` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
-| D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | `Client#command` checks `@ws.closed?` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
-| D6c | Low | §2 | A stalled close-frame write raises out of `WebSocket#close`, so `Client#close` skips its teardown | `abandon_stalled_write` raises from `@driver.close` (code reading) | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | open |
+| D6a | Low | §14 Keyboard | A raising key leaves held modifiers down (`keyDown` with no `keyUp`) | `type(:shift, :no_such_key)` sends Shift `keyDown` only | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `holding_modifiers`; `test/unit/keyboard_test.rb` |
+| D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | a command released during `:closing` raised `TimeoutError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `closed?` includes `:closing`; `test/unit/client_test.rb` |
+| D6c | Low | §2 | A stalled close-frame write raises out of `WebSocket#close`, so `Client#close` skips its teardown | full socket buffers → `close` raised `DeadBrowserError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `close` rescues it; `test/unit/web_socket_test.rb` |
 
 ### Latent, not fixed
 
