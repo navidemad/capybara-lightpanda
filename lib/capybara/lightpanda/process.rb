@@ -337,25 +337,36 @@ module Capybara
       # silently accept a binary the nightly channel rejects.
       MINIMUM_RELEASE = Gem::Version.new("1.0.3")
 
+      # A release-candidate binary: "<x.y.z>-rc<N>.<git rev-list --count>+<hash>".
+      # Captures the commit counter.
+      RC_VERSION = /\A\d+\.\d+\.\d+-rc\d+\.(\d+)\+\h+\z/
+
       class << self
-        # `lightpanda version` prints one of two shapes, and the gem supports
-        # both so a suite can either track nightly or pin a reproducible
-        # release:
+        # `lightpanda version` prints one of three shapes, and the gem supports
+        # all of them so a suite can track nightly, try a release candidate or
+        # pin a reproducible release:
         #
         #   "1.0.0-nightly.8285+de85a51d"  rolling nightly (also "dev.NNNN" for
         #                                  a locally compiled tree — same
         #                                  `git rev-list --count HEAD` counter,
         #                                  different label). Checked against
         #                                  MINIMUM_NIGHTLY_BUILD.
+        #   "1.0.4-rc1.11801+1b60dcc7a"    a release candidate (tag x.y.z-rcN,
+        #                                  upstream #4480). build.zig's
+        #                                  resolveVersion enriches any
+        #                                  pre-release tag with the same commit
+        #                                  counter, so it is checked against
+        #                                  MINIMUM_NIGHTLY_BUILD like a nightly
+        #                                  — its x.y.z is the release it leads
+        #                                  up to, not one that exists yet.
         #   "0.3.5"                        a tagged release: bare semver, no
         #                                  build metadata. Checked against
         #                                  MINIMUM_RELEASE.
         #
-        # The release form is matched anchored — a bare semver and nothing else
-        # — so a stray "1.2.3" inside some other string can never be mistaken
-        # for a release. Anything that matches neither shape stays a hard
-        # failure: a version we cannot identify is never assumed to be new
-        # enough.
+        # The release and RC forms are matched anchored, so a stray "1.2.3" or
+        # "rc1.99999" inside some other string can never be mistaken for one.
+        # Anything that matches none of the shapes stays a hard failure: a
+        # version we cannot identify is never assumed to be new enough.
         #
         # Lives on the class, not the instance, because there are two ways to
         # learn a version and only one of them involves a Process: the spawn
@@ -371,7 +382,7 @@ module Capybara
         def check_version!(raw)
           version = raw.to_s.strip
 
-          if (build = version[/(?:nightly|dev)\.(\d+)/, 1])
+          if (build = version[/(?:nightly|dev)\.(\d+)/, 1] || version[RC_VERSION, 1])
             nightly_build = Gem::Version.new(build)
             return [version, nightly_build, nil] if nightly_build >= MINIMUM_NIGHTLY_BUILD
           elsif (tag = version[/\A\d+\.\d+\.\d+\z/])
