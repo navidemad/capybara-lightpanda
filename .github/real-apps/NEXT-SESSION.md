@@ -27,15 +27,6 @@ makes a stale `~/.cache/lightpanda/lightpanda` win over the PATH binary
 `boot.sh` provisioned; point `XDG_CACHE_HOME` at a dir holding a current
 binary until that is fixed.
 
---- | --- | --- |
-| `selenium-only-api` (`switch_to.alert`) | 1 | Fails by design. Lightpanda pre-arms dialog responses. |
-| `selenium-textarea-text` | 1 | `likely` — the spec relies on Selenium's visible text including a textarea's child text. |
-| `customer-switch-refill` | 2 | Open, `unknown`. |
-| `decidim-account-js` | 2 | Open, `likely` (avatar widget visibility). |
-| `select2-v3-flow`, `js-component-not-rendering` | 2 | Open, one entry each. |
-
-The open work is the 6 entries in the last three rows.
-
 ---
 
 ## Prompt 1 — build the local boot harness — DONE (2026-07-25)
