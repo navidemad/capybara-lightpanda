@@ -4,9 +4,9 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-05; release v0.20.1, main `e1aca0674f`. #674 merged: `Node#click(wait:)` forwards the navigation watch to `Mouse#click` (`0` returns at once); N/A until Cuprite gives Capybara a way to pass it, and our `node.rb#click` ignores options and sniffs `Browser::SNIFF_WINDOW`. Open #685 (out-of-process iframe idle tracking), #696 (bounding-rect center fallback when content quads fail; immune, no offsetWidth/offsetHeight geometry in lib/ or javascripts/), #697 (Chrome 157 browser_ui targets, N/A).
+https://github.com/rubycdp/ferrum — reviewed 2026-11-08; release v0.20.1, main `1e147025b5`. Open: #685 (out-of-process iframe idle tracking) only.
 
-Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once, and no header setter touches the UA); inverted `Node#moving?` (ours compares rects correctly; delay stays 10 ms, `LIGHTPANDA_NODE_MOVING_WAIT`); `go_to(on_timeout: :raise)` (ours falls back to readyState polling). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide (getAllCookies on our BrowserContext).
+Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until Cuprite passes it through; our `node.rb#click` ignores options and sniffs `Browser::SNIFF_WINDOW`); #696 bounding-rect center fallback when content quads fail (immune: no quad or offsetWidth geometry in lib/ or javascripts/); `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once); inverted `Node#moving?` (ours compares rects correctly); `go_to(on_timeout: :raise)` (ours falls back to readyState polling). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide.
 
 ### Adopted
 
@@ -54,7 +54,7 @@ Unreleased main audited 2026-11-02, no change needed: `headers.clear` not reachi
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-05; release v0.20, main `701df642` (unchanged since 2026-11-04). Open #347 (finder hints), #356 (reset!/quit must not launch a browser that never started; ours since #208), #360 (ObsoleteNode when a node detaches before the click hit test; ours is immune: the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests). #353 reading the window's url/title converges on ours (`location.href` via Runtime.evaluate).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-08; release v0.20, main `24d80e9c22`. Open: #347 (finder hints) only. Merged since v0.20, all converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op).
 
 ### Adopted
 
@@ -77,6 +77,7 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-05; release v0.20, main 
 
 - **[tiny]** Peer javascripts/index.js#setValue native HTMLInputElement setter ↔ node.rb#SET_VALUE_JS: bypass framework value interception only when a real-app regression motivates it.
 - **[medium]** Peer driver.rb#evaluate_async_script + Ferrum ScriptTimeoutError ↔ driver.rb/browser/runtime.rb: pass Capybara session wait and distinguish script timeout. Ours uses the driver timeout for both page timer and CDP wait, so a missing callback can surface as a command timeout (verified 2026-10-23).
+- **[medium]** Peer driver.rb `url_blocklist`/`url_allowlist` options (#361, legacy `url_blacklist`/`url_whitelist`) ↔ options.rb/browser.rb: the gem has neither. Lightpanda's `Network.setBlockedURLs` takes only `urlPatterns: [{urlPattern, block}]` and sets browser-wide state that context disposal keeps, so a blocklist must be cleared in `reset!`; an allowlist needs Fetch interception.
 
 ### Diverged on purpose
 

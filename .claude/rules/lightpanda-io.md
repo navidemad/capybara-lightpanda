@@ -1,18 +1,20 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-05 at `1b60dcc7a` (build 11745, also the published nightly).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-08 at `d2f387cae` (build 11912). The published nightly is still 11745 (`1b60dcc7a`, 2026-11-05): every scheduled release build since 2026-11-06 failed on x86_64-linux and was cancelled, so 11746+ is main-only.
 
 ## Version and transport constraints
 
 - Floors: `Process::MINIMUM_NIGHTLY_BUILD = 11647`, `MINIMUM_RELEASE = 1.0.3`, the same commit (raised 2026-11-05). `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
-- A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten.
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release: 1.0.3 (2026-11-05) = the floor, build 11647 (`b8e234a77`); #4430, #4242 and #4450 (11651/11663/11672) are nightly-only. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450; no release carries the fix yet).
+- A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten. From #4480 (11801) the release workflow can cut release candidates that print `1.0.4-rc1.<count>+<hash>`; `Process.check_version!` matches only `nightly|dev.<count>` or bare semver, so it rejects an RC as "too old".
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release: 1.0.3 (2026-11-05) = the floor, build 11647 (`b8e234a77`); #4430, #4242 and #4450 (11651/11663/11672) are nightly-only. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450; no release carries the fix yet). The aarch64-macos release build also passes no `-Dcpu`; #4519 reports nightly 11745 SIGILLs at startup on an M1 Pro while 1.0.3 runs (unverified here: no M1 host).
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin.
 
 ## CDP commands used by the gem
 
-All **32 distinct literal commands** below are admitted by the dispatch enums at release `1.0.2`, at `3a8c88bbd` (11672) and at the audited SHA (11673–11745 only added `LP.waitUntil` and dropped the `UnsafePort` error member); the current handlers/routes were inspected. Call sites are under `lib/capybara/lightpanda/`; internal command/page_command wrappers were inspected, including multiline calls. Runtime's enum admits evaluate/callFunctionOn/getProperties/releaseObject and forwards them through `sendInspector` → `BrowserContext.callInspector` → V8, rather than separate Zig handlers.
+All **31 distinct literal commands** below are admitted by the dispatch enums at 11745 and at the audited SHA (11912). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+
+**Multi-target CDP (#3945, 11844, main-only):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. Not yet run against a build.
 
 | Domain | Commands |
 |---|---|
@@ -20,13 +22,13 @@ All **32 distinct literal commands** below are admitted by the dispatch enums at
 | DOM | `describeNode`, `setFileInputFiles` |
 | Emulation | `setDeviceMetricsOverride` |
 | Input | `dispatchKeyEvent`, `insertText` |
-| LP | `configureLoading`, `getMarkdown`, `handleJavaScriptDialog`, `version` |
+| LP | `configureLoading`, `handleJavaScriptDialog`, `version` |
 | Network | `clearBrowserCookies`, `deleteCookies`, `disable`, `enable`, `getAllCookies`, `setCookie`, `setExtraHTTPHeaders` |
 | Page | `addScriptToEvaluateOnNewDocument`, `captureScreenshot`, `enable`, `getLayoutMetrics`, `navigate`, `reload` |
 | Runtime | `callFunctionOn`, `enable`, `evaluate`, `getProperties`, `releaseObject` |
 | Target | `attachToTarget`, `createBrowserContext`, `createTarget`, `disposeBrowserContext` |
 
-`LP.getMarkdown` is used by `driver.rb#markdown`. Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The `Network.setBlockedURLs` string in selenium_compat.rb is a documentation example, not a built-in call.
+Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The `LP.getMarkdown` (driver.rb) and `Network.setBlockedURLs` (selenium_compat.rb) strings are doc-comment examples, not built-in calls.
 
 ### Subscribed events (14 distinct names)
 
@@ -60,7 +62,9 @@ DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
 Input.dispatchMouseEvent     Input.dispatchTouchEvent (#3816, 10479)
 Input.setInterceptDrags      Input.dispatchDragEvent (#4228, 11246; external text drag only, no files or native dragstart)
 Page.frameDetached (event, #3939, 10544 — removed iframes)
-Network.setCookies (batch)   Network.getResponseBody     Network.setBlockedURLs
+Network.setBlockedURLs (`urlPatterns: [{urlPattern, block}]` only, no legacy `urls`; sets the browser-wide HttpClient list, which disposeBrowserContext does not clear)
+LP.getMarkdown               LP.configureLoading {beacon} (#4504, 11869)
+Network.setCookies (batch)   Network.getResponseBody
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
 Network.requestServedFromCache (event)                    Network.getRequestPostData
 Runtime.addBinding           Runtime.runIfWaitingForDebugger (stub)
@@ -110,22 +114,27 @@ LP.configureCDP              LP.getContentSignal
 - **Files/downloads:** upload/drop paths read files on the browser host via DOM.setFileInputFiles. Downloads retain browser-level events and on-disk tracking. Native anchor download (#4124, 11097) is in the floor: CLICK_JS skips its own navigation for a `download` link, since navigating again cancels the download. MIME-only navigation still does not download.
 - **Drag:** hidden upload input belongs in the dropzone's document; fire dragenter→dragover→drop. HTML5 drag_to ends with drop OR dragleave, never both; coordinate drag_by/non-HTML5 fallback remains unsupported. Input.dispatchDragEvent (#4228, 11246) does not yet support files/native dragstart and does not replace this path.
 
-## Behavior the 1.0.3 floor added over 1.0.2
+## Floor behavior that surprises Chrome-trained readers
 
-- CSS nesting: #3962 (10976); nested display:none is lost below it.
-- Initial about:blank timers: #4148 (11012); awaiting a timer before visit hangs below it.
-- Dialog conformance: #4164 (11050); showModal on an already-modal dialog is a no-op and close is queued. Do not expect the old InvalidStateError.
-- Cookie eviction: #4138 (11017); Chrome-style limits replace the old 1024-cookie failure. Non-loopback HTTP cannot overwrite Secure cookies above #4125 (10973).
-- stepMismatch validation: #4157 (11032). sendBeacon only sends when beacon resources are enabled (#4144, 11020).
-- onmouseenter/onmouseleave handlers: #4248 (11237); dispatching mouseenter alone did not make property/attribute handlers run on older browsers.
-- Closed `<details>` loose text is left out of innerText (#4297, 11340), so visible_text no longer includes it.
-- An unsized iframe is 300×150 and its box is the frame's viewport (#4344, 11490): isObscured reports content below the frame's 150px as obscured, as Chrome does.
-- Parser-inserted inline scripts report document-relative line/column in Runtime.exceptionThrown (#4340, 11502), so page_errors lines match Chrome; dynamic, document.write and `sourceURL` scripts stay script-relative.
+- `showModal()` on an already-modal dialog is a no-op (no InvalidStateError) and `close` is queued (#4164).
+- `navigator.sendBeacon` sends nothing: the gem enables no `beacon` resource loading (#4144).
+- An unsized iframe is 300×150 and is its own viewport (#4344), so isObscured reports content below 150px as obscured, as Chrome does.
+- Runtime.exceptionThrown lines are document-relative for parser-inserted inline scripts (#4340); dynamic, document.write and `sourceURL` scripts stay script-relative.
 
 ## Nightly-only behavior (above 11647)
 
+Published (≤11745):
+
 - `postMessage` honors `targetOrigin` (#4382, 11676; an opaque origin may still post to itself, #4466, 11704): a mismatched target drops the message, as Chrome does.
 - Custom elements: `createElement`/`createElementNS` run CE reactions (#4459, 11702) and `:defined` follows the element's upgrade state (#4448, 11715). Turbo/Stimulus elements ride this path; recheck on the next real-apps run.
+
+Main only (11746–11912), shipped with the next published nightly:
+
+- Multi-target CDP (#3945, 11844); see "CDP commands used by the gem".
+- Disposing a context resets its viewport override (#4191, 11853); `create_page` resends the viewport anyway.
+- innerText follows CSS `white-space: pre|pre-wrap|break-spaces` (#4510, 11912) and breaks lines between table row groups (#4509, 11897), so `visible_text` changes for styled code blocks and `<thead>`/`<tbody>` tables (Chrome parity).
+- `history.pushState(undefined, '')` stores no state instead of the string `"undefined"`, and a non-cloneable state throws DataCloneError (#4499, 11887).
+- In-page WebSocket reassembles fragmented messages (#4492, 11847) and fails a handshake whose server subprotocol wasn't offered (#4462, 11793).
 
 ## Upstream open issues that affect this gem
 
@@ -135,6 +144,7 @@ LP.configureCDP              LP.getContentSignal
 | #4371 | Hit testing | Nightly regression: an empty block after a positioned element spans the viewport and wins elementFromPoint (1.0.1 OK). |
 | #4298 | Text | innerText line breaks follow the tag, not computed display, so visible_text newlines can differ from Chrome. |
 | #4251 | Keyboard | Ctrl deletion/arrows do not perform word editing. |
+| #4519 | Binary | Nightly 11745 aarch64-macos reportedly SIGILLs at startup on M1 Pro; 1.0.3 runs. The gem downloads the nightly by default; pinning the release avoids it. |
 | (wishlist A63) | Drag | scrollIntoView ignores alignment options; HTML5_DRAG_JS centers manually to avoid pushing neighbours offscreen. |
 
 ## CLI details that affect the gem
