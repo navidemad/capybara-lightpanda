@@ -1,6 +1,6 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-09 at `0335335a6` (build 11948). The published nightly is 11921 (`1867ce51b`, 2026-11-09), the first scheduled release build to succeed after three cancelled runs (2026-11-06/07/08).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-10 at `c6d54d8f7` (build 11977). The published nightly is 11975 (`bfa07e3e4`, 2026-11-10).
 
 ## Version and transport constraints
 
@@ -12,7 +12,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## CDP commands used by the gem
 
-All **31 distinct literal commands** below are admitted by the dispatch enums at 11921 and at the audited SHA (11948). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **31 distinct literal commands** below are admitted by the dispatch enums at 11975 and at the audited SHA (11977). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
 **Multi-target CDP (#3945, 11844, nightly-only):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. Validated 2026-11-08 on a local `d2f387cae` (11912) build: `test:all` 690 runs and `spec:shared:parallel` 0 failures.
 
@@ -105,7 +105,7 @@ LP.configureCDP              LP.getContentSignal
 - **Pointer focus:** untrusted mousedown does not focus; CLICK_JS must focus the enabled target (labels resolve to controls, contenteditable to the editing host), or blur when appropriate. A non-focusable send_keys target must blur the previous field.
 - **Text caret:** Input.insertText inserts at the caret; SEND_KEYS_FOCUS_JS moves it to the end only for a newly focused field. Preserve an already-focused caret. Ctrl/Meta chords omit text to avoid inserting stray characters; use keyDown, not rawKeyDown.
 - **Keyboard:** trusted Enter/Space can activate controls; cancelled keypress suppresses Enter submit. Backspace/Delete emit beforeinput/input; blur/Enter commits change. Keys within frames target the frame's active field. JS-written values do not satisfy user-edited tooShort/tooLong validation. Selecting a disabled option is legal in native IDL, so SELECT_OPTION_JS must reject it.
-- **Contenteditable:** native getter correct from #4210 (11229, in the floor), but keep the helper: SVG elements have no getter and pointerFocusTarget needs each element's own state. `predicates.js#contentEditableState` mirrors upstream `Element.contentEditableState`: HTML elements only, invalid values inherit, then `document.designMode` decides (its body is the editing host, #4285/#4286, 11345/11347). On 1.0.3 the native getter agrees with the helper for `true`/`""`/`plaintext-only`/`false`/invalid/inherited values and designMode; SVG elements have no getter (`undefined`, helper `false`) (verified 2026-11-05). Trusted text insertion needs #4182 (11101), Backspace/Delete and Ctrl+A in an editing host #4415 (11610); from #4438 (11682) Enter inserts a paragraph and Shift+Enter a line break through cancellable beforeinput (below it Enter did not edit a host). Node#set still writes innerHTML.
+- **Contenteditable:** native getter correct from #4210 (11229, in the floor), but keep the helper: SVG elements have no getter and pointerFocusTarget needs each element's own state. `predicates.js#contentEditableState` mirrors upstream `Element.contentEditableState`: HTML elements only, invalid values inherit, then `document.designMode` decides (its body is the editing host, #4285/#4286, 11345/11347). On 1.0.3 the native getter agrees with the helper for `true`/`""`/`plaintext-only`/`false`/invalid/inherited values and designMode; SVG elements have no getter (`undefined`, helper `false`) (verified 2026-11-05). Trusted text insertion needs #4182 (11101), Backspace/Delete and Ctrl+A in an editing host #4415 (11610); from #4438 (11682) Enter inserts a paragraph and Shift+Enter a line break through cancellable beforeinput (below it Enter did not edit a host). From #4538 (11966) `focus()` collapses the caret at the host's first position unless the selection is already inside, and `beforeinput` carries `getTargetRanges()`; text typed without a selection already landed there, so send_keys output is unchanged. Node#set still writes innerHTML.
 - **Errors:** page_errors stays separate from console_logs. Runtime.exceptionThrown is absent when page error is cancelled, for handled same-tick rejections and for driver Runtime failures. No stackTrace; line/column are zero-based; rejections have 0/0 and no URL. Console object arguments have descriptions but no value; keep primitive sentinels and console_arg_text fallback.
 - **Network:** redirects repeat requestId with redirectResponse and no intermediate responseReceived. Close each previous hop and resolve responses onto the last open entry, or idle waits strand pending traffic. Cross-origin hops drop Authorization; response names are lowercase. Worker fetches count in page traffic.
 - **Headers/CORS:** fixed Sec-Ch-Ua outranks CLI, then CDP, script and defaults. Mozilla-containing UA overrides are rejected. CORS is on by default; keep it. Blocked requests emit loadingFailed/CorsBlocked without a response; the traffic entry must close. From #4242 (11663) fetch/XHR hide cross-origin response headers not listed in Access-Control-Expose-Headers. Preflight cache survives context reset.
@@ -123,7 +123,7 @@ LP.configureCDP              LP.getContentSignal
 
 ## Nightly-only behavior (above 11647)
 
-Published (≤11921):
+Published (≤11975):
 
 - `postMessage` honors `targetOrigin` (#4382, 11676; an opaque origin may still post to itself, #4466, 11704): a mismatched target drops the message, as Chrome does.
 - Custom elements: `createElement`/`createElementNS` run CE reactions (#4459, 11702) and `:defined` follows the element's upgrade state (#4448, 11715). Turbo/Stimulus elements ride this path; recheck on the next real-apps run.
@@ -132,12 +132,10 @@ Published (≤11921):
 - innerText follows CSS `white-space: pre|pre-wrap|break-spaces` (#4510, 11912) and breaks lines between table row groups (#4509, 11897), so `visible_text` changes for styled code blocks and `<thead>`/`<tbody>` tables (Chrome parity).
 - `history.pushState(undefined, '')` stores no state instead of the string `"undefined"`, and a non-cloneable state throws DataCloneError (#4499, 11887).
 - In-page WebSocket reassembles fragmented messages (#4492, 11847) and fails a handshake whose server subprotocol wasn't offered (#4462, 11793).
-
-Main only (11922–11948), shipped with the next published nightly:
-
 - `ClipboardEvent` exists (#4527, 11923), which clears real-apps cause `campfire-clipboard-event` (`new ClipboardEvent("paste", …)` threw ReferenceError).
 - CSS animations fire trusted, bubbling `animationstart`/`animationend`/`animationcancel` for a rendered element whose stylesheet `animation-name` has matching `@keyframes`, after delay + duration × iterations; never for `infinite` (#4496, 11948). Pages that waited on `animationend` forever now advance (Chrome parity).
 - Trusted mouse events stop at the first disabled form control in the path (#4507, 11930). CLICK_JS dispatches untrusted events, so it is unaffected.
+- `import()` of an already-available module settles in a later task, after an earlier `setTimeout(fn, 0)` (#4531, 11969), as in Chrome.
 
 ## Upstream open issues that affect this gem
 
