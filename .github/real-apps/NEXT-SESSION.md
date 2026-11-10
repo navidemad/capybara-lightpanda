@@ -15,8 +15,9 @@ causes.yml` has their diagnoses.
 
 | Lot | N | Reality |
 | --- | --- | --- |
-| `campfire-clipboard-event` | 3 | Upstream: no `ClipboardEvent` constructor. Small PR modelled on `DragEvent.zig`. |
-| `campfire-lexxy-composer-state` | 1 | Upstream: a cached `import()` resolves in microtasks, overtaking earlier `setTimeout(0)` (Lexxy's element definition). |
+| `campfire-lexxy-composer-state` | 1 | Partial: the cached-`import()` ordering is fixed upstream (#4531, nightly 11975), yet the test still fails there. Retest after #4554 (readyState during deferred scripts), then re-diagnose. |
+
+`campfire-clipboard-event` (3) was retired on 2026-11-10: upstream #4527 added `ClipboardEvent` (nightly 11975), and all three examples pass in real-apps run 42799163663.
 | `decidim-account-js` | 2 | Page race exposed by Lightpanda's early load (no images) — gem settle-after-visit option to decide; plus upstream: no `xhr.upload` progress events. |
 | `select2-v3-flow` | 1 | Gem: CLICK_JS descent lands on a preselected multi-select choice; then upstream faux-layout makes the form "obscured". |
 | `selenium-textarea-text` | 1 | By design: Selenium-only visible-text semantics. |

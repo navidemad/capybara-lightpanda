@@ -116,23 +116,8 @@ decidim-account-js:
   patterns:
     - 'account_spec\.rb # Account when on the account page update avatar'
 
-campfire-clipboard-event:
-  confidence: confirmed
-  summary: >-
-    Campfire's paste helper builds `new ClipboardEvent("paste", …)` from
-    execute_script, and Lightpanda has no ClipboardEvent constructor
-    (ReferenceError on 1.0.0 and nightly 10552). DataTransfer exists since
-    #2671, so only the event interface is missing. Still absent at upstream
-    d2f387cae (11912), with no issue or PR filed (checked 2026-11-08). Fix
-    belongs upstream, not in a gem polyfill: a webapi/event/ClipboardEvent.zig
-    modelled on DragEvent.zig (an Event carrying a nullable DataTransfer).
-  next_step: >-
-    File the upstream issue + PR (lightpanda-upstream-pr skill).
-  patterns:
-    - 'ClipboardEvent is not defined'
-
 campfire-lexxy-composer-state:
-  confidence: confirmed
+  confidence: partial
   summary: >-
     Event-loop ordering, upstream. Lexxy defines its custom elements in
     `setTimeout(defineElements, 0)`; Campfire's Stimulus controllers load via
@@ -150,7 +135,10 @@ campfire-lexxy-composer-state:
     ScriptManager.tailHook). No gem fix: the driver cannot reorder the page's
     event loop.
   next_step: >-
-    File upstream: post the cached dynamic-import resolution as a 0 ms
-    scheduler task; separate issue for readyState during deferred scripts.
+    The import() ordering is fixed upstream (#4531, in nightly 11975), yet
+    the test still fails on 11975 (real-apps run 42799163663, 2026-11-10), so
+    that was not the whole story. Retest once #4554 (readyState
+    "interactive" before deferred scripts) lands; if it still fails,
+    re-diagnose from the Lexxy draft restore on 11975.
   patterns:
     - 'test_an_unsent_message_is_kept_as_a_draft'

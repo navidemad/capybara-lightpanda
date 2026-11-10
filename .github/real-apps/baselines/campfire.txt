@@ -1,4 +1,1 @@
 ./test/system/composer_test.rb # ComposerTest#test_an_unsent_message_is_kept_as_a_draft_while_hopping_between_rooms
-./test/system/composer_test.rb # ComposerTest#test_pasting_a_URL_unfurls_an_opengraph_preview
-./test/system/composer_test.rb # ComposerTest#test_pasting_a_table_sends_it_as_a_table
-./test/system/unfurling_links_test.rb # UnfurlingLinksTest#test_a_quote_in_the_opengraph_image_URL_cannot_add_attributes_to_the_preview
