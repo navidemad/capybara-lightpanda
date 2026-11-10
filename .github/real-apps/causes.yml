@@ -31,35 +31,26 @@
 # search-returns-nothing with the causes it proved. The 2026-10-16 refresh
 # (run 38886066850) retired jquery1-change-shim (window's GlobalEventHandlers,
 # upstream #3958) and no-change-on-blur (change on blur, upstream #3952), both
-# in the 1.0.1 floor.
+# in the 1.0.1 floor. The 2026-11-08 refresh (run 42494980619, 0.17.1 on the
+# 11745 nightly) retired campfire-lexxy-prompt-menu (the mention test passes),
+# and customer-switch-refill and js-component-not-rendering, which no baseline
+# entry matched any more.
 
 selenium-textarea-text:
-  confidence: likely
+  confidence: confirmed
   summary: >-
     After a failed memo save the row stays in edit mode, so the memo text is
     hidden and the expected "Memo Lottery Won" can only come from the
     textarea's child text (its defaultValue, set by the previous successful
     save). Selenium's visible-text atom includes a textarea's child text;
     innerText, which this gem reads, does not, so the spec is written against
-    a Selenium-only reading. Not reproduced in Chrome's innerText yet.
+    a Selenium-only reading. Booted locally on 11912 (2026-11-08): the memo
+    POSTs go 200 then the spec's stubbed 400, no console error, and
+    `row.innerText` is "Memo\t". Stock solidus runs Firefox via Selenium.
+    Chrome/Cuprite not run, but innerText excludes textarea content there too.
+    Fails by design; matching Selenium would diverge from Chrome.
   patterns:
     - "store_credits_spec\\.rb # Store credits admin displaying a store credit details page lets edit store credit's memo"
-
-customer-switch-refill:
-  confidence: unknown
-  summary: >-
-    Switching the order's customer through the select2 customer search should
-    refill the bill address, including the state control (a state_id select
-    for a country with states, a state_name input for one without). The field
-    the spec waits for never becomes visible. The country -> state swap itself
-    works since window got its GlobalEventHandlers (#3958), so the gap is in the
-    customer-select path (onSelectCustomer -> model.set(bill_address)).
-  next_step: >-
-    Boot solidus, run new_order_spec.rb "when changing customer" with
-    console_logs and network.traffic, and check whether the second select2 pick
-    fires the select event and requests the states of the new country.
-  patterns:
-    - 'new_order_spec\.rb # New Order when changing customer'
 
 selenium-only-api:
   confidence: confirmed
@@ -75,38 +66,53 @@ selenium-only-api:
     - 'post-hoc switch_to\.alert'
 
 select2-v3-flow:
-  confidence: likely
+  confidence: confirmed
   summary: >-
-    A spec ends up hunting for select2's own DOM (input.select2-input.
-    select2-focused, .select2-drop) and never finds it, so the dropdown never
-    opened for that helper's click path. The gem's CLICK_JS wrapper descent
-    (wishlist C13) fixed the container-click path into select2; the taxons
-    display-order picker takes a third path again.
+    The taxons picker is a select2 v3 MULTI select that already holds a
+    choice. CLICK_JS's wrapper descent (wishlist C13) takes the first visible
+    child at every level: ul.select2-choices -> li.select2-search-choice (the
+    existing choice) -> its div. select2's multi initContainer deliberately
+    ignores clicks inside .select2-search-choice, so the drop never opens and
+    no /api/taxons search is sent. Chrome's centred click lands on the empty
+    ul or the search input. Traced locally on 11912 (2026-11-08).
+    Gem fix: in the descent, stop once a node below the clicked element has
+    more than one visible child (the first step still descends, so the
+    single-select container -> a.select2-choice path is unchanged). Patched at
+    runtime, the select2 step passes and spec/features/admin (338) shows no
+    regression. The spec then still fails on
+    `find(".edit_product", obscured: false)`: Lightpanda's approximate layout
+    gives the form height 5 at top 1300 (block height excludes children), so
+    isObscured sees its centre off-viewport. That second part is upstream
+    geometry.
   reference: "wishlist C13"
   next_step: >-
-    Boot solidus, run products/edit/taxons_spec.rb with console capture, and
-    find which element the helper clicks and where select2 v3 binds the open
-    handler for that widget. One entry.
+    Land the CLICK_JS descent fix with a feature test (multi select2 with a
+    preselected choice); the entry stays red on the faux-layout obscured
+    check until upstream sizes blocks from their children.
   patterns:
     - 'select2-input|select2-focused|select2-drop'
 
-js-component-not-rendering:
-  confidence: likely
-  summary: >-
-    Forem's comment UI is made of Preact components. After a reply is
-    submitted, the parent comment keeps its "replying" state, so the component
-    tree is not updating. Same family as the readyState stall that took out the
-    forem homepage, but on article pages.
-  reference: "wishlist A10"
-  patterns:
-    - 'spec/system/comments/'
-
 decidim-account-js:
-  confidence: likely
+  confidence: confirmed
   summary: >-
-    Decidim's avatar widget shows both of its states at once, so "Remove"
-    matches twice and Capybara raises Ambiguous. A visibility question: the
-    hidden state is not recognised as hidden.
+    Not visibility: both "Remove" buttons are real. upload_field.js preloads
+    the existing avatar on page load with an async `await fetch(img.src)`
+    before `items.push`; the modal button re-runs preloadFiles while
+    `items.length === 0`. Lightpanda's visit returns before that fetch lands
+    (~40 ms later: images are not loaded, so no <img> holds back the load
+    event as in Chrome), the spec clicks at once, and the avatar is preloaded
+    twice (blobs/redirect + disk requested twice; 2 <li data-filename> items).
+    A 2 s sleep before the click gives one item and passes. load_images: true
+    does not close the race (3/5 still Ambiguous). Booted locally on 1.0.3
+    (2026-11-08). Behind it, "can update avatar" also needs
+    `li progress[value='100']`, set only from xhr.upload progress events,
+    which Lightpanda never fires (webapi/net/XMLHttpRequestUpload.zig at
+    d2f387cae; no upstream issue).
+  next_step: >-
+    Gem option to settle the network briefly after visit (bounded, never
+    raising; LP.waitUntil networkalmostidle above 11698), decided against its
+    cost on long-polling pages. Upstream: dispatch upload
+    loadstart/progress/load/loadend from XMLHttpRequest.send.
   patterns:
     - 'account_spec\.rb # Account when on the account page update avatar'
 
@@ -116,32 +122,35 @@ campfire-clipboard-event:
     Campfire's paste helper builds `new ClipboardEvent("paste", …)` from
     execute_script, and Lightpanda has no ClipboardEvent constructor
     (ReferenceError on 1.0.0 and nightly 10552). DataTransfer exists since
-    #2671, so only the event interface is missing.
+    #2671, so only the event interface is missing. Still absent at upstream
+    d2f387cae (11912), with no issue or PR filed (checked 2026-11-08). Fix
+    belongs upstream, not in a gem polyfill: a webapi/event/ClipboardEvent.zig
+    modelled on DragEvent.zig (an Event carrying a nullable DataTransfer).
+  next_step: >-
+    File the upstream issue + PR (lightpanda-upstream-pr skill).
   patterns:
     - 'ClipboardEvent is not defined'
 
-campfire-lexxy-prompt-menu:
-  confidence: unknown
-  summary: >-
-    Mention insertion still fails after the prompt menu opens: selecting the
-    suggestion can report "Item does not match the provided selector".
-    The prompt itself appears on nightly 11106 with the current driver;
-    editing an existing message with a mention also passes (verified 2026-10-26).
-  next_step: >-
-    Inspect the suggestion's lifetime when Tab commits the mention and the
-    assertion reads the resulting attachment.
-  patterns:
-    - 'test_mentioning_a_user_with_@_inserts_a_mention_attachment'
-    - 'lexxy-prompt-menu__item'
-
 campfire-lexxy-composer-state:
-  confidence: unknown
+  confidence: confirmed
   summary: >-
-    An unsent per-room draft fails to restore its composer when hopping
-    between rooms on nightly 11106 (verified 2026-10-26). Markdown
-    strikethrough and both Enter keyboard flows now pass; they are not this gap.
+    Event-loop ordering, upstream. Lexxy defines its custom elements in
+    `setTimeout(defineElements, 0)`; Campfire's Stimulus controllers load via
+    `import()` of modulepreloaded modules. Lightpanda resolves `import()` of an
+    already-fetched/evaluated module in microtasks
+    (ScriptManagerBase.getAsyncImport `.done` branch, and the evaluated-cache
+    hit in js/Context.zig _dynamicModuleCallback), so the composer controller
+    connects before the timer: `#restoreDraft` sets `.value` on a
+    not-yet-upgraded <lexxy-editor> and `selection.placeCursorAtTheEnd()`
+    throws ("Error connecting controller TypeError"). Chrome delivers the
+    import a task later, after the timer. Forcing defineElements synchronous
+    makes the test pass. Reproduced on 1.0.3 and 11912 with a standalone
+    timer-vs-import page (2026-11-08). Secondary: module/defer scripts see
+    readyState "loading" instead of "interactive" (set only in
+    ScriptManager.tailHook). No gem fix: the driver cannot reorder the page's
+    event loop.
   next_step: >-
-    Watch the room navigation and Lexxy draft restoration when returning
-    to the original room.
+    File upstream: post the cached dynamic-import resolution as a 0 ms
+    scheduler task; separate issue for readyState during deferred scripts.
   patterns:
     - 'test_an_unsent_message_is_kept_as_a_draft'
