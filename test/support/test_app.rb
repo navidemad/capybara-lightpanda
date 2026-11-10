@@ -1300,6 +1300,7 @@ class TestApp
           <button type="button" id="disabled-button" disabled>Disabled</button>
           <div id="plain">Plain text</div>
           <div id="editor" contenteditable="true"><p id="editor-child">Edit me</p></div>
+          <div id="flat-editor" contenteditable="true">Edit me</div>
           <div id="guarded"><span id="guarded-inner">Keeps focus</span></div>
           <select id="pets">
             <option value="cat">Cat</option>
