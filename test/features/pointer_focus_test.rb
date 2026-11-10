@@ -101,6 +101,35 @@ describe "Capybara::Lightpanda pointer focus and typing" do
       assert_equal "xfoo", field.value
     end
 
+    # Same WebDriver rule for an editing host: the caret goes after its
+    # content. Lightpanda's focus() puts it at the host's first position
+    # (upstream #4538), so without the gem's caret move a rich-text editor
+    # that already holds a draft gets `send_keys("x")` typed in front of it,
+    # and a spec appending to a pre-filled body asserts the wrong text.
+    it "types after a contenteditable's text content" do
+      session.find(:css, "#flat-editor").send_keys("x")
+
+      assert_equal "Edit mex", session.find(:css, "#flat-editor").text
+    end
+
+    it "types at the end of a contenteditable's last paragraph, not after the <p>" do
+      session.find(:css, "#editor").send_keys("x")
+
+      assert_equal "Edit mex", session.find(:css, "#editor-child").text
+    end
+
+    it "keeps the caret of an already-focused editing host" do
+      editor = session.find(:css, "#flat-editor")
+      session.execute_script(<<~JS, editor)
+        arguments[0].focus();
+        getSelection().collapse(arguments[0].firstChild, 0);
+      JS
+
+      editor.send_keys("x")
+
+      assert_equal "xEdit me", editor.text
+    end
+
     it "does not type into the previously focused field when the target cannot take focus" do
       session.find(:css, "#first").click
       session.find(:css, "#plain").send_keys("x")

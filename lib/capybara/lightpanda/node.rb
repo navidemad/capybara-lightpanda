@@ -1019,6 +1019,13 @@ module Capybara
       # A non-focusable target (focus() is a no-op on those since upstream
       # #3592, build 9646) must not leave the previous field focused, or its
       # keys land there: blur it so they go to the body, as in Chrome.
+      #
+      # An editing host gets the same treatment: Lightpanda's focus() collapses
+      # the caret at the host's first position (upstream #4538), so a draft
+      # already in the editor took the keys in front of it. The caret goes
+      # after the last non-blank text, inside its <p>, the position Chrome
+      # normalizes WebDriver's collapsed end-of-contents range to; a host with
+      # no text gets the end of its children.
       SEND_KEYS_FOCUS_JS = <<~JS
         function() {
           var doc = this.ownerDocument;
@@ -1035,6 +1042,16 @@ module Capybara
               var end = String(this.value || '').length;
               this.setSelectionRange(end, end);
             } catch (e) {}
+          } else if (this.isContentEditable) {
+            var sel = doc.defaultView && doc.defaultView.getSelection();
+            if (!sel) return;
+            var last = null;
+            var walker = doc.createTreeWalker(this, 4 /* NodeFilter.SHOW_TEXT */);
+            while (walker.nextNode()) {
+              if (/\\S/.test(walker.currentNode.data)) last = walker.currentNode;
+            }
+            if (last) sel.collapse(last, last.data.length);
+            else sel.collapse(this, this.childNodes.length);
           }
         }
       JS
