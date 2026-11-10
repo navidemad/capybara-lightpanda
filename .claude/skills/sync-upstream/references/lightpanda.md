@@ -114,12 +114,15 @@ git rev-parse HEAD  # record this sha — goes into the report
 **Skip the build if up to date.** If `zig-out/bin/lightpanda` exists and its mtime is newer than the HEAD commit's author date, the binary already matches `main` — reuse it. Otherwise:
 
 ```bash
-LP_V8=$(ls -t /Users/navid/code/upstream/browser/.lp-cache/prebuilt-v8/*.a | head -1)
-echo "Using V8 archive: $LP_V8"
-mise exec -- zig build -Doptimize=ReleaseFast -Dprebuilt_v8_path="$LP_V8"
+SHIM=<scratchpad>/xcrun-shim; mkdir -p "$SHIM"
+printf '%s\n' '#!/bin/sh' \
+  'for a in "$@"; do [ "$a" = "--show-sdk-path" ] && { echo /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk; exit 0; }; done' \
+  'exec /usr/bin/xcrun "$@"' > "$SHIM/xcrun"; chmod +x "$SHIM/xcrun"
+cd /Users/navid/code/upstream/browser
+PATH="$SHIM:$PATH" mise exec -- zig build -Doptimize=ReleaseFast   # prints "Using prebuilt V8: …" then the version
 ```
 
-The V8 archive name encodes the V8 version (e.g. `libc_v8_14.0.365.4_macos_aarch64.a`); pick the most recent file rather than hardcoding the version, since it changes when the upstream `build.zig` bumps the V8 prebuilt.
+No `-Dprebuilt_v8_path`: plain `zig build` picks the archive for the pinned zig-v8 tag from `.lp-cache/prebuilt-v8/<tag>/` (verified 2026-11-10, 11977). The old `ls .lp-cache/prebuilt-v8/*.a` glob finds nothing since the archives moved into tag directories, so it built with an empty path and failed. The shim works around the macOS 27 SDK breaking Zig's linker (see `~/.claude/notes/zig.md`). If the build log mentions `gclient`/`depot_tools`, the pinned tag's archive is missing and a V8 source build has started: stop it and run `make download-v8` first.
 
 After the build, **do not run specs unprompted**. Print a one-line handoff for the user, then pause:
 
