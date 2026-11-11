@@ -4,7 +4,7 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-10; release v0.20.1, main `8d2f3ff671`. Open: #685 (out-of-process iframe idle tracking) and #701 (symbol procs/one-argument lambdas in `page.on` got `(object, index, total)`; immune: `client/subscriber.rb#dispatch` calls every callback with `params` alone).
+https://github.com/rubycdp/ferrum — reviewed 2026-11-11; release v0.20.1, main `8d2f3ff671`. Open: #685 (out-of-process iframe idle tracking) and #701 (symbol procs/one-argument lambdas in `page.on` got `(object, index, total)`; immune: `client/subscriber.rb#dispatch` calls every callback with `params` alone).
 
 Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until Cuprite passes it through; our `node.rb#click` ignores options and sniffs `Browser::SNIFF_WINDOW`); #696 bounding-rect center fallback when content quads fail (immune: no quad or offsetWidth geometry in lib/ or javascripts/); `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once); inverted `Node#moving?` (ours compares rects correctly); `go_to(on_timeout: :raise)` (ours falls back to readyState polling); #699/#700 Fetch-event navigation detection and `AuthRequest#abort` (N/A: no Fetch interception). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide.
 
@@ -54,7 +54,7 @@ Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until C
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-10; release v0.20, main `24d80e9c22`. Open: #347 (finder hints) only. Merged since v0.20, all converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-11; release v0.20, main `24d80e9c22`. Open: #347 (finder hints) only; its 2026-11-11 push returns the first 50 candidates (with their texts cached) when none holds the text, because Capybara builds the failure message from the nodes it filtered out itself. Ours has that gap (verified 2026-11-11 against Capybara 3.40): `predicates.js#findHints` returns `[]` for an ASCII text nothing holds, so the message drops `visible`/`with text` and the "Also found" list. Merged since v0.20, all converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op).
 
 ### Adopted
 
