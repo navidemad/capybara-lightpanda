@@ -613,8 +613,13 @@ module Capybara
           // child of the .select2-container that Capybara helpers click. We
           // can't use "single visible child" as a guard — select2 keeps an
           // offscreen .select2-focusser <input> sibling that has no geometry to
-          // distinguish, so it reads as a second visible child. The descent
-          // never starts from an interactive element, so a normal
+          // distinguish, so it reads as a second visible child. That's why the
+          // first step always descends, but below `this` the walk stops at an
+          // element with several visible children: a centred pointer lands on
+          // that element, not inside its first child. A multi select2 holding
+          // a choice is the case: descending into the choice is a click
+          // select2 deliberately ignores, while the choices list opens it.
+          // The descent never starts from an interactive element, so a normal
           // button/link/input click still lands exactly on `this`.
           var INTERACTIVE = { A: 1, BUTTON: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1,
                               OPTION: 1, LABEL: 1, SUMMARY: 1 };
@@ -622,11 +627,14 @@ module Capybara
           while (!INTERACTIVE[hit.tagName] &&
                  !hit.hasAttribute('onclick') &&
                  hit.getAttribute('role') !== 'button') {
-            var next = null, ch = hit.children;
+            var next = null, visible = 0, ch = hit.children;
             for (var i = 0; i < ch.length; i++) {
-              if (!window._lightpanda || _lightpanda.isVisible(ch[i])) { next = ch[i]; break; }
+              if (!window._lightpanda || _lightpanda.isVisible(ch[i])) {
+                visible++;
+                if (!next) next = ch[i];
+              }
             }
-            if (!next) break;
+            if (!next || (hit !== this && visible > 1)) break;
             hit = next;
           }
           // Real pointer clicks are a mousedown -> mouseup -> click sequence,

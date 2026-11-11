@@ -29,4 +29,17 @@ describe "Capybara::Lightpanda::Node#click event sequence" do
 
     assert_equal "Option A", session.find(:css, "#option").text
   end
+
+  # Chrome's centred click on a multi-select2 lands on the choices list (or
+  # its search input), never inside the first existing choice, which select2
+  # deliberately ignores. Descending to the first visible child at every level
+  # landed inside "Brand 1", so the dropdown never opened (solidus
+  # products/edit/taxons_spec.rb).
+  it "opens a multi select2 that already holds a choice" do
+    refute session.has_css?("#multi-drop", wait: 0)
+
+    session.find(:css, "#multi").click
+
+    assert_equal "Clothing", session.find(:css, "#multi-drop").text
+  end
 end
