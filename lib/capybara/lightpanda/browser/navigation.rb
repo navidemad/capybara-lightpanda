@@ -169,7 +169,18 @@ module Capybara
           # decide whether the session is recoverable.
         end
 
-        POLL_STATE_JS = "(function(){return{r:document.readyState,u:location.href}})()"
+        # `d` says whether DOMContentLoaded has fired, read from the navigation
+        # timing entry (null when the page has none). Since Lightpanda #4554
+        # (11988) readyState is `interactive` from the end of parsing, while
+        # deferred and module scripts (Stimulus, Turbo) are still pending;
+        # DOMContentLoaded waits for them. Legacy `performance.timing` can't
+        # stand in: Lightpanda keeps every field at 0.
+        POLL_STATE_JS = <<~JS.delete("\n")
+          (function(){
+          var p=window.performance,e=p&&p.getEntriesByType?p.getEntriesByType("navigation")[0]:null;
+          return{r:document.readyState,u:location.href,d:e?e.domContentLoadedEventStart>0:null}
+          })()
+        JS
         private_constant :POLL_STATE_JS
 
         def page_ready?(cmd_timeout, starting_url)
@@ -183,9 +194,18 @@ module Capybara
           return false unless state
 
           url_changed = starting_url.nil? || state["u"] != starting_url
-          url_changed && %w[complete interactive].include?(state["r"])
+          url_changed && ready_state_loaded?(state["r"], state["d"])
         rescue Error
           false
+        end
+
+        # `interactive` still counts once DOMContentLoaded fired: a page whose
+        # load event never comes (a hanging subresource) is usable then, and
+        # must not cost the whole timeout. Without a timing entry, trust it.
+        def ready_state_loaded?(ready_state, dom_content_loaded)
+          return true if ready_state == "complete"
+
+          ready_state == "interactive" && dom_content_loaded != false
         end
       end
     end

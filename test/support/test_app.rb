@@ -1429,6 +1429,52 @@ class TestApp
     JS
   end
 
+  # -- visit readiness. go_to waits 2 s for Page.loadEventFired, then polls
+  # document.readyState. A module script arriving after that wait leaves the
+  # document `interactive` while it is pending (Lightpanda #4554, 11988), so
+  # these delays must exceed the 2 s event wait.
+  VISIT_SCRIPT_DELAY = 2.5
+  VISIT_IFRAME_DELAY = 8
+
+  get "/lightpanda/visit_wait/late_module" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Late module</title>
+          <script type="module" src="/lightpanda/visit_wait/late_module.js"></script>
+        </head>
+        <body><div id="result">pending</div></body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/visit_wait/late_module.js" do
+    sleep VISIT_SCRIPT_DELAY
+    content_type "text/javascript"
+    'document.getElementById("result").textContent = "ran";'
+  end
+
+  # DOMContentLoaded fires at once, but the iframe holds the load event back
+  # for VISIT_IFRAME_DELAY: the document stays `interactive` the whole time.
+  get "/lightpanda/visit_wait/slow_iframe" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Slow iframe</title></head>
+        <body>
+          <div id="ready">ready</div>
+          <iframe src="/lightpanda/visit_wait/slow_iframe_body"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/visit_wait/slow_iframe_body" do
+    sleep VISIT_IFRAME_DELAY
+    "<!DOCTYPE html><html><body>late frame</body></html>"
+  end
+
   # -- go_back / go_forward across history entries. /lightpanda/history/*
   # answers every sub-path with the same page so a driver that wrongly
   # *reloads* a pushState entry gets a 200 (and fails on the lost JS state),
