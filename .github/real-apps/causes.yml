@@ -119,26 +119,29 @@ decidim-account-js:
 campfire-lexxy-composer-state:
   confidence: partial
   summary: >-
-    Event-loop ordering, upstream. Lexxy defines its custom elements in
-    `setTimeout(defineElements, 0)`; Campfire's Stimulus controllers load via
-    `import()` of modulepreloaded modules. Lightpanda resolves `import()` of an
-    already-fetched/evaluated module in microtasks
-    (ScriptManagerBase.getAsyncImport `.done` branch, and the evaluated-cache
-    hit in js/Context.zig _dynamicModuleCallback), so the composer controller
-    connects before the timer: `#restoreDraft` sets `.value` on a
-    not-yet-upgraded <lexxy-editor> and `selection.placeCursorAtTheEnd()`
-    throws ("Error connecting controller TypeError"). Chrome delivers the
-    import a task later, after the timer. Forcing defineElements synchronous
-    makes the test pass. Reproduced on 1.0.3 and 11912 with a standalone
-    timer-vs-import page (2026-11-08). Secondary: module/defer scripts see
-    readyState "loading" instead of "interactive" (set only in
-    ScriptManager.tailHook). No gem fix: the driver cannot reorder the page's
-    event loop.
+    Lexxy's HTML import loses the draft, upstream. Re-diagnosed 2026-11-16 on
+    1.0.4 and nightly 12181 with the local harness: the earlier event-loop
+    story (import() settling before Lexxy's `setTimeout(defineElements, 0)`,
+    "Error connecting controller TypeError") is gone. Both its fixes landed
+    (#4531 import() ordering, #4554 readyState), there are no page errors,
+    and the editor is a connected, upgraded LexicalEditorElement whose
+    Lexical root is the content div. Back in the first room, `#restoreDraft`
+    reads the draft from localStorage and sets `.value`, but the Lexical
+    state stays empty (root + one empty paragraph). The `.value` getter only
+    returns its cached string, which is why the draft looked restored. Even
+    after mount, `ed.value = "<p>x</p>"` changes nothing. The steps check
+    out on their own: `ed.$generateNodesFromDOM(parsedDoc)` returns the
+    paragraph from DOMParser and from createHTMLDocument, and Lexical's `p`
+    conversion matches. So the nodes are lost in `#setEditorHtml`'s
+    `$getRoot().clear().selectEnd().insertNodes(nodes)` or right after it:
+    the update commits with one dirty node and no error reaches
+    `editor._onError`. The CI message ("no matches", no "with text") hid
+    this: the editor exists but its text is empty (the finder-hints gap, #247).
   next_step: >-
-    The import() ordering is fixed upstream (#4531, in nightly 11975), yet
-    the test still fails on 11975 (real-apps run 42799163663, 2026-11-10), so
-    that was not the whole story. Retest once #4554 (readyState
-    "interactive" before deferred scripts) lands; if it still fails,
-    re-diagnose from the Lexxy draft restore on 11975.
+    Break inside Lexical's RangeSelection.insertNodes (and $getRoot().clear()
+    / selectEnd()) on Lightpanda with a non-minified Lexxy build, in the
+    composer's `set value` update, and compare with Chrome. Typed input works
+    (keys go through another path), so look for a DOM or selection API the
+    programmatic insert path calls.
   patterns:
     - 'test_an_unsent_message_is_kept_as_a_draft'
