@@ -122,8 +122,13 @@ module Capybara
 
         # Common navigation lifecycle shared by `wait_for_page_load` (fresh
         # `Page.navigate`) and `wait_for_navigation` (reload).
-        # Subscribes to Page.loadEventFired, runs the trigger, waits briefly for
-        # the event, falls back to readyState polling for the remaining budget.
+        # Subscribes to the main frame's load, runs the trigger, waits briefly
+        # for it, falls back to readyState polling for the remaining budget.
+        # The load is Page.frameStoppedLoading for the main frame, which
+        # Lightpanda sends right after Page.loadEventFired: that one carries no
+        # frameId and comes for every frame, so an iframe that loaded first
+        # made `visit` return while the page's deferred scripts were pending
+        # (forem's comment dropdown; visit_readiness_test.rb).
         # The handler is unsubscribed via `ensure` so a raising trigger doesn't
         # leak a subscription onto the next navigation. Returns the deadline so
         # the caller can decide whether to attempt crash recovery.
@@ -131,8 +136,8 @@ module Capybara
           starting_url = safe_current_url
           deadline = monotonic_time + @options.timeout
           loaded = Utils::Event.new
-          handler = proc { loaded.set }
-          @client.on("Page.loadEventFired", &handler)
+          handler = proc { |params| loaded.set if params["frameId"] == @target_id }
+          @client.on("Page.frameStoppedLoading", &handler)
 
           begin
             yield
@@ -142,7 +147,7 @@ module Capybara
               poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
             end
           ensure
-            @client.off("Page.loadEventFired", handler)
+            @client.off("Page.frameStoppedLoading", handler)
           end
 
           deadline
