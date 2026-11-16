@@ -1,20 +1,20 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-11 at `e2593a0cc` (build 12019). The published nightly is 12013 (`cae5d41fa`, 2026-11-11); pre-release 1.0.4-rc1 is 12015 (`44d096b9a`, a CI-only delta on top).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-16 at `c43bbb95a` (build 12201). The published nightly is 12181 (`2519e1716`, 2026-11-16); latest release 1.0.4 (2026-11-13) is 12015 (`44d096b9a`, the 1.0.4-rc1 commit).
 
 ## Version and transport constraints
 
 - Floors: `Process::MINIMUM_NIGHTLY_BUILD = 11647`, `MINIMUM_RELEASE = 1.0.3`, the same commit (raised 2026-11-05). `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
-- A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten. A release candidate (#4480) prints `<semver>-rcN.<count>+<hash>` (`build.zig#resolveVersion`) and `Process::RC_VERSION` checks its counter against the nightly floor, so 1.0.4-rc1 (2026-11-11, GitHub pre-release) reads as build 12015 and takes the nightly-gated paths; `Binary.required_version = "1.0.4-rc1"` downloads it. Format derived from source, the binary was not run.
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Latest release: 1.0.3 (2026-11-05) = the floor, build 11647 (`b8e234a77`); #4430, #4242 and #4450 (11651/11663/11672) ship only in nightlies and 1.0.4-rc1. Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450; 1.0.4-rc1 carries the fix, no final release does). From #4533 (11915) the aarch64-macos build pins `-Dcpu=apple_m1` on macos-15 runners: nightly 11745, built native on a newer chip, SIGILLed at startup on M1 (#4519, closed); 1.0.3 runs.
+- A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten. A release candidate (#4480) prints `<semver>-rcN.<count>+<hash>` (`build.zig#resolveVersion`); `Process::RC_VERSION` checks its counter against the nightly floor, so an RC takes the nightly-gated paths (format derived from source, no RC binary run).
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. The floor release 1.0.3 is build 11647 (`b8e234a77`); 1.0.4 (12015) is the first release with #4430, #4242 and #4450 (11651/11663/11672). Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450; fixed from release 1.0.4). From #4533 (11915) the aarch64-macos build pins `-Dcpu=apple_m1` on macos-15 runners: nightly 11745, built native on a newer chip, SIGILLed at startup on M1 (#4519, closed); 1.0.3 runs.
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin. From #4553 (11986) the same Host check guards every HTTP route (`/json/*`), not only upgrades.
 
 ## CDP commands used by the gem
 
-All **31 distinct literal commands** below are admitted by the dispatch enums at 12013 and at the audited SHA (12019). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **31 distinct literal commands** below are admitted by the dispatch enums at 12181 and at the audited SHA (12201). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
-**Multi-target CDP (#3945, 11844, nightly-only):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. Validated 2026-11-08 on a local `d2f387cae` (11912) build: `test:all` 690 runs and `spec:shared:parallel` 0 failures.
+**Multi-target CDP (#3945, 11844; in 1.0.4):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. `test:all` and `spec:shared:parallel` were green on a local 11912 build (2026-11-08).
 
 | Domain | Commands |
 |---|---|
@@ -59,11 +59,12 @@ DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes
 DOM.getFrameOwner            DOM.getOuterHTML            DOM.requestNode
-Input.dispatchMouseEvent     Input.dispatchTouchEvent (#3816, 10479)
+Input.dispatchMouseEvent     Input.dispatchTouchEvent
 Input.setInterceptDrags      Input.dispatchDragEvent (#4228, 11246; external text drag only, no files or native dragstart)
-Page.frameDetached (event, #3939, 10544 — removed iframes)
+Page.frameDetached (event, removed iframes)
 Network.setBlockedURLs (`urlPatterns: [{urlPattern, block}]` only, no legacy `urls`; sets the browser-wide HttpClient list, which disposeBrowserContext does not clear)
 LP.getMarkdown               LP.configureLoading {beacon} (#4504, 11869)
+LP.dump {format, withFrames} (withFrames #4657, 12166: html only, inlines each iframe's document, nested ones too)
 Network.setCookies (batch)   Network.getResponseBody
 Network.setCacheDisabled     Network.clearBrowserCache    Network.canClearBrowserCache
 Network.requestServedFromCache (event)                    Network.getRequestPostData
@@ -121,9 +122,9 @@ LP.configureCDP              LP.getContentSignal
 - An unsized iframe is 300×150 and is its own viewport (#4344), so isObscured reports content below 150px as obscured, as Chrome does.
 - Runtime.exceptionThrown lines are document-relative for parser-inserted inline scripts (#4340); dynamic, document.write and `sourceURL` scripts stay script-relative.
 
-## Nightly-only behavior (above 11647)
+## Behavior above the floor (11647)
 
-Published (≤12013; 1.0.4-rc1 carries all of it):
+In release 1.0.4 (12015) and every later nightly:
 
 - `postMessage` honors `targetOrigin` (#4382, 11676; an opaque origin may still post to itself, #4466, 11704): a mismatched target drops the message, as Chrome does.
 - Custom elements: `createElement`/`createElementNS` run CE reactions (#4459, 11702) and `:defined` follows the element's upgrade state (#4448, 11715). Turbo/Stimulus elements ride this path; recheck on the next real-apps run.
@@ -137,9 +138,15 @@ Published (≤12013; 1.0.4-rc1 carries all of it):
 - Trusted mouse events stop at the first disabled form control in the path (#4507, 11930). CLICK_JS dispatches untrusted events, so it is unaffected.
 - `import()` of an already-available module settles in a later task, after an earlier `setTimeout(fn, 0)` (#4531, 11969), as in Chrome.
 
-Main only (12014–12019):
+Published nightly only (12016–12181):
 
 - `elementFromPoint` and trusted mouse input skip `inert` subtrees (#4548, 12019), so isObscured stops reporting an inert overlay as covering what is beneath it (Chrome parity).
+- `xhr.upload` dispatches `loadstart`/`progress`/`load`/`loadend` (or `error`/`abort`/`timeout`) (#4529, ours, 12116); below it a page waiting on upload progress never saw the upload finish.
+- Style invalidation is selective (#4583, 12029, then #4610–#4641): an attribute write clears the style cache only when a stylesheet selector names that attribute, and DOM insertion/removal invalidates the parent's subtree unless `:has`/`:empty`/form pseudo-classes reach further. An `isVisible` that stays stale after a DOM mutation on a nightly but not on 1.0.4 is an upstream invalidation bug, not a predicate bug.
+
+Main only (12182–12201):
+
+- Navigation API `NavigateEvent.intercept()` (#4243, 12199) keeps an intercepted cross-document navigation in the document: a same-document commit that emits only `Page.navigatedWithinDocument`, never `frameStartedNavigating`, so the click sniff sees no navigation, as for `pushState`.
 
 ## Upstream open issues that affect this gem
 
