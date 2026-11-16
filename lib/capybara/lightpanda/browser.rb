@@ -319,6 +319,11 @@ module Capybara
         return if @page_events_enabled
 
         page_command("Page.enable")
+        # Page.domContentEventFired and Page.loadEventFired carry no frameId
+        # and Lightpanda sends them for every frame: an iframe's load reads
+        # as the page's. Page.lifecycleEvent names its frame, so readiness
+        # waits use it instead (see #subscribe_to_document_ready).
+        page_command("Page.setLifecycleEventsEnabled", enabled: true)
         @page_events_enabled = true
       end
 
@@ -684,9 +689,17 @@ module Capybara
       end
 
       # The new document's context exists before its deferred and module
-      # scripts have run: this event marks the end of that phase, at
-      # Page.domContentEventFired or anything later that proves it is over
-      # (load, the frame stopping, the document request failing).
+      # scripts have run: this event marks the end of that phase, at the main
+      # frame's DOMContentLoaded or anything later that proves it is over
+      # (load, the frame stopping, the document request failing). Only the
+      # main frame counts: Page.domContentEventFired/loadEventFired carry no
+      # frameId and Lightpanda also sends them for iframes, so an iframe that
+      # finished first ended this wait while the page's deferred scripts were
+      # still pending (visit_readiness_test.rb). Page.lifecycleEvent names its
+      # frame; enable_page_events turns it on.
+      MAIN_FRAME_READY_EVENTS = %w[DOMContentLoaded load].freeze
+      private_constant :MAIN_FRAME_READY_EVENTS
+
       def subscribe_to_document_ready
         @document_ready_event = Utils::Event.new
         @document_ready_event.set
@@ -694,8 +707,11 @@ module Capybara
         on("Page.frameStartedNavigating") do |params|
           @document_ready_event.reset if main_frame_navigation_start?(params)
         end
-        on("Page.domContentEventFired") { @document_ready_event.set }
-        on("Page.loadEventFired") { @document_ready_event.set }
+        on("Page.lifecycleEvent") do |params|
+          next unless params["frameId"] == @target_id
+
+          @document_ready_event.set if MAIN_FRAME_READY_EVENTS.include?(params["name"])
+        end
         on("Page.frameStoppedLoading") do |params|
           @document_ready_event.set if params["frameId"] == @target_id
         end

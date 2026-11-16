@@ -12,7 +12,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## CDP commands used by the gem
 
-All **31 distinct literal commands** below are admitted by the dispatch enums at 12181 and at the audited SHA (12201). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **32 distinct literal commands** below are admitted by the dispatch enums at 12181 and at the audited SHA (12201). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
 **Multi-target CDP (#3945, 11844, in the floor):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. `test:all` and `spec:shared:parallel` were green on a local 11912 build (2026-11-08).
 
@@ -24,18 +24,18 @@ All **31 distinct literal commands** below are admitted by the dispatch enums at
 | Input | `dispatchKeyEvent`, `insertText` |
 | LP | `configureLoading`, `handleJavaScriptDialog`, `version` |
 | Network | `clearBrowserCookies`, `deleteCookies`, `disable`, `enable`, `getAllCookies`, `setCookie`, `setExtraHTTPHeaders` |
-| Page | `addScriptToEvaluateOnNewDocument`, `captureScreenshot`, `enable`, `getLayoutMetrics`, `navigate`, `reload` |
+| Page | `addScriptToEvaluateOnNewDocument`, `captureScreenshot`, `enable`, `getLayoutMetrics`, `navigate`, `reload`, `setLifecycleEventsEnabled` |
 | Runtime | `callFunctionOn`, `enable`, `evaluate`, `getProperties`, `releaseObject` |
 | Target | `attachToTarget`, `createBrowserContext`, `createTarget`, `disposeBrowserContext` |
 
 Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The `LP.getMarkdown` (driver.rb) and `Network.setBlockedURLs` (selenium_compat.rb) strings are doc-comment examples, not built-in calls.
 
-### Subscribed events (14 distinct names)
+### Subscribed events (13 distinct names)
 
 ```
 Browser.downloadProgress Browser.downloadWillBegin
 Network.loadingFailed Network.requestWillBeSent Network.responseReceived
-Page.domContentEventFired Page.frameStartedNavigating Page.frameStoppedLoading Page.javascriptDialogOpening Page.loadEventFired
+Page.frameStartedNavigating Page.frameStoppedLoading Page.javascriptDialogOpening Page.lifecycleEvent
 Runtime.consoleAPICalled Runtime.exceptionThrown Runtime.executionContextCreated Runtime.executionContextsCleared
 ```
 
@@ -51,7 +51,7 @@ Page.createIsolatedWorld     Page.getFrameTree
 Page.getNavigationHistory    Page.navigateToHistoryEntry (same-document traversal fixed by #3903, 11113, in the floor; Browser#back keeps history.back())
 Page.removeScriptToEvaluateOnNewDocument
 DOM.querySelector            DOM.querySelectorAll (finds go through JS in Runtime.callFunctionOn)
-Page.setLifecycleEventsEnabled  Page.stopLoading (stub)    Page.close
+Page.stopLoading (stub)    Page.close
 Page.printToPDF (fake PDF)
 DOM.getDocument              DOM.resolveNode
 DOM.getBoxModel (returns real getBoundingClientRect geometry)
@@ -92,7 +92,7 @@ LP.configureCDP              LP.getContentSignal
 
 ## Constraints the driver must preserve
 
-- **Navigation:** `Page.loadEventFired` can be absent; keep `go_to`'s readyState polling. A refused/DNS/TLS root navigation commits an error document at the failed URL; from #4430 (11651) a Fetch bad-list port (1, 22, 25, 6000…) fails the same way with `net::ERR_UNSAFE_PORT`, before any connection; cancelled navigation keeps the old document. Click waits must follow main-frame navigation start and document readiness, not just context clearing or Turbo idle. From #4554 (11988) readyState turns `interactive` when the parser ends, before deferred and module scripts run (DOMContentLoaded still waits for them), as in Chrome; below it `interactive` came just before DOMContentLoaded. So `interactive` no longer means the page's JS ran: `wait_for_document_ready` requires `complete`, and `navigation.rb#page_ready?` (go_to's fallback after 2 s without `loadEventFired`) accepts `interactive` only once the navigation timing entry shows DOMContentLoaded (`visit_readiness_test.rb`).
+- **Navigation:** `Page.loadEventFired` can be absent; keep `go_to`'s readyState polling. It and `Page.domContentEventFired` carry no frameId and fire for every frame (`frameLoaded`/`frameDOMContentLoaded` in page.zig, 1.0.3 and later), so an iframe that loads first reads as the page: wait on the main frame's `Page.frameStoppedLoading` or `Page.lifecycleEvent` (frameId == target id) instead. A refused/DNS/TLS root navigation commits an error document at the failed URL; from #4430 (11651) a Fetch bad-list port (1, 22, 25, 6000…) fails the same way with `net::ERR_UNSAFE_PORT`, before any connection; cancelled navigation keeps the old document. Click waits must follow main-frame navigation start and document readiness, not just context clearing or Turbo idle. From #4554 (11988) readyState turns `interactive` when the parser ends, before deferred and module scripts run (DOMContentLoaded still waits for them), as in Chrome; below it `interactive` came just before DOMContentLoaded. So `interactive` no longer means the page's JS ran: `wait_for_document_ready` requires `complete`, and `navigation.rb#page_ready?` (go_to's fallback after 2 s without `loadEventFired`) accepts `interactive` only once the navigation timing entry shows DOMContentLoaded (`visit_readiness_test.rb`).
 - **History:** same-document `Page.navigateToHistoryEntry` is fixed in the floor (#3903, 11113); history.back/forward works and stays unless a switch is validated. Read URLs from location rather than tracking them from frame events.
 - **Frames:** `callFunctionOn` executes in the top context even with an iframe node as `this`; use `this.ownerDocument/defaultView`. Frame scripts compile through the frame's own eval while accepting top-context handles. #4192's listener-world fix does not establish that this constraint changed or resolve issue #3833.
 - **Node handles:** old-document `this` can raise NoExecutionContextError; old nodes passed as arguments can raise a cross-world error mapped to NodeNotFoundError. Only actual nodes have subtype node; ordinary objects serialize by value and cyclic values can be refused.

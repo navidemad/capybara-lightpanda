@@ -33,4 +33,25 @@ describe "Browser#go_to readiness fallback" do
                     "visit waited for the held-back load event (#{elapsed.round(2)} s)"
     assert_equal "ready", session.find(:css, "#ready").text
   end
+
+  # Lightpanda reports an iframe's load as Page.loadEventFired, without a
+  # frameId. Taking it for the page's own load let `visit` return while a
+  # deferred script was still pending, and the next click hit a page whose
+  # handlers weren't attached (forem's comment dropdown, real-apps 2026-11-16).
+  it "does not take an iframe's load event for the page's" do
+    session.visit("/lightpanda/visit_wait/fast_iframe")
+
+    assert_equal "ran", session.evaluate_script("document.getElementById('result').textContent"),
+                 "visit returned on the iframe's load, before the page's deferred script ran"
+  end
+
+  # Same events after a click: an iframe's DOMContentLoaded or load must not
+  # end the wait for the new page, or the next action can be lost on it.
+  it "does not end a click navigation on an iframe's events" do
+    session.visit("/lightpanda/visit_wait/link_to_fast_iframe")
+    session.find(:css, "#go").click
+
+    assert_equal "ran", session.evaluate_script("document.getElementById('result')?.textContent"),
+                 "the click returned on the iframe's events, before the page's deferred script ran"
+  end
 end
