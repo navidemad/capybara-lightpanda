@@ -65,3 +65,25 @@ test("findHints: large lazy searches never read every candidate's text", () => {
   expect(kept.length).toBe(nodes.length);
   expect(reads).toBe(0);
 });
+
+// When no candidate holds the text, Capybara still needs a few of them: it
+// builds "visible css ... with text ..." and "Also found ..." from the ones it
+// rejects itself. It rejects these too, so results stay the same.
+test("findHints: keeps the first ten candidates, hinted, when none holds the text", () => {
+  const { predicates, nodes } = items(Array.from({ length: 12 }, (_, i) => `<li>Item ${i}</li>`).join(""));
+  const kept = predicates.findHints(nodes, { texts: ["nowhere"] }) as any[];
+  expect(kept).toEqual(nodes.slice(0, 10));
+  expect(hintsOf(kept)).toEqual(Array(10).fill({ tag_name: "li" }));
+});
+
+test("findHints: the fallback never pads a partial match", () => {
+  const { predicates, nodes } = items("<li>needle</li><li>a</li><li>b</li>");
+  const kept = predicates.findHints(nodes, { texts: ["needle"] }) as any[];
+  expect(kept.map((el) => el.textContent)).toEqual(["needle"]);
+});
+
+test("findHints: without a text hint nothing is dropped, so no fallback is needed", () => {
+  const { predicates, nodes } = items("<li>a</li><li>b</li>");
+  expect((predicates.findHints(nodes, {}) as any[]).length).toBe(2);
+  expect((predicates.findHints([], { texts: ["x"] }) as any[]).length).toBe(0);
+});
