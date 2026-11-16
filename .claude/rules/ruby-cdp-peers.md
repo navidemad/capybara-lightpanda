@@ -54,7 +54,7 @@ Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until C
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-16 (unchanged since 2026-11-08); release v0.20, main `24d80e9c22`. Open: #347 (finder hints) only; its 2026-11-11 push returns the first 50 candidates (with their texts cached) when none holds the text, because Capybara builds the failure message from the nodes it filtered out itself. Ours has that gap (verified 2026-11-11 against Capybara 3.40): `predicates.js#findHints` returns `[]` for an ASCII text nothing holds, so the message drops `visible`/`with text` and the "Also found" list. Merged since v0.20, all converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-16 (unchanged since 2026-11-08); release v0.20, main `24d80e9c22`. Open: #347 (finder hints) only; its 2026-11-11 push returns the first 50 candidates (with their texts cached) when none holds the text, because Capybara builds the failure message from the nodes it filtered out itself. Ours closes the same gap differently (2026-11-16): `predicates.js#findHints` keeps the first 10 candidates with tag hints only, no cached texts (contract below), so a passing `has_no_css?(text:)` pays at most ~20 live reads. Merged since v0.20, all converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op).
 
 ### Adopted
 
@@ -70,7 +70,7 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-16 (unchanged since 2026
 - Peer unhandled modal option ↔ `browser/modals.rb#check_unhandled_modal!`: accept and defer the error to the caller thread; LP pre-arm bookkeeping is single-shot.
 - Peer node attachment check ↔ `node.rb#wrap_with_attached_guard`: fold isConnected into the operation's own callFunctionOn, avoiding a check/use race and extra round-trip.
 - Peer page extension setup ↔ `browser.rb#register_auto_scripts`: register for future documents AND evaluate into the initial blank page; the idempotency guard permits both.
-- Capybara finder hints ↔ `driver.rb`/`node.rb`: cache immutable tag names only, keep mutable hints live; text filtering stops at 512 candidates and retains Unicode conservatively. Contract: `.codex/rules/finder-hints.md`; peer #347 remains unmerged.
+- Capybara finder hints ↔ `driver.rb`/`node.rb`: cache immutable tag names only, keep mutable hints live; text filtering stops at 512 candidates, retains Unicode conservatively, and keeps the first 10 candidates when none holds the text so Capybara keeps its failure message. Contract: `.codex/rules/finder-hints.md`; peer #347 remains unmerged.
 - Peer HTML5 drag script ↔ `node.rb#HTML5_DRAG_JS`: drop only when accepted, otherwise dragleave; never both. Coordinate fallback is unsupported. Keep the port's corrected rect/key variables.
 
 ### Outstanding adoption candidates

@@ -39,6 +39,33 @@ describe "Capybara finder hints" do
     assert_operator calls, :<, 20, "find(text:) made #{calls} CDP calls"
   end
 
+  # Capybara builds the failure message from the candidates it filtered out
+  # itself. If the pre-filter hands it none, the message loses the filters
+  # ("visible", "with text") and, for assertions, the "Also found" list:
+  # exactly what tells someone whether they mistyped the text or the selector.
+  it "keeps the filters in a find failure message" do
+    error = assert_raises(Capybara::ElementNotFound) { session.find(:css, "li", text: "No such item", wait: 0) }
+
+    assert_includes error.message, 'visible css "li" with text "No such item"'
+  end
+
+  it "lists the candidates the text filter rejected in an assertion failure" do
+    error = assert_raises(Capybara::ExpectationNotMet) do
+      session.assert_selector(:css, "li", text: "No such item", wait: 0)
+    end
+
+    assert_includes error.message, 'with text "No such item"'
+    assert_match(/Also found "Item 1", "Item 2", .*which matched the selector but not all filters/, error.message)
+  end
+
+  # The candidates kept for that message are read one CDP call at a time, and
+  # a passing negative assertion pays for them too: the cap keeps it cheap.
+  it "keeps a passing negative text assertion within a small call budget" do
+    calls = count_commands { assert session.has_no_css?("li", text: "No such item", wait: 0) }
+
+    assert_operator calls, :<, 40, "has_no_css?(text:) made #{calls} CDP calls"
+  end
+
   it "keeps Capybara's visibility semantics" do
     assert_equal 200, session.all(:css, "li").size
     assert_equal 300, session.all(:css, "li", visible: :all).size
