@@ -8,6 +8,8 @@
 
 - **`visit` waits for the page's JavaScript.** With a recent Lightpanda, `visit` could return before deferred and module scripts (Stimulus controllers, Turbo) had run, when the page took more than 2 seconds to load. The next `click` or `fill_in` then hit a page whose handlers weren't attached yet and was silently lost. `visit` now waits until those scripts have run.
 - **`send_keys` on a rich-text editor types after the existing text.** On a `contenteditable` element that already held text, `send_keys` used to type in front of it ("xEdit me" instead of "Edit mex"). It now appends, as Chrome and WebDriver do.
+- **A page with an iframe no longer lets `visit` or `click` move on too early.** When an iframe (an embedded widget, a video, a tweet) finished loading before the page itself, `visit` and a `click` that navigated returned while the page's own scripts were still pending, so the next click could do nothing. Seen on Forem: the comment menu never opened. They now wait for the page itself.
+- **Text failure messages say what was searched for.** When no element held the text, `find("li", text: "…")` failed with just `Unable to find css "li"`. It now reads `Unable to find visible css "li" with text "…"`, and `assert_selector` lists the elements it rejected ("Also found …").
 
 ## [0.17.1] - 2026-11-08
 
