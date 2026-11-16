@@ -4,9 +4,9 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## Version and transport constraints
 
-- Floors: `Process::MINIMUM_NIGHTLY_BUILD = 11647`, `MINIMUM_RELEASE = 1.0.3`, the same commit (raised 2026-11-05). `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
+- Floors: `Process::MINIMUM_NIGHTLY_BUILD = 12015`, `MINIMUM_RELEASE = 1.0.4`, the same commit (raised 2026-11-16; suites green on the 1.0.4 aarch64-macos binary). `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
 - A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten. A release candidate (#4480) prints `<semver>-rcN.<count>+<hash>` (`build.zig#resolveVersion`); `Process::RC_VERSION` checks its counter against the nightly floor, so an RC takes the nightly-gated paths (format derived from source, no RC binary run).
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. The floor release 1.0.3 is build 11647 (`b8e234a77`); 1.0.4 (12015) is the first release with #4430, #4242 and #4450 (11651/11663/11672). Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450; fixed from release 1.0.4). From #4533 (11915) the aarch64-macos build pins `-Dcpu=apple_m1` on macos-15 runners: nightly 11745, built native on a newer chip, SIGILLed at startup on M1 (#4519, closed); 1.0.3 runs.
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. The floor release 1.0.4 is build 12015 (`44d096b9a`). Release aarch64-linux binaries (1.0.2 included) need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them; #3852 closed as documented (#4333), not rebuilt. x86_64-macos binaries built before #4450 (11672), releases 1.0.2 and 1.0.3 included, have no CPU baseline and crash with SIGILL on the first HTTPS request on CPUs without ADX (#4433, closed by #4450); that is why the floor is 1.0.4. From #4533 (11915) the aarch64-macos build pins `-Dcpu=apple_m1` on macos-15 runners: nightly 11745, built native on a newer chip, SIGILLed at startup on M1 (#4519, closed).
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin. From #4553 (11986) the same Host check guards every HTTP route (`/json/*`), not only upgrades.
 
@@ -14,7 +14,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 All **31 distinct literal commands** below are admitted by the dispatch enums at 12181 and at the audited SHA (12201). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
-**Multi-target CDP (#3945, 11844; in 1.0.4):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. `test:all` and `spec:shared:parallel` were green on a local 11912 build (2026-11-08).
+**Multi-target CDP (#3945, 11844, in the floor):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither. `test:all` and `spec:shared:parallel` were green on a local 11912 build (2026-11-08).
 
 | Domain | Commands |
 |---|---|
@@ -121,22 +121,17 @@ LP.configureCDP              LP.getContentSignal
 - `navigator.sendBeacon` sends nothing: the gem enables no `beacon` resource loading (#4144).
 - An unsized iframe is 300×150 and is its own viewport (#4344), so isObscured reports content below 150px as obscured, as Chrome does.
 - Runtime.exceptionThrown lines are document-relative for parser-inserted inline scripts (#4340); dynamic, document.write and `sourceURL` scripts stay script-relative.
-
-## Behavior above the floor (11647)
-
-In release 1.0.4 (12015) and every later nightly:
-
 - `postMessage` honors `targetOrigin` (#4382, 11676; an opaque origin may still post to itself, #4466, 11704): a mismatched target drops the message, as Chrome does.
 - Custom elements: `createElement`/`createElementNS` run CE reactions (#4459, 11702) and `:defined` follows the element's upgrade state (#4448, 11715). Turbo/Stimulus elements ride this path; recheck on the next real-apps run.
-- Multi-target CDP (#3945, 11844); see "CDP commands used by the gem".
-- Disposing a context resets its viewport override (#4191, 11853); `create_page` resends the viewport anyway.
 - innerText follows CSS `white-space: pre|pre-wrap|break-spaces` (#4510, 11912) and breaks lines between table row groups (#4509, 11897), so `visible_text` changes for styled code blocks and `<thead>`/`<tbody>` tables (Chrome parity).
 - `history.pushState(undefined, '')` stores no state instead of the string `"undefined"`, and a non-cloneable state throws DataCloneError (#4499, 11887).
 - In-page WebSocket reassembles fragmented messages (#4492, 11847) and fails a handshake whose server subprotocol wasn't offered (#4462, 11793).
 - `ClipboardEvent` exists (#4527, 11923).
-- CSS animation events (#4496, 11948: trusted, bubbling `animationstart`/`animationend`/`animationcancel` after delay + duration × iterations, never for `infinite`) are opt-in from #4559 (11991) behind `--experimental-features animation`, for load cost. The gem doesn't pass it, so pages waiting on `animationend` stall as on the floor; `LIGHTPANDA_EXTRA_ARGS="--experimental-features animation"` opts a suite in. Only 11948–11990 fired them by default.
+- CSS animation events (#4496, 11948: trusted, bubbling `animationstart`/`animationend`/`animationcancel` after delay + duration × iterations, never for `infinite`) are opt-in from #4559 (11991) behind `--experimental-features animation`, for load cost. The gem doesn't pass it, so pages waiting on `animationend` stall; `LIGHTPANDA_EXTRA_ARGS="--experimental-features animation"` opts a suite in.
 - Trusted mouse events stop at the first disabled form control in the path (#4507, 11930). CLICK_JS dispatches untrusted events, so it is unaffected.
 - `import()` of an already-available module settles in a later task, after an earlier `setTimeout(fn, 0)` (#4531, 11969), as in Chrome.
+
+## Behavior above the floor (12015)
 
 Published nightly only (12016–12181):
 
