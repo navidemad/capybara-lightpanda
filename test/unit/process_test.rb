@@ -268,6 +268,7 @@ describe Capybara::Lightpanda::Process do
         Gem::Version.new("1.0.1") => Gem::Version.new("10641"),
         Gem::Version.new("1.0.2") => Gem::Version.new("10965"),
         Gem::Version.new("1.0.3") => Gem::Version.new("11647"),
+        Gem::Version.new("1.0.4") => Gem::Version.new("12015"),
       }
       build = release_builds[release_floor]
 
