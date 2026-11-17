@@ -1,6 +1,6 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-16 at `c43bbb95a` (build 12201). The published nightly is 12181 (`2519e1716`, 2026-11-16); latest release 1.0.4 (2026-11-13) is 12015 (`44d096b9a`, the 1.0.4-rc1 commit).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-18 at `b4d0a529a` (build 12238). The published nightly is 12226 (`88fb36db0`, 2026-11-17); latest release 1.0.4 (2026-11-13) is 12015 (`44d096b9a`, the 1.0.4-rc1 commit), and `Binary::DEFAULT_VERSION` pins it.
 
 ## Version and transport constraints
 
@@ -12,7 +12,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## CDP commands used by the gem
 
-All **32 distinct literal commands** below are admitted by the dispatch enums at 12181 and at the audited SHA (12201). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **32 distinct literal commands** below are admitted by the dispatch enums at 12226 and at the audited SHA (12238). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls. Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
 **Multi-target CDP (#3945, 11844, in the floor):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither.
 
@@ -133,15 +133,17 @@ LP.configureCDP              LP.getContentSignal
 
 ## Behavior above the floor (12015)
 
-Published nightly only (12016–12181):
+Published nightly only (12016–12226):
 
 - `elementFromPoint` and trusted mouse input skip `inert` subtrees (#4548, 12019), so isObscured stops reporting an inert overlay as covering what is beneath it (Chrome parity).
 - `xhr.upload` dispatches `loadstart`/`progress`/`load`/`loadend` (or `error`/`abort`/`timeout`) (#4529, ours, 12116); below it a page waiting on upload progress never saw the upload finish.
-- Style invalidation is selective (#4583, 12029, then #4610–#4641): an attribute write clears the style cache only when a stylesheet selector names that attribute, and DOM insertion/removal invalidates the parent's subtree unless `:has`/`:empty`/form pseudo-classes reach further. An `isVisible` that stays stale after a DOM mutation on a nightly but not on 1.0.4 is an upstream invalidation bug, not a predicate bug.
-
-Main only (12182–12201):
-
+- Style invalidation is selective (#4583, 12029, then #4610–#4641, extended to layout caches by #4651, 12226): an attribute write clears the style cache only when a stylesheet selector names that attribute, and DOM insertion/removal invalidates the parent's subtree unless `:has`/`:empty`/form pseudo-classes reach further. An `isVisible` that stays stale after a DOM mutation on a nightly but not on 1.0.4 is an upstream invalidation bug, not a predicate bug.
 - Navigation API `NavigateEvent.intercept()` (#4243, 12199) keeps an intercepted cross-document navigation in the document: a same-document commit that emits only `Page.navigatedWithinDocument`, never `frameStartedNavigating`, so the click sniff sees no navigation, as for `pushState`.
+- Layout rewrite (#4650, 12212; it supersedes the closed #4549/#4561): box tops follow block flow and `position: absolute/relative`, heights follow content (a text line is 20px; an empty block keeps a fallback height, #4679 open) instead of the 5px-per-element stack, and widths are text-aware. Hit testing still picks the last element in tree order whose box holds the point (no z-index), on these boxes. isObscured, `wait_for_stop_moving`, HTML5_DRAG_JS and `DOM.getBoxModel` see other rects than on 1.0.4, and the `#obscured?` skips in `spec/spec_helper.rb` may now pass (not run yet).
+
+Main only (12227–12238):
+
+- `display: grid` layout, and text wraps at the computed width rather than only an explicit one (#4673, 12238).
 
 ## Upstream open issues that affect this gem
 
