@@ -347,7 +347,9 @@ module Capybara
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
-      # silently accept a binary the nightly channel rejects.
+      # silently accept a binary the nightly channel rejects. Move
+      # Binary::DEFAULT_VERSION with it: that is the release a fresh install
+      # downloads, and it must clear this floor.
       MINIMUM_RELEASE = Gem::Version.new("1.0.4")
 
       # A release-candidate binary: "<x.y.z>-rc<N>.<git rev-list --count>+<hash>".

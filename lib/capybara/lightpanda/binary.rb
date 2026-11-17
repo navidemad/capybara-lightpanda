@@ -30,19 +30,59 @@ module Capybara
 
       DEFAULT_CACHE_TIME = 86_400
 
-      # One-liner that re-provisions the binary from a process with no
-      # HTTP-stubbing loaded (VCR/WebMock guard the test process itself).
-      # Referenced from the stale-fallback warning and BETA_TESTING.md.
-      PROVISION_HINT =
-        "bundle exec ruby -r capybara-lightpanda " \
-        "-e 'Capybara::Lightpanda::Binary.remove; puts Capybara::Lightpanda::Binary.update'"
+      # The release downloaded when nothing else is asked for. Each gem version
+      # ships with the Lightpanda release it was validated against, so a
+      # `bundle update` moves the browser with the driver: the pin's
+      # version-scoped filename (see install_path) changes, the old cached file
+      # no longer matches, and the new release is fetched. Tracking the rolling
+      # nightly by default did the opposite — a floor bump left a cached
+      # sub-floor binary in place and the suite died at driver start, while CI
+      # ran whatever upstream published that morning.
+      #
+      # INVARIANT: never below Process::MINIMUM_RELEASE (binary_test pins it),
+      # or a fresh install would download a binary the driver then refuses.
+      DEFAULT_VERSION = "1.0.4"
+
+      # required_version value (or LIGHTPANDA_VERSION) that opts back into the
+      # rolling `nightly` tag.
+      NIGHTLY = "nightly"
+
+      # Command that provisions the binary from a process with no HTTP stubbing
+      # loaded (VCR/WebMock guard the test process itself). An executable
+      # rather than a rake task or a `ruby -r` one-liner: the rake tasks only
+      # exist under RAILS_ENV=test in a Rails app, and the executable works
+      # from bin/setup, a CI step and a dev shell alike. --force re-downloads
+      # even when a file is already cached.
+      PROVISION_HINT = "bundle exec capybara-lightpanda install --force"
 
       class << self
-        # Set a specific release tag (e.g. "0.3.0") to pin downloads to that
-        # release. When nil, the rolling "nightly" tag is used. The pin only
-        # affects download URL construction — the gem's MINIMUM_NIGHTLY_BUILD
-        # floor is still enforced at process start.
-        attr_accessor :required_version
+        # The Lightpanda version to download: a release tag ("1.0.4",
+        # "1.0.5-rc1") or "nightly" for the rolling tag. Unset (nil), it falls
+        # back to LIGHTPANDA_VERSION, then to DEFAULT_VERSION. The version only
+        # picks the download — the gem's floor is still enforced at process
+        # start.
+        attr_writer :required_version
+
+        def required_version
+          version = @required_version.to_s
+          version = ENV.fetch("LIGHTPANDA_VERSION", "") if version.empty?
+          version.empty? ? DEFAULT_VERSION : version
+        end
+
+        def nightly?
+          required_version == NIGHTLY
+        end
+
+        # The release tag in effect, nil on the rolling nightly.
+        def pinned_version
+          nightly? ? nil : required_version
+        end
+
+        # True when the user (or the environment) chose the version, as opposed
+        # to inheriting DEFAULT_VERSION.
+        def explicit_version?
+          !@required_version.to_s.empty? || !ENV.fetch("LIGHTPANDA_VERSION", "").empty?
+        end
 
         # Seconds before a cached unpinned binary is re-downloaded. Pinned
         # binaries are never refreshed on age (they're pinned).
@@ -68,64 +108,68 @@ module Capybara
           yield self
         end
 
-        # Canonical entrypoint: ensure the binary at install_path is current,
-        # download if needed, return its path. Pinned (required_version set)
-        # never re-downloads when present. Unpinned re-downloads when older
-        # than cache_time. When unpinned and the gem cache is empty/stale,
-        # an already-installed `lightpanda` on PATH (e.g. via Homebrew) wins
-        # over re-downloading — keeps test suites running under VCR/WebMock
-        # from triggering surprise HTTP to github.com.
+        # Canonical entrypoint: return the path of a usable binary, downloading
+        # one if needed.
+        #
+        # - A release (the default, or an explicit pin) is used as soon as its
+        #   version-scoped file exists; it is never refreshed on age.
+        # - The nightly is re-downloaded once older than cache_time, or at once
+        #   when the cached build is below the gem's floor (see cache_usable?).
+        # - A `lightpanda` on PATH (Homebrew, a package) wins over downloading
+        #   unless the version was chosen explicitly — a pin is a version
+        #   contract PATH can't honor. It keeps a suite under VCR/WebMock from
+        #   firing surprise HTTP at github.com.
         def update
           destination = install_path
 
-          if required_version
-            if File.executable?(destination)
-              log("Pinned #{required_version} present at #{destination}")
-              return destination
-            end
-            return download
-          end
-
-          if cached_fresh?(destination)
-            log("Cached binary at #{destination} is fresh (< #{cache_time}s)")
+          if cache_usable?
+            log("Cached binary at #{destination} is usable")
             return destination
           end
 
-          if (system_path = system_binary_path)
+          if !(pinned_version && explicit_version?) && (system_path = system_binary_path)
             log("Using lightpanda from PATH at #{system_path}")
             return system_path
           end
 
-          # Stale-or-absent cache, nothing on PATH: refresh from the network.
-          # If that fails (GitHub 5xx, DNS/connect timeouts, SocketError) but a
-          # usable — if stale — binary is already cached, keep using it rather
-          # than hard-failing. A cold cache (nothing on disk) still surfaces the
-          # error. The MINIMUM_NIGHTLY_BUILD floor is enforced downstream in
-          # Process#start, so a sub-floor binary can't slip in.
+          # If the download fails (GitHub 5xx, DNS/connect timeouts, an HTTP
+          # stub) but a binary is already cached, keep using it rather than
+          # hard-failing; with nothing on disk the error surfaces. The floor is
+          # enforced downstream in Process#start, so a sub-floor binary can't
+          # slip in.
           #
           # Deliberately StandardError, not Exception: WebMock's
           # NetConnectNotAllowedError descends from Exception so it propagates
           # through app rescue blocks by design — a test suite that blocks net
-          # connections SHOULD fail loudly here, not silently fall back. CI
-          # pre-provisions the binary outside that guard instead (real-apps.yml).
+          # connections SHOULD fail loudly here, not silently fall back.
+          #
+          # Kernel.warn, not log: log() is silent unless LIGHTPANDA_DEBUG or an
+          # explicit logger is set, and this is exactly the moment the user
+          # needs to hear about — a VCR-guarded suite (whose
+          # UnhandledHTTPRequestError is a StandardError) lands here, and
+          # without the hint all it sees is VCR's error or, later, a floor
+          # error with no trace of the blocked download.
           begin
             download
           rescue StandardError => e
-            raise unless File.executable?(destination)
-
-            # Kernel.warn, not log: log() is silent unless LIGHTPANDA_DEBUG or
-            # an explicit logger is set, and this fallback is exactly the
-            # moment the user needs to hear about — a VCR-guarded suite (whose
-            # UnhandledHTTPRequestError is a StandardError, unlike raw
-            # WebMock's Exception) lands here silently, keeps a stale binary,
-            # and later hits a confusing MINIMUM_NIGHTLY_BUILD floor error
-            # with no trace of the blocked download.
-            warn("[capybara-lightpanda] Binary download failed (#{e.class}: #{e.message}); " \
-                 "falling back to the cached binary at #{destination}. " \
+            cached = File.executable?(destination)
+            warn("[capybara-lightpanda] Binary download failed (#{e.class}: #{e.message})" \
+                 "#{"; falling back to the cached binary at #{destination}" if cached}. " \
                  "If your suite stubs HTTP (VCR/WebMock), pre-provision from an " \
                  "unstubbed process: #{PROVISION_HINT}")
+            raise unless cached
+
             destination
           end
+        end
+
+        # Make sure the binary for the version in effect sits in the gem's own
+        # cache, ignoring PATH: what `capybara-lightpanda install` runs from
+        # bin/setup or a CI step, where the point is to fill the cache.
+        def install(force: false)
+          return install_path if !force && cache_usable?
+
+          download
         end
 
         # Delete the cached binary. Returns the path that was deleted, or nil
@@ -175,7 +219,7 @@ module Capybara
         # and both rename a complete file — last writer wins, both are valid.
         def download
           binary_name = platform_binary
-          tag = required_version || "nightly"
+          tag = required_version
           url = "#{release_url}/#{tag}/#{binary_name}"
           destination = install_path
 
@@ -223,10 +267,10 @@ module Capybara
         def update_hint(binary_path)
           if brew_managed?(binary_path)
             "brew update && brew upgrade lightpanda"
-          elsif binary_path == install_path && required_version
+          elsif binary_path == install_path && pinned_version
             "Capybara::Lightpanda::Binary.required_version is pinned to " \
               "#{required_version} — raise the pin to a newer release, " \
-              "or unset it to track the rolling nightly."
+              "or set it to \"nightly\" to track the rolling nightly."
           elsif binary_path == install_path
             PROVISION_HINT
           else
@@ -261,7 +305,7 @@ module Capybara
         # pin self-verifying and lets several pins coexist in one cache dir.
         def install_path
           dir = @install_dir || File.dirname(default_binary_path)
-          basename = required_version ? "lightpanda-#{required_version}" : "lightpanda"
+          basename = pinned_version ? "lightpanda-#{pinned_version}" : "lightpanda"
 
           File.join(dir, basename)
         end
@@ -302,11 +346,42 @@ module Capybara
           nil
         end
 
+        # A cached release only has to exist: its filename carries the version.
+        # A cached nightly must be young enough AND clear the gem's floor — age
+        # alone let a build cached yesterday survive a floor bump for up to
+        # cache_time, and the driver then refused to start on a binary the gem
+        # itself had just called fresh.
+        def cache_usable?
+          path = install_path
+          return File.executable?(path) if pinned_version
+
+          cached_fresh?(path) && !below_floor?(path)
+        end
+
         def cached_fresh?(path)
           return false unless File.executable?(path)
           return true if cache_time.zero?
 
           (Time.now - File.mtime(path)) < cache_time
+        end
+
+        # Only a version the floor check positively rejects counts. A file that
+        # can't be run or doesn't answer is left to Process#start, which reports
+        # it properly. Process is looked up lazily: binary.rb loads before
+        # process.rb, and on its own in the provisioning scripts, where the
+        # floor is unknown and nothing is rejected.
+        def below_floor?(path)
+          return false unless Lightpanda.const_defined?(:Process, false)
+
+          stdout, _, status = Open3.capture3(path, "version")
+          return false unless status.success? && !stdout.strip.empty?
+
+          Lightpanda::Process.check_version!(stdout) { "" }
+          false
+        rescue BinaryError
+          true
+        rescue SystemCallError
+          false
         end
 
         def normalize_arch(arch)

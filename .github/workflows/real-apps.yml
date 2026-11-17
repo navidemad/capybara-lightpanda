@@ -28,6 +28,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The gem defaults to the Lightpanda release it ships with. This repo's own
+# suites stay on the rolling nightly on purpose: that is how an upstream
+# regression is seen before it reaches a release. The release itself is
+# guarded by ci.yml's release-channel job.
+env:
+  LIGHTPANDA_VERSION: nightly
+
 jobs:
   smoke:
     runs-on: ubuntu-26.04

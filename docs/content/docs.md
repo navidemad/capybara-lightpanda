@@ -55,14 +55,19 @@ ephemeral port and connects over CDP.
 
 Two things follow from that, and both surprise people:
 
+- The download is the Lightpanda release this gem version was validated
+  against, kept in a version-scoped file and never refreshed on age. Upgrading
+  the gem fetches the next one. [Choose another version](#pinning) if you need to.
 - A `lightpanda` already on your `PATH` — Homebrew's, or one you dropped in
-  `/usr/local/bin` — is preferred over re-downloading, but only while you're
-  unpinned *and* the cached copy is missing or stale. It's a deliberate fallback
-  (it keeps VCR/WebMock suites from firing surprise HTTP at github.com), not a
-  lookup order to lean on: a warm cache wins over `PATH`, and a pin skips `PATH`
-  entirely. Set `browser_path` to the binary you want used unconditionally.
-- The download tracks the rolling `nightly` tag and refreshes every 24 h. Fine
-  locally, wrong for CI — [pin a release](#pinning).
+  `/usr/local/bin` — is preferred over downloading while that file is missing
+  and you haven't chosen a release yourself. It's a deliberate fallback (it
+  keeps VCR/WebMock suites from firing surprise HTTP at github.com), not a
+  lookup order to lean on: a cached copy wins over `PATH`, and an explicit
+  release skips `PATH` entirely. Set `browser_path` to the binary you want
+  used unconditionally.
+- The download happens inside your test process. If the suite stubs HTTP
+  (VCR/WebMock), fetch the binary first, from `bin/setup` and from a CI step:
+  `bundle exec capybara-lightpanda install`.
 
 ## Configuration { #configuration }
 
@@ -83,7 +88,7 @@ end
 | `timeout` | `15` | Per-CDP-command timeout, also covers navigation polling |
 | `process_timeout` | `10` | Wait this long for `lightpanda serve` to start before failing |
 | `handshake_timeout` | `5` | Budget for the WebSocket TCP + Upgrade handshake alone. Separate from `timeout` because a handshake either lands in a few hundred ms or never |
-| `browser_path` | `nil` | Path to a binary **you** manage — used unconditionally. When `nil` the gem downloads and refreshes its own copy under `~/.cache/lightpanda/`, falling back to a `lightpanda` on `PATH` while that cache is cold or stale (see [quick start](#install)) |
+| `browser_path` | `nil` | Path to a binary **you** manage — used unconditionally. When `nil` the gem downloads its own copy under `~/.cache/lightpanda/`, falling back to a `lightpanda` on `PATH` while that cache is cold (see [quick start](#install)) |
 | `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
 | `ws_url` | `nil` | Connect to a Lightpanda you started yourself rather than spawning one — see [external browser](#external-browser). `host`, `port` and `browser_path` are unused when it is set |
 | `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
@@ -91,29 +96,41 @@ end
 | `raise_on_unhandled_modal` | `false` | A JS dialog that opens with no `accept_*`/`dismiss_*` wrapper in flight is resolved by Lightpanda's default (confirm → cancel, prompt → `null`, alert → dismissed), so a runaway `confirm` cancels the action and the spec still passes. `false` prints a warning naming the dialog text; `true` raises `Capybara::Lightpanda::UnhandledModalError` from the click or `visit` that opened it |
 | `headless` | `true` | Accepted so option sets written for other drivers keep working, and inert — headless is the only mode Lightpanda has |
 
-### Pinning the browser version { #pinning }
+### Choosing the browser version { #pinning }
 
-By default the driver tracks Lightpanda's rolling `nightly` tag and refreshes it
-once every 24 hours. That is convenient for local exploration and wrong for CI:
-the browser can change under a suite that didn't change a single line, and
-nightly builds are not archived, so you cannot go back to the one that was green
-yesterday.
+Each version of the gem downloads one Lightpanda release: the one it was
+validated against (1.0.4 for this version). It lands in its own
+version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.4`) and is never
+refreshed on age, so the browser changes only when you upgrade the gem. Cache
+that directory in CI and the browser is as reproducible as your `Gemfile.lock`.
 
-For any shared or CI environment, pin a tagged release:
+To run something else, name it:
 
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "1.0.4"   # a tag from lightpanda-io/browser/releases
+  binary.required_version = "1.0.5"     # a tag from lightpanda-io/browser/releases
+  # binary.required_version = "nightly" # the rolling nightly, refreshed every 24 hours
 end
 ```
 
-A pin is downloaded once into its own version-scoped file
-(`~/.cache/lightpanda/lightpanda-1.0.4`), is never refreshed on age, and is
-never satisfied by a nightly left over from an earlier run. Cache that directory
-in CI and the browser becomes as reproducible as your `Gemfile.lock`.
+`LIGHTPANDA_VERSION` sets the same thing from the environment, for a CI job
+that tries the nightly without touching the code; `required_version` wins when
+both are set. The nightly moves under a suite that didn't change a line, and
+nightly builds are not archived, so keep it for exploring upstream fixes rather
+than for the signal you merge on.
 
-The same reproducibility is available for a nightly: download one once, keep
+Provision ahead of the suite with the bundled command. It needs no Rails
+environment and loads nothing that stubs HTTP:
+
+```bash
+bundle exec capybara-lightpanda install            # the version in effect
+bundle exec capybara-lightpanda install nightly    # or a release tag
+bundle exec capybara-lightpanda install -r ./test/support/capybara.rb  # honor your Binary.configure block
+bundle exec capybara-lightpanda install --force    # re-download over a cached file
+```
+
+A nightly can be made reproducible too: download one once, keep
 it as a build artifact or bake it into your CI image, and point `browser_path`
 at it. The gem never downloads when that is set, so the
 browser changes only when you replace the artifact.
@@ -128,11 +145,10 @@ Two supporting knobs:
 | Knob | Use |
 |---|---|
 | `browser_path` (driver option) | You manage the binary yourself — a Docker layer, a vendored artifact. The gem never downloads |
-| `LIGHTPANDA_CACHE_TIME=0` (env) | Treat whatever is already cached as fresh forever. Pair with a pre-provisioning step when the suite blocks outbound HTTP (VCR/WebMock) |
+| `LIGHTPANDA_CACHE_TIME=0` (env) | Nightly only: treat whatever is already cached as fresh forever. Pair with a pre-provisioning step when the suite blocks outbound HTTP (VCR/WebMock) |
 
 > Suites that stub HTTP need the binary fetched **before** the stubs load, from a
-> process with no WebMock/VCR in it:
-> `bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'`
+> process with no WebMock/VCR in it: `bundle exec capybara-lightpanda install`
 
 ### Dynamic port for parallel tests
 
@@ -452,7 +468,7 @@ also why triaging your own suite goes faster than the raw count suggests.
 | `UnsupportedPlatformError: Unsupported platform: …` | No upstream binary for that arch/OS pair — see [requirements](#install). Windows needs WSL2 |
 | `BinaryError: Lightpanda <version> is too old` | The cached or pinned binary is under the gem's floor. The message names the version it found and the exact command to move off it |
 | `PortInUseError: … port N is already in use` | An earlier Lightpanda still holds the port. The driver reclaims it via `lsof` when available; leaving `port = 0` (the default) sidesteps this entirely, including under parallel workers |
-| Binary download fails, or a `WebMock`/`VCR` error during it | The first-run download is being caught by your HTTP stubs. Pre-provision from an unstubbed process — `bundle exec ruby -r capybara-lightpanda -e 'puts Capybara::Lightpanda::Binary.update'` — then set `LIGHTPANDA_CACHE_TIME=0` so the warm copy is never refreshed mid-suite |
+| Binary download fails, or a `WebMock`/`VCR` error during it | The first-run download is being caught by your HTTP stubs. Pre-provision from an unstubbed process, in `bin/setup` and before the tests in CI: `bundle exec capybara-lightpanda install`. On the nightly, also set `LIGHTPANDA_CACHE_TIME=0` so the warm copy is never refreshed mid-suite |
 | `DeadBrowserError` | The browser process died mid-command, usually an upstream crash on the page under test. The driver respawns and retries once; a reproducible one is worth an issue with the URL |
 | `NoExecutionContextError` | The JS context was swapped mid-command — a child iframe navigating invalidates the main frame's context upstream. The driver retries on context re-creation and Capybara reloads the element, so persistent cases mean the page churns iframes faster than the retry window |
 | `ElementNotFound` on a menu item after `hover` | CSS `:hover` reveals nothing here. JS-driven menus do open (`mouseover` + `mouseenter` are dispatched); a `:hover`-only menu can't open. See [limitations](#limits) |
