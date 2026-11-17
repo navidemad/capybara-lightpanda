@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.19.0] - 2026-11-17
 
 > **The default browser is now a release, not the nightly.** If you relied on the rolling nightly, set `Capybara::Lightpanda::Binary.required_version = "nightly"` or `LIGHTPANDA_VERSION=nightly`. `required_version = nil` now means "the gem's default release".
 
