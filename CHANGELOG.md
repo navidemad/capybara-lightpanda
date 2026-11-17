@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+> **The default browser is now a release, not the nightly.** If you relied on the rolling nightly, set `Capybara::Lightpanda::Binary.required_version = "nightly"` or `LIGHTPANDA_VERSION=nightly`. `required_version = nil` now means "the gem's default release".
+
+### Changed
+
+- **Each gem version downloads the Lightpanda release it was validated against** (1.0.4 for now) instead of that day's nightly. The browser changes when you upgrade the gem and not otherwise, and CI no longer breaks because of a nightly published that morning.
+- **Upgrading the gem no longer leaves a too-old browser in the cache.** The binary is cached per version, so the new gem fetches its own release instead of failing at driver start with "Lightpanda … is too old". On the nightly, a cached build below the required version is now re-downloaded at once instead of being kept for up to 24 hours.
+
+### Added
+
+- **`bundle exec capybara-lightpanda install`** downloads the browser ahead of the test run. Call it from `bin/setup` and from a CI step when your suite stubs HTTP (VCR/WebMock), which blocks the download the driver would otherwise do on first use. It takes a version (`install nightly`, `install 1.0.4`), `--force` to re-download, and `-r FILE` to load your `Binary.configure` block. `version`, `path` and `remove` are there too.
+- **`LIGHTPANDA_VERSION`** picks the browser version from the environment.
+- When a download is blocked and nothing is cached, the driver now prints the command to run, next to the HTTP stub's own error.
+
 ## [0.18.0] - 2026-11-16
 
 > **Update Lightpanda before upgrading.** This release requires Lightpanda **1.0.4** or a nightly build ≥ 12015. The driver refuses anything older and names the version it found. Pin `1.0.4` for a reproducible browser. On Intel Macs, Lightpanda 1.0.3 crashes on the first HTTPS request; 1.0.4 fixes that.

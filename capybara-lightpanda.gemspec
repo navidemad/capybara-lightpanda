@@ -23,7 +23,10 @@ Gem::Specification.new do |spec|
   spec.metadata["documentation_uri"] = spec.homepage
   spec.metadata["rubygems_mfa_required"] = "true"
 
-  spec.files = Dir["lib/**/*", "LICENSE.txt", "NOTICE.md", "README.md", "CHANGELOG.md"].select { File.file?(_1) }
+  spec.files = Dir["lib/**/*", "exe/*", "LICENSE.txt", "NOTICE.md", "README.md", "CHANGELOG.md"]
+               .select { File.file?(_1) }
+  spec.bindir = "exe"
+  spec.executables = ["capybara-lightpanda"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "capybara", ">= 3.0", "< 5"

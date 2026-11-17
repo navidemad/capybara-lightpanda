@@ -12,11 +12,168 @@ describe Capybara::Lightpanda::Binary do
                    @proxy_addr @proxy_port @proxy_user @proxy_pass].to_h do |ivar|
       [ivar, Capybara::Lightpanda::Binary.instance_variable_get(ivar)]
     end
+    @env_version = ENV.delete("LIGHTPANDA_VERSION")
+    # Most of this file exercises the rolling-nightly cache (age, PATH, stale
+    # fallback), which is opt-in now. The default-release behavior has its own
+    # describe blocks, which reset this to nil.
+    Capybara::Lightpanda::Binary.required_version = "nightly"
   end
 
   after do
     @snapshot.each do |ivar, value|
       Capybara::Lightpanda::Binary.instance_variable_set(ivar, value)
+    end
+    ENV["LIGHTPANDA_VERSION"] = @env_version if @env_version
+    ENV.delete("LIGHTPANDA_VERSION") unless @env_version
+  end
+
+  def fake_binary(path, version_output = nil)
+    body = version_output ? "#!/bin/sh\necho '#{version_output}'\n" : "fake"
+    File.write(path, body)
+    File.chmod(0o755, path)
+    path
+  end
+
+  # The default exists so that upgrading the gem moves the browser with it:
+  # a floor bump used to leave yesterday's cached nightly in place, and the
+  # suite died at driver start until someone re-provisioned by hand.
+  describe "default version" do
+    before { Capybara::Lightpanda::Binary.required_version = nil }
+
+    it "downloads the release the gem ships with, into a version-scoped file" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      default = Capybara::Lightpanda::Binary::DEFAULT_VERSION
+
+      assert_equal default, Capybara::Lightpanda::Binary.required_version
+      assert_equal File.join(dir, "lightpanda-#{default}"), Capybara::Lightpanda::Binary.install_path
+    end
+
+    # A default below the floor would make a fresh install download a binary
+    # Process#start then refuses — every new user's first run would fail.
+    it "is never below the release floor the driver enforces" do
+      require "capybara/lightpanda/process"
+
+      assert_operator Gem::Version.new(Capybara::Lightpanda::Binary::DEFAULT_VERSION), :>=,
+                      Capybara::Lightpanda::Process::MINIMUM_RELEASE
+    end
+
+    # The whole point of scoping the file by version: the binary cached for
+    # the previous gem version must not satisfy the new one.
+    it "ignores the binary cached for another release and fetches its own" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      fake_binary(File.join(dir, "lightpanda-0.0.1"))
+      fake_binary(File.join(dir, "lightpanda"))
+      wanted = Capybara::Lightpanda::Binary.install_path
+
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(wanted)
+
+      assert_equal wanted, Capybara::Lightpanda::Binary.update
+    end
+
+    it "never refreshes its cached release on age" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 60
+      path = fake_binary(Capybara::Lightpanda::Binary.install_path)
+      File.utime(Time.now - 86_400, Time.now - 86_400, path)
+
+      Capybara::Lightpanda::Binary.expects(:download).never
+      assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+
+    # Unlike an explicit pin, the default is not a version contract: a user
+    # who installed Lightpanda themselves (Homebrew) keeps using it, and a
+    # suite under VCR/WebMock fires no HTTP at github.com.
+    it "prefers a lightpanda on PATH over downloading" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns("/opt/homebrew/bin/lightpanda")
+
+      Capybara::Lightpanda::Binary.expects(:download).never
+      assert_equal "/opt/homebrew/bin/lightpanda", Capybara::Lightpanda::Binary.update
+    end
+
+    it "follows LIGHTPANDA_VERSION, and an explicit required_version over it" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      ENV["LIGHTPANDA_VERSION"] = "nightly"
+
+      assert_nil Capybara::Lightpanda::Binary.pinned_version
+      assert Capybara::Lightpanda::Binary.install_path.end_with?("/lightpanda")
+
+      Capybara::Lightpanda::Binary.required_version = "1.2.3"
+      assert Capybara::Lightpanda::Binary.install_path.end_with?("/lightpanda-1.2.3")
+    end
+
+    # Under VCR the blocked download surfaces as VCR's own error, which says
+    # nothing about Lightpanda. The warning is what tells the user to
+    # provision from outside the test process.
+    it "names the provisioning command when the download is blocked" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
+      Capybara::Lightpanda::Binary.expects(:download).raises(StandardError, "real HTTP connections are disabled")
+
+      _out, err = capture_io do
+        assert_raises(StandardError) { Capybara::Lightpanda::Binary.update }
+      end
+
+      assert_includes err, "real HTTP connections are disabled"
+      assert_includes err, Capybara::Lightpanda::Binary::PROVISION_HINT
+    end
+  end
+
+  # Freshness used to be age alone, so a nightly cached an hour before a floor
+  # bump stayed "fresh" for a day and the driver refused to start on it.
+  describe ".update with a cached nightly below the floor" do
+    before { require "capybara/lightpanda/process" }
+
+    it "re-downloads even though the file is younger than cache_time" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 86_400
+      path = fake_binary(File.join(dir, "lightpanda"), "1.0.0-nightly.100+abcdef012")
+
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns(nil)
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(path)
+
+      assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+
+    it "keeps a fresh nightly that clears the floor" do
+      dir = Dir.mktmpdir
+      Capybara::Lightpanda::Binary.install_dir = dir
+      Capybara::Lightpanda::Binary.cache_time = 86_400
+      floor = Capybara::Lightpanda::Process::MINIMUM_NIGHTLY_BUILD
+      path = fake_binary(File.join(dir, "lightpanda"), "1.0.0-nightly.#{floor}+abcdef012")
+
+      Capybara::Lightpanda::Binary.expects(:download).never
+      assert_equal path, Capybara::Lightpanda::Binary.update
+    end
+  end
+
+  # `install` is what bin/setup and CI run to fill the cache ahead of the
+  # suite, so it must write there even when PATH already has a lightpanda.
+  describe ".install" do
+    before { Capybara::Lightpanda::Binary.required_version = nil }
+
+    it "downloads into the cache even when PATH has lightpanda" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      wanted = Capybara::Lightpanda::Binary.install_path
+      Capybara::Lightpanda::Binary.stubs(:system_binary_path).returns("/opt/homebrew/bin/lightpanda")
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(wanted)
+
+      assert_equal wanted, Capybara::Lightpanda::Binary.install
+    end
+
+    it "does nothing when the release is already cached, unless forced" do
+      Capybara::Lightpanda::Binary.install_dir = Dir.mktmpdir
+      path = fake_binary(Capybara::Lightpanda::Binary.install_path)
+
+      Capybara::Lightpanda::Binary.expects(:download).once.returns(path)
+
+      assert_equal path, Capybara::Lightpanda::Binary.install
+      assert_equal path, Capybara::Lightpanda::Binary.install(force: true)
     end
   end
 
@@ -376,8 +533,10 @@ describe Capybara::Lightpanda::Binary do
         Capybara::Lightpanda::BinaryError, "Failed to download binary: 504 Gateway Time-out"
       )
 
-      assert_raises(Capybara::Lightpanda::BinaryError) do
-        Capybara::Lightpanda::Binary.update
+      capture_io do
+        assert_raises(Capybara::Lightpanda::BinaryError) do
+          Capybara::Lightpanda::Binary.update
+        end
       end
     ensure
       ENV["PATH"] = original_path
