@@ -77,6 +77,26 @@ class CupriteContractTest < Minitest::Test
     FileUtils.remove_entry(@directory)
   end
 
+  def test_coordinate_mouse_input_for_chart_interactions
+    @page.visit("/")
+    @page.execute_script("window.addEventListener('mousemove', e => { window.lastPoint = [e.clientX, e.clientY] })")
+    browser = @page.driver.browser
+    move_to_tick = -> { browser.mouse.move(x: 75, y: 45) }
+
+    if browser.is_a?(Capybara::Lightpanda::Browser)
+      refute_respond_to browser, :mouse
+      error = assert_raises(NoMethodError, &move_to_tick)
+      assert_equal :mouse, error.name
+      assert_same browser, error.receiver
+      assert_match(/rendered layout.*Cuprite/, error.message)
+      other = assert_raises(NoMethodError) { browser.missing_chart_helper }
+      refute_match(/Cuprite/, other.message)
+    else
+      move_to_tick.call
+      assert_equal [75, 45], @page.evaluate_script("window.lastPoint")
+    end
+  end
+
   def test_page_commands_switch_date_and_intl_without_replacing_the_document
     @page.visit("/")
     @page.fill_in("Name", with: "Unsaved")

@@ -263,7 +263,8 @@ module Capybara
         unless html5
           raise NotImplementedError,
                 "drag_to needs coordinate mouse dispatch for non-HTML5 (legacy) drags, which Lightpanda " \
-                "cannot do (no layout). Pass `html5: true` to force HTML5 DragEvent simulation."
+                "cannot do (no layout). Run this example with Cuprite (Chrome) for coordinate-based dragging. " \
+                "For an HTML5 drop target, pass `html5: true` to simulate drag events."
         end
 
         driver.browser.evaluate_async(HTML5_DRAG_JS, self, other, (delay * 1000).to_i, keys)
