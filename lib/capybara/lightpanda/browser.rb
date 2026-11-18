@@ -2,6 +2,7 @@
 
 require "forwardable"
 
+require_relative "cuprite_page"
 require_relative "browser/runtime"
 require_relative "browser/finder"
 require_relative "browser/navigation"
@@ -309,6 +310,10 @@ module Capybara
 
       def command(method, **params)
         @client.command(method, params)
+      end
+
+      def page
+        CupritePage.new(self)
       end
 
       def page_command(method, **params)

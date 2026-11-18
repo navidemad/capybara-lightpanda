@@ -77,6 +77,50 @@ class CupriteContractTest < Minitest::Test
     FileUtils.remove_entry(@directory)
   end
 
+  def test_page_commands_switch_date_and_intl_without_replacing_the_document
+    @page.visit("/")
+    @page.fill_in("Name", with: "Unsaved")
+    browser = @page.driver.browser
+    current_zone = "Intl.DateTimeFormat().resolvedOptions().timeZone"
+    original = @page.evaluate_script(current_zone)
+    zone = original == "America/New_York" ? "America/St_Johns" : "America/New_York"
+    method = "Emulation.setTimezoneOverride"
+    if browser.is_a?(Capybara::Lightpanda::Browser)
+      # Check the engine independently of the adapter. Older releases acknowledge
+      # the raw CDP call even though Intl and Date keep the previous zone.
+      browser.page_command(method, timezoneId: zone)
+      supported = @page.evaluate_script(current_zone) == zone
+      browser.page_command(method, timezoneId: "")
+      unless supported
+        assert_raises(Capybara::NotSupportedByDriverError) { browser.page.command(method, timezoneId: zone) }
+        assert_equal original, @page.evaluate_script(current_zone)
+        return
+      end
+    end
+
+    { "America/New_York" => [300, 240], "America/St_Johns" => [210, 150] }.each do |id, offsets|
+      browser.page.command(method, timezoneId: id)
+      assert_equal id, @page.evaluate_script(current_zone)
+      assert_equal offsets, @page.evaluate_script("[0, 6].map(m => new Date(Date.UTC(2024, m, 1)).getTimezoneOffset())")
+    end
+    browser.page.command(method, timezoneId: "GMT")
+    assert_equal 0, @page.evaluate_script("new Date().getTimezoneOffset()")
+    browser.page.command(method, timezoneId: "")
+    assert_equal original, @page.evaluate_script(current_zone)
+    assert_equal "Unsaved", @page.find_field("Name").value
+  end
+
+  def test_cached_page_handle_cannot_mutate_the_next_session
+    @page.visit("/")
+    cached = @page.driver.browser.page
+    @page.reset!
+    @page.visit("/")
+    assert_raises(Ferrum::BrowserError, Capybara::Lightpanda::BrowserError) do
+      cached.command("Runtime.evaluate", expression: "document.title = 'changed'")
+    end
+    assert_equal "Store", @page.title
+  end
+
   def test_application_registration_preserves_the_stock_drivers
     assert_instance_of Capybara::Cuprite::Driver, Capybara.drivers[:cuprite].call(nil)
     assert_instance_of Capybara::Lightpanda::Driver, Capybara.drivers[:lightpanda].call(nil)
