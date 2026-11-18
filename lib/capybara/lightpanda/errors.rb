@@ -48,6 +48,7 @@ module Capybara
       end
     end
 
+    class NoSuchCookieError < BrowserError; end
     class DeadBrowserError < BrowserError; end
     class NodeNotFoundError < BrowserError; end
     class NoExecutionContextError < BrowserError; end

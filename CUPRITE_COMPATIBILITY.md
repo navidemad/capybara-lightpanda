@@ -1,4 +1,4 @@
-# What would it take to switch a Cuprite suite to Lightpanda?
+# Migrating Cuprite and Selenium suites to Lightpanda
 
 The first migration round landed on `main` at `bb8303a`. An application can keep its driver name and use the registration, header, cookie, network and download helpers below. The comparison targets Cuprite 0.20.1, Ferrum 0.20.1 and Capybara 3.40.0. Cuprite deprecates several driver-level helpers in favor of their browser-level equivalents. [Cuprite deprecations](https://github.com/rubycdp/cuprite/blob/v0.20.1/CHANGELOG.md)
 
@@ -13,6 +13,12 @@ The first migration round landed on `main` at `bb8303a`. An application can keep
 | [Downloads #271](https://github.com/navidemad/capybara-lightpanda/pull/271) | Configure a save directory and use `browser.downloads.wait { click_link("Report") }`. The block runs once, including when the page starts the download later. | Lightpanda returns absolute file paths. Ferrum exposes metadata hashes. Compare the bytes on disk in portable helpers. |
 
 The [shared contract](test/compatibility/cuprite_contract.rb) runs the same helper bodies against Chrome/Cuprite and Lightpanda with a local Rack app. Run `bundle exec ruby test/compatibility/cuprite_contract.rb` and repeat with `CONTRACT_DRIVER=cuprite`. The [round-one main run](https://github.com/navidemad/capybara-lightpanda/actions/runs/44367610811) also passed the shared Capybara battery on Ruby 3.3 and 4.0.
+
+## Selenium migration evidence
+
+Decidim uses `page.driver.browser.manage.cookie_named(name)` to check a consent cookie’s expiry, domain, SameSite, HttpOnly and secure flags. Its sign-out helpers also use `all_cookies` and `delete_all_cookies`. At gem commit `9f9ba4d`, these calls raised `NoMethodError` at `manage`. They now operate on cookies visible to the current document, including HttpOnly cookies. A cookie confined to another path or host survives deletion. When a named cookie is missing, the adapter raises Selenium’s `NoSuchCookieError` if Selenium is loaded, otherwise `Capybara::Lightpanda::NoSuchCookieError`. [Original consent specs](https://github.com/decidim/decidim/blob/d22e3584e07045fea4f1c759454cbfd5478168e7/decidim-core/spec/system/data_consent/organization_spec.rb) · [Differential contract](test/compatibility/selenium_contract.rb)
+
+All seven HTTP examples in that file passed unchanged on Selenium WebDriver 4.41.0 with Chrome 156.0.8078.4 and on Lightpanda 1.0.4. For the Lightpanda run we added the gem and changed the body of the `:headless_chrome` registration. The original CDP setup hook, teardown and spec assertions ran on both. The local harness supplied the browser executables, an isolated database and a fixed server port. The PWA, mobile and HTTPS modes were outside this run. Run the cookie contract with `bundle exec ruby test/compatibility/selenium_contract.rb` and repeat with `CONTRACT_DRIVER=selenium`.
 
 ## Original probe results
 

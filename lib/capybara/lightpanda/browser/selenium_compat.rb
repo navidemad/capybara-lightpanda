@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "date"
+
 module Capybara
   module Lightpanda
     class Browser
@@ -80,6 +82,53 @@ module Capybara
         # "all ivars initialized in the constructor" rule for these modules.
         def logs
           Logs.new(self)
+        end
+
+        # WebDriver's cookie commands operate on the active document. The native
+        # cookie jar spans the whole browser context, including other hosts.
+        class Manager
+          def initialize(browser)
+            @browser = browser
+          end
+
+          def all_cookies
+            document_cookies.map do |raw|
+              cookie = Cookies::Cookie.new(raw)
+              { name: cookie.name, value: cookie.value, domain: cookie.domain, path: cookie.path,
+                expires: cookie.expires&.utc&.to_datetime, secure: cookie.secure?, http_only: cookie.httponly?,
+                same_site: cookie.same_site || "Lax", }
+            end
+          end
+
+          def cookie_named(name)
+            cookie = all_cookies.find { |entry| entry[:name] == name }
+            return cookie if cookie
+
+            error = if defined?(::Selenium::WebDriver::Error::NoSuchCookieError)
+                      ::Selenium::WebDriver::Error::NoSuchCookieError
+                    else
+                      NoSuchCookieError
+                    end
+            raise error, "No cookie named #{name.inspect} for the current document"
+          end
+
+          def delete_all_cookies
+            document_cookies.each do |cookie|
+              @browser.execute_cdp("Network.deleteCookies", name: cookie.fetch("name"),
+                                                            domain: cookie.fetch("domain"), path: cookie.fetch("path"))
+            end
+            nil
+          end
+
+          private
+
+          def document_cookies
+            @browser.execute_cdp("Network.getCookies", urls: [@browser.frame_url]).fetch("cookies")
+          end
+        end
+
+        def manage
+          Manager.new(self)
         end
 
         # Selenium's `execute_async_script`: the script receives a completion
