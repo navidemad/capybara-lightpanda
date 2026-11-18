@@ -18,17 +18,28 @@ module Capybara
       # spec files (decidim's `account_spec.rb` + the shared "accessible page"
       # examples, real-apps run 30116365373).
       #
-      # Scope is deliberately narrow: alias what maps cleanly onto an existing
-      # API, and raise something *actionable* where the underlying model
-      # genuinely differs (see #switch_to). We do not grow a Selenium
-      # emulation layer.
+      # Scope grows only when a real-app helper needs an entry point, each one
+      # pinned by test/compatibility/selenium_contract.rb: alias what maps
+      # cleanly onto an existing API, and raise something *actionable* where
+      # the underlying model genuinely differs (see #switch_to). Mirroring
+      # Selenium's API for its own sake is not a goal.
       module SeleniumCompat
         # Selenium’s browser log includes console output and uncaught JavaScript errors.
         # `level` is the Selenium severity string ("SEVERE"/"WARNING"/…), not
         # the CDP console type, because that is what callers compare against.
+        # `timestamp` is wall-clock epoch milliseconds, as in Selenium, and
+        # `time`/`as_json`/`to_s` mirror Selenium::WebDriver::LogEntry.
         LogEntry = Struct.new(:level, :message, :timestamp) do
+          def time
+            Time.at(timestamp / 1000)
+          end
+
+          def as_json(*)
+            { "timestamp" => timestamp, "level" => level, "message" => message }
+          end
+
           def to_s
-            "#{timestamp} #{level} #{message}"
+            "#{time} #{level}: #{message}"
           end
         end
 
@@ -61,13 +72,13 @@ module Capybara
               LogEntry.new(
                 CONSOLE_LEVELS.fetch(entry[:type], "INFO"),
                 entry[:text],
-                entry[:timestamp]
+                entry[:received_at]
               )
             end
             errors = @browser.page_errors.map do |error|
               prefix = error[:kind] == "unhandledrejection" ? "Uncaught (in promise)" : "Uncaught"
               message = [error[:url], prefix, error[:message]].reject(&:empty?).join(" ")
-              LogEntry.new("SEVERE", message, error[:timestamp])
+              LogEntry.new("SEVERE", message, error[:received_at])
             end
             (console + errors).sort_by { |entry| entry.timestamp || 0 }
           end

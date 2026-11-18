@@ -129,6 +129,8 @@ class SeleniumContractTest < Minitest::Test
       assert_equal 1, severe.count { |entry| entry.message.include?("migration #{kind}") }, severe.inspect
     end
     refute(severe.any? { |entry| entry.message.include?("migration handled") })
+    # Teardown helpers print `entry.time`; on both drivers it must be now, not 1970.
+    severe.each { |entry| assert_in_delta Time.now, entry.time, 60, entry.inspect }
 
     @page.reset_session!
     @page.visit("/")

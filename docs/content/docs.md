@@ -379,8 +379,12 @@ the driver keeps them apart too:
 page.driver.browser.page_errors
 # => [{kind: "error", message: "TypeError: Cannot read properties of undefined (reading 'id')",
 #      url: "http://app.test/assets/taxonomy.js", line: 94, column: 22,
-#      stack: "TypeError: …", timestamp: 1753449600.0}]
+#      stack: "TypeError: …", timestamp: 474249, received_at: 1795038075680}]
 ```
+
+`timestamp` is the browser's own clock, which on Lightpanda counts seconds since
+the host booted. `received_at` is the wall-clock time the driver took the event,
+in epoch milliseconds; `console_logs` entries carry both too.
 
 `kind` is `"error"` or `"unhandledrejection"`; a rejection's `message` is the
 reason's message and it carries no `line`/`column`. Same lifecycle as

@@ -9,10 +9,12 @@ module Capybara
       module Console
         # Console messages captured from `Runtime.consoleAPICalled` since the
         # last `reset` (Turbo-tracker sentinels excluded). Loose hashes, like
-        # Network#traffic: `{type:, text:, timestamp:, args:}` where `type` is
-        # the console method name ("log", "error", "warning", ...), `text` joins
-        # the arguments' primitive values/descriptions, and `args` keeps the raw
-        # CDP RemoteObjects. Lets suites assert on JS console errors
+        # Network#traffic: `{type:, text:, timestamp:, received_at:, args:}`
+        # where `type` is the console method name ("log", "error", "warning",
+        # ...), `text` joins the arguments' primitive values/descriptions, and
+        # `args` keeps the raw CDP RemoteObjects. `timestamp` is the browser's
+        # own value (see .received_at_ms); `received_at` is wall-clock epoch
+        # ms. Lets suites assert on JS console errors
         # (`browser.console_logs.select { |m| m[:type] == "error" }`) the way
         # peer drivers do via custom Ferrum loggers.
         def console_logs
@@ -25,7 +27,8 @@ module Capybara
 
         # Uncaught page exceptions and unhandled promise rejections since the
         # last `reset`: `{kind:, message:, url:, line:, column:, stack:,
-        # timestamp:}`, where `kind` is "error" or "unhandledrejection".
+        # timestamp:, received_at:}`, where `kind` is "error" or
+        # "unhandledrejection".
         #
         # Deliberately NOT folded into #console_logs. Chrome reports an
         # uncaught exception through Runtime.exceptionThrown rather than
@@ -84,6 +87,15 @@ module Capybara
             stack: stack&.slice(0, STACK_LIMIT),
             timestamp: params["timestamp"],
           }
+        end
+
+        # Wall-clock epoch milliseconds when the driver took the event. CDP's
+        # `timestamp` is not that on Lightpanda: 1.0.4 sends whole seconds since
+        # the host booted (verified 2026-11-18: 474249 on a host up 5.5 days),
+        # where Chrome sends epoch milliseconds. Selenium-shaped log entries
+        # need a real time, so each entry carries this one as well.
+        def self.received_at_ms
+          ::Process.clock_gettime(::Process::CLOCK_REALTIME, :millisecond)
         end
 
         def self.one_based(position)
@@ -172,6 +184,7 @@ module Capybara
               type: params["type"],
               text: args.map { |a| console_arg_text(a) }.join(" "),
               timestamp: params["timestamp"],
+              received_at: Console.received_at_ms,
               args: args,
             }
             push_capped(@console_logs, @console_logs_mutex, entry, CONSOLE_LOGS_LIMIT)
@@ -184,7 +197,8 @@ module Capybara
 
         def subscribe_to_page_errors
           on("Runtime.exceptionThrown") do |params|
-            push_capped(@page_errors, @page_errors_mutex, Console.page_error_entry(params), PAGE_ERRORS_LIMIT)
+            entry = Console.page_error_entry(params).merge(received_at: Console.received_at_ms)
+            push_capped(@page_errors, @page_errors_mutex, entry, PAGE_ERRORS_LIMIT)
           end
         end
 
