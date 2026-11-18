@@ -91,6 +91,7 @@ end
 | `browser_path` | `nil` | Path to a binary **you** manage — used unconditionally. When `nil` the gem downloads its own copy under `~/.cache/lightpanda/`, falling back to a `lightpanda` on `PATH` while that cache is cold (see [quick start](#install)) |
 | `window_size` | `[1920, 1080]` | Drives `window.innerWidth`/`innerHeight` and what `@media` / `matchMedia` evaluate against. JS-visible viewport only — no reflow (see [limitations](#limits)). The default mirrors Lightpanda's native viewport, so leaving it alone changes nothing |
 | `ws_url` | `nil` | Connect to a Lightpanda you started yourself rather than spawning one — see [external browser](#external-browser). `host`, `port` and `browser_path` are unused when it is set |
+| `timezone` | `nil` (host zone) | IANA zone the browser reports through `Date` and `Intl`, e.g. `"America/New_York"`. Set as `TZ` on the browser process only, so your test process and app keep their own zone. Per process, not per test, and unused with `ws_url` — see [limitations](#limits) |
 | `save_path` | `Capybara.save_path` | Where downloaded files land. Downloads stay off when both are `nil` |
 | `logger` | `nil` | An IO (or `Capybara::Lightpanda::Logger`) that receives raw CDP traffic. `LIGHTPANDA_DEBUG=1` wires `$stdout` |
 | `raise_on_unhandled_modal` | `false` | A JS dialog that opens with no `accept_*`/`dismiss_*` wrapper in flight is resolved by Lightpanda's default (confirm → cancel, prompt → `null`, alert → dismissed), so a runaway `confirm` cancels the action and the spec still passes. `false` prints a warning naming the dialog text; `true` raises `Capybara::Lightpanda::UnhandledModalError` from the click or `visit` that opened it |
@@ -324,8 +325,19 @@ page.driver.add_headers("Accept-Language" => "fr")
 ```
 
 Header overrides ride `Network.setExtraHTTPHeaders`. A `User-Agent` set this way
-is honored, but Lightpanda rejects any value containing `Mozilla` by design — so
-you can label the driver, not disguise it as Chrome.
+changes the request header only. To change `navigator.userAgent` as well, use
+`user_agent=`:
+
+```ruby
+page.driver.user_agent = "Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile"
+```
+
+Lightpanda refuses any user agent containing `Mozilla`, by design, and does so
+without an error: `user_agent=` raises on such a value and `headers=` warns.
+Keep the device tokens and drop the `Mozilla/5.0` prefix. Server-side detection
+(the `browser` and `device_detector` gems) reads the string above as an iPhone,
+and `Lightpanda/1.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/135.0.0.0 Safari/537.36`
+as desktop Chrome on macOS.
 
 `reset!` disposes the whole `BrowserContext`, which takes the header overrides
 with it — the fresh context never received them, so the driver drops its copy
@@ -423,7 +435,10 @@ These are upstream Lightpanda limits, not driver bugs:
 | Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
 | CSS: external `<link>`, `@media`, `matchMedia` | Fetched, parsed, and evaluated against the configured `window_size` — responsive variants resolve at the width you set. What's absent is reflow, not the media query |
-| User agent | `Lightpanda/1.0` — no Chrome/Safari token, and Mozilla-styled UA overrides are rejected by design. App-side UA bot detection flags the driver as a bot; allowlist `Lightpanda` in your test environment |
+| User agent | `Lightpanda/1.0` by default. `page.driver.user_agent=` overrides it until `reset!`, but a value containing `Mozilla` is refused by design — keep the device tokens, drop the prefix (see [driver API](#driver-api)). App-side bot detection that wants a `Mozilla` prefix still flags the driver; allowlist `Lightpanda` in your test environment |
+| Time zone | `Emulation.setTimezoneOverride` is accepted and ignored upstream. Use the `timezone` driver option: one zone per browser process, not per test |
+| `document.execCommand` | Text commands work (`insertText`, `delete`, `forwardDelete`, `selectAll`, `insertLineBreak`, `insertParagraph`). Formatting commands (`bold`, `formatBlock`, `insertHTML`, …) return `false` and change nothing, so rich-text editor toolbars built on them can't be tested |
+| `<audio>` / `<video>` playback | No media pipeline. `play()` resolves and fires `play`/`playing`, but metadata never loads: `duration` is `NaN`, `currentTime` stays `0`, and `loadedmetadata`/`timeupdate`/`ended` never fire |
 | Complex Stimulus controllers | Some may not execute fully |
 
 External `<link rel="stylesheet">` files are fetched and parsed by default — the driver always passes `--load-resources stylesheet` — so linked CSS contributes to the cascade and `checkVisibility` / `getComputedStyle` reflect it. `@media`-gated duplicates (mobile/desktop CTA variants) now collapse to a single visible variant instead of raising `Capybara::Ambiguous`. Breakpoints resolve at whatever `window_size` you configure, so a suite that runs mobile-width specs can register a second driver at `[375, 812]`. The catch is that the viewport is JS-visible only: nothing reflows, so a spec that asserts on pixel-level layout, scrolling, or that an element is visually obscured can't pass here.

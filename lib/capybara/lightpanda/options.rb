@@ -55,9 +55,15 @@ module Capybara
       # skipping image fetches entirely. When on, image requests ride the
       # Network domain like any other — they show in `network.traffic` and
       # count toward `wait_for_network_idle`.
+      # timezone: IANA zone ("America/New_York") the browser reports through
+      # Date and Intl. Lightpanda accepts Emulation.setTimezoneOverride but
+      # ignores it (verified 2026-11-18 on 1.0.4 and by source at 12238), so the
+      # zone is set through the TZ variable of the browser process alone: the
+      # test process and the app it boots keep their own. It is per process,
+      # not per test, and has no effect with ws_url (the gem spawns nothing).
       attr_accessor :host, :port, :timeout, :handshake_timeout, :process_timeout,
                     :window_size, :browser_path, :headless, :logger, :save_path,
-                    :raise_on_unhandled_modal, :load_images
+                    :raise_on_unhandled_modal, :load_images, :timezone
       attr_writer :ws_url
 
       def initialize(options = {})
@@ -72,6 +78,7 @@ module Capybara
         @save_path = options[:save_path]
         @raise_on_unhandled_modal = options.fetch(:raise_on_unhandled_modal, false)
         @load_images = options.fetch(:load_images, false)
+        @timezone = validate_timezone(options[:timezone])
         @ws_url = options[:ws_url]
         @logger = parse_logger(options[:logger])
       end
@@ -98,6 +105,7 @@ module Capybara
           save_path: save_path,
           raise_on_unhandled_modal: raise_on_unhandled_modal,
           load_images: load_images,
+          timezone: timezone,
         }
         h[:ws_url] = @ws_url if @ws_url
         h
@@ -114,6 +122,13 @@ module Capybara
         return size if width.is_a?(Integer) && height.is_a?(Integer) && width.positive? && height.positive?
 
         raise ArgumentError, "window_size must be [width, height] of positive Integers, got #{size.inspect}"
+      end
+
+      # Same reason as window_size: fail before a process is spawned.
+      def validate_timezone(zone)
+        return zone if zone.nil? || (zone.is_a?(String) && !zone.empty?)
+
+        raise ArgumentError, "timezone must be an IANA zone name such as \"America/New_York\", got #{zone.inspect}"
       end
 
       def parse_logger(logger)

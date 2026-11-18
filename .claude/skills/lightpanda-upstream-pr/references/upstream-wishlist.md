@@ -328,6 +328,42 @@ Three independent issues:
 ---
 
 
+### B21. `Emulation.setTimezoneOverride` is a stub — answers `{}`, page keeps the host zone
+
+- **Today (verified 2026-11-18 on 1.0.4, and by source on `main` `b4d0a529a` / 12238)**: `emulation.zig#setTimezoneOverride` logs `not_implemented` at debug level and returns `{}`. `Intl.DateTimeFormat().resolvedOptions().timeZone` and `Date#getTimezoneOffset()` keep the host zone after the command and a navigation.
+- **Real-world impact**: beta tester report 2026-11-18 (Rails system tests): apps that detect the browser zone can't be tested per example. Playwright's `timezoneId` context option sends the same command (upstream #3076 lists it).
+- **Want**: Chrome semantics — the override applies to the target's `Date`/`Intl`, an empty `timezoneId` clears it, an unknown zone answers `-32602 Invalid timezone id`. V8 side: set ICU's default zone, then `Isolate::DateTimeConfigurationChangeNotification(kRedetect)`.
+- **Gem workaround**: `timezone` driver option → `TZ` in the spawned process's environment (`process.rb#spawn_env`), verified to move both `Intl` and `Date`. Per process, not per test; nothing for `ws_url`.
+- **Drop-on-fix**: keep the option, but send the CDP command from `create_page` (per context) and add a per-test `driver.timezone=`; `emulation_test.rb` then needs no dedicated process.
+- **Upstream issue**: none filed.
+
+### B22. `Emulation.setUserAgentOverride` answers `{}` when it refuses a `Mozilla` user agent
+
+- **Today (verified 2026-11-18 on 1.0.4, and by source on `main` 12238)**: a `userAgent` containing `Mozilla` (case-insensitive) is refused by `Config.validateUserAgent` (`error.Reserved`), logged at warn level in the browser's own output, and the command still answers `{}`. Same through `Network.setExtraHTTPHeaders`. A non-Mozilla value is applied to the request header and `navigator.userAgent`, and ends with the BrowserContext. The silent `{}` is deliberate: Playwright always sends a Mozilla user agent next to `acceptLanguage`, which is applied even then.
+- **Real-world impact**: beta tester report 2026-11-18: server-side device detection (`browser`, `device_detector`) saw "unknown device"; the tester asked for an error rather than `{}`.
+- **Want**: maintainers' call (the refusal is a product decision). At least document it; an error would break the Playwright path above, so a CDP-visible signal would have to be opt-in.
+- **Gem workaround**: `Network#user_agent=` raises on a Mozilla value, `headers=`/`add_headers` warn; docs give Mozilla-less strings that `browser` and `device_detector` parse (iPhone and desktop Chrome verified 2026-11-18).
+- **Drop-on-fix**: if upstream ever errors, map it and drop `Network.refused_user_agent?`.
+- **Upstream issue**: none filed.
+
+### B23. `document.execCommand` formatting commands unsupported — `bold`, `formatBlock`, `insertHTML`, … return `false`
+
+- **Today (verified 2026-11-18 on 1.0.4, and by source on `main` 12238)**: `browser/frame/exec_command.zig` supports `insertText`, `delete`, `forwardDelete`, `selectAll`, `insertLineBreak`, `insertParagraph`, plus the `styleWithCSS`/`useCSS`/`defaultParagraphSeparator` settings. Every other command returns `false` (`queryCommandSupported` too) and leaves the DOM alone; the file states the policy: a command is supported only once it does what Chrome does, events included. On 1.0.4, `execCommand('bold')` on a selected contenteditable returns `false`; `insertText` works.
+- **Real-world impact**: beta tester report 2026-11-18: rich-text editors whose toolbar calls `execCommand` can't be tested.
+- **Want**: [execCommand spec](https://w3c.github.io/editing/docs/execCommand/) inline formatting first (`bold`, `italic`, `underline`, `strikeThrough`, with `queryCommandState`), then `insertHTML`, then block commands (`formatBlock`, lists). Large: the spec's range-splitting algorithms, one command family per PR.
+- **Gem workaround**: none, deliberately (the gem doesn't polyfill Web APIs).
+- **Drop-on-fix**: nothing in the gem; update the limitations rows in `docs/content/docs.md` and `BETA_TESTING.md`.
+- **Upstream issue**: none filed (#4216, closed, added the function itself).
+
+### B24. No media clock for `<audio>` / `<video>` — metadata never loads, `currentTime` never advances
+
+- **Today (verified 2026-11-18 on 1.0.4, and by source on `main` 12238)**: `webapi/element/html/Media.zig#play` flips `paused`, sets `readyState` to `HAVE_ENOUGH_DATA`, fires `play`/`playing` and resolves. `getDuration` always returns `NaN`, `getEnded` always `false`, `currentTime` only moves when script sets it, and nothing fires `loadedmetadata`, `durationchange`, `timeupdate` or `ended`. Repro: a `data:audio/wav` source, `play()`, read after 1 s → `playing`, `currentTime 0`, `duration NaN`.
+- **Real-world impact**: beta tester report 2026-11-18: custom players (progress bar, seek, pause) can't be tested.
+- **Want**: no decoding or output. Read the duration from the container header (WAV/MP3/MP4/WebM, or even WAV + MP4 first), fire `loadedmetadata`/`durationchange`/`canplay`, then advance `currentTime` on the page clock while playing, with `timeupdate` (~4 Hz), `seeking`/`seeked` and `ended`.
+- **Gem workaround**: none, deliberately.
+- **Drop-on-fix**: nothing in the gem; update the limitations rows.
+- **Upstream issue**: none filed.
+
 ### A63. `Element.scrollIntoView()` ignores its options — always aligns the element's top with the viewport's
 
 - **Today (found 2026-10-16 on nightly 10661, `webapi/Element.zig#scrollIntoView`)**: the body starts with `_ = opts;` and scrolls the window to the element's faux-layout top (`scrollTo(0, max(0, y))`), whatever `block`/`inline` say. `{block: 'center'}`, `{block: 'end'}`, `{block: 'nearest'}` and `scrollIntoView(false)` all behave like `block: 'start'`, and the window's x is reset to 0. Chrome/CSSOM View: `center` puts the element's center at the viewport's, `end` its bottom at the viewport's bottom, `nearest` doesn't scroll an element already in view, each clamped to the scrollable range.

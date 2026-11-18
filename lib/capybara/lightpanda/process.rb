@@ -552,12 +552,21 @@ module Capybara
         args = build_args
 
         ::Process.spawn(
-          { "LIGHTPANDA_DISABLE_TELEMETRY" => "true" },
+          spawn_env,
           binary_path, *args,
           out: @stdout_w,
           err: @stderr_w,
           pgroup: true
         )
+      end
+
+      # TZ reaches the browser only: Process.spawn merges this hash into the
+      # child's environment, so Ruby's own zone (and the app server's) is
+      # untouched. See Options#timezone.
+      def spawn_env
+        env = { "LIGHTPANDA_DISABLE_TELEMETRY" => "true" }
+        env["TZ"] = @options.timezone if @options.timezone
+        env
       end
 
       def build_args

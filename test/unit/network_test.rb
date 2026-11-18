@@ -58,6 +58,47 @@ describe Capybara::Lightpanda::Network do
   let(:browser) { FakeBrowser.new }
   let(:network) { Capybara::Lightpanda::Network.new(browser) }
 
+  # Lightpanda answers {} to a "Mozilla" user agent and keeps its own: without
+  # a signal the spec runs on the default user agent and fails far from here.
+  describe "user agent the browser refuses" do
+    it "warns when headers= carries a Mozilla User-Agent, and still sends the headers" do
+      headers = { "user-agent" => "Mozilla/5.0 (Macintosh)", "X-A" => "1" }
+      _out, err = capture_io { network.headers = headers }
+
+      assert_includes err, "Lightpanda ignores a User-Agent containing \"Mozilla\""
+      assert_includes browser.commands, ["Network.setExtraHTTPHeaders", { headers: headers }]
+    end
+
+    it "warns on add_headers too" do
+      _out, err = capture_io { network.add_headers("User-Agent" => "mozilla/5.0") }
+
+      assert_includes err, "Lightpanda ignores a User-Agent"
+    end
+
+    it "stays quiet for a user agent the browser accepts" do
+      _out, err = capture_io { network.headers = { "User-Agent" => "Lightpanda/1.0 (iPhone) Mobile" } }
+
+      assert_empty err
+    end
+  end
+
+  describe "#user_agent=" do
+    it "overrides through Emulation, which also moves navigator.userAgent" do
+      network.user_agent = "Lightpanda/1.0 (iPhone) Mobile"
+
+      assert_includes browser.commands,
+                      ["Emulation.setUserAgentOverride", { userAgent: "Lightpanda/1.0 (iPhone) Mobile" }]
+    end
+
+    # A new API can refuse outright: sending the command would be a silent no-op.
+    it "raises on a Mozilla value instead of sending a command the browser drops" do
+      error = assert_raises(ArgumentError) { network.user_agent = "Mozilla/5.0 (iPhone)" }
+
+      assert_includes error.message, "drop the prefix"
+      refute(browser.commands.any? { |method, _| method == "Emulation.setUserAgentOverride" })
+    end
+  end
+
   describe "#enable / #disable" do
     it "is idempotent" do
       network.enable

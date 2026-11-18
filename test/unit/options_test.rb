@@ -128,6 +128,23 @@ describe Capybara::Lightpanda::Options do
       assert_equal true, Capybara::Lightpanda::Options.new(with_images.to_h).load_images
     end
 
+    # Driver rebuilds Options from the hash; a zone lost in the round-trip
+    # would leave the browser on the host zone with no error.
+    it "defaults timezone to nil and round-trips it" do
+      assert_nil Capybara::Lightpanda::Options.new.timezone
+      zoned = Capybara::Lightpanda::Options.new(timezone: "America/New_York")
+      assert_equal "America/New_York", Capybara::Lightpanda::Options.new(zoned.to_h).timezone
+    end
+
+    # A Symbol or an empty String would reach the child's TZ as junk, which
+    # libc reads as UTC without complaint: fail before anything is spawned.
+    it "rejects a timezone that is not a zone name" do
+      [:utc, "", 5].each do |bad|
+        error = assert_raises(ArgumentError) { Capybara::Lightpanda::Options.new(timezone: bad) }
+        assert_includes error.message, "timezone must be an IANA zone name"
+      end
+    end
+
     it "excludes ws_url when not explicitly set" do
       options = Capybara::Lightpanda::Options.new
       refute_includes options.to_h.keys, :ws_url
