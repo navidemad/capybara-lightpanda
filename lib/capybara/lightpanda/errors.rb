@@ -13,6 +13,8 @@ module Capybara
     class UnsupportedPlatformError < Error; end
 
     class TimeoutError < Error; end
+    class ScriptTimeoutError < TimeoutError; end
+
     # A JS dialog opened with no accept_modal/dismiss_modal pre-arm in flight
     # and the driver was configured with `raise_on_unhandled_modal: true`.
     # Lightpanda has already applied its silent default by the time this is

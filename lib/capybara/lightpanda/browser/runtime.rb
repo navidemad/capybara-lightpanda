@@ -110,15 +110,22 @@ module Capybara
               var __args = Array.prototype.slice.call(arguments);
               return new Promise(function(__resolve, __reject) {
                 var __timer = setTimeout(function() {
-                  __reject(new Error('Async script timeout after #{timeout_ms}ms'));
+                  __reject(new (class LightpandaCallbackTimeout extends Error {})());
                 }, #{timeout_ms});
                 var __done = function(val) { clearTimeout(__timer); __resolve(val); };
                 __args.push(__done);
-                (function() { #{expression} }).apply(null, __args);
+                try { (function() { #{expression} }).apply(null, __args); }
+                catch (error) { clearTimeout(__timer); __reject(error); }
               });
             }
           JS
-          call_with_args(wrapped, args, frame: frame)
+          # Give the browser's timer time to report a missing callback over CDP.
+          # A disconnected socket or an unanswered command keeps its own error.
+          call_with_args(wrapped, args, frame: frame, command_timeout: wait + 1)
+        rescue JavaScriptError => e
+          raise unless e.class_name == "LightpandaCallbackTimeout"
+
+          raise ScriptTimeoutError, "Async script callback timed out after #{wait}s"
         end
 
         # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
@@ -214,7 +221,7 @@ module Capybara
         # callFunctionOn in the top context, so node handles found inside a
         # frame belong to that context and can't be passed into another
         # ("Argument should belong to the same JavaScript world").
-        def call_with_args(function_declaration, args, return_by_value: false, frame: nil)
+        def call_with_args(function_declaration, args, return_by_value: false, frame: nil, command_timeout: nil)
           arguments = args.map { |a| serialize_argument(a) }
           if frame
             target = frame.remote_object_id
@@ -233,7 +240,8 @@ module Capybara
             awaitPromise: true,
             arguments: arguments,
           }
-          response = page_command("Runtime.callFunctionOn", **params)
+          response = @client.command("Runtime.callFunctionOn", params, session_id: @session_id,
+                                                                       timeout: command_timeout)
           raise_on_js_error!("call_with_args", function_declaration, response)
 
           return unwrap_call_result(response["result"]) unless return_by_value

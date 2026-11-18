@@ -153,6 +153,25 @@ class CupriteContractTest < Minitest::Test
     assert_nil @page.driver.browser.cookies["session"]
   end
 
+  def test_async_callbacks_follow_the_session_wait
+    @page.visit("/")
+    @page.using_wait_time(0.15) do
+      assert_equal "done", @page.evaluate_async_script("arguments[1](arguments[0])", "done")
+      assert_raises(Ferrum::ScriptTimeoutError, Capybara::Lightpanda::ScriptTimeoutError) do
+        @page.evaluate_async_script("setTimeout(arguments[0], 800, 'late')")
+      end
+    end
+    assert_equal 2, @page.evaluate_script("1 + 1"), "a missing callback leaves the browser usable"
+  end
+
+  def test_async_application_errors_reach_the_caller
+    @page.visit("/")
+    error = assert_raises(Ferrum::JavaScriptError, Capybara::Lightpanda::JavaScriptError) do
+      @page.evaluate_async_script("throw new Error('application rejected the edit')")
+    end
+    assert_includes error.message, "application rejected the edit"
+  end
+
   def test_redirect_and_iframe_keep_distinct_responses
     @page.visit("/redirect")
     network = @page.driver.browser.network
