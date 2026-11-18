@@ -21,6 +21,24 @@ describe "Capybara::Lightpanda failed network requests" do
     assert_nil session.status_code
   end
 
+  it "reports a pending dialog on the refused Cuprite visit so the next visit can succeed" do
+    Capybara::Lightpanda.register_cuprite_driver(:strict_navigation, raise_on_unhandled_modal: true,
+                                                                     browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
+    page = Capybara::Session.new(:strict_navigation, TestApp)
+    page.visit("/lightpanda/simple")
+    page.execute_script("setTimeout(() => { alert('pending'); document.body.dataset.done = 'yes' }, 0)")
+    assert page.has_css?("body[data-done=yes]", visible: :all)
+
+    error = assert_raises(Capybara::Lightpanda::UnhandledModalError) do
+      page.visit("http://127.0.0.1:#{TestApp::REFUSED_PORT}/unavailable")
+    end
+    assert_includes error.message, "pending"
+    page.visit("/lightpanda/simple")
+    assert_equal "/lightpanda/simple", page.current_path
+  ensure
+    page&.driver&.quit
+  end
+
   it "does not count a CORS-blocked request as in flight" do
     session.visit("/lightpanda/cross_origin_fetch")
     assert session.has_no_css?("#result", text: "pending")

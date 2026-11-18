@@ -29,8 +29,8 @@ module Capybara
                    else
                      page_command("Page.navigate", **navigation_params(url))
                    end
-          yield result if block_given?
           check_unhandled_modal!
+          yield result if block_given?
         end
         alias goto go_to
 
