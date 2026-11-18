@@ -99,6 +99,14 @@ class CupriteContractTest < Minitest::Test
     refute @page.driver.browser.headers.get.key?("Referer")
   end
 
+  def test_registration_rejects_endpoints_the_transport_cannot_connect_to
+    ["wss://remote.example", "ws://local host", "ws://host:99999", nil].each do |endpoint|
+      assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:remote, ws_url: endpoint) }
+    end
+    Capybara::Lightpanda.register_cuprite_driver(:remote, ws_url: "ws://localhost:9222/cdp")
+    assert_equal "ws://localhost:9222/cdp", Capybara.drivers[:remote].call(nil).options[:ws_url]
+  end
+
   def test_copied_remote_and_chrome_options_fail_before_launch
     error = assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:remote, url: "http://remote") }
     assert_includes error.message, "ws_url:"

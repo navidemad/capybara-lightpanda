@@ -2,6 +2,7 @@
 
 require "json"
 require "socket"
+require "uri"
 require "websocket/driver"
 
 require_relative "../utils/attempt"
@@ -12,6 +13,18 @@ module Capybara
     class Client
       class WebSocket
         attr_reader :url, :messages
+
+        # The transport opens a TCP socket directly and cannot negotiate TLS.
+        def self.endpoint_uri(url)
+          uri = URI.parse(url)
+          if uri.scheme == "ws" && uri.host && !uri.host.empty? && !uri.fragment && (1..65_535).cover?(uri.port)
+            return uri
+          end
+
+          raise ArgumentError, "ws_url: requires a ws:// endpoint with a host and valid port (TLS is unsupported)"
+        rescue URI::InvalidURIError
+          raise ArgumentError, "ws_url: requires a valid ws:// endpoint"
+        end
 
         def initialize(url, options)
           @url = url
@@ -160,9 +173,9 @@ module Capybara
         end
 
         def connect
-          uri = URI.parse(@url)
+          uri = self.class.endpoint_uri(@url)
 
-          @socket = connect_with_retry(uri.host, uri.port)
+          @socket = connect_with_retry(uri.hostname, uri.port)
           @driver = ::WebSocket::Driver.client(self)
 
           setup_callbacks
