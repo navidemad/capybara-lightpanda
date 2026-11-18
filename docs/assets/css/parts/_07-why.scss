@@ -36,54 +36,6 @@
   content: none;
 }
 
-.why__eyebrow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--paper-faint);
-}
-.why__eyebrow a {
-  color: var(--paper);
-  text-decoration: none;
-  border-bottom: 1px solid color-mix(in oklab, var(--ruby) 60%, transparent);
-  padding-bottom: 1px;
-}
-.why__eyebrow-glyph {
-  font-family: var(--display);
-  font-style: italic;
-  color: var(--ruby);
-  font-size: 18px;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.why__quote {
-  margin: 0;
-}
-.why__quote p {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(22px, 2.4vw, 36px);
-  line-height: 1.18;
-  letter-spacing: -0.02em;
-  color: var(--paper);
-  font-weight: 400;
-  font-variation-settings:
-    "opsz" 96,
-    "wght" 460;
-}
-.why__quote em {
-  font-style: italic;
-  color: var(--bamboo);
-  font-weight: 500;
-}
-
 .why__pillars {
   display: flex;
   flex-direction: column;

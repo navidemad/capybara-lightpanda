@@ -542,7 +542,7 @@ Root-caused items from this run were promoted to their own entries: **A44** (CDP
 
 ### New bugs not yet folded into this wishlist (discovered 2026-05-04 → 2026-05-06 via Turbo Drive probes)
 
-Tracked in `UPSTREAM_BUGS.md` at gem root (Bug #9, #10). **Both retracted 2026-06-12** after pure-CDP probes on nightly 6736:
+Were tracked in `UPSTREAM_BUGS.md` at gem root (Bug #9, #10; file removed 2026-11-18 once every entry was closed). **Both retracted 2026-06-12** after pure-CDP probes on nightly 6736:
 
 - **Bug #9 — `requestSubmit()` throws when a listener cancels the SubmitEvent** — **RETRACTED: fixed upstream** (probe 2026-06-12, nightly 6736: returns silently for both form-level and document-level bubbling cancel listeners; almost certainly PR #2639's submit-path rework). Gem follow-up: drop the `try { ... } catch (e) {}` around `CLICK_JS`'s submit path in `node.rb` once `MINIMUM_NIGHTLY_BUILD` covers it.
 - **Bug #10 — `Runtime.evaluate` retains `const`/`let` top-level bindings between CDP calls** — **RETRACTED: NOT A BUG, Chrome parity** (probe 2026-06-12: chrome-headless-shell throws the identical `SyntaxError: Identifier 'sel' has already been declared` without `replMode`; with `replMode: true` both Chrome and Lightpanda allow redeclaration). Top-level lexical declarations persisting across classic scripts is spec behavior; the wishlist's original "fresh script scope" claim was wrong. Gem follow-up: pass `replMode: true` on `Runtime.evaluate` in `browser.rb` and drop the IIFE wrapping (keep the `exceptionDetails` surfacing — that part is a real gem fix).

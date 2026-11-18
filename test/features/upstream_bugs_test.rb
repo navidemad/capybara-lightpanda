@@ -5,8 +5,8 @@ require_relative "../test_helper"
 # Tests d'intégration ciblés sur d'anciens bugs upstream du binaire
 # Lightpanda. Chaque exemple exerce le scénario qui crashait nativement ;
 # les bugs couverts ici (#1, #3, #4, #9, #10) sont désormais corrigés ou
-# rétractés upstream — UPSTREAM_BUGS.md ne liste plus que les bugs encore
-# ouverts —
+# rétractés upstream (le suivi des bugs encore ouverts vit dans
+# `.claude/rules/lightpanda-io.md` et l'upstream wishlist) —
 # mais certains restent doublés par un workaround côté gem (`CLICK_JS` dans
 # `node.rb`).
 #

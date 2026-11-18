@@ -26,7 +26,7 @@ The site is served under `/capybara-lightpanda/`. Link to the home page with `.S
 
 ## SCSS conventions
 
-`assets/css/main.scss` is the entry point. It `@use`s 24 numbered partials (08 and 12 are retired numbers — don't reuse them) in `parts/_NN-name.scss`. **Cascade order is preserved by the numeric prefix — do not reorder lightly.** When adding a new partial:
+`assets/css/main.scss` is the entry point. It `@use`s 21 numbered partials (08, 12, 13, 16 and 23 are retired numbers — don't reuse them) in `parts/_NN-name.scss`. **Cascade order is preserved by the numeric prefix — do not reorder lightly.** When adding a new partial:
 
 1. Pick the next free number (currently 27).
 2. Create `parts/_27-foo.scss`.
