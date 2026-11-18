@@ -89,6 +89,16 @@ class CupriteContractTest < Minitest::Test
     refute @page.driver.browser.headers.get.key?("Referer")
   end
 
+  def test_removing_a_cookie_by_name_clears_every_path_on_its_host
+    @page.visit("/")
+    jar = @page.driver.browser.cookies
+    jar.set(name: "account", value: "root", path: "/")
+    jar.set(name: "account", value: "private", path: "/private")
+    jar.set(name: "account", value: "other", domain: "other.example")
+    jar.remove(name: "account")
+    assert_equal ["other"], jar.select { |item| item.name == "account" }.map(&:value)
+  end
+
   def test_login_cookie_before_visit_and_scoped_cookie_removal
     jar = @page.driver.browser.cookies
     assert jar.set({ name: "session", value: "before", httponly: true, samesite: "Lax" })
