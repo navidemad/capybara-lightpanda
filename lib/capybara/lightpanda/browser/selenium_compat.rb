@@ -118,6 +118,23 @@ module Capybara
           end
         end
 
+        # Chromium's per-page destination, used by Rails download helpers.
+        def download_path=(path)
+          path = path.to_path if path.respond_to?(:to_path)
+          path = path.to_s if path.is_a?(Symbol)
+          unless path.is_a?(String)
+            error = if defined?(::Selenium::WebDriver::Error::InvalidArgumentError)
+                      ::Selenium::WebDriver::Error::InvalidArgumentError
+                    else
+                      ArgumentError
+                    end
+            raise error, "download_path must be a directory path"
+          end
+
+          downloads.download_path = File.absolute_path(path)
+          {}
+        end
+
         # WebDriver's cookie commands operate on the active document. The native
         # cookie jar spans the whole browser context, including other hosts.
         class Manager

@@ -9,6 +9,23 @@ require_relative "client/subscriber"
 module Capybara
   module Lightpanda
     class Client # rubocop:disable Metrics/ClassLength
+      # Apply a state change on the message thread before waking the caller or
+      # delivering the next CDP event. The callback must never issue CDP commands.
+      class AcknowledgedCommand < Concurrent::IVar
+        def initialize(on_success)
+          super()
+          @on_success = on_success
+        end
+
+        def try_set(message)
+          super() do
+            @on_success.call if message&.key?("result")
+            message
+          end
+        end
+      end
+      private_constant :AcknowledgedCommand
+
       def initialize(ws_url, options)
         @options = options
         @ws = WebSocket.new(ws_url, options)
@@ -23,7 +40,7 @@ module Capybara
       # `timeout` bounds the whole command: waiting for the socket lock, writing
       # the frame and waiting for the response all draw on one deadline, so a
       # slow send can't stretch a command past its budget.
-      def command(method, params = {}, async: false, session_id: nil, timeout: nil)
+      def command(method, params = {}, async: false, session_id: nil, timeout: nil, on_success: nil)
         message = build_message(method, params, session_id: session_id)
         effective_timeout = timeout || @options.timeout
         deadline = Utils::Wait.deadline(effective_timeout)
@@ -33,7 +50,7 @@ module Capybara
           return true
         end
 
-        pending = Concurrent::IVar.new
+        pending = on_success ? AcknowledgedCommand.new(on_success) : Concurrent::IVar.new
         @pendings[message[:id]] = pending
 
         @ws.send_message(JSON.generate(message), deadline: deadline)

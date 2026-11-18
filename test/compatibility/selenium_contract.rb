@@ -4,25 +4,34 @@ require "minitest/autorun"
 require_relative "session_isolation"
 require "capybara-lightpanda"
 require "selenium-webdriver"
+require "tmpdir"
 
 class SeleniumContractTest < Minitest::Test
   include SessionIsolationContract
 
   APP = lambda do |env|
+    if env["PATH_INFO"] == "/export"
+      headers = { "content-type" => "application/octet-stream",
+                  "content-disposition" => 'attachment; filename="report.bin"', }
+      next [200, headers, [env.fetch("QUERY_STRING")]]
+    end
     body = env["PATH_INFO"] == "/" ? '<iframe src="/admin/frame"></iframe>' : "<title>Consent</title>"
     [200, { "content-type" => "text/html" }, [body]]
   end
 
   def setup
+    @default_directory = Dir.mktmpdir
     driver = ENV.fetch("CONTRACT_DRIVER", "lightpanda")
     Capybara.register_driver(:migration_browser) do |app|
       case driver
       when "selenium"
         options = Selenium::WebDriver::Chrome::Options.new(args: ["--headless", "--no-sandbox"])
+        options.add_preference("download.default_directory", @default_directory)
         options.binary = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
         Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
       when "lightpanda"
-        Capybara::Lightpanda::Driver.new(app, browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
+        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory,
+                                              browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
       else
         raise ArgumentError, "unknown contract driver #{driver.inspect}"
       end
@@ -34,7 +43,74 @@ class SeleniumContractTest < Minitest::Test
   end
 
   def teardown
-    @page.driver.quit
+    @page&.driver&.quit
+    FileUtils.remove_entry(@default_directory)
+  end
+
+  def test_download_helper_reads_each_export_from_the_selected_directory
+    %w[first second].each do |report|
+      path = File.join(@default_directory, report)
+      assert_equal({}, @browser.public_send(:download_path=, path))
+      assert_raises(Selenium::WebDriver::Error::InvalidArgumentError) { @browser.download_path = nil }
+      download_report(report, path)
+    end
+
+    @page.reset_session!
+    @page.visit("/")
+    # Decidim configures the destination before every download example.
+    after_reset = File.join(@default_directory, "after-reset")
+    @page.driver.browser.download_path = after_reset
+    download_report("after-reset", after_reset)
+    assert_equal "first", File.binread(File.join(@default_directory, "first", "report.bin"))
+    assert_equal "second", File.binread(File.join(@default_directory, "second", "report.bin"))
+  end
+
+  def download_report(report, destination)
+    @page.execute_script("document.body.innerHTML = '<a href=/export?#{report}>Export</a>'")
+    @page.click_link("Export")
+    file = File.join(destination, "report.bin")
+    Capybara::Lightpanda::Utils::Wait.until(timeout: 5) { File.file?(file) && File.binread(file) == report }
+  end
+
+  def test_native_attribute_reads_form_validation_and_current_field_values
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input id="title" required value="draft" data-kind="title">' +
+        '<select id="scope" required><option value="">Choose</option><option value="all">All</option></select>' +
+        '<input id="consent" type="checkbox" checked><a id="export" href="">Export</a>';
+      document.querySelector('#title').value = '';
+      document.querySelector('#consent').checked = false;
+    JS
+    title = @page.find("#title").native
+    assert_equal "Please fill out this field.", title.attribute("validationMessage")
+    assert_equal "Please select an item in the list.", @page.find("#scope").native.attribute("validationMessage")
+    assert_equal "", title.attribute("value")
+    assert_equal "true", title.attribute("required")
+    assert_equal "false", title.attribute("disabled")
+    assert_equal "title", title.attribute("data-kind")
+    assert_nil title.attribute("data-missing")
+    assert_nil @page.find("#consent").native.attribute("checked")
+    assert_equal "", @page.find("#export").native.attribute("href")
+
+    @page.fill_in("title", with: "New initiative")
+    @page.select("All", from: "scope")
+    assert_equal "New initiative", title.attribute("value")
+    assert_equal "", title.attribute("validationMessage")
+    assert_equal "", @page.find("#scope").native.attribute("validationMessage")
+  end
+
+  def test_native_attribute_uses_live_properties_and_preserves_svg_link_values
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input value="live" data-kind="field">' +
+        '<svg><a href="report"><text>Report</text></a></svg>';
+      document.querySelector("input").getAttribute = () => { throw Error("overridden") };
+    JS
+    input = @page.find("input").native
+    assert_equal "live", input.attribute("value")
+    assert_equal "field", input.attribute("data-kind")
+    assert_nil input.attribute("data-absent")
+    link = @page.find("svg a", visible: :all).native
+    assert_equal({ "baseVal" => "report", "animVal" => "report" }, link.attribute("href"))
+    assert_equal link.attribute("href"), link.attribute("HREF")
   end
 
   def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
