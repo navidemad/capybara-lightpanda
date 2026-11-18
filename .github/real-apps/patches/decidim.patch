@@ -130,12 +130,3 @@ index 381002a..c592c6c 100644
  end
  
  server_options = { Silent: true, queue_requests: false }
-@@ -175,7 +115,7 @@ RSpec.configure do |config|
-   end
- 
-   config.after(type: :system) do |example|
--    warn page.driver.browser.logs.get(:browser) unless example.metadata[:driver].eql?(:rack_test)
-+    # Lightpanda doesn't expose Selenium's `.logs` accessor; skip the console dump.
-   end
- 
-   config.include Decidim::CapybaraTestHelpers, type: :system

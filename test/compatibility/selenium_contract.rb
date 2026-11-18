@@ -34,14 +34,38 @@ class SeleniumContractTest < Minitest::Test
     @page.driver.quit
   end
 
+  def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
+    @page.execute_script(<<~JS)
+      setTimeout(() => { throw new Error("migration exception"); }, 0);
+      setTimeout(() => { Promise.reject(new Error("migration rejection")); }, 5);
+      Promise.reject(new Error("migration handled")).catch(() => {});
+      setTimeout(() => {
+        console.error("migration console");
+        document.body.dataset.finished = "yes";
+      }, 20);
+    JS
+    @page.assert_selector("body[data-finished=yes]", visible: :all)
+    severe = @browser.logs.get(:browser).select { |entry| entry.level == "SEVERE" }
+    %w[exception rejection console].each do |kind|
+      assert_equal 1, severe.count { |entry| entry.message.include?("migration #{kind}") }, severe.inspect
+    end
+    refute(severe.any? { |entry| entry.message.include?("migration handled") })
+
+    @page.reset_session!
+    @page.visit("/")
+    refute(@page.driver.browser.logs.get(:browser).any? { |entry| entry.message.include?("migration") })
+  end
+
   def test_decidim_mobile_and_desktop_helpers_change_the_next_pages_responsive_branch
     window = @browser.manage.window
     [["375", 667, true], [1920, 1080, false]].each do |width, height, mobile|
       rect = window.resize_to(width, height)
       assert_equal %w[height width x y], rect.keys.sort
       assert_equal mobile, rect.fetch("width") <= 767
+      assert_equal height, rect.fetch("height")
       @page.visit("/")
       assert_equal mobile, @page.evaluate_script("matchMedia('(max-width: 767px)').matches")
+      assert_equal mobile, @page.evaluate_script("matchMedia('(max-height: 800px)').matches")
     end
     assert_raises(Selenium::WebDriver::Error::InvalidArgumentError) { window.resize_to(-1, 500) }
     assert_raises(ArgumentError) { window.resize_to("mobile", 500) }
