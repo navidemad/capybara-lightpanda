@@ -141,16 +141,14 @@ step_summary << "## #{target}: #{failed.size} failed / baseline #{baseline.size}
 
 unless attributed.empty? && unattributed.empty?
   puts "\nKnown failures by cause:"
-  attributed.sort_by { |_, keys| -keys.size }.each do |slug, keys|
-    confidence = causes.dig(slug, "confidence") || "?"
-    puts "  #{slug.ljust(28)} #{keys.size.to_s.rjust(3)}  (#{confidence})"
-  end
-  puts "  #{'UNATTRIBUTED'.ljust(28)} #{unattributed.size.to_s.rjust(3)}" unless unattributed.empty?
-
   step_summary << "\n**Known failures by cause:**"
   attributed.sort_by { |_, keys| -keys.size }.each do |slug, keys|
-    step_summary << "- `#{slug}` — #{keys.size} (#{causes.dig(slug, 'confidence') || '?'})"
+    confidence = causes.dig(slug, "confidence") || "?"
+    hint = causes.dig(slug, "driver_hint")
+    puts ["  #{slug.ljust(28)} #{keys.size.to_s.rjust(3)}  (#{confidence})", hint].compact.join(" — ")
+    step_summary << ["- `#{slug}` — #{keys.size} (#{confidence})", hint].compact.join(" — ")
   end
+  puts "  #{'UNATTRIBUTED'.ljust(28)} #{unattributed.size.to_s.rjust(3)}" unless unattributed.empty?
 end
 
 unless unattributed.empty?

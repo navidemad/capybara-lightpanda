@@ -29,6 +29,7 @@ describe "Capybara::Lightpanda::Node#drag_to" do
       session.find(:css, "#not_draggable").drag_to(session.find(:css, "#dropzone"))
     end
 
+    assert_match(/Cuprite .*coordinate-based dragging/, err.message)
     assert_match(/html5: true/, err.message)
   end
 

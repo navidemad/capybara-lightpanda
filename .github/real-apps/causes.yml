@@ -156,14 +156,16 @@ goodjob-chart-drag:
   summary: >-
     The chart range helper uses Cuprite's coordinate-based mouse API to drag between ticks.
     The gem has no equivalent mouse object.
+  driver_hint: Run chart drags that use screen coordinates with Cuprite (Chrome).
   patterns:
-    - "undefined method 'mouse'"
+    - "undefined method 'mouse' for (?:an instance of )?Capybara::Lightpanda::Browser"
 
 goodjob-chart-rendering:
   confidence: confirmed
   summary: >-
     The responsive table assertion compares rendered column offsets. The range controls
     assertion computes text contrast from resolved styles. Both require a rendering browser.
+  driver_hint: Run rendered alignment and contrast assertions with Cuprite (Chrome).
   patterns:
-    - 'Performance Page keeps every performance column aligned'
-    - 'Performance Page presents standard-size range controls'
+    - 'Performance Page keeps every performance column aligned[^\n]*\n.*header [\d,]+ vs body [\d,]+'
+    - 'Performance Page presents standard-size range controls[^\n]*\nexpected: >= 4\.5 got: [\d.]+'

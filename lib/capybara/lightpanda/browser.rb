@@ -548,6 +548,16 @@ module Capybara
 
       private
 
+      # Keep capability checks such as respond_to?(:mouse) accurate for suites
+      # that already fall back to another driver.
+      def method_missing(name, *args) # rubocop:disable Style/MissingRespondToMissing
+        return super unless name == :mouse
+
+        message = "undefined method 'mouse' for #{self.class}. Coordinate mouse input needs rendered layout. " \
+                  "Run this example with Cuprite (Chrome)."
+        raise NoMethodError.new(message, name, args, receiver: self)
+      end
+
       def initialize_console_buffers
         @console_logs = []
         @console_logs_mutex = Mutex.new
