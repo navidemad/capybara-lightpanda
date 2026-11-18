@@ -335,7 +335,7 @@ Three independent issues:
 - **Want**: Chrome semantics — the override applies to the target's `Date`/`Intl`, an empty `timezoneId` clears it, an unknown zone answers `-32602 Invalid timezone id`. V8 side: set ICU's default zone, then `Isolate::DateTimeConfigurationChangeNotification(kRedetect)`.
 - **Gem workaround**: `timezone` driver option → `TZ` in the spawned process's environment (`process.rb#spawn_env`), verified to move both `Intl` and `Date`. Per process, not per test; nothing for `ws_url`.
 - **Drop-on-fix**: keep the option, but send the CDP command from `create_page` (per context) and add a per-test `driver.timezone=`; `emulation_test.rb` then needs no dedicated process.
-- **Upstream issue**: none filed.
+- **Upstream issue**: #4700, **Upstream PR**: #4701 + lightpanda-io/zig-v8-fork#229 (both open as of 2026-11-18). Two PRs because V8/ICU bindings ship inside the prebuilt V8 archive: #229 adds `v8__V8__SetDefaultTimeZone` and `v8__Isolate__DateTimeConfigurationChangeNotification`; #4701 wires the handler (`kSkip` on set, `kRedetect` on an empty id or at context end, so `--timezone` is restored) and stays red until a zig-v8 release and pin bump. Known limit, stated in the PR: ICU's zone is process-wide, so another CDP connection sees the override in `Intl`. Branch `cdp-timezone-override`, worktree `/Users/navid/code/upstream/browser-timezone-override`, repro `repro/b21-timezone-override/` (exit 1 on 1.0.4, 0 with fix); tests `cdp.Emulation: setTimezoneOverride …` (cdp batch 454/454).
 
 ### B22. `Emulation.setUserAgentOverride` answers `{}` when it refuses a `Mozilla` user agent
 
