@@ -164,10 +164,21 @@ class CupriteContractTest < Minitest::Test
     assert_equal 2, @page.evaluate_script("1 + 1"), "a missing callback leaves the browser usable"
   end
 
+  def test_async_deadline_includes_a_promise_supplied_to_the_callback
+    @page.visit("/")
+    @page.using_wait_time(0.15) do
+      assert_raises(Ferrum::ScriptTimeoutError, Capybara::Lightpanda::ScriptTimeoutError) do
+        @page.evaluate_async_script("arguments[0](new Promise(resolve => setTimeout(resolve, 800, 'late')))")
+      end
+    end
+  end
+
   def test_async_application_errors_reach_the_caller
     @page.visit("/")
     error = assert_raises(Ferrum::JavaScriptError, Capybara::Lightpanda::JavaScriptError) do
-      @page.evaluate_async_script("throw new Error('application rejected the edit')")
+      @page.evaluate_async_script(<<~JS)
+        throw new (class LightpandaCallbackTimeout extends Error {})('application rejected the edit');
+      JS
     end
     assert_includes error.message, "application rejected the edit"
   end
