@@ -47,24 +47,11 @@ index 16d2439..962736a 100644
    gem "exifr", ">= 1.3.6" # EXIF Reader is a module to read EXIF from JPEG and TIFF images
    gem "factory_bot_rails", "~> 6.2" # factory_bot is a fixtures replacement with a straightforward definition syntax, support for multiple build strategies
    gem "fakeredis", "~> 0.8.0" # Fake (In-memory) driver for redis-rb. Useful for testing environment and machines without Redis.
-diff --git a/spec/support/initializers/capybara.rb b/spec/support/initializers/capybara.rb
-index 1ae762e..1bac92a 100644
---- a/spec/support/initializers/capybara.rb
-+++ b/spec/support/initializers/capybara.rb
-@@ -12,7 +12,7 @@
-   end
- 
-   config.before(:each, :js, type: :system) do
--    driven_by :better_cuprite
-+    driven_by :lightpanda
-   end
- end
- 
 diff --git a/spec/support/initializers/cuprite.rb b/spec/support/initializers/cuprite.rb
 index 6860b14..f109b7b 100644
 --- a/spec/support/initializers/cuprite.rb
 +++ b/spec/support/initializers/cuprite.rb
-@@ -1,36 +1 @@
+@@ -1,36 +1,9 @@
 -require "capybara/cuprite"
 -
 -REMOTE_CHROME_URL = ENV.fetch("CHROME_URL", nil)
@@ -102,6 +89,14 @@ index 6860b14..f109b7b 100644
 -  )
 -end
 +require "capybara-lightpanda"
++
++Capybara::Lightpanda.register_cuprite_driver(
++  :better_cuprite, window_size: [1200, 800],
++  browser_options: {}, process_timeout: 60, timeout: 15,
++  pending_connection_errors: false,
++  headless: !ENV["HEADLESS"].in?(%w[n 0 no false]),
++  **{ ws_url: ENV["CHROME_URL"] }.compact
++)
 diff --git a/spec/system/articles/feeds/basic_spec.rb b/spec/system/articles/feeds/basic_spec.rb
 --- a/spec/system/articles/feeds/basic_spec.rb
 +++ b/spec/system/articles/feeds/basic_spec.rb
