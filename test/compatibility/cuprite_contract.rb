@@ -28,6 +28,7 @@ class CupriteContractTest < Minitest::Test
     @directory = Dir.mktmpdir
     options = { save_path: @directory, window_size: [900, 700] }
     if ENV.fetch("CONTRACT_DRIVER", "lightpanda") == "cuprite"
+      options[:process_timeout] = 30
       options[:browser_path] = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
       Capybara.register_driver(:store_system) { |app| Capybara::Cuprite::Driver.new(app, options) }
     else
@@ -98,7 +99,11 @@ class CupriteContractTest < Minitest::Test
     assert_equal source, echoed_headers["HTTP_REFERER"]
     refute @page.driver.browser.headers.get.key?("Referer")
   end
+end
 
+# Cuprite 0.20.1 boots Chrome when an unused driver receives quit. These
+# registration checks run without a session or browser teardown.
+class CupriteRegistrationTest < Minitest::Test
   def test_registration_rejects_endpoints_the_transport_cannot_connect_to
     ["wss://remote.example", "ws://local host", "ws://host:99999", nil].each do |endpoint|
       assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:remote, ws_url: endpoint) }
