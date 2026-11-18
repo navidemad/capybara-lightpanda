@@ -115,8 +115,10 @@ RSpec.configure do |config|
       # geometry-free. Matching "#drag_to should" excludes exactly the
       # legacy block.
       /node #drag_to should/,
-      # One HTML5 drag example that outruns what Lightpanda can drive (12/13
-      # pass, audited 2026-08-25 on nightly 8796):
+      # One HTML5 drag example that outruns what Lightpanda can drive (11/13
+      # HTML5 examples run: this one and the dragover-clientX/Y spec in
+      # `non_browser_behavior_patterns` below are skipped; audited 2026-08-25
+      # on nightly 8796, recounted 2026-11-18):
       # — SortableJS prevents default on mousedown, steering Selenium's
       #   auto-detect to the LEGACY (real mouse) path — which Selenium can
       #   drive and we cannot; its reordering also needs real hit-testing.

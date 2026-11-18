@@ -2,13 +2,14 @@
 
 require_relative "../test_helper"
 
-# Probe-style spec : exerce les 4 grandes surfaces d'API dont Turbo Drive,
-# Turbo Streams et Stimulus dépendent. Chaque test isole une famille
-# d'API en pure CDP/JS — pas de Capybara magic, pas de Stimulus, pas de
-# Turbo. L'objectif est d'avoir un signal clair "Lightpanda implémente
-# correctement cette famille" plutôt qu'un bug spécifique.
+# Tests de non-régression sur les surfaces d'API dont Turbo Drive, Turbo
+# Streams et Stimulus dépendent. Chaque test isole une famille d'API en pure
+# CDP/JS — pas de Capybara magic, pas de Stimulus, pas de Turbo — pour qu'un
+# échec désigne la famille cassée plutôt qu'un symptôme lointain dans une app.
 #
-# Quand un test échoue, c'est un candidat à filer en upstream wishlist (A/B).
+# Nés comme sondes (« Lightpanda implémente-t-il cette famille ? »), ils
+# passent tous sur le plancher supporté. Un échec est donc une régression,
+# du binaire ou du driver, à diagnostiquer avant de l'attribuer à upstream.
 # rubocop:disable-next Layout/LineLength -- inline JS payloads stay legible only un-wrapped
 describe "Lightpanda Hotwire-zone probes" do
   let(:session) { TestSessions::Lightpanda }
@@ -241,12 +242,10 @@ describe "Lightpanda Hotwire-zone probes" do
       assert_equal "42", result.dig("json", "params", "count")
     end
 
-    it "XHR + FormData also fails the same way (Bug #6 — single root cause)" do
-      # XHR uses a different code path from fetch for body init. If both
-      # fail with the same `[object FormData]` symptom, the upstream fix
-      # likely lives at a shared body-coercion site and a single PR
-      # covers both. If only fetch fails, the bugs are split and need
-      # separate PRs.
+    it "POSTs a FormData body through XHR too (Bug #6 — XHR path)" do
+      # XHR initializes its body on a different code path from fetch. Bug #6
+      # hit both, and PR #2370 fixed both; pinning XHR separately catches a
+      # regression that breaks only one of the two paths.
       result = session.evaluate_async_script(<<~JS)
         var done = arguments[arguments.length - 1];
         var fd = new FormData();
@@ -264,9 +263,7 @@ describe "Lightpanda Hotwire-zone probes" do
       assert_equal true, result["ok"], "XHR + FormData failed entirely: #{result.inspect}"
       assert_equal "xhr", result.dig("json", "params", "via"),
                    "XHR + FormData entries should be parseable; " \
-                   "if this fails the same way as fetch+FormData, " \
-                   "the upstream fix is shared between the two paths " \
-                   "(common body-init coercion). got=#{result.dig('json', 'params').inspect}"
+                   "got=#{result.dig('json', 'params').inspect}"
     end
   end
 

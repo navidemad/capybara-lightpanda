@@ -5,10 +5,11 @@
 # This file tests a REALISTIC Rails 7+ Turbo app — Turbo Drive is on by default,
 # forms submit through Turbo, and Turbo Frames handle partial page updates.
 #
-# The gem automatically:
-# - Disables Turbo Drive (body replacement via fetch doesn't work in Lightpanda)
-# - Submits forms via fetch + document.write when Turbo is present
-# - Keeps Turbo Frames fully functional (lazy-loading, scoped link navigation)
+# Turbo runs unmodified: Drive visits, form submissions and Frames (lazy-loading,
+# scoped link navigation) all go through Turbo's own fetch path in Lightpanda.
+# The gem doesn't patch Turbo. It injects a small tracker
+# (lib/capybara/lightpanda/javascripts/turbo.js) so clicks and form submissions
+# wait until Turbo's requests and renders have settled.
 #
 # NOTE: Turbo loads from CDN as an ES module (async). Tests that depend on Turbo
 # being loaded (link clicks, form submissions) must wait for it — either via
@@ -75,10 +76,10 @@ RSpec.describe "Rails + Turbo system tests", type: :feature do
     end
   end
 
-  # ── Link navigation (Drive auto-disabled) ──────────────────────
+  # ── Link navigation (Turbo Drive) ──────────────────────────────
 
   describe "link navigation" do
-    it "click_link works (Drive auto-disabled)" do
+    it "click_link works through Turbo Drive" do
       visit "/"
       wait_for_turbo_init
       click_link "About"
@@ -140,7 +141,7 @@ RSpec.describe "Rails + Turbo system tests", type: :feature do
       expect(page).to have_css("#post-title")
       expect(page).to have_css("#page-title", text: "Home")
 
-      # Link navigation (Drive disabled)
+      # Link navigation (Turbo Drive)
       click_link "Posts"
       expect(page).to have_css("#page-title", text: "Posts")
       expect(all(".post").length).to eq(2)

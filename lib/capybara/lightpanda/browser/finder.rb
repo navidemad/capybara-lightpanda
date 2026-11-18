@@ -26,17 +26,16 @@ module Capybara
 
         # Find child elements within a specific node.
         # Returns an array of remote object ID strings.
-        #
-        # Wrapped in `with_default_context_wait` so a click that triggered a
-        # navigation immediately before the find (e.g. a fill_in following a
-        # link that mutated the DOM) doesn't race against
-        # `Runtime.executionContextCreated` and surface as
-        # `NoExecutionContextError`. `find_in_document` and `find_in_frame`
-        # already use the same wrapper; `find_within` was the odd one out.
         def find_within(remote_object_id, method, selector)
           find_within_hinted(remote_object_id, method, selector).map(&:first)
         end
 
+        # Wrapped in `with_default_context_wait` so a click that triggered a
+        # navigation immediately before the find (e.g. a fill_in following a
+        # link that mutated the DOM) doesn't race against
+        # `Runtime.executionContextCreated` and surface as
+        # `NoExecutionContextError` — the same wrapper `find_in_document` and
+        # `find_in_frame` use.
         def find_within_hinted(remote_object_id, method, selector, spec = nil)
           with_default_context_wait do
             result = call_function_on(remote_object_id, FIND_WITHIN_JS, method, selector, spec,
@@ -49,8 +48,8 @@ module Capybara
 
         # Ancestor chain of `remote_object_id` from parentNode up to (but
         # excluding) `document`, returned as an array of remote object IDs.
-        # Same `with_default_context_wait` wrapping as `find_within` — same
-        # race window applies.
+        # Same `with_default_context_wait` wrapping as `find_within_hinted` —
+        # same race window applies.
         def parents_of(remote_object_id)
           with_default_context_wait do
             result = call_function_on(remote_object_id, PARENTS_JS, return_by_value: false)
@@ -74,7 +73,7 @@ module Capybara
         # fix (e.g. a new XPath error case) can't silently miss a copy.
         #
         # XPath routes through native `Document.evaluate` + `XPathResult`
-        # (Lightpanda PR #2305, in nightly >=6109); on parse error we return
+        # (Lightpanda PR #2305, in the floor); on parse error we return
         # [] silently to match Capybara's internal XPath generator, which
         # sometimes produces selectors with empty trailing predicates like
         # `(...)[]` that native rejects but `has_element?` expects to behave

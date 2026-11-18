@@ -2,17 +2,22 @@
 
 require_relative "../test_helper"
 
-# Document hit testing retargets shadow content to its host. New browsers can
-# inspect inside the root; older supported builds must retain the host fallback.
+# Document hit testing retargets shadow content to its host, so isObscured
+# looks inside the root with ShadowRoot.elementFromPoint (upstream #4184, in
+# the floor). predicates.js still feature-detects it and accepts the host hit
+# when it is missing.
 describe "Node#obscured? inside a shadow root" do
   let(:session) { TestSessions::Lightpanda }
 
   before { session.visit("/lightpanda/shadow_obscured") }
   after { session.reset_session! }
 
-  # The "covered by a light-DOM element" half isn't pinned: neither 1.0.1 nor
-  # nightly 10965 honors top/left or negative margins in getBoundingClientRect,
-  # so no fixture can make one box overlap another (probed 2026-10-22).
+  # The "covered by a light-DOM element" half isn't pinned here. When this file
+  # was written, no build honored top/left or negative margins in
+  # getBoundingClientRect (probed 2026-10-22 on 1.0.1 and nightly 10965).
+  # Geometry overlap works on the floor now — Capybara's "should see
+  # overlapped elements as obscured" passes on 1.0.4 (spec/spec_helper.rb) —
+  # but the test below still supplies its covering hit directly.
   it "is not obscured when the hit lands on its own host" do
     button = session.find(:css, "#host").shadow_root.find(:css, "button")
 

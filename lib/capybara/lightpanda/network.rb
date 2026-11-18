@@ -204,10 +204,10 @@ module Capybara
       # (mirrors capybara-playwright-driver's navigation_request? hook). CDP
       # normally marks the main-document response via
       # `Network.responseReceived.type`. Lightpanda only started emitting that
-      # field on responses in build 8318 (#3037) — far above the gem's floor —
-      # so match the long way instead: remember the document requestId, store
-      # the response whose requestId equals it. Works on every supported build;
-      # don't "simplify" it to read response.type until the floor clears 8318.
+      # field on responses in build 8318 (#3037), which the floor now clears,
+      # but the gem still matches the long way: remember the document
+      # requestId, store the response whose requestId equals it. Switching to
+      # response.type is possible now; it has not been validated.
       def subscribe
         @request_handler = build_request_handler
         @response_handler = build_response_handler

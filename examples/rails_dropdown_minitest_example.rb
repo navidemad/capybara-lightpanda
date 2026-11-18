@@ -9,6 +9,10 @@
 # The Stimulus controller is rewritten in vanilla JS (see support/dropdown_app.rb)
 # so the repro stands on its own — no Stimulus / Floating UI from a CDN.
 #
+# This is a bug reproduction, not a green example: BuggyDropdownTest is
+# EXPECTED TO FAIL with the ElementNotFound above. SafeDropdownTest shows the
+# pattern that works (the click-outside listener registered inside open()).
+#
 # Run: ruby examples/rails_dropdown_minitest_example.rb
 
 require "bundler/inline"

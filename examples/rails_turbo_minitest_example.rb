@@ -5,10 +5,11 @@
 # This file tests a REALISTIC Rails 7+ Turbo app — Turbo Drive is on by default,
 # forms submit through Turbo, and Turbo Frames handle partial page updates.
 #
-# The gem automatically:
-# - Disables Turbo Drive (body replacement via fetch doesn't work in Lightpanda)
-# - Submits forms via fetch + document.write when Turbo is present
-# - Keeps Turbo Frames fully functional (lazy-loading, scoped link navigation)
+# Turbo runs unmodified: Drive visits, form submissions and Frames (lazy-loading,
+# scoped link navigation) all go through Turbo's own fetch path in Lightpanda.
+# The gem doesn't patch Turbo. It injects a small tracker
+# (lib/capybara/lightpanda/javascripts/turbo.js) so clicks and form submissions
+# wait until Turbo's requests and renders have settled.
 #
 # Run: ruby examples/rails_turbo_minitest_example.rb
 

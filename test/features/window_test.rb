@@ -5,9 +5,10 @@ require_relative "../test_helper"
 # Capybara's Window API against Lightpanda's single-window model.
 #
 # Capybara's own `:windows` battery stays in `capybara_skip` because it needs
-# several independent windows, which Lightpanda can't serve (one target per CDP
-# connection, upstream #1962). What IS reachable is the slice real Rails suites
-# lean on: resizing to exercise a responsive breakpoint. Before this,
+# several independent windows, which the driver doesn't serve (one CDP target
+# per session, see Driver#open_new_window). What IS reachable is the slice
+# real Rails suites lean on: resizing to exercise a responsive breakpoint.
+# Before this,
 # `page.current_window.resize_to(...)` raised NotSupportedByDriverError from
 # Capybara::Driver::Base, so a suite had to pin one viewport for the whole run
 # via the `window_size` driver option. viewport_test.rb covers that static
@@ -144,7 +145,7 @@ describe "Capybara::Lightpanda window API" do
     # instead — a bare NotSupportedByDriverError sends people to the issue tracker.
     it "explains why a second window cannot be opened" do
       error = assert_raises(Capybara::NotSupportedByDriverError) { driver.open_new_window }
-      assert_match(/single target|1962/, error.message)
+      assert_match(/single target/, error.message)
       assert_match(/Capybara session/, error.message)
     end
 

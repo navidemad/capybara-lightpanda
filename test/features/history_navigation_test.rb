@@ -5,17 +5,18 @@ require_relative "../test_helper"
 # go_back / go_forward must behave like the browser's back button: an entry
 # created by history.pushState is restored in the SAME document (JS state
 # kept, `popstate` fired), and only an entry from another document loads a
-# page. Lightpanda's Page.navigateToHistoryEntry reloads even a pushState
-# entry, which wiped SPA/Stimulus state and never fired `popstate` — so a
-# "browser back button" system test could only fail there.
+# page. The driver runs history.back()/forward() in the page for this:
+# Page.navigateToHistoryEntry used to reload even a pushState entry, which
+# wiped SPA/Stimulus state and never fired `popstate`. Upstream #3903 (11113,
+# in the floor) fixed that, but Browser#back/#forward keep the in-page path
+# until a switch is validated (see CLAUDE.md).
 describe "Driver#go_back / #go_forward" do
   let(:session) { TestSessions::Lightpanda }
 
   after { session.reset_session! }
 
-  # Lightpanda restores a pushState entry in place only when it differs from
-  # the current URL by its fragment (`URL.eqlDocument`), so that is the shape
-  # pinned here — the step-by-step wizards that keep their state in the hash.
+  # Entries that differ only by fragment — the step-by-step wizards that keep
+  # their state in the hash. Entries whose paths differ are pinned below.
   describe "between pushState entries that differ by fragment" do
     before do
       session.visit("/lightpanda/history")

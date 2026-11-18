@@ -62,9 +62,8 @@ module Capybara
         #
         # Like `evaluate`, the no-args path uses `replMode: true` so top-level
         # `const`/`let` redeclarations across calls don't raise. Also raises
-        # on JS exceptions so silent failures don't mask test bugs (the
-        # previous fast path swallowed them because `awaitPromise: false` was
-        # checked but `exceptionDetails` was not).
+        # on JS exceptions (it checks `exceptionDetails`) so silent failures
+        # don't mask test bugs.
         def execute(expression, *args, frame: nil)
           if frame && args.empty?
             call_with_args(FRAME_EXECUTE_JS, [expression], return_by_value: true, frame: frame)
@@ -279,10 +278,9 @@ module Capybara
         # Cheaper than walking properties and good enough for shared specs. Releases
         # the original handle so long-lived sessions don't accumulate leaked objectIds.
         #
-        # V8 refuses to return a cyclic object by value. Below 10255 every
-        # Zig-backed object, `window` included, came back as a node; since
-        # upstream #3831 (in the floor) `window` lands here and raised. Both it
-        # and a plain self-referencing object return CyclicObject.
+        # V8 refuses to return a cyclic object by value. `window` lands here
+        # (only real nodes carry subtype node) and is cyclic, as is a plain
+        # self-referencing object: both return CyclicObject instead of raising.
         def serialize_remote_object(object_id)
           json = page_command(
             "Runtime.callFunctionOn",

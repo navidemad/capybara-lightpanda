@@ -49,8 +49,9 @@ describe "Capybara::Lightpanda keyboard activation" do
   end
 
   # The anchor assertion deliberately stops at "the activation event arrived".
-  # Whether Lightpanda then *navigates* is upstream issue #3179, still open —
-  # pinning navigation here would couple this file to an unrelated bug.
+  # Whether Lightpanda then *navigates* was upstream issue #3179 (closed
+  # 2026-09-15) — a separate behavior, so the fixture cancels the default
+  # action and this file stays about key activation alone.
   it "dispatches an activation click to an <a href> on Enter" do
     session.find(:css, "#link").send_keys(:enter)
 
@@ -89,10 +90,11 @@ describe "Capybara::Lightpanda keyboard activation" do
     assert_includes session.current_url, "q=hello"
   end
 
-  # A printable keydown now carries a `keypress` with it. Plain strings go
-  # through `Input.insertText` (no key events at all), so a *modified* char is
-  # what exercises `Input.dispatchKeyEvent` — and shift is neither ctrl nor
-  # meta, so the keypress is not suppressed.
+  # A printable keydown now carries a `keypress` with it. A plain US-layout
+  # character already goes out as keyDown + keyUp (`Keyboard.char_definition`);
+  # the shifted char here also covers the held-modifier path
+  # (`dispatch_modified_char`) — shift is neither ctrl nor meta, so the keyDown
+  # keeps its `text` and the keypress is not suppressed.
   it "fires keypress for a printable key" do
     session.find(:css, "#field").send_keys([:shift, "a"])
 
