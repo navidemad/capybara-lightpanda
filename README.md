@@ -21,7 +21,7 @@ end
 ```
 
 > [!IMPORTANT]
-> Lightpanda does not draw the page. Tests that need screenshots, pixel positions or real scrolling will fail. See [Limits](#limits).
+> Lightpanda has no layout engine. It does not know where things are on the page. Tests that need screenshots, pixel positions or real scrolling will fail. See [Limits](#limits).
 
 Read the [docs](https://navidemad.github.io/capybara-lightpanda/docs/) for setup, options, Turbo, limits and help with errors.
 
@@ -66,7 +66,7 @@ Each gem version gets one Lightpanda version. Today it is 1.0.4. We test the gem
 
 ## Limits
 
-Lightpanda reads your CSS and uses it. Media queries use the `window_size` you set. But Lightpanda does not draw the page, so an element has no real place or size.
+Lightpanda reads your CSS and uses it. Media queries use the `window_size` you set. But Lightpanda has no layout engine. So an element has no real place or size on the page.
 
 Tests that need one of these things will fail:
 
@@ -93,7 +93,7 @@ A new gem version can need a new Lightpanda version. If your browser is too old,
 ## Credits
 
 - [Lightpanda](https://lightpanda.io/) is the headless browser.
-- [Capybara](https://github.com/teamcapybara/capybara) is the test tool.
+- [Capybara](https://github.com/teamcapybara/capybara) is the test framework.
 - [Ferrum](https://github.com/rubycdp/ferrum) and [`lightpanda-ruby`](https://github.com/marcoroth/lightpanda-ruby) gave us ideas for the design.
 
 We took some code ideas from these projects. They use the MIT license. [NOTICE.md](NOTICE.md) has the list and the copyright notices.
