@@ -136,17 +136,17 @@ module Capybara
         styles.to_h { |style| [style, call(GET_STYLE_JS, style)] }
       end
 
-      def click(_keys = [], **_options)
-        call(CLICK_JS)
+      def click(keys = [], **_options)
+        call(CLICK_JS, mouse_event_options(keys))
         driver.browser.wait_for_idle
       end
 
-      def right_click(_keys = [], **_options)
-        call("function() { this.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true})) }")
+      def right_click(keys = [], **_options)
+        call(DISPATCH_MOUSE_EVENT_JS, "contextmenu", mouse_event_options(keys))
       end
 
-      def double_click(_keys = [], **_options)
-        call("function() { this.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true})) }")
+      def double_click(keys = [], **_options)
+        call(DISPATCH_MOUSE_EVENT_JS, "dblclick", mouse_event_options(keys))
       end
 
       # A real pointer entering an element fires `mouseover` (bubbling) AND
@@ -378,6 +378,15 @@ module Capybara
 
       private
 
+      def mouse_event_options(keys)
+        names = Array(keys).map(&:to_s)
+        {
+          bubbles: true, cancelable: true,
+          shiftKey: names.include?("shift"), ctrlKey: names.intersect?(%w[control ctrl]),
+          altKey: names.include?("alt"), metaKey: names.intersect?(%w[meta command]),
+        }
+      end
+
       def find_hinted(method, selector, hints)
         driver.browser.find_within_hinted(@remote_object_id, method, selector, self.class.hint_spec(**hints))
               .map { |oid, cache| self.class.new(driver, oid, cache, frame_scoped: @frame_scoped) }
@@ -597,7 +606,7 @@ module Capybara
       # 6167 as duplicate `turbo:submit-start` events; the first request
       # gets aborted by the second and Turbo never renders the response.
       CLICK_JS = <<~JS
-        function() {
+        function(mouseOptions) {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
           // Emulate coordinate hit-testing without a layout engine. In a real
           // browser a pointer click on a container lands on its frontmost
@@ -653,7 +662,7 @@ module Capybara
           // Cancelling mousedown suppresses focus/text-selection in a real
           // browser but never the click, so the click below is dispatched
           // unconditionally.
-          var pressed = hit.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          var pressed = hit.dispatchEvent(new EventCtor('mousedown', mouseOptions));
           // mousedown's default action moves focus. Ours is untrusted, so the
           // browser won't do it (and since upstream #3702 its click handling
           // doesn't either): focus what the press landed on, or blur the
@@ -668,8 +677,8 @@ module Capybara
               doc.activeElement.blur();
             }
           }
-          hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
-          var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
+          hit.dispatchEvent(new EventCtor('mouseup', mouseOptions));
+          var clickEvt = new EventCtor('click', mouseOptions);
           // A link to a scheme the browser can't fetch (mailto:, tel:, sms:…)
           // goes to an external app in Chrome and the page stays. The link's
           // own activation is a no-op for it since upstream #3940 (10536, in
@@ -719,6 +728,11 @@ module Capybara
           }
         }
       JS
+
+      DISPATCH_MOUSE_EVENT_JS = <<~JS
+        function(type, options) { this.dispatchEvent(new MouseEvent(type, options)); }
+      JS
+      private_constant :DISPATCH_MOUSE_EVENT_JS
 
       # Picks the right Event constructor based on the event name so listeners
       # that key on `event instanceof MouseEvent` / `instanceof SubmitEvent`

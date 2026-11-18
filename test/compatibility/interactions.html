@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <title>Editor</title>
+  <button id="select" type="button">Select row</button>
+  <button id="discard" type="button">Discard</button>
+  <output id="decision"></output>
+  <label>Title <input id="title"></label>
+  <output id="preview"></output>
+  <output id="saved"></output>
+  <script>
+    const select = document.querySelector("#select");
+    window.mouseEvents = [];
+    for (const type of ["mousedown", "mouseup", "click", "dblclick", "contextmenu"]) {
+      select.addEventListener(type, event => {
+        window.mouseEvents.push([type, event.shiftKey, event.ctrlKey, event.altKey, event.metaKey]);
+        if (type === "contextmenu") event.preventDefault();
+      });
+    }
+
+    document.querySelector("#discard").onclick = () => {
+      document.querySelector("#decision").textContent = confirm("Discard changes?") ? "discarded" : "kept";
+    };
+
+    const titleField = document.querySelector("#title");
+    titleField.addEventListener("input", () => {
+      document.querySelector("#preview").textContent = titleField.value.toUpperCase();
+    });
+    titleField.addEventListener("keydown", event => {
+      if (event.key === "Enter") document.querySelector("#saved").textContent = titleField.value;
+    });
+  </script>
+</html>

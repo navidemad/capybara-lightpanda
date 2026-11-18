@@ -18,6 +18,8 @@ end
 class CupriteContractTest < Minitest::Test
   APP = lambda do |env|
     case env["PATH_INFO"]
+    when "/editor"
+      next [200, { "content-type" => "text/html" }, [File.read(File.join(__dir__, "interactions.html"))]]
     when "/reports"
       next [200, { "content-type" => "text/html" }, ['<a href="/report.csv" download>Download report</a>']]
     when "/report.csv"
@@ -188,6 +190,42 @@ class CupriteContractTest < Minitest::Test
     assert @page.driver.wait_for_reload(0.15)
     assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.12
     assert_equal "draft", @page.evaluate_script("window.unsaved")
+  end
+
+  def test_click_modifiers_reach_the_entire_mouse_sequence_and_reset
+    @page.visit("/editor")
+    button = @page.find_button("Select row")
+    button.click(:shift, :alt)
+    button.click
+    flags = [[true, false, true, false], [false, false, false, false]]
+    expected = flags.flat_map { |keys| %w[mousedown mouseup click].map { |type| [type, *keys] } }
+    assert_equal expected, @page.evaluate_script("window.mouseEvents")
+  end
+
+  def test_secondary_click_handlers_receive_their_modifiers
+    @page.visit("/editor")
+    button = @page.find_button("Select row")
+    button.right_click(:control, :alt)
+    button.double_click(:meta)
+    events = @page.evaluate_script("window.mouseEvents.filter(e => ['dblclick', 'contextmenu'].includes(e[0]))")
+    assert_equal [["contextmenu", false, true, true, false], ["dblclick", false, false, false, true]], events
+  end
+
+  def test_confirm_wrappers_choose_the_application_branch
+    @page.visit("/editor")
+    @page.dismiss_confirm("Discard changes?") { @page.click_button("Discard") }
+    assert_equal "kept", @page.find("#decision").text
+    @page.accept_confirm("Discard changes?") { @page.click_button("Discard") }
+    assert_equal "discarded", @page.find("#decision").text
+  end
+
+  def test_fill_and_keyboard_helpers_drive_editor_state
+    @page.visit("/editor")
+    @page.fill_in("Title", with: "Draft")
+    assert_equal "DRAFT", @page.find("#preview").text
+    @page.find_field("Title").send_keys("!", :enter)
+    assert_equal "DRAFT!", @page.find("#preview").text
+    assert_equal "Draft!", @page.find("#saved").text
   end
 
   def test_redirect_and_iframe_keep_distinct_responses
