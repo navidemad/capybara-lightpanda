@@ -9,7 +9,7 @@ description = "A Capybara driver for Lightpanda, the headless browser built in Z
 github_url = "https://github.com/navidemad/capybara-lightpanda"
 rubygems_url = "https://rubygems.org/gems/capybara-lightpanda"
 # version-bearing — keep in sync with lib/capybara/lightpanda/version.rb
-version = "0.19.0"
+version = "0.19.1"
 
 [markup.goldmark.renderer]
 unsafe = true

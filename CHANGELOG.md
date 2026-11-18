@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.1] - 2026-11-18
+
+### Fixed
+
+- **Clicking a multi-select select2 field that already holds a choice opens its dropdown.** The click landed on the selected choice, which select2 ignores, so the dropdown never opened and the next `find` of an option failed. The click now stops on the field itself. Single-select select2 and other clicks behave as before.
+
 ## [0.19.0] - 2026-11-17
 
 > **The default browser is now a release, not the nightly.** If you relied on the rolling nightly, set `Capybara::Lightpanda::Binary.required_version = "nightly"` or `LIGHTPANDA_VERSION=nightly`. `required_version = nil` now means "the gem's default release".
