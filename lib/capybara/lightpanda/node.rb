@@ -978,13 +978,13 @@ module Capybara
 
       VISIBLE_TEXT_JS = "function() { return _lightpanda.visibleText(this); }"
 
-      # Selenium WebDriver 4.41, javascript/webdriver/atoms/attribute.js.
+      # Capybara supplies its own getAttribute atom to the Selenium bridge.
       WEBDRIVER_ATTRIBUTE_JS = <<~JS
         function(name) {
           const key = name.toLowerCase();
           const tag = this.localName;
           const raw = this.getAttribute(name);
-          if (key === 'style') return this.style.cssText;
+          if (key === 'style') return this.style?.cssText ?? null;
           if ((tag === 'a' && key === 'href') || (tag === 'img' && key === 'src')) {
             return raw ? this[key] : raw;
           }
@@ -999,12 +999,6 @@ module Capybara
           let value;
           try { value = this[prop]; } catch (_) { return raw; }
           if (key === 'spellcheck') return String(this.spellcheck);
-          const booleans = 'allowfullscreen allowpaymentrequest allowusermedia async autofocus autoplay checked ' +
-            'compact complete controls declare default defaultchecked defaultselected defer disabled ended ' +
-            'formnovalidate hidden indeterminate iscontenteditable ismap itemscope loop multiple muted nohref nomodule noresize ' +
-            'noshade novalidate nowrap open paused playsinline pubdate readonly required reversed scoped ' +
-            'seamless seeking selected truespeed typemustmatch willvalidate';
-          if (booleans.split(' ').includes(key)) return raw !== null || value ? 'true' : null;
           if (value == null || typeof value === 'object' || typeof value === 'function') return raw;
           return String(value);
         }

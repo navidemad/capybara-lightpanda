@@ -47,6 +47,7 @@ class SeleniumContractTest < Minitest::Test
     assert_equal "Please select an item in the list.", @page.find("#scope").native.attribute("validationMessage")
     assert_equal "", title.attribute("value")
     assert_equal "true", title.attribute("required")
+    assert_equal "false", title.attribute("disabled")
     assert_equal "title", title.attribute("data-kind")
     assert_nil title.attribute("data-missing")
     assert_nil @page.find("#consent").native.attribute("checked")
