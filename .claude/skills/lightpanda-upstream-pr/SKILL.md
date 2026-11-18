@@ -1,6 +1,6 @@
 ---
 name: lightpanda-upstream-pr
-description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/upstream/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A1 upstream", "tackle the next Lightpanda bug", "open a PR for the cookie clearing bug", "implement A14 upstream", "file an issue and PR for the requestSubmit gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
+description: Drive a single upstream Lightpanda contribution end-to-end — pick one item from this skill's references/upstream-wishlist.md (Section A bug or Section B missing method), verify it's still broken on current nightly, locate the Zig code in /Users/navid/code/upstream/browser, implement the fix with a Zig test, build a self-contained reproducer (Lightpanda + CDP only — never Ruby/Capybara), file a GitHub issue first with mermaid sequence diagrams of broken-vs-expected flow and the runnable repro script, then open a linked PR (`Closes #<issue>`) with mermaid flowcharts of the old-vs-new code path. Always issue first, then PR — never PR alone. Audience for issue/PR is a Zig browser engineer who is NOT familiar with Ruby, Rails, Capybara, RSpec, or Turbo — never use framework names; describe behavior in CDP/HTML-spec terms. Use this skill when the user says "fix A63 upstream", "tackle the next Lightpanda bug", "open a PR for the scrollIntoView bug", "implement B21 upstream", "file an issue and PR for the setTimezoneOverride gap", "send the form.submit fix to lightpanda-io". Do NOT use for gem-side code changes (those edit /Users/navid/code/personal/capybara-lightpanda — different repo) or for general upstream reconnaissance (that's the sync-upstream skill). Section C items (no rendering, no compositor) are out of scope and the skill should refuse them.
 user_invocable: true
 model: opus
 effort: xhigh
@@ -14,14 +14,14 @@ Two repos are in play. Keep them straight:
 
 | Path                                    | Role                                    | What this skill edits                                                                                                       |
 | --------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/Users/navid/code/capybara-lightpanda` | The gem (Ruby). Source of the wishlist. | NOTHING — only reads `references/upstream-wishlist.md` (this skill's own reference) and gem workaround sources for context. |
+| `/Users/navid/code/personal/capybara-lightpanda` | The gem (Ruby). Source of the wishlist. | NOTHING — only reads `references/upstream-wishlist.md` (this skill's own reference) and gem workaround sources for context. |
 | `/Users/navid/code/upstream/browser`             | Lightpanda upstream (Zig).              | All edits land here. New branch, new commit, PR opened from here.                                                           |
 
 The gem stays untouched in this skill. Removing the gem-side workaround happens in a **separate** turn after the upstream PR merges — never speculatively delete a workaround in the same session as the fix.
 
 ## Reference files (load when needed)
 
-- `references/upstream-wishlist.md` — source of truth for items A1–A19, B1–B11. Read at Step 0.
+- `references/upstream-wishlist.md` — source of truth for the Section A (`A<n>`) and Section B (`B<n>`) items. IDs are stable but not contiguous: resolved items are struck through or removed. Read at Step 0.
 - `references/file-mapping.md` — wishlist item → gem-side workaround file + upstream Zig source file, plus a directory test-runner table for `webapi/`. Read at Steps 1c, 3, and 4.
 - `references/templates.md` — implementation prompt, reproducer skeleton, issue body, commit message, PR body, final report. Read at Steps 4, 6, 7, 8, 9.
 - `references/visual-verification.md` — GitHub markdown rendering checklist used by Steps 7c and 8e.
@@ -41,9 +41,9 @@ Hard rules:
 
 ## Step 0: Pick the item
 
-Source of truth: `references/upstream-wishlist.md`. Each entry has an ID (`A1`–`A19`, `B1`–`B11`).
+Source of truth: `references/upstream-wishlist.md`. Each entry has an ID (`A<n>` for Section A bugs, `B<n>` for Section B missing methods); the numbering has gaps, and struck-through entries are resolved.
 
-User typically names the item directly ("fix A14"). If they don't:
+User typically names the item directly ("fix A63"). If they don't:
 
 - Ask which one, OR
 - Suggest the next from the recommended order (Step 0a) and confirm.
@@ -58,18 +58,13 @@ The wishlist's "Quick wins" section reflects the priority. If unsure, pick the s
 
 **Treat `(open as of YYYY-MM-DD)` annotations as hints, not facts.** The wishlist is hand-maintained and stale fast — items can flip from `open` to merged-and-shipped on the same day you start work. Always cross-check `git fetch && git log --oneline origin/main -20` and `gh pr list --state all --limit 20` before committing to an item. Step 1a/1b run these checks anyway, but a stale annotation can mislead the _recommended-order_ picking before you ever get there.
 
-1. **A14** — `requestSubmit()` polyfill on `HTMLFormElement`. Smallest, isolated, easy to test. Good first PR.
-2. **A6** — `Page.reload` replays POST. Targeted CDP fix, single domain file.
-3. **A1 + A2 + B3** — cookie clearing trio. Bundle these because they share a root cause. (Exception to the "one PR per item" rule — only because the upstream fix is a single change.)
-4. **A3** — `Page.handleJavaScriptDialog` actually dismisses/accepts. Touches `page.zig` + dialog plumbing.
-5. **A8** — `#id` selector regression after body replacement. Check `gh pr list` first; we may already have a PR open.
-6. **B1** — `XPathResult` + `document.evaluate`. Largest scope (~700 LOC drop on the gem side). Last because it's the most invasive Zig change.
+Then take the wishlist's **Quick wins → "Unfiled items most worth claiming"** list as the order, skipping struck-through and already-filed entries. Don't keep a copy of that order here — every item this file once listed (cookie clearing, `requestSubmit`, dialogs, XPath…) has since left the wishlist.
 
 Section A bugs > Section B missing methods, generally — bugs have clearer "want" semantics (Chrome behavior). Missing methods may need design discussion upstream first.
 
 ### Step 0b: Anti-patterns (refuse to do these)
 
-- **Bundling unrelated fixes into one PR.** Each item gets its own branch + issue + PR. Reviewers reject mixed changes. The A1+A2+B3 bundle above is the only exception, and only because they share a one-function fix.
+- **Bundling unrelated fixes into one PR.** Each item gets its own branch + issue + PR. Reviewers reject mixed changes. The only exception is items that share one root cause the upstream fix addresses in a single change.
 - **Writing Ruby tests for the Zig fix.** Verification on the gem side is a separate phase (Step 5) and uses the _existing_ gem-side test as a regression check, not a new spec.
 - **Skipping the Zig test.** Every fix gets at least one `test "..."` block in the same .zig file or under `src/browser/tests/`. CI requires it and reviewers will block.
 - **Opening a PR without an issue first.** Always file the issue (Step 7) before the PR (Step 8). An orphan PR has no place to record the reproducer cleanly and gives the maintainer no chance to weigh in on approach before code review.
@@ -79,7 +74,7 @@ Section A bugs > Section B missing methods, generally — bugs have clearer "wan
 - **Filing the issue or PR without visually verifying the rendering.** After every `gh issue create` and `gh pr create`, navigate to the URL with the Playwright MCP and confirm mermaid diagrams render as graphs (not as `mermaid` code blocks), code fences are intact, `Closes #<n>` is hyperlinked, and the body reads cleanly. See `references/visual-verification.md`. Steps 7c and 8e are mandatory, not optional.
 - **Re-filing an item we already filed.** If `gh pr list` (Step 1b) returns an open PR by us for this item, report status and stop — don't open a duplicate.
 - **Branching off a stale `main`.** Every session that enters `/Users/navid/code/upstream/browser` MUST `git checkout main && git pull origin main` before creating the fix branch — even if the repo "looks fine" or you were on `main` recently. Upstream moves fast; stale-base branches conflict and miss fixes. Step 2 enforces this; never skip it.
-- **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.16.0 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. Never pass `-Dprebuilt_v8_path=…` either: `build.zig` picks up the archive `make download-v8` cached, and an explicit path overrides that tag-keyed lookup. Just write `zig build check` / `zig build test`. See "Local build & test commands" below.
+- **Hand-injecting `mise exec --` or `$V8` is not your job.** Zig 0.17.1 is pinned in `~/.config/mise/config.toml` globally, so plain `zig` in any shell (including Claude's non-interactive Bash subshells) resolves to the mise-pinned binary. Never pass `-Dprebuilt_v8_path=…` either: `build.zig` picks up the archive `make download-v8` cached, and an explicit path overrides that tag-keyed lookup. Just write `zig build check` / `zig build test`. See "Local build & test commands" below.
 - **Running `make build` or `make build-dev` for verification.** Those forces `ReleaseFast` and rebuild the V8 snapshot — slower than what you need. Use `zig build check` / `zig build test` directly.
 
 ### Step 0c: Pivot policy when verification surfaces an adjacent bug
@@ -110,7 +105,7 @@ Run these checks in order. Each one cross-references an existing Step in this fi
 
 1. **Locate the worktree, then check state.** Run `git worktree list | grep <branch>` from anywhere inside `/Users/navid/code/upstream/browser*` to find which directory has the branch checked out — a fresh session won't know, and trying to `git checkout <branch>` from the main clone when it's worktree-locked fails with `'<branch>' is already used by worktree at <path>` (and the workaround of checking out `fork/<branch>` puts you in detached HEAD, which silently misroutes any later `git push`). If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone. Fall back to `cd /Users/navid/code/upstream/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts) and don't assume the branch is missing. Then `cd <worktree-or-main-clone>; git status` is clean; `git log --oneline main..HEAD` shows the expected commits; `git diff main..HEAD --stat` is scoped to relevant files only (no `repro/`, no editor config).
 2. **Issue + PR linkage.** `gh issue view <n> --repo lightpanda-io/browser --json state,title` and `gh pr view <n> --repo lightpanda-io/browser --json state,closingIssuesReferences`. The PR's `closingIssuesReferences` MUST include the issue number — see Step 8c. If empty, the `Closes #<n>` line is missing or malformed in the PR body.
-3. **Toolchain pin.** `zig version` prints `0.16.0` — see Step 2's pin block.
+3. **Toolchain pin.** `zig version` satisfies `build.zig.zon`'s `minimum_zig_version` (0.17.x) — see Step 2's pin block.
 4. **Compile clean.** `zig build check` is clean — see Step 4a.
 5. **Targeted test passes.** Run the new test with the right `TEST_FILTER` form (see "Local build & test commands" — `<test-name>#<html-basename>` for fixtures). Confirm it passes.
 6. **Toggle-off proves the test exercises the fix.** `git checkout main -- <production-file>`, re-run the targeted test, confirm it fails. Restore with `git checkout HEAD -- <production-file>`. See Step 4a's two-pattern bullet.
@@ -125,14 +120,14 @@ If any of 1–8 fail, surface the specific failure to the user with a fix propos
 
 The recipes below are bare `zig build …`. Two layers do the right thing automatically so the recipe stays minimal (point 3 is the one macOS-27 exception):
 
-1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.16.0"` and `zls = "0.16.0"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.16.0 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.16.0`.
+1. **Toolchain pin** — `~/.config/mise/config.toml` lists `zig = "0.17.1"` and `zls = "0.17.0"` globally, so the snapshot PATH that any shell (interactive or not) inherits resolves `zig` to mise's 0.17.1 install. No per-project `mise.toml`, no `mise exec --` prefix needed. If you ever see a Zig stdlib mismatch error (`error: root source file struct 'fs' has no member named 'File'` and friends), the snapshot is stale — `zig version` should print `0.17.1`.
 2. **Prebuilt V8** — run `make download-v8` once per checkout (the main clone AND every `git worktree add` directory). It only fetches, into `.lp-cache/prebuilt-v8/<zig-v8 tag>/`, and skips when that file is already there. `build.zig` then finds the archive on its own: every build prints `Using prebuilt V8: <path>`. If it prints `No prebuilt V8 at <path>; using the V8 source-build path` instead, stop the build (a source build takes 20+ min) and run `make download-v8` in that checkout first. The cache is resolved from the checkout root (`b.pathFromRoot(".lp-cache")`), so a fresh worktree never sees the main clone's archive.
 
    The cache path is keyed on the zig-v8-fork tag because a release keeps the same asset filename across tags. Never copy an archive to the top level of `.lp-cache/prebuilt-v8/` or pass it with `-Dprebuilt_v8_path`: `build.zig` ignores the top level, and an explicit path bypasses the tag check. The old `lp-zig-build-rewrite.sh` hook did exactly that, and the flat archive it injected turned out truncated (13 MB instead of 106 MB, `nm`: "truncated or malformed archive", found 2026-09-14). If a link fails on `undefined symbol: _v8__…` while `zig build check` passes, suspect the cache before the Zig code: delete `.lp-cache/prebuilt-v8/` and rerun `make download-v8`.
 
    **Upstream bumps V8 under you — re-run `make download-v8` after every `git pull`.** Verified 2026-10-03: main moved V8 14.9 → 15.5 (#3676), the checkout only had the old tag's archive, and the first `zig build check` silently took the source-build path — `gclient sync` pulled 2.4 GB of V8 sources plus 695 MB of depot_tools into `.lp-cache/` before dying on a full disk. The build prints the `No prebuilt V8` line long before the damage; on a cold build, `make download-v8` first, then build. Clean-up if it happens: delete `.lp-cache/v8-<ver>` and `.lp-cache/depot_tools-<ver>` (pure source-build artifacts).
 
-3. **macOS 27 SDK** — verified 2026-10-03 on macOS 27.0.1: Zig 0.16 detects the `MacOSX27.0.sdk` through `xcrun --sdk macosx --show-sdk-path` and its bundled libcxx fails to compile against it (`use of undeclared identifier 'INFINITY'` in `__random/clamp_to_integral.h`, "sub-compilation of libcxx failed"). The 26.5 SDK is still installed under `/Library/Developer/CommandLineTools/SDKs/`. Pin it for Zig only with a throwaway `xcrun` wrapper first on `PATH` that answers `--show-sdk-path` with `/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk` and `exec /usr/bin/xcrun "$@"` otherwise, then run every build as `PATH=<wrapper-dir>:$PATH zig build …`. `SDKROOT` does not work — `xcrun --sdk macosx` ignores it. Upstream CI (Linux) is unaffected.
+3. **macOS 27 SDK** — verified 2026-10-03 on macOS 27.0.1: Zig detects the `MacOSX27.0.sdk` through `xcrun --sdk macosx --show-sdk-path`. On 0.16 its bundled libcxx failed to compile against it (`use of undeclared identifier 'INFINITY'` in `__random/clamp_to_integral.h`); on 0.17 a cold build (fresh worktree) fails to link host tools (`ld64.lld: could not load TAPI file …MacOSX27.0.sdk/…/Foundation.tbd`, verified 2026-10-10). The 26.5 SDK is still installed under `/Library/Developer/CommandLineTools/SDKs/`. Pin it for Zig only with a throwaway `xcrun` wrapper first on `PATH` that answers `--show-sdk-path` with `/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk` and `exec /usr/bin/xcrun "$@"` otherwise, then run every build as `PATH=<wrapper-dir>:$PATH zig build …`. `SDKROOT` does not work — `xcrun --sdk macosx` ignores it. Upstream CI (Linux) is unaffected.
 
 | Command                                                    | When to use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -146,10 +141,10 @@ Sanity-check the toolchain once per session before the first build. **`build.zig
 
 ```bash
 grep minimum_zig_version /Users/navid/code/upstream/browser/build.zig.zon   # the authority
-zig version                                                        # must match it
+zig version                                                        # must satisfy it
 ```
 
-As of 2026-07-24 both say `0.16.0`. If `zig version` disagrees with `build.zig.zon`, fix the global mise pin (`~/.config/mise/config.toml`) to match the repo and restart Claude Code so the PATH snapshot regenerates — then update the numbers in this skill. If `zig` resolves to something outside `~/.local/share/mise/installs/zig/` (e.g. a Homebrew install), mise isn't reaching this shell's PATH. If `zig` isn't installed at all, `mise install zig@<version> zls@<version>` from anywhere does it.
+As of 2026-11-18 `build.zig.zon` says `0.17.0` and the mise pin is `0.17.1` (a newer patch satisfies the minimum). If `zig version` disagrees with `build.zig.zon`, fix the global mise pin (`~/.config/mise/config.toml`) to match the repo and restart Claude Code so the PATH snapshot regenerates — then update the numbers in this skill. If `zig` resolves to something outside `~/.local/share/mise/installs/zig/` (e.g. a Homebrew install), mise isn't reaching this shell's PATH. If `zig` isn't installed at all, `mise install zig@<version> zls@<version>` from anywhere does it.
 
 Performance notes:
 
@@ -163,9 +158,9 @@ Performance notes:
 
 Known-flaky-on-macOS tests (reproduce identically on `main` HEAD, NOT caused by your branch):
 
-- `MCP - findElement` (`src/mcp/tools.zig:1141`)
-- `cdp.lp: action tools` (`src/cdp/domains/lp.zig:357`)
-- `cdp.lp: waitForSelector` (`src/cdp/domains/lp.zig:423`)
+- `MCP - findElement` (`src/mcp/tools.zig`)
+- `cdp.lp: action tools` (`src/server/cdp/domains/lp.zig`)
+- `cdp.lp: waitForSelector` (`src/server/cdp/domains/lp.zig`)
 - The `server:` group (`src/server/Server.zig` / `http.zig`): `a shutdown in the same batch as a readable connection`, `an accept at the connection limit …`, `releasing past the pool's retain …`, `accepted sockets get TCP keepalive` (ConnectionResetByPeer / NotAccepted), and a **panic** in `http connections stay ordered by deadline` (`Server.zig` kqueue `@intCast(socket)` — integer does not fit). Verified 2026-09-06 identical on unmodified `main` 14d868486; the five tests and the kqueue `@intCast(socket)` are all still in `Server.zig` on `main` 6fbbeeec3 (2026-10-03, not re-run). The panic ABORTS the whole run, so an unfiltered `zig build test` never reaches most of the suite on macOS — batch the rest by prefix instead (`TEST_FILTER=WebApi`, `cdp`, `browser.`, `MCP`, `agent`, `bidi`, `Selector`, `Form` covered ~1270 tests in ~8 min on 2026-09-06; filters are include-only, there is no exclude).
 
 If `zig build test` fails ONLY on tests in this list, do NOT investigate. Confirm upstream CI on `main` is green for `zig-test` / `e2e-test` (`gh run list --repo lightpanda-io/browser --branch main --limit 3`) and move on — these are local-environment (likely macOS-vs-Linux) drift, not regressions you introduced. To prove pre-existence in seconds: `cd /Users/navid/code/upstream/browser && TEST_FILTER='<test name>' zig build test` against the unmodified `main`. Same panic = pre-existing. Only investigate if a NEW test fails or one of these starts producing a different failure mode.
@@ -189,7 +184,7 @@ Four confirmation paths, in order of cheapness:
 
 0. **`lightpanda fetch --dump html` against a static page** — cheapest of all, and sufficient whenever the bug is pure JS-visible behavior (a getter, a constructor, a DOM API — no CDP events, navigation, or network involved). Write a page whose script runs the check and writes results into a `<pre id=out>`, serve it (`python3 -m http.server`), run `lightpanda fetch --dump html <url>` and grep the serialized DOM. **The trap (burned 2026-08-24): `fetch` prints NOTHING without `--dump html`** — exit 0, empty stdout, empty stderr — which reads exactly like "the probe page didn't run". The same page + a 3-line assertion script later becomes the Step 6 reproducer with zero CDP client for the maintainer to install (precedent: the A53 repro).
 1. **Pure-CDP probe against the installed nightly** — the strongest signal and the right default for any DOM / event / navigation / form / cookie bug. Copy `references/probe-lib/cdp.js` into `/tmp/probe-<id>/`, write a 30-line `probe.js` that exercises the bug via `Page.navigate` + `Runtime.evaluate` + `Target.attachToTarget`, and run it against a `lightpanda serve` from the binary already on disk. Asserts the wishlist's claim with no gem code in the loop. **Do this even if you "know" the bug is real** — the 5 minutes saves the 30+ minutes of branch + tests + issue-draft work that gets thrown away when you discover the bug is already fixed.
-2. **Grep the relevant `.zig` file for the missing symbol** — only valid for _pure absence_ (e.g. B1's `XPathResult` doesn't exist anywhere; B3's `Network.getAllCookies` not in the dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
+2. **Grep the relevant `.zig` file for the missing symbol** — only valid for _pure absence_ (e.g. a DOM interface that doesn't exist anywhere in `src/browser/webapi/`, or a CDP method missing from its domain's dispatch enum). Absence is the repro. Don't use this path for "method exists but misbehaves" — that needs a probe.
 3. **Build local debug binary + re-run probe** — only when the installed nightly is older than recent commits to the relevant `.zig` file AND the probe against nightly is ambiguous. `zig build` then `LIGHTPANDA_BIN=./zig-out/bin/lightpanda <re-run probe>`.
 
 **Cross-check intuition with `git blame`**: if the wishlist comment says "method X doesn't navigate" but `git blame src/<path>.zig` on the relevant function shows the navigation call has been in place for weeks/months, trust blame. The wishlist note is one author's empirical claim from a single timestamp; blame is what's actually in `main` right now. Today's session burned an hour on A4 because the gem's `CLICK_JS` comment authoritatively claimed `form.submit()` doesn't navigate, but `git blame Frame.zig:3756-3768` showed the navigation logic had been there for a month — the gem author had misdiagnosed a symptom.
@@ -211,7 +206,7 @@ gh issue list --repo lightpanda-io/browser --search "<keyword>" --state all --li
 gh pr list --repo lightpanda-io/browser --search "<keyword>" --state all --limit 10
 ```
 
-Keywords to use per item: `requestSubmit` for A14, `clearBrowserCookies` for A1, `getNavigationHistory` for B2, `XPathResult` for B1, `handleJavaScriptDialog` for A3, etc.
+Keywords to use per item: the CDP method or DOM API the entry names — e.g. `scrollIntoView` for A63, `setTimezoneOverride` for B21, `execCommand` for B23, `loadEventFired` for A10.
 
 If a PR exists:
 
@@ -243,16 +238,16 @@ git checkout -b fix-<item-id>-<slug>           # e.g. fix-a14-requestsubmit, fix
 
 If the main clone is on a different open-PR branch (because a previous session left it there), prefer creating a worktree for the new fix — keeps the main clone's branch intact and matches the existing per-fix-worktree pattern. Use `git worktree add -b fix-<id>-<slug> ../browser-<slug> origin/main`; the worktree starts from a fresh `origin/main` automatically. Budget for the cold build: the worktree gets its own empty `.zig-cache`, so its first `zig build test` / `zig build` is a from-scratch compile (see "Performance notes" — run it in background, don't chain invocations).
 
-**`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/upstream/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
+**`git worktree list` only enumerates worktrees of the repo containing CWD.** Running it from `/Users/navid/code/personal/capybara-lightpanda` (the gem) returns the gem's worktrees, not the browser's. To see browser worktrees you must `cd /Users/navid/code/upstream/browser && git worktree list` (or any subdirectory of the browser repo). Same trap exists in Step 10b for review-flow — same fix.
 
 If `git status` is dirty (uncommitted work from a previous session, stray repro artifacts, etc.), stop and surface it to the user — do not stash, reset, or clean without permission. The user decides whether to keep, discard, or move that work.
 
 **Remote naming**: this clone uses two remotes — `origin = lightpanda-io/browser` (upstream, where `git pull` reads from) and a personal fork (e.g. `fork = navidemad/browser`, where pushes go). Run `git remote -v` to confirm. The pull above targets `origin`; **the push at Step 8a targets the fork** (`git push -u fork ...`) and `gh pr create` needs `--head <fork-owner>:<branch> --repo lightpanda-io/browser` since the source branch lives on the fork. If `git remote -v` shows only `origin` pointing at your fork, the convention collapses to plain `origin` — but verify before assuming.
 
-Sanity-check the Zig toolchain. The repo's `build.zig.zon` declares `minimum_zig_version = "0.16.0"` but does not commit a `.zig-version` / `.tool-versions` file. The pin lives in `~/.config/mise/config.toml` globally (`zig = "0.16.0"`, `zls = "0.16.0"`), so any shell resolves `zig` to the right version without per-project setup:
+Sanity-check the Zig toolchain. The repo's `build.zig.zon` declares `minimum_zig_version = "0.17.0"` but does not commit a `.zig-version` / `.tool-versions` file. The pin lives in `~/.config/mise/config.toml` globally (`zig = "0.17.1"`, `zls = "0.17.0"`), so any shell resolves `zig` to the right version without per-project setup:
 
 ```bash
-zig version   # MUST print 0.16.0 — see "Local build & test commands" if not
+zig version   # MUST satisfy build.zig.zon's minimum_zig_version (0.17.x) — see "Local build & test commands" if not
 ```
 
 If it prints anything else, restart Claude Code so the snapshot picks up the global mise pin. Building with the wrong Zig produces stdlib errors that look like real bugs and burn debugging time.
@@ -273,11 +268,11 @@ Work TDD: failing test → confirm it fails → implement → confirm it passes 
 
 Use the local commands from "Local build & test commands" — fast enough that all of these gates are cheap:
 
-- `zig version` prints `0.16.0`, matching `build.zig.zon`'s `minimum_zig_version`. Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
+- `zig version` prints `0.17.1`, satisfying `build.zig.zon`'s `minimum_zig_version` (`0.17.0`). Anything else means mise isn't resolving the pinned toolchain — fix Step 2's pin before doing anything else, otherwise every subsequent build is suspect.
 - `zig build check` is clean. No compile errors anywhere in the project (not just the file you edited).
 - A new `test "..."` block exists in the appropriate `.zig` file covering the fix. Run `TEST_FILTER=<test name> zig build test` and confirm it passes.
 - Toggle the fix off and confirm the new test fails — this proves the test actually exercises the fix, not some unrelated path. Restore the fix afterwards. Two patterns by where the test lives:
-  - **Test in the same `.zig` file as the fix** (common for CDP changes — both live in `src/cdp/domains/<domain>.zig`): **Use `Edit` to surgically revert just the production lines, NOT `git stash`**. A `git stash` sweeps the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
+  - **Test in the same `.zig` file as the fix** (common for CDP changes — both live in `src/server/cdp/domains/<domain>.zig`): **Use `Edit` to surgically revert just the production lines, NOT `git stash`**. A `git stash` sweeps the test out alongside the fix and the toggle re-run reports `0 of 0 tests passed` instead of a real failure. The reliable pattern is: `Edit` the fix call site to its pre-fix shape (e.g. delete the `.method/.body/.header` fields, hardcode `.method = .GET`), run, observe failure, `Edit` it back. If you do reach for `git stash`, stage the test first (`git add <test-file>`) so `--keep-index` actually retains it.
   - **Test is an HTML fixture under `src/browser/tests/<dir>/`** (common for `htmlRunner` directories like `tests/element/`, `tests/document/`): the production code and the fixture live in different paths, so use `git checkout main -- <production-file>` to surgically revert just the production code. The fixture stays untouched and the same `TEST_FILTER='<runner>#<fixture>.html'` re-run reports a real fail (e.g. for the B7 fix: `git checkout main -- src/browser/webapi/selector/Parser.zig`, then `TEST_FILTER='WebApi: Element#attribute_value_escapes.html' zig build test`). Restore with `git checkout HEAD -- <production-file>` ONLY IF the branch has at least one commit on it. **If you haven't committed the fix yet, HEAD points at the same SHA as `main` and the restore is a silent no-op** — your edited Input.zig is gone and the next run validates the wrong-and-restored production code with no warning. Two ways to avoid the trap: (a) commit the fix first, then toggle, then `git checkout HEAD --` actually restores; or (b) `cp <production-file> /tmp/<file>.fix` before the `git checkout main --`, then `cp /tmp/<file>.fix <production-file>` to restore. Either way, sanity-check after the restore by grepping for a unique token from your fix (e.g. `grep -c snapToStep src/<path>` should be ≥1).
   - **Verify the test actually ran the new fixture, not nothing.** Both `WebApi: Element` and `WebApi: HTML.Input` are valid test names but each owns _different_ fixtures via separate `htmlRunner(...)` calls — `tests/element/*.html` (top-level) vs. `tests/element/html/*.html` (subdirectory, registered explicitly per file). A wrong `TEST_FILTER` matches the test name but skips your fixture entirely; both pre- and post-fix runs print `1 of 1 test passed` and look fine, hiding the bug. Two tells: (1) the timing — a fixture-less run finishes in ~0.1ms; a real fixture run shows tens of ms (e.g. `9.46ms`). (2) The output should print `- src/browser/tests/.../<your-fixture>.html` under the test name. If it doesn't, the filter missed; `grep htmlRunner src/browser/webapi/<area>/<File>.zig` to find which test name owns your fixture.
 - `zig build test` (full suite, no filter) passes — catches regressions in adjacent code.
@@ -296,7 +291,7 @@ If recent `main` runs in upstream's GitHub Actions are red without your changes 
 The point of this PR is to make the gem's workaround unnecessary. Spot-check that the fix actually does that, **without modifying gem code**:
 
 ```bash
-cd /Users/navid/code/capybara-lightpanda
+cd /Users/navid/code/personal/capybara-lightpanda
 # Read the workaround from Step 1c.
 # Mentally trace: with the upstream fix in place, would the workaround's gem-side
 # fallback path still trigger? If yes, the upstream fix is incomplete.
@@ -304,7 +299,7 @@ cd /Users/navid/code/capybara-lightpanda
 
 For items where the gem skip-lists tests (`spec/spec_helper.rb`), the test should be runnable after the fix lands — but **don't unskip in this PR's scope**. That belongs to a follow-up gem PR.
 
-For items where the gem implements a polyfill (A14, B1, A8), confirm the upstream behavior matches what the polyfill emulates — same return shape, same event sequence, same error semantics. If it doesn't, the polyfill won't be deletable, which means the fix is incomplete or the polyfill diverged from spec.
+For items where the gem implements a polyfill (e.g. A22's `_lightpanda.isContentEditable` helper), confirm the upstream behavior matches what the polyfill emulates — same return shape, same event sequence, same error semantics. If it doesn't, the polyfill won't be deletable, which means the fix is incomplete or the polyfill diverged from spec.
 
 If the validation reveals a gap (fix works but doesn't fully obsolete the workaround): document the residual gap in the PR description rather than expanding scope. A partial fix is fine; a misleading PR is not.
 
@@ -459,7 +454,7 @@ GitHub also has a "code suggestion" feature: a comment whose body starts with `\
 
 ### 10b. Address the feedback in code BEFORE replying
 
-**Locate the worktree first.** Run `cd /Users/navid/code/upstream/browser && git worktree list | grep <branch>` — the explicit `cd` is required because a fresh session typically starts in `/Users/navid/code/capybara-lightpanda` (the gem) and `git worktree list` only enumerates worktrees of the repo containing cwd. The branch is often checked out at `/Users/navid/code/upstream/browser-<slug>/` from a previous session — `cd` into the worktree directory before editing. If you skip this and `git checkout <branch>` from the main clone, you'll either be blocked (`'<branch>' is already used by worktree at <path>`) or fall back to checking out `fork/<branch>` and end up in detached HEAD, where edits commit fine but the eventual `git push` either fails or pushes the wrong ref.
+**Locate the worktree first.** Run `cd /Users/navid/code/upstream/browser && git worktree list | grep <branch>` — the explicit `cd` is required because a fresh session typically starts in `/Users/navid/code/personal/capybara-lightpanda` (the gem) and `git worktree list` only enumerates worktrees of the repo containing cwd. The branch is often checked out at `/Users/navid/code/upstream/browser-<slug>/` from a previous session — `cd` into the worktree directory before editing. If you skip this and `git checkout <branch>` from the main clone, you'll either be blocked (`'<branch>' is already used by worktree at <path>`) or fall back to checking out `fork/<branch>` and end up in detached HEAD, where edits commit fine but the eventual `git push` either fails or pushes the wrong ref.
 
 If `grep` returns **nothing**, the branch is not in any worktree — it lives in the main clone (a previous session may have done all its work there, or this is the first follow-up since the branch was created). Fall back to `cd /Users/navid/code/upstream/browser && git checkout <branch>`; don't `git worktree add` (creates a duplicate that drifts from the original), don't assume the branch is missing.
 

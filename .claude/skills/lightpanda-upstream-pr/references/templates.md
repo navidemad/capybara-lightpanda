@@ -5,7 +5,7 @@ Load this file when reaching Step 4 (implementation), Step 6 (reproducer), Step 
 Sections:
 
 - [Implementation prompt (Step 4)](#implementation-prompt-step-4) — TDD brief for the Zig change
-- [CDP test gotchas (Step 4)](#cdp-test-gotchas-step-4) — non-obvious behaviors of `src/cdp/testing.zig` that bite first-time test authors
+- [CDP test gotchas (Step 4)](#cdp-test-gotchas-step-4) — non-obvious behaviors of `src/server/cdp/testing.zig` that bite first-time test authors
 - [Reproducer skeleton (Step 6)](#reproducer-skeleton-step-6) — `repro.js` + `repro.sh` with the non-default `chrome-remote-interface` config Lightpanda needs
 - [Issue body (Step 7)](#issue-body-step-7) — bug report with broken-vs-expected sequence diagrams
 - [Commit message (Step 8)](#commit-message-step-8) — area-prefixed, includes `Closes #<n>`
@@ -25,7 +25,7 @@ Either way, fill in the `<...>` placeholders before applying — the prompt assu
 
 ````
 **Context**: Working in `/Users/navid/code/upstream/browser`, the Lightpanda browser
-(Zig 0.16.0 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from the
+(Zig 0.17 + V8). Branch `fix-<id>-<slug>`. Need to fix item `<ID>` from the
 gem's upstream wishlist: `<one-line description>`.
 
 **Today's behavior**: `<copy from wishlist>`
@@ -36,11 +36,11 @@ gem's upstream wishlist: `<one-line description>`.
 - Primary: `<file from file-mapping.md>`
 - Related: `<any test fixtures or sibling files>`
 
-**TDD steps** (local builds are fast — global mise pin handles Zig 0.16.0, `build.zig` finds the prebuilt V8 that `make download-v8` cached in the checkout, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
+**TDD steps** (local builds are fast — global mise pin handles Zig 0.17, `build.zig` finds the prebuilt V8 that `make download-v8` cached in the checkout, so `zig build check` finishes in <10s and a filtered `zig build test` in 30s–2min):
 
 1. Write a failing test in `<test file>` that exercises the bug. For CDP fixes
    use `test "cdp.<Domain> <method>"` blocks in the domain `.zig` file
-   (pattern: see existing tests in `src/cdp/domains/network.zig`). For JS API
+   (pattern: see existing tests in `src/server/cdp/domains/network.zig`). For JS API
    fixes use HTML fixtures under `src/browser/tests/<area>/` (pattern: see
    `src/browser/tests/element/duplicate_ids.html` from PR #2244). Before
    adding a `test "..."` block in `webapi/<File>.zig`, consult the
@@ -84,12 +84,12 @@ gem's upstream wishlist: `<one-line description>`.
 
 ## CDP test gotchas (Step 4)
 
-The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domain> <method>"` blocks, but a few non-obvious behaviors will burn an iteration if you don't know them up front.
+The `src/server/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domain> <method>"` blocks, but a few non-obvious behaviors will burn an iteration if you don't know them up front.
 
 - **`expectSentEvent("Method", .{}, .{})` is a *strict* empty-object match, not a wildcard.** The `params: .{}` parameter serializes to JSON `"params": {}` and is deep-compared against the received message. Real CDP events almost always carry a populated `params` object (e.g. `Page.frameNavigated` has `params.frame.{id, loaderId, url, ...}`), so an empty-struct expectation never matches and the assertion times out with `ErrorNotFound` on a perfectly-correct fixture. Two workable alternatives:
   - Match a discriminating field: `try ctx.expectSentEvent("Page.frameNavigated", .{ .frame = .{ .loaderId = "LID-0000000002" } }, .{})`. Mind that the loader/frame ID counters are **shared across tests in the same `zig build test` run** — don't hard-pin a value if your test order isn't deterministic.
   - Skip event matching entirely and drain the runner: `var runner = try bc.session.runner(.{}); try runner.wait(.{ .ms = 2000 });`. Cleaner when you only need "navigation finished, now I'll inspect the frame state" without caring which event fired.
-- **`Frame.navigate` asserts `_load_state == .waiting`.** A second direct `frame.navigate(...)` on a frame that already loaded panics with `frame.renavigate`. The CDP-side helpers (`doNavigate`, `doReload` in `src/cdp/domains/page.zig`) work around this by calling `session.replacePage()` first when the state isn't `.waiting`, returning a fresh frame in `.waiting`. Mirror that pattern in tests that want to drive multiple navigations on the same browser context — or do the second navigation *as the first* on a context you set up by hand (`cdp_inst.createBrowserContext()` + `bc.session.createPage()`).
+- **`Frame.navigate` asserts `_load_state == .waiting`.** A second direct `frame.navigate(...)` on a frame that already loaded panics with `frame.renavigate`. The CDP-side handlers (`navigate`, `doReload` in `src/server/cdp/domains/page.zig`) work around this: they call `frame.navigate` only while `canNavigateInPlace` holds (state `.waiting`, main world untouched) and otherwise go through `session.initiateRootNavigation`. Mirror that pattern in tests that want to drive multiple navigations on the same browser context — or do the second navigation *as the first* on a context you set up by hand (`cdp_inst.createBrowserContext()` + `bc.session.createPage()`).
 - **`loadBrowserContext({ .url = "..." })` does a GET only.** There's no parameter for `method` / `body` / `header`. If your test needs the first navigation to be POST, hand-roll the setup (`createBrowserContext` → set `bc.id`/`session_id`/`target_id` → `bc.session.createPage()` → `frame.navigate(url, .{ .method = .POST, .body = ..., .header = ... })`) instead of trying to bend `loadBrowserContext`.
 - **Adding HTTP routes goes in `src/testing.zig`'s `testHTTPHandler`.** It's a flat `if (std.mem.eql(u8, path, ...))` chain that responds via `req.respond(...)`. The handler runs synchronously per request; `req.head.method` gives the HTTP method, and you don't have to read or discard the request body before responding. Reuse existing routes (`/xhr`, `/xhr/json`) where possible to keep the test surface small.
 - **`loadBrowserContext({ .url = "anything.html" })` creates a real V8 JS context even when the URL 404s.** The test HTTP handler responds with a 404 for any unmapped path under `/src/browser/tests/`, but `frame.navigate` still initializes the JS runtime. Existing tests like `cdp.frame: addScriptToEvaluateOnNewDocument` lean on this — `hi.html` doesn't exist on disk. Useful when your test only needs JS execution, not fixture content. If you want a *real* fixture, drop one in `src/browser/tests/cdp/` (CDP-test-specific area; the directory test runners ignore it) and reference it as `.url = "cdp/<name>.html"`.
@@ -103,7 +103,7 @@ The `src/cdp/testing.zig` harness is the standard scaffold for `test "cdp.<Domai
   try testing.expectEqual(true, v.toBool());
   ```
   `Value` conversions: `.toBool()` (bool), `.toI32() !i32`, `.toStringSlice() ![]u8`, `.isNull() bool`, `.isUndefined()`, `.isTrue()`. Cheaper than going through `Runtime.evaluate` + `expectSentResult` — the test reads the JS value directly without a CDP round-trip.
-- **`cmd.params(struct{...})` returns `?T`, not `T`.** Required params: unwrap with `orelse return error.InvalidParams`. Optional params: declare them with `?T = null` defaults inside the struct. The pre-existing pattern across `src/cdp/domains/*.zig` is `(try cmd.params(struct{...})) orelse return error.InvalidParams`.
+- **`cmd.params(struct{...})` returns `?T`, not `T`.** Required params: unwrap with `orelse return error.InvalidParams`. Optional params: declare them with `?T = null` defaults inside the struct. The pre-existing pattern across `src/server/cdp/domains/*.zig` is `(try cmd.params(struct{...})) orelse return error.InvalidParams`.
 - **`expectSentResult(null, .{ .id = N })` asserts a successful empty response** — i.e. the dispatch handler called `cmd.sendResult(null, .{})`. Matching shape on the wire: `{"id": N, "result": {}}`. Use this for any handler whose contract is "no payload, just success" (`Page.handleJavaScriptDialog`, `Network.clearBrowserCookies`, `Page.enable`, etc.).
 
 ---
@@ -403,7 +403,7 @@ Validation: <one-line — did the gem's workaround become deletable in principle
 
 Next:
 - Wait for nightly to ship the fix.
-- Follow-up gem PR: delete <workaround> in /Users/navid/code/capybara-lightpanda when nightly drops.
+- Follow-up gem PR: delete <workaround> in /Users/navid/code/personal/capybara-lightpanda when nightly drops.
 - When the PR merges (and again when the fix ships in a tagged nightly), refresh the wishlist annotation in `references/upstream-wishlist.md` for `<ID>` — flip status from `(open as of YYYY-MM-DD)` to `merged ...` / `shipped in <nightly>`. The `/sync-upstream` skill audits this if you'd rather batch it.
 - For each follow-up issue listed above: open its own branch + PR later, applying this skill end-to-end.
 ```

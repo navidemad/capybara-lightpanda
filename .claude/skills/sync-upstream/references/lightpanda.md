@@ -8,7 +8,7 @@ Rules destination: `.claude/rules/lightpanda-io.md`
 ## What to read before reconning
 
 - `.claude/rules/lightpanda-io.md` — current understanding (CDP methods used, known bugs, tracked issues)
-- `lib/capybara/lightpanda/browser.rb`, `node.rb`, `cookies.rb`, `frame.rb` — implementations whose workarounds depend on Lightpanda quirks
+- `lib/capybara/lightpanda/browser.rb` (frames via `Browser#frame_stack`) and its modules under `browser/`, `node.rb`, `cookies.rb` — implementations whose workarounds depend on Lightpanda quirks
 
 ## Recon commands
 
@@ -37,7 +37,7 @@ git log --first-parent --format='%h %s' <last-snapshot-sha>..origin/main | \
 
 ### Tracked issues — are any closed?
 
-For each issue listed in the "Upstream Open Issues That Affect This Gem" table in `lightpanda-io.md`:
+For each issue listed in the "Upstream open issues that affect this gem" table in `lightpanda-io.md`:
 
 ```bash
 gh issue view <NUMBER> --repo lightpanda-io/browser --json state,title,closedAt
@@ -69,7 +69,7 @@ gh api "repos/lightpanda-io/browser/issues?state=open&per_page=50&sort=created&d
 
 ### Verify our CDP methods still exist upstream
 
-This is the highest-value check — Lightpanda is in flux and an endpoint we depend on can be removed/renamed without warning. Fetch each domain file via `gh api` or WebFetch on raw GitHub URLs and grep the dispatch enum for every method in `lightpanda-io.md`'s "CDP Methods Used by This Gem" list.
+This is the highest-value check — Lightpanda is in flux and an endpoint we depend on can be removed/renamed without warning. Fetch each domain file via `gh api` or WebFetch on raw GitHub URLs and grep the dispatch enum for every method in `lightpanda-io.md`'s "CDP commands used by the gem" table.
 
 Files and methods to verify:
 - `src/server/cdp/domains/page.zig` — `Page.navigate`, `Page.reload`, `Page.enable`, `Page.handleJavaScriptDialog`, `Page.loadEventFired` (event), `Page.captureScreenshot`, `Page.getLayoutMetrics`, `Page.addScriptToEvaluateOnNewDocument`
@@ -178,11 +178,11 @@ After narrowing, re-run the full session spec without `AUDIT_SKIPS` to confirm t
 
 The doc is a **current-state reference, not a git log**. Keep it focused on what affects gem behavior today.
 
-- Closed upstream issues → **delete** their row from the "Upstream Open Issues That Affect This Gem" table. No "Closed Issues" section.
+- Closed upstream issues → **delete** their row from the "Upstream open issues that affect this gem" table. No "Closed Issues" section.
 - New open issues → add only if they touch CDP methods we use, navigation, cookies, JS context, or crashes. Skip CLI-only, MCP-only, build/CI, and pure-internal-refactor issues.
 - Fixed limitations → update the relevant section in place; don't archive the old text.
-- Method support changes → move methods between Used / NOT Available / Partially Implemented / Recently Implemented / Available-but-unused.
-- Methods we call that don't exist upstream → flag them in "CDP Methods Used by This Gem" with a note.
+- Method support changes → move methods between "CDP commands used by the gem" and "Available CDP methods (not yet used by this gem)"; note partial or stub support inline.
+- Methods we call that don't exist upstream → flag them in "CDP commands used by the gem" with a note.
 
 **Do not add a chronological "Recently Merged Fixes" changelog.** When a merged PR changes gem-relevant behavior, edit the affected section inline and add the PR number there. PRs that don't change gem behavior must not be recorded.
 
