@@ -1,0 +1,56 @@
+# What would it take to switch a Cuprite suite to Lightpanda?
+
+The first migration round landed on `main` at `bb8303a`. An application can keep its driver name and use the registration, header, cookie, network and download helpers below. The comparison targets Cuprite 0.20.1, Ferrum 0.20.1 and Capybara 3.40.0. Cuprite deprecates several driver-level helpers in favor of their browser-level equivalents. [Cuprite deprecations](https://github.com/rubycdp/cuprite/blob/v0.20.1/CHANGELOG.md)
+
+## Landed on main
+
+| Area | What suites can use | Boundary |
+| --- | --- | --- |
+| [Registration #267](https://github.com/navidemad/capybara-lightpanda/pull/267) | `Capybara::Lightpanda.register_cuprite_driver(:better_cuprite, window_size: [1200, 800])` preserves the application's registration name. Both stock drivers coexist in either require order. | Pass a Lightpanda `ws://` endpoint for remote operation. The adapter rejects HTTP discovery, TLS WebSockets, unsupported options and headed mode before launch. Ruby 3.3+ is required. |
+| [Headers #268](https://github.com/navidemad/capybara-lightpanda/pull/268) | `browser.headers.get/set/add/clear`, the temporary navigation Referer, and user agent and language overrides. Shared examples check both the server request and JavaScript identity. | Session reset clears overrides. Native Lightpanda header assignment is still available. |
+| [Cookies #269](https://github.com/navidemad/capybara-lightpanda/pull/269) | Seed a cookie before visiting, restore a saved cookie, fetch by name with `browser.cookies.all.fetch(name)`, or remove by host and path. | The name-keyed view belongs to the opt-in driver. Enumerate the jar to see duplicate names at different paths. |
+| [Network #270](https://github.com/navidemad/capybara-lightpanda/pull/270) | Read `exchange.request.url`, `exchange.response.status`, top-document status and response. Wait for response bodies with `wait_for_idle(duration: ...)`. Clear traffic history and HTTP cache separately. | Existing hash access works. Blocked-request filtering needs interception support. Clearing traffic preserves in-flight requests for idle waits. |
+| [Downloads #271](https://github.com/navidemad/capybara-lightpanda/pull/271) | Configure a save directory and use `browser.downloads.wait { click_link("Report") }`. The block runs once, including when the page starts the download later. | Lightpanda returns absolute file paths. Ferrum exposes metadata hashes. Compare the bytes on disk in portable helpers. |
+
+The [shared contract](test/compatibility/cuprite_contract.rb) runs the same helper bodies against Chrome/Cuprite and Lightpanda with a local Rack app. Run `bundle exec ruby test/compatibility/cuprite_contract.rb` and repeat with `CONTRACT_DRIVER=cuprite`. The [round-one main run](https://github.com/navidemad/capybara-lightpanda/actions/runs/44367610811) also passed the shared Capybara battery on Ruby 3.3 and 4.0.
+
+## Original probe results
+
+The table below is historical. It records the pre-adapter comparison at `1c93471` on 18 November 2026 with Lightpanda 1.0.4 and Chrome for Testing 156.0.8078.4. In the table, `b` is `page.driver.browser`.
+
+| Call or assertion | Cuprite | Lightpanda |
+| --- | --- | --- |
+| Visit, read title, fill a labeled input and read its value | Returned `"Audit"` and `"Ada"` | Same |
+| `b.headers.set("X-Audit" => "present")`, then revisit | Server received the header | `NoMethodError` on `headers`. The existing spelling is `page.driver.headers = {...}` |
+| `b.cookies.set(name: "audit", value: "yes")` after visiting | Returned true | `BrowserError` requiring a domain or URL |
+| Set the cookie with explicit domain, then `b.cookies["audit"].value` | `"yes"` | `"yes"` |
+| `b.cookies.all` | Hash keyed by name | Array of cookie objects |
+| `b.network.traffic.first` after navigation | Exchange object with `request` and `response` | Hash with symbol keys |
+| `b.network.clear(:traffic)` / `wait_for_idle(duration: 0.01)` on the network object | Cleared traffic / returned true | Both raised `ArgumentError`. Current forms are `clear` and `wait_for_idle(timeout:, connections:)` |
+| `b.downloads.wait { page.click_link("Report") }` | Ran the block, wrote the CSV, recorded a metadata hash | Returned without calling the block or writing a file |
+| `find("button").click(:shift)` | Handler read `true` | Handler read `false` |
+| Evaluate an unwrapped `confirm("Continue?")` | Warned and returned `true` | Warned and returned `false` |
+| Callback after 1 s, Capybara wait 0.5 s, driver timeout 3 s | Raised `Ferrum::ScriptTimeoutError` | Returned the callback value |
+
+The rest of the audit follows the released sources and this repository’s implementation and fixtures. The Forem integration is a useful migration example. Its patch replaces a named Cuprite registration, including optional remote Chrome discovery, with the stock Lightpanda registration. A passing patched spec would exercise its application flow while bypassing the original initializer. [Forem patch](.github/real-apps/patches/forem.patch) · [Cuprite usage examples](https://github.com/rubycdp/cuprite/blob/v0.20.1/README.md)
+
+## Next round of migration gaps
+
+The following gaps remained at the end of #271. Each acceptance example belongs in the shared contract so future changes are checked against the two browser engines.
+
+| Priority / effort | Change | Acceptance example |
+| --- | --- | --- |
+| Next / medium | Match the session wait for `evaluate_async_script` and distinguish a missing callback from a broken CDP connection. Give the transport enough time to deliver the script deadline. Implement a distinct navigation wait for helpers using `browser.wait_for_reload`. | Use the two deadlines from the probe, plus an immediate callback and a disconnected browser. For reload, schedule navigation after network idle and assert the new document was reached. |
+| Next / medium | Forward modifier flags for DOM click handlers where Lightpanda supports them. Exercise explicit modal decisions and document the unwrapped default. Scope input changes to observed app behavior. Assigning `.value` plus input/change and typing characters differ for key listeners and user-edit validation. | Assert shift and ctrl in the handler, confirm both branches with Capybara’s dialog wrappers, and compare a key-driven field plus a controlled input in both browsers. |
+
+The first round also supplied the legacy cookie and network entry points. Check the adopting suite before adding more aliases such as `resize` and `window_handle`. Script injection via `extensions:`, JavaScript error policy, device emulation and Chrome-only launch options remain migration considerations. The opt-in registration rejects unsupported keys. Browser and session defaults still differ, so set the viewport and timeouts explicitly where they affect the application. [Driver options](lib/capybara/lightpanda/options.rb) · [Registration](lib/capybara/lightpanda/cuprite_driver.rb)
+
+## Which suites still need Chrome?
+
+- **URL policies and HTTP auth (larger).** Cuprite 0.20.1 accepts constructor keys `url_blacklist:` / `url_whitelist:` and browser setters under both old and new names. The modern **constructor** spellings are on upstream main and absent from the release. Lightpanda currently consumes none of them. Its native block command has a different pattern language and survives context disposal. Start with a documented pattern subset, reject unrepresentable expressions, and verify allowed and denied requests against a local server. Test two sessions and a reset, including restoration of configured policy. Arbitrary Ruby regexes, interception callbacks and challenge-based `network.authorize` warrant a separate Fetch-domain implementation and tests. [Cuprite browser](https://github.com/rubycdp/cuprite/blob/v0.20.1/lib/capybara/cuprite/browser.rb) · [Constructor change](https://github.com/rubycdp/cuprite/pull/361) · [Lightpanda protocol inventory](.claude/rules/lightpanda-io.md)
+- **Raw Ferrum helpers.** Search the adopting suite for `page.driver.browser.page`, `on(:request)`, `console`, `at_css`, `native.node` and rescues naming `Ferrum::` or `Capybara::Cuprite::`. Lightpanda has its own browser, node handles, event payloads and exception classes. A shared method name such as `command` does not establish the same target or return type. Port the specific helper to Capybara or a narrow adapter. Preserve Capybara’s stale-node retry behavior and distinguish JS, selector and transport errors. [Ferrum browser](https://github.com/rubycdp/ferrum/blob/v0.20.1/lib/ferrum/browser.rb) · [Lightpanda errors](lib/capybara/lightpanda/errors.rb) · [Event dispatch](lib/capybara/lightpanda/client/subscriber.rb)
+- **Keep a Chrome lane for rendering and multi-window flows.** Lightpanda supports one window, synthetic geometry and a JS-visible viewport. Its scroll helpers are no-ops. A screenshot call can succeed without generating useful visual evidence. Keep actual scrolling, coordinates, CSS hover, image/PDF assertions, multiple tabs, and opener relationships on Cuprite. DOM hover events, HTML5 drag/drop, file upload, iframe scripting and explicitly handled dialogs already have Lightpanda paths. Downloads need their own fixture for an attachment or a download link. A MIME-only navigation has different behavior. [Shared-spec capability list](spec/features/session_spec.rb) · [Specific skipped behaviors](spec/spec_helper.rb) · [Download fixtures](test/features/download_test.rb)
+
+## How to decide when to call it drop-in
+
+Extend the existing shared contract with two-session isolation checks, then migrate an application-owned initializer such as Forem’s while retaining its helper calls. Record any remaining edits to the application specs and any examples assigned to Chrome, with the capability they require. A useful release claim would name the initializer and helper contracts that pass unchanged. Shared Capybara specs alone cannot establish that a suite’s Ferrum calls work.
