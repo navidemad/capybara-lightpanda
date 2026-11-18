@@ -53,6 +53,28 @@ describe "Capybara::Lightpanda selenium compatibility" do
       assert_includes entry.to_s, "boom"
     end
 
+    # Selenium's LogEntry#timestamp is epoch milliseconds and helpers print or
+    # compare `entry.time`. Lightpanda's CDP timestamp is seconds since the host
+    # booted, so passing it through would date every entry in January 1970.
+    it "dates entries with the wall clock, as Selenium's LogEntry does" do
+      entries = browser.logs.get(:browser)
+      refute_empty entries
+
+      entries.each do |entry|
+        assert_in_delta Time.now, entry.time, 60, "#{entry.inspect} is not wall-clock epoch ms"
+        assert_equal({ "timestamp" => entry.timestamp, "level" => entry.level, "message" => entry.message },
+                     entry.as_json)
+        assert_equal "#{entry.time} #{entry.level}: #{entry.message}", entry.to_s
+      end
+    end
+
+    it "orders console output and page errors by when they happened" do
+      session.execute_script("setTimeout(function () { throw new Error('late'); }, 50)")
+      Capybara::Lightpanda::Utils::Wait.until(timeout: 2) { browser.page_errors.any? }
+
+      assert_equal "late", browser.logs.get(:browser).last.message[/late\z/]
+    end
+
     # Chrome's getLog drains; ours deliberately doesn't, so a helper that reads
     # the log early can't swallow an error a later assertion should have seen.
     it "does not drain the buffer between reads" do
