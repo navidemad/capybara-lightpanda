@@ -2,6 +2,8 @@
 
 require "minitest/autorun"
 require "tmpdir"
+require "json"
+require "cgi"
 
 # Run both load orders. The selection also determines which browser runs the
 # shared examples. Both gems register their stock driver in either process.
@@ -14,7 +16,11 @@ else
 end
 
 class CupriteContractTest < Minitest::Test
-  APP = lambda do |_env|
+  APP = lambda do |env|
+    if env["PATH_INFO"] == "/headers"
+      values = env.select { |key, _| key.start_with?("HTTP_") }
+      next [200, { "content-type" => "text/html" }, ["<pre>#{CGI.escapeHTML(values.to_json)}</pre>"]]
+    end
     [200, { "content-type" => "text/html" }, ["<title>Store</title><label>Name<input></label>"]]
   end
 
@@ -44,6 +50,43 @@ class CupriteContractTest < Minitest::Test
     @page.fill_in("Name", with: "Ada")
     assert_equal "Ada", @page.find_field("Name").value
     assert_equal [900, 700], @page.current_window.size
+  end
+
+  def echoed_headers
+    @page.visit("/headers")
+    JSON.parse(@page.find("pre").text)
+  end
+
+  def test_request_headers_reach_the_server_and_reset_between_examples
+    headers = @page.driver.browser.headers
+    headers.set("X-First" => "1")
+    headers.add({ "X-Second" => "2" })
+    assert_equal %w[1 2], echoed_headers.values_at("HTTP_X_FIRST", "HTTP_X_SECOND")
+    headers.set("X-Third" => "3")
+    assert_nil echoed_headers["HTTP_X_FIRST"]
+    assert_equal({ "X-Third" => "3" }, headers.get)
+    headers.clear
+    assert_empty headers.get
+    headers.set("X-Third" => "3")
+    @page.reset_session!
+    assert_nil echoed_headers["HTTP_X_THIRD"]
+  end
+
+  def test_browser_identity_matches_the_request
+    headers = @page.driver.browser.headers
+    headers.set("User-Agent" => "TestAgent/1", "Accept-Language" => "fr-FR")
+    received = echoed_headers
+    assert_equal "TestAgent/1", received["HTTP_USER_AGENT"]
+    assert_includes received["HTTP_ACCEPT_LANGUAGE"], "fr-FR"
+    assert_equal %w[TestAgent/1 fr-FR], @page.evaluate_script("[navigator.userAgent, navigator.language]")
+  end
+
+  def test_navigation_only_referer_is_excluded_from_persistent_headers
+    @page.visit("/")
+    source = "#{@page.current_url}source"
+    @page.driver.add_header("Referer", source, permanent: false)
+    assert_equal source, echoed_headers["HTTP_REFERER"]
+    refute @page.driver.browser.headers.get.key?("Referer")
   end
 
   def test_copied_remote_and_chrome_options_fail_before_launch

@@ -21,7 +21,7 @@ module Capybara
       include Console
       include SeleniumCompat
 
-      attr_reader :options, :process, :client, :target_id, :session_id, :browser_context_id, :frame_stack
+      attr_reader :options, :process, :client, :target_id, :session_id, :browser_context_id, :frame_stack, :headers
 
       delegate %i[on off] => :client
 
@@ -96,6 +96,7 @@ module Capybara
 
       def initialize(options = {})
         @options = Options.new(options)
+        @headers = RequestHeaders.new(self)
         @process = nil
         @client = nil
         @remote_version = nil
@@ -245,6 +246,7 @@ module Capybara
       # short-circuit on the new client, so find_modal silently sees no
       # javascriptDialogOpening events.
       def clear_session_state
+        @headers.reset
         @page_events_enabled = false
         @modal_handler_installed = false
         @modal_messages_mutex.synchronize do

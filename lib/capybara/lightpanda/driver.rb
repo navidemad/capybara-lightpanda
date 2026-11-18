@@ -321,6 +321,10 @@ module Capybara
         browser.network.headers = headers
       end
 
+      def add_header(name, value, permanent: true)
+        browser.headers.add({ name => value }, permanent: permanent)
+      end
+
       def add_headers(headers)
         browser.network.add_headers(headers)
       end

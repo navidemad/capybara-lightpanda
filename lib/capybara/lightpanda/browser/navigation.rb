@@ -27,7 +27,7 @@ module Capybara
           if wait
             wait_for_page_load(url)
           else
-            page_command("Page.navigate", url: url)
+            page_command("Page.navigate", **navigation_params(url))
           end
           check_unhandled_modal!
         end
@@ -56,9 +56,13 @@ module Capybara
 
         private
 
+        def navigation_params(url)
+          { url: url, referrer: headers&.referrer }.compact
+        end
+
         def wait_for_page_load(url, retried: false)
           deadline = await_navigation do
-            @client.command("Page.navigate", { url: url }, async: true, session_id: @session_id)
+            @client.command("Page.navigate", navigation_params(url), async: true, session_id: @session_id)
           end
           handle_navigation_crash(url, deadline, retried: retried)
         end
