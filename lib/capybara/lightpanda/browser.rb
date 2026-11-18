@@ -94,9 +94,10 @@ module Capybara
         @process&.release || @remote_release
       end
 
-      def initialize(options = {})
+      def initialize(options = {}, &cookie_jar)
         @options = Options.new(options)
         @headers = RequestHeaders.new(self)
+        @cookies = cookie_jar&.call(self)
         @process = nil
         @client = nil
         @remote_version = nil
@@ -112,10 +113,7 @@ module Capybara
         @modal_handler_installed = false
         @modal_armed = false
         @unhandled_modal = nil
-        @console_logs = []
-        @console_logs_mutex = Mutex.new
-        @page_errors = []
-        @page_errors_mutex = Mutex.new
+        initialize_console_buffers
         @frame_stack = []
         @turbo_event = Utils::Event.new
         @turbo_event.set
@@ -544,6 +542,13 @@ module Capybara
               :enable_page_events
 
       private
+
+      def initialize_console_buffers
+        @console_logs = []
+        @console_logs_mutex = Mutex.new
+        @page_errors = []
+        @page_errors_mutex = Mutex.new
+      end
 
       # Keep iframes and workers loading.
       #

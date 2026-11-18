@@ -60,8 +60,7 @@ module Capybara
       end
 
       def all
-        result = browser.command("Network.getAllCookies")
-        (result["cookies"] || []).map { |c| Cookie.new(c) }
+        to_a
       end
 
       # Yields each Cookie. Powers `Enumerable` (so callers can do
@@ -70,7 +69,8 @@ module Capybara
       def each(&block)
         return enum_for(:each) unless block
 
-        all.each(&block)
+        result = browser.command("Network.getAllCookies")
+        (result["cookies"] || []).each { |attributes| block.call(Cookie.new(attributes)) }
       end
 
       def get(name)
@@ -88,7 +88,7 @@ module Capybara
       # BrowserError instead: since upstream #3791 (build 10212) the browser
       # answers `-32602 Sanitizing cookie failed`, as Chrome does.
       def set(name:, value:, domain: nil, path: "/", secure: false, http_only: false, # rubocop:disable Metrics/ParameterLists, Naming/PredicateMethod
-              same_site: nil, expires: nil)
+              same_site: nil, expires: nil, url: nil)
         params = {
           name: name,
           value: value,
@@ -98,6 +98,7 @@ module Capybara
         }
 
         params[:domain] = domain if domain
+        params[:url] = url if url
         # CDP rejects unknown SameSite values; pass through only the canonical
         # spec strings ("Strict" / "Lax" / "None") so YAML noise from a hand-
         # edited file doesn't reach the browser.
@@ -108,9 +109,8 @@ module Capybara
         !(result.is_a?(Hash) && result["success"] == false)
       end
 
-      def remove(name:, domain: nil, path: "/")
-        params = { name: name, path: path }
-        params[:domain] = domain if domain
+      def remove(name:, domain: nil, path: "/", url: nil)
+        params = { name: name, path: path, domain: domain, url: url }.compact
 
         browser.command("Network.deleteCookies", **params)
       end
@@ -122,7 +122,7 @@ module Capybara
       # Persist all current cookies to a YAML file (ferrum parity).
       # Returns the number of bytes written.
       def store(path = "cookies.yml")
-        File.write(path, all.map(&:to_h).to_yaml)
+        File.write(path, map(&:to_h).to_yaml)
       end
 
       # Load cookies from a YAML file produced by `store` and re-set them.
