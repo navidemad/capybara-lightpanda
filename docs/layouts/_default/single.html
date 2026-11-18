@@ -19,7 +19,7 @@
       <h1 class="docs__title">{{ .Title }}</h1>
       <p class="docs__lede">{{ .Description }}</p>
       <p class="docs__meta">
-        <a href="{{ "/" | relURL }}" class="docs__back">← Back to overview</a>
+        <a href="{{ .Site.Home.RelPermalink }}" class="docs__back">← Back to overview</a>
         <span aria-hidden="true">·</span>
         <a href="{{ .Site.Params.github_url }}/blob/main/README.md" rel="noopener">README on GitHub ↗</a>
       </p>
@@ -40,7 +40,7 @@
   <footer class="docs__footer">
     <div class="wrap wrap--wide">
       <p>
-        <a href="{{ "/" | relURL }}">capybara-lightpanda</a>
+        <a href="{{ .Site.Home.RelPermalink }}">capybara-lightpanda</a>
         <span aria-hidden="true">·</span>
         <a href="{{ .Site.Params.github_url }}" rel="noopener">GitHub</a>
         <span aria-hidden="true">·</span>
