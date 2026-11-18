@@ -1093,10 +1093,26 @@ class TestApp
             </ul>
           </div>
           <div id="multi-drop" style="display: none">Clothing</div>
+          <!-- select2 v4 single with allowClear and a value: the "×" is the
+               first child of the rendered value, next to its text. A press on
+               it clears the selection; a press anywhere else only opens. -->
+          <span id="clearable" class="select2-selection" role="combobox">
+            <span id="clearable-rendered" class="select2-selection__rendered"><span id="clearable-x" class="select2-selection__clear">×</span>Alpha</span>
+          </span>
+          <div id="clearable-drop" style="display: none">Beta</div>
+          <div id="clearable-log"></div>
+          <table><tr id="total-row"><th>Total due</th><td>$0.00</td></tr></table>
           <script>
             document.getElementById('multi-choices').addEventListener('click', function(e) {
               if (e.target.closest('.select2-search-choice')) return;
               document.getElementById('multi-drop').style.display = 'block';
+            });
+            document.getElementById('clearable-x').addEventListener('mousedown', function(e) {
+              e.stopPropagation();
+              document.getElementById('clearable-log').textContent = 'cleared';
+            });
+            document.getElementById('clearable').addEventListener('mousedown', function() {
+              document.getElementById('clearable-drop').style.display = 'block';
             });
             ['mousedown', 'mouseup', 'click'].forEach(function(name) {
               document.getElementById('btn').addEventListener(name, function() {
