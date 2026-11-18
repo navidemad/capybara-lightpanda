@@ -290,4 +290,25 @@ namespace :examples do
   task all: %i[plain turbo]
 end
 
+namespace :readme do
+  desc "Measure how easy README.md is to read (Flesch-Kincaid grade, share of basic English words). " \
+       "Fails above grade 9. FILE=<path> measures another Markdown file."
+  task :readability do
+    require_relative "script/readability"
+
+    path = ENV.fetch("FILE", "README.md")
+    report = Readability.report(File.read(path))
+
+    puts "#{path}: #{report.words} words in #{report.sentences} sentences"
+    puts "  Flesch-Kincaid grade: #{report.grade}  (target: #{Readability::MAX_GRADE} or below)"
+    puts "  Basic English words:  #{report.basic_share}%  (higher is easier)"
+    puts "  Longest sentences:"
+    report.longest.each { |s| puts "    #{Readability.words(s).length} words: #{s}" }
+
+    if report.grade > Readability::MAX_GRADE
+      abort "readme:readability: grade #{report.grade} is above #{Readability::MAX_GRADE}"
+    end
+  end
+end
+
 task default: %i[test:js test:unit rubocop]
