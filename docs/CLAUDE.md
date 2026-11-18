@@ -22,7 +22,7 @@ bin/website        # repo root — runs `mise exec -- hugo server --disableFastR
 
 ## Links
 
-The site is served under `/capybara-lightpanda/`. Link to the home page with `.Site.Home.RelPermalink`, never `"/" | relURL`: `relURL` leaves a path that starts with `/` unchanged, so the link points at the domain root (verified 2026-11, Hugo 0.162). Paths without a leading slash (`"docs/" | relURL`) are fine. `hugo server` hides the bug, since it serves the same base path only in a production build: check with `hugo --environment production`.
+The site is served under `/capybara-lightpanda/`. Link to the home page with `.Site.Home.RelPermalink`, never `"/" | relURL`: `relURL` leaves a path that starts with `/` unchanged, so the link points at the domain root (verified 2026-11, Hugo 0.162). Paths without a leading slash (`"docs/" | relURL`) are fine. Check the built links with `hugo --environment production`.
 
 ## SCSS conventions
 
