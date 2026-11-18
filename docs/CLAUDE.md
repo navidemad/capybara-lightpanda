@@ -20,6 +20,10 @@ bin/website        # repo root — runs `mise exec -- hugo server --disableFastR
 - `layouts/partials/nav.html` — top nav.
 - `layouts/_default/single.html` + `_markup/render-{heading,table}.html` — markdown rendering hooks (anchor links on headings, wrapped tables).
 
+## Links
+
+The site is served under `/capybara-lightpanda/`. Link to the home page with `.Site.Home.RelPermalink`, never `"/" | relURL`: `relURL` leaves a path that starts with `/` unchanged, so the link points at the domain root (verified 2026-11, Hugo 0.162). Paths without a leading slash (`"docs/" | relURL`) are fine. `hugo server` hides the bug, since it serves the same base path only in a production build: check with `hugo --environment production`.
+
 ## SCSS conventions
 
 `assets/css/main.scss` is the entry point. It `@use`s 24 numbered partials (08 and 12 are retired numbers — don't reuse them) in `parts/_NN-name.scss`. **Cascade order is preserved by the numeric prefix — do not reorder lightly.** When adding a new partial:
