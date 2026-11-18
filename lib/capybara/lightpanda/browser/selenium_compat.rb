@@ -23,6 +23,40 @@ module Capybara
       # genuinely differs (see #switch_to). We do not grow a Selenium
       # emulation layer.
       module SeleniumCompat
+        # Alchemy's picture overlay queues navigation keys for whichever
+        # element has focus when the caller performs the actions.
+        class KeyboardActions
+          NAVIGATION_KEYS = { arrow_left: :left, arrow_right: :right, arrow_up: :up, arrow_down: :down,
+                              left: :left, right: :right, up: :up, down: :down, enter: :numpad_enter, }.freeze
+
+          def initialize(browser)
+            @browser = browser
+            @keys = []
+          end
+
+          def send_keys(*keys)
+            @keys.concat(keys.flatten.map do |key|
+              NAVIGATION_KEYS.fetch(key) do
+                raise ::Capybara::NotSupportedByDriverError, "Keyboard actions support the arrow keys and Enter"
+              end
+            end)
+            self
+          end
+
+          def perform
+            unless @keys.empty?
+              @browser.keyboard.type(*@keys)
+              @browser.wait_for_idle
+              @keys.clear
+            end
+            nil
+          end
+        end
+
+        def action
+          KeyboardActions.new(self)
+        end
+
         # Selenium’s browser log includes console output and uncaught JavaScript errors.
         # `level` is the Selenium severity string ("SEVERE"/"WARNING"/…), not
         # the CDP console type, because that is what callers compare against.

@@ -47,6 +47,27 @@ class SeleniumContractTest < Minitest::Test
     FileUtils.remove_entry(@default_directory)
   end
 
+  def test_picture_overlay_keyboard_shortcuts_use_focus_at_perform_time
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<button id="picture">Open picture</button>';
+      window.keys = [];
+      document.onkeydown = e => window.keys.push([e.target.id, e.key, e.code]);
+      document.querySelector('button').onclick = () => document.body.dataset.open = 'yes';
+    JS
+    actions = @browser.action
+    actions.send_keys(:arrow_right).send_keys(:arrow_left)
+    @page.execute_script("document.querySelector('button').focus()")
+    assert_empty @page.evaluate_script("window.keys")
+    assert_nil actions.perform
+    assert_equal [%w[picture ArrowRight ArrowRight], %w[picture ArrowLeft ArrowLeft]],
+                 @page.evaluate_script("window.keys")
+
+    actions.send_keys(:enter).perform
+    assert_equal "yes", @page.evaluate_script("document.body.dataset.open")
+    assert_equal [%w[ArrowRight ArrowRight], %w[ArrowLeft ArrowLeft], %w[Enter NumpadEnter]],
+                 @page.evaluate_script("window.keys.map(e => e.slice(1))")
+  end
+
   def test_download_helper_reads_each_export_from_the_selected_directory
     %w[first second].each do |report|
       path = File.join(@default_directory, report)
