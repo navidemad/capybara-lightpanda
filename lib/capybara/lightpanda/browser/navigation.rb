@@ -58,7 +58,7 @@ module Capybara
         # same-URL reload. Ferrum's return value is truthy even on expiry.
         def wait_for_reload(timeout = 1) # rubocop:disable Naming/PredicateMethod
           enable_page_events
-          with_main_frame_load { |loaded| loaded.wait(timeout) }
+          with_main_frame_load("Page.navigatedWithinDocument") { |loaded| loaded.wait(timeout) }
           true
         end
 
@@ -158,15 +158,16 @@ module Capybara
           deadline
         end
 
-        def with_main_frame_load
+        def with_main_frame_load(*additional_events)
           loaded = Utils::Event.new
           handler = proc { |params| loaded.set if params["frameId"] == @target_id }
           client = @client
-          client.on("Page.frameStoppedLoading", &handler)
+          events = ["Page.frameStoppedLoading", *additional_events]
+          events.each { |event| client.on(event, &handler) }
           begin
             yield loaded
           ensure
-            client.off("Page.frameStoppedLoading", handler)
+            events.each { |event| client.off(event, handler) }
           end
         end
 

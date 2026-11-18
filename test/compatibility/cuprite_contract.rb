@@ -192,6 +192,15 @@ class CupriteContractTest < Minitest::Test
     assert_nil @page.evaluate_script("window.oldDocument"), "reload must replace the original document"
   end
 
+  def test_reload_wait_wakes_for_same_document_navigation
+    @page.visit("/")
+    @page.execute_script("setTimeout(() => location.hash = 'summary', 200)")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    @page.driver.browser.wait_for_reload(5)
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 4
+    assert_equal "#summary", @page.evaluate_script("location.hash")
+  end
+
   def test_driver_reload_wait_expires_without_reloading_the_page
     @page.visit("/")
     @page.execute_script("window.unsaved = 'draft'")
