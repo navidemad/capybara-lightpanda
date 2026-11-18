@@ -30,8 +30,10 @@ predicate names are derived from the source, and `load.test.ts` asserts the
 exposed surface matches what `attach.js` wires onto `window._lightpanda`, so a
 predicate can't be added to the bundle (or wired) without test coverage.
 
-happy-dom has no real layout and no `checkVisibility()`, so the tests target
-the gem's own logic (the visibility gates, ancestor walks, the real
+happy-dom has no real layout, and its `checkVisibility()` (native from
+happy-dom 21) follows its own cascade, not Lightpanda's. `load.ts` replaces it
+with a stub that `setVisible()` controls, so the tests target the gem's own
+logic (the visibility gates, ancestor walks, the real
 `visibility:hidden` short-circuits) and leave rendered-text fidelity (now native
 innerText's job) and deep hit-testing to the Capybara battery.
 

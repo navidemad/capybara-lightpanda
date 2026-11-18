@@ -10,11 +10,12 @@
 // `return` the functions instead of assigning them to `window._lightpanda`.
 //
 // happy-dom provides the DOM, but its visibility fidelity is not browser-grade:
-// it has no `checkVisibility()` and no layout (getBoundingClientRect is zeros,
-// elementFromPoint is null). So these tests target the gem's OWN logic — the
-// whitespace/block rules, the ancestor walks, the visibility short-circuits —
-// and treat `checkVisibility`/layout as a controllable input (see makeDom's
-// stub). Deep hit-testing / real visibility stays in the Capybara battery.
+// its `checkVisibility()` (native from happy-dom 21) follows its own partial
+// cascade, not Lightpanda's, and it has no layout (getBoundingClientRect is
+// zeros, elementFromPoint is null). So these tests target the gem's OWN logic —
+// the whitespace/block rules, the ancestor walks, the visibility
+// short-circuits — and treat `checkVisibility`/layout as a controllable input
+// (see makeDom's stub). Deep hit-testing / real visibility stays in the Capybara battery.
 
 import { Window } from "happy-dom";
 import { readFileSync } from "node:fs";
@@ -63,7 +64,8 @@ export interface Dom {
   window: Window;
   document: Document;
   predicates: Predicates;
-  // Set an element's `checkVisibility()` return value (happy-dom lacks it).
+  // Set an element's `checkVisibility()` return value (the stub replaces
+  // happy-dom's own).
   // Defaults to visible:true for every element a test doesn't override.
   setVisible(el: unknown, visible: boolean): void;
 }
@@ -76,7 +78,10 @@ export function makeDom(bodyHTML: string): Dom {
   const document = window.document as unknown as Document;
   document.body.innerHTML = bodyHTML;
 
-  // happy-dom doesn't implement checkVisibility(); default everything visible.
+  // Replace checkVisibility() with a stub; default everything visible. It is
+  // installed even when happy-dom has its own (native from 21): only the stub
+  // lets a test decide visibility, and with the native one setVisible() did
+  // nothing. The marker keeps it to one install.
   // NOTE: happy-dom shares one Element.prototype across all Window realms, so
   // this patch is applied once and inherited by every makeDom() call. That's
   // safe ONLY because the stub is stateless-per-instance — it reads
@@ -84,10 +89,12 @@ export function makeDom(bodyHTML: string): Dom {
   // visible), so nothing leaks across tests. Keep it stateless: do not close
   // over realm/test state here or tests will bleed across files.
   const proto = (window as any).Element.prototype;
-  if (typeof proto.checkVisibility !== "function") {
-    proto.checkVisibility = function () {
+  if (!proto.checkVisibility?.__lpStub) {
+    const stub = function (this: any) {
       return this.__lp_visible !== false;
     };
+    (stub as any).__lpStub = true;
+    proto.checkVisibility = stub;
   }
 
   const predicates = instantiate(window);
