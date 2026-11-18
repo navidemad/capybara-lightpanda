@@ -75,20 +75,16 @@ select2-v3-flow:
     ignores clicks inside .select2-search-choice, so the drop never opens and
     no /api/taxons search is sent. Chrome's centred click lands on the empty
     ul or the search input. Traced locally on 11912 (2026-11-08).
-    Gem fix: in the descent, stop once a node below the clicked element has
-    more than one visible child (the first step still descends, so the
-    single-select container -> a.select2-choice path is unchanged). Patched at
-    runtime, the select2 step passes and spec/features/admin (338) shows no
-    regression. The spec then still fails on
+    PR #233 shipped the descent fix and its preselected-choice regression.
+    The real-app run passed the select2 step. The spec then failed on
     `find(".edit_product", obscured: false)`: Lightpanda's approximate layout
     gives the form height 5 at top 1300 (block height excludes children), so
     isObscured sees its centre off-viewport. That second part is upstream
     geometry.
   reference: "wishlist C13"
   next_step: >-
-    Land the CLICK_JS descent fix with a feature test (multi select2 with a
-    preselected choice); the entry stays red on the faux-layout obscured
-    check until upstream sizes blocks from their children.
+    Recheck the form's obscured assertion when upstream sizes blocks from
+    their children. Use a rendering browser for the geometry check.
   patterns:
     - 'select2-input|select2-focused|select2-drop'
 
