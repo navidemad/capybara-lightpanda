@@ -137,7 +137,8 @@ are invisible to `options`/`value`/`selectedIndex`/`selectedOptions` and to form
 submission; jQuery's `.val()` setter then drives `selectedIndex` to -1 and the
 getter returns `null`, and solidus's handler throws before it can POST. Confirmed
 in the booted app and with a Ruby-free flat-vs-grouped reproducer; not
-gem-fixable. See `findings/cluster-3-select-optgroup-options.md`. The 16th entry
+gem-fixable. Fixed upstream by #3058 (build 8328); the diagnosis lives in wishlist
+A52. The 16th entry
 (`products/edit/taxons_spec.rb`) is still `select2-v3-flow` and still open.
 
 **Done 2026-10-14**: `ajax-partial-not-applied`, `address-state-not-toggled`

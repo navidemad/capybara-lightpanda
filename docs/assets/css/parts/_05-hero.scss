@@ -578,18 +578,6 @@
   border-color: color-mix(in oklab, var(--ruby) 35%, var(--ink-line));
   color: var(--paper);
 }
-.eyebrow__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--bamboo);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--bamboo) 25%, transparent);
-  margin-right: 4px;
-}
-.eyebrow__div {
-  display: none !important;
-}
-
 .hero__title {
   font-family: var(--display);
   font-weight: 500;
@@ -820,15 +808,6 @@
 .stat:last-child {
   border-right: 0;
 }
-.stat__rank {
-  display: none;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--paper-faint);
-  margin-bottom: 8px;
-}
 .stat__num {
   display: block;
   font-family: var(--display);
@@ -966,15 +945,6 @@
   .why__manifesto {
     padding-bottom: 18px;
   }
-  .why__eyebrow {
-    margin-bottom: 10px;
-  }
-  .why__quote p {
-    font-size: clamp(14px, 1.05vw, 17px);
-  }
-  .why__manifesto-source {
-    margin-top: 12px;
-  }
   .why__pillars .pillar {
     padding: 10px 0;
   }
@@ -1109,14 +1079,8 @@
 .gh-pill svg {
   color: var(--gold);
 }
-.gh-pill__gh {
-  color: var(--paper-mute);
-}
 .gh-pill__star {
   color: var(--gold);
-}
-.gh-pill:hover .gh-pill__gh {
-  color: var(--paper);
 }
 .gh-pill [data-gh-stars] {
   opacity: 0.55;
@@ -1129,18 +1093,6 @@
 }
 .gh-pill [data-gh-stars]:not(.is-loaded) {
   animation: pulse-faint 1.4s ease-in-out infinite;
-}
-
-.gh-pill--inline {
-  margin: 0 4px 0 6px;
-  vertical-align: 1px;
-  transform: translateY(-1px);
-  transition:
-    border-color 0.2s var(--ease),
-    color 0.2s var(--ease);
-}
-.gh-pill--inline:hover {
-  border-color: color-mix(in oklab, var(--gold) 40%, var(--ink-line-2));
 }
 .stat__x {
   font-style: italic;

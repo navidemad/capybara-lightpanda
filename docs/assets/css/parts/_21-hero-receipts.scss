@@ -84,26 +84,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.hero__receipts-cite {
-  margin: 14px 0 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--paper-faint);
-}
-.hero__receipts-cite a {
-  color: var(--paper-mute);
-  border-bottom: 1px dotted var(--paper-faint);
-  padding-bottom: 1px;
-  transition:
-    color 0.2s var(--ease),
-    border-color 0.2s var(--ease);
-}
-.hero__receipts-cite a:hover {
-  color: var(--ruby);
-  border-bottom-color: var(--ruby);
-}
-
 @media (max-width: 720px) {
   .hero__receipts-list {
     grid-template-columns: 1fr;
