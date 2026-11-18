@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`timezone` driver option.** `timezone: "America/New_York"` makes `Date` and `Intl` in the page report that zone, whatever the host or CI runner is set to. Lightpanda accepts `Emulation.setTimezoneOverride` but ignores it, so the zone is given to the browser process alone: your test process and your app keep theirs. It is one zone per browser process, not per test, and has no effect with `ws_url`.
+- **`page.driver.user_agent=`** sets the `User-Agent` request header and `navigator.userAgent` together, until the next `reset!`. A `User-Agent` passed to `headers=` only changes the request header.
+
+### Changed
+
+- **A user agent the browser refuses is no longer silent.** Lightpanda ignores any user agent containing `Mozilla` and answers as if it had applied it, so the suite ran on `Lightpanda/1.0` with no signal. `user_agent=` raises on such a value and `headers=` / `add_headers` print a warning. Drop the `Mozilla/5.0` prefix and keep the device tokens: the `browser` and `device_detector` gems read `Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile` as an iPhone.
+
 ## [0.19.1] - 2026-11-18
 
 ### Fixed

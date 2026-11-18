@@ -461,6 +461,12 @@ class TestApp
   # 1x1 transparent PNG referenced by /lightpanda/links. Lightpanda only
   # requests it when spawned with `--load-resources image` (the gem's
   # `load_images: true`), which image_loading_test.rb asserts both ways.
+  # Echoes the request's User-Agent (emulation_test.rb).
+  get "/lightpanda/user-agent" do
+    content_type "text/plain"
+    request.user_agent.to_s
+  end
+
   get "/lightpanda/image.png" do
     content_type "image/png"
     Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")

@@ -108,7 +108,10 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. W
 - **WebAuthn / passkeys** — not implemented.
 - **Coordinate-based `drag_to` / `drag_by`** — no layout engine, no coordinates. HTML5 `Element#drop` (dropping files or data onto a dropzone) works since `0.6.0`.
 - **JS dialogs fired outside Capybara's modal wrappers** — the gem pre-arms the dialog response before the triggering action, so `accept_confirm` / `dismiss_confirm` / `accept_prompt` & co. work, including the JS-side `confirm`/`prompt` return values. A dialog that opens *outside* one of those wrappers is auto-dismissed by Lightpanda.
-- **UA-based bot detection in your app** — Lightpanda identifies as `Lightpanda/1.0`. The UA carries no `Chrome`/`Safari`/`Gecko` token, and the browser refuses Mozilla-styled `setUserAgentOverride` values by design, so the gem can't disguise it. App code that gates signup, listens, or tracking on a browser-looking user agent will route the driver down the bot path — alonetone's `PreventAbuse` concern was the first real sighting. Allowlist `Lightpanda` (or skip the UA check) in your app's test environment.
+- **UA-based bot detection in your app** — Lightpanda identifies as `Lightpanda/1.0` and refuses any user agent containing `Mozilla`, by design, so the gem can't disguise it as Chrome. App code that gates signup, listens, or tracking on a browser-looking user agent will route the driver down the bot path — alonetone's `PreventAbuse` concern was the first real sighting. Allowlist `Lightpanda` (or skip the UA check) in your app's test environment. Device detection is different: `page.driver.user_agent = "Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile"` is accepted, and the `browser` and `device_detector` gems read it as an iPhone.
+- **Formatting through `document.execCommand`** (`bold`, `formatBlock`, `insertHTML`, …) — returns `false`. Text commands such as `insertText` work.
+- **`<audio>` / `<video>` playback** — no media pipeline: `duration` stays `NaN`, `currentTime` stays `0`, `loadedmetadata`/`timeupdate`/`ended` never fire.
+- **A time zone per test** — `Emulation.setTimezoneOverride` is ignored upstream. The `timezone` driver option sets one zone per browser process.
 
 A clean way to skip those in a mixed suite:
 

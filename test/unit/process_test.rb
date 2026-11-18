@@ -90,6 +90,27 @@ describe Capybara::Lightpanda::Process do
     end
   end
 
+  # The zone must reach the browser through the child's environment only:
+  # setting ENV["TZ"] in the test process would also move Ruby's clock and the
+  # in-process app server's, which is the bug the option exists to avoid.
+  describe "#spawn_env" do
+    it "leaves TZ alone by default" do
+      assert_equal({ "LIGHTPANDA_DISABLE_TELEMETRY" => "true" }, process.send(:spawn_env))
+    end
+
+    describe "with timezone" do
+      let(:options) { Capybara::Lightpanda::Options.new(timezone: "America/New_York") }
+
+      it "hands the zone to the browser process as TZ, without touching this process" do
+        before = ENV.fetch("TZ", nil)
+
+        assert_equal "America/New_York", process.send(:spawn_env)["TZ"]
+        assert_equal "true", process.send(:spawn_env)["LIGHTPANDA_DISABLE_TELEMETRY"]
+        assert before == ENV.fetch("TZ", nil), "spawn_env must not write TZ into this process"
+      end
+    end
+  end
+
   describe "#build_args" do
     before { @extra_args = ENV.delete("LIGHTPANDA_EXTRA_ARGS") }
 

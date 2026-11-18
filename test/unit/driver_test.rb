@@ -75,6 +75,11 @@ describe Capybara::Lightpanda::Driver do
       driver.headers = { "User-Agent" => "test" }
     end
 
+    it "delegates user_agent= to network" do
+      network.expects(:user_agent=).with("Lightpanda/1.0 Mobile")
+      driver.user_agent = "Lightpanda/1.0 Mobile"
+    end
+
     it "delegates add_headers to network" do
       network.expects(:add_headers).with({ "X-Custom" => "1" })
       driver.add_headers({ "X-Custom" => "1" })

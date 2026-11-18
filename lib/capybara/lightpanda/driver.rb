@@ -319,6 +319,12 @@ module Capybara
         browser.network.add_headers(headers)
       end
 
+      # Request header + navigator.userAgent, until the next reset!. See
+      # Network#user_agent= for the "Mozilla" refusal.
+      def user_agent=(value)
+        browser.network.user_agent = value
+      end
+
       # -- Lifecycle --
 
       # Thin wrapper. The interesting work — disposing the BrowserContext

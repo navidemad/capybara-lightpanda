@@ -95,12 +95,14 @@ module Capybara
       # `network.enable` (or `wait_for_network_idle`).
       def headers=(headers)
         enable
+        warn_on_refused_user_agent(headers)
         @extra_headers = headers
         browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
       end
 
       def add_headers(headers)
         enable
+        warn_on_refused_user_agent(headers)
         @extra_headers = (@extra_headers || {}).merge(headers)
         browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
       end
@@ -109,6 +111,27 @@ module Capybara
         enable
         @extra_headers = {}
         browser.page_command("Network.setExtraHTTPHeaders", headers: {})
+      end
+
+      # Lightpanda refuses a user agent containing "Mozilla" by design, and
+      # answers {} either way.
+      def self.refused_user_agent?(value)
+        value.to_s.match?(/mozilla/i)
+      end
+
+      # Sets the User-Agent request header AND navigator.userAgent, which a
+      # User-Agent in headers= does not touch. The override ends with the
+      # BrowserContext, so reset! restores "Lightpanda/1.0". Raises on a value
+      # the browser would silently drop, rather than let a spec run on the
+      # default user agent.
+      def user_agent=(value)
+        if Network.refused_user_agent?(value)
+          raise ArgumentError,
+                "Lightpanda refuses a user agent containing \"Mozilla\" (got #{value.inspect}). Keep the device " \
+                "tokens and drop the prefix, e.g. \"Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile\"."
+        end
+
+        browser.page_command("Emulation.setUserAgentOverride", userAgent: value.to_s)
       end
 
       # Count of in-flight requests (no response and no failure recorded yet).
@@ -142,6 +165,14 @@ module Capybara
       end
 
       private
+
+      def warn_on_refused_user_agent(headers)
+        value = headers.find { |name, _| name.to_s.casecmp?("user-agent") }&.last
+        return unless Network.refused_user_agent?(value)
+
+        warn "[capybara-lightpanda] Lightpanda ignores a User-Agent containing \"Mozilla\" (#{value.inspect}): " \
+             "requests keep the default user agent. Drop the \"Mozilla/5.0\" prefix, or use page.driver.user_agent=."
+      end
 
       # CDP events arrive on the message thread while wait_for_idle /
       # pending_connections read from the main thread; serialize all
