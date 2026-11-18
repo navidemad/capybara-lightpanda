@@ -84,11 +84,42 @@ module Capybara
           Logs.new(self)
         end
 
+        # Lightpanda's single virtual window has a fixed origin. Resizing
+        # changes the viewport used by matchMedia and by the next document.
+        class Window
+          def initialize(browser)
+            @browser = browser
+          end
+
+          def resize_to(width, height)
+            width = Integer(width)
+            height = Integer(height)
+            unless [width, height].all? { |value| value.between?(0, (2**31) - 1) }
+              error = if defined?(::Selenium::WebDriver::Error::InvalidArgumentError)
+                        ::Selenium::WebDriver::Error::InvalidArgumentError
+                      else
+                        ArgumentError
+                      end
+              raise error, "Window dimensions must be nonnegative 32-bit signed integers"
+            end
+            if width.zero? || height.zero?
+              raise ::Capybara::NotSupportedByDriverError, "Lightpanda cannot represent a zero-sized viewport"
+            end
+
+            @browser.set_viewport(width, height)
+            { "x" => 0, "y" => 0, "width" => width, "height" => height }
+          end
+        end
+
         # WebDriver's cookie commands operate on the active document. The native
         # cookie jar spans the whole browser context, including other hosts.
         class Manager
           def initialize(browser)
             @browser = browser
+          end
+
+          def window
+            Window.new(@browser)
           end
 
           def all_cookies

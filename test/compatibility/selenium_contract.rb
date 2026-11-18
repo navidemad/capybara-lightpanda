@@ -34,6 +34,19 @@ class SeleniumContractTest < Minitest::Test
     @page.driver.quit
   end
 
+  def test_decidim_mobile_and_desktop_helpers_change_the_next_pages_responsive_branch
+    window = @browser.manage.window
+    [["375", 667, true], [1920, 1080, false]].each do |width, height, mobile|
+      rect = window.resize_to(width, height)
+      assert_equal %w[height width x y], rect.keys.sort
+      assert_equal mobile, rect.fetch("width") <= 767
+      @page.visit("/")
+      assert_equal mobile, @page.evaluate_script("matchMedia('(max-width: 767px)').matches")
+    end
+    assert_raises(Selenium::WebDriver::Error::InvalidArgumentError) { window.resize_to(-1, 500) }
+    assert_raises(ArgumentError) { window.resize_to("mobile", 500) }
+  end
+
   def test_cookie_manager_follows_the_current_frame
     @browser.execute_cdp("Network.setCookie", name: "inside", value: "frame", url: @page.current_url, path: "/admin")
     manager = @browser.manage
