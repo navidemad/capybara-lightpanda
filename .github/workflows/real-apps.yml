@@ -186,6 +186,9 @@ jobs:
             db_create: false
             pre_spec: "bundle exec bin/rails db:create db:schema:load"
             spec: "spec/system/performance_spec.rb spec/system/cleaner_spec.rb spec/system/theme_spec.rb"
+            # Every baseline entry has a diagnosed cause, so a known example
+            # failing for another reason fails the job (check_baseline.rb).
+            strict_causes: true
           - name: tryruby
             repo: ruby/TryRuby
             sha: 953e6a81c0b238c3bfa0574a0307812c47ae0f94
@@ -196,6 +199,7 @@ jobs:
             db_create: false
             # The four URL-hash playground examples run against Middleman.
             spec: "spec/playground_spec.rb:70"
+            strict_causes: true
           - name: alchemycms
             repo: AlchemyCMS/alchemy_cms
             sha: 12805e4a03dc56af5d7a731f0feffba60f2b8eba
@@ -207,6 +211,7 @@ jobs:
             pre_spec: "bundle exec rake alchemy:test:prepare"
             # Navigate the picture overlay and activate the focused thumbnail.
             spec: "spec/features/admin/picture_library_integration_spec.rb:292:328"
+            strict_causes: true
           - name: campfire
             repo: basecamp/once-campfire
             sha: edbc779f4dfc9b26c36310881711ddc976a9dfc8
@@ -537,6 +542,8 @@ jobs:
 
       - name: Compare failures against baseline
         if: steps.guard.outputs.skip != 'true'
+        env:
+          STRICT_CAUSES: ${{ matrix.strict_causes && '1' || '' }}
         run: ruby capybara-lightpanda/.github/real-apps/check_baseline.rb ${{ matrix.name }} "$GITHUB_WORKSPACE/rspec-report.json"
 
       - name: Upload rspec report
@@ -601,4 +608,9 @@ jobs:
         # check_baseline.rb so gem-sourced absolute file_paths normalize the same
         # way they did in the matrix legs. Informational — non-zero exit here is
         # redundant with the per-target gate, so don't fail the run on it.
-        run: ruby capybara-lightpanda/.github/real-apps/aggregate_baseline.rb reports || true
+        # A target left out by the `targets` input still shows a green job
+        # (every step skipped). EXPECTED_TARGETS lets the roll-up list the
+        # targets that produced no report, so a subset run can't pass for all.
+        run: |
+          EXPECTED_TARGETS="$(ruby capybara-lightpanda/script/real-app/targets.rb --list | paste -sd, -)" \
+            ruby capybara-lightpanda/.github/real-apps/aggregate_baseline.rb reports || true

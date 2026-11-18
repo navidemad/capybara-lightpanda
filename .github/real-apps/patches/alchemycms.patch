@@ -9,7 +9,7 @@ index d5ea813..1d321e1 100644
 +
 +gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__", require: false
 diff --git a/spec/rails_helper.rb b/spec/rails_helper.rb
-index 6a69a41..ddb8060 100644
+index 6a69a41..9ba96af 100644
 --- a/spec/rails_helper.rb
 +++ b/spec/rails_helper.rb
 @@ -8,6 +8,7 @@
@@ -20,7 +20,7 @@ index 6a69a41..ddb8060 100644
  require "capybara-screenshot/rspec"
  require "capybara/shadowdom"
  require "rails-controller-testing"
-@@ -104,8 +105,7 @@
+@@ -104,8 +105,9 @@
  
    config.before(:each, type: :system, js: true) do |example|
      screen_size = example.metadata[:screen_size] || [1280, 800]
@@ -29,5 +29,7 @@ index 6a69a41..ddb8060 100644
 -    end
 +    driven_by :lightpanda
 +    page.current_window.resize_to(*screen_size)
++    # The Firefox registration preferred en-GB; keep the same language.
++    page.driver.browser.headers.set("Accept-Language" => "en-GB")
    end
  end
