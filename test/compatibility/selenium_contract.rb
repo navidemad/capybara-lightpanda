@@ -69,6 +69,47 @@ class SeleniumContractTest < Minitest::Test
     Capybara::Lightpanda::Utils::Wait.until(timeout: 5) { File.file?(file) && File.binread(file) == report }
   end
 
+  def test_native_attribute_reads_form_validation_and_current_field_values
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input id="title" required value="draft" data-kind="title">' +
+        '<select id="scope" required><option value="">Choose</option><option value="all">All</option></select>' +
+        '<input id="consent" type="checkbox" checked><a id="export" href="">Export</a>';
+      document.querySelector('#title').value = '';
+      document.querySelector('#consent').checked = false;
+    JS
+    title = @page.find("#title").native
+    assert_equal "Please fill out this field.", title.attribute("validationMessage")
+    assert_equal "Please select an item in the list.", @page.find("#scope").native.attribute("validationMessage")
+    assert_equal "", title.attribute("value")
+    assert_equal "true", title.attribute("required")
+    assert_equal "false", title.attribute("disabled")
+    assert_equal "title", title.attribute("data-kind")
+    assert_nil title.attribute("data-missing")
+    assert_nil @page.find("#consent").native.attribute("checked")
+    assert_equal "", @page.find("#export").native.attribute("href")
+
+    @page.fill_in("title", with: "New initiative")
+    @page.select("All", from: "scope")
+    assert_equal "New initiative", title.attribute("value")
+    assert_equal "", title.attribute("validationMessage")
+    assert_equal "", @page.find("#scope").native.attribute("validationMessage")
+  end
+
+  def test_native_attribute_uses_live_properties_and_preserves_svg_link_values
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input value="live" data-kind="field">' +
+        '<svg><a href="report"><text>Report</text></a></svg>';
+      document.querySelector("input").getAttribute = () => { throw Error("overridden") };
+    JS
+    input = @page.find("input").native
+    assert_equal "live", input.attribute("value")
+    assert_equal "field", input.attribute("data-kind")
+    assert_nil input.attribute("data-absent")
+    link = @page.find("svg a", visible: :all).native
+    assert_equal({ "baseVal" => "report", "animVal" => "report" }, link.attribute("href"))
+    assert_equal link.attribute("href"), link.attribute("HREF")
+  end
+
   def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
     @page.execute_script(<<~JS)
       setTimeout(() => { throw new Error("migration exception"); }, 0);
