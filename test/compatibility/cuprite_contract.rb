@@ -166,10 +166,21 @@ class CupriteContractTest < Minitest::Test
     assert_equal 2, @page.evaluate_script("1 + 1"), "a missing callback leaves the browser usable"
   end
 
+  def test_async_deadline_includes_a_promise_supplied_to_the_callback
+    @page.visit("/")
+    @page.using_wait_time(0.15) do
+      assert_raises(Ferrum::ScriptTimeoutError, Capybara::Lightpanda::ScriptTimeoutError) do
+        @page.evaluate_async_script("arguments[0](new Promise(resolve => setTimeout(resolve, 800, 'late')))")
+      end
+    end
+  end
+
   def test_async_application_errors_reach_the_caller
     @page.visit("/")
     error = assert_raises(Ferrum::JavaScriptError, Capybara::Lightpanda::JavaScriptError) do
-      @page.evaluate_async_script("throw new Error('application rejected the edit')")
+      @page.evaluate_async_script(<<~JS)
+        throw new (class LightpandaCallbackTimeout extends Error {})('application rejected the edit');
+      JS
     end
     assert_includes error.message, "application rejected the edit"
   end
@@ -181,6 +192,15 @@ class CupriteContractTest < Minitest::Test
     @page.driver.browser.wait_for_reload(5)
     assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 4
     assert_nil @page.evaluate_script("window.oldDocument"), "reload must replace the original document"
+  end
+
+  def test_reload_wait_wakes_for_same_document_navigation
+    @page.visit("/")
+    @page.execute_script("setTimeout(() => location.hash = 'summary', 200)")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    @page.driver.browser.wait_for_reload(5)
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 4
+    assert_equal "#summary", @page.evaluate_script("location.hash")
   end
 
   def test_driver_reload_wait_expires_without_reloading_the_page
