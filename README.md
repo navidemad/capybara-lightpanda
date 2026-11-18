@@ -3,38 +3,28 @@
 [![Gem version](https://img.shields.io/gem/v/capybara-lightpanda?logo=rubygems&logoColor=white&label=gem)](https://rubygems.org/gems/capybara-lightpanda)
 [![Total downloads](https://img.shields.io/gem/dt/capybara-lightpanda?label=downloads)](https://rubygems.org/gems/capybara-lightpanda)
 [![Tests](https://img.shields.io/github/actions/workflow/status/navidemad/capybara-lightpanda/ci.yml?branch=main&logo=github&label=tests)](https://github.com/navidemad/capybara-lightpanda/actions/workflows/ci.yml)
-[![Rails compatible](https://img.shields.io/badge/Rails-compatible-CC0000?logo=rubyonrails&logoColor=white)](https://rubyonrails.org/)
-[![Turbo friendly](https://img.shields.io/badge/Turbo-friendly-CC0000?logo=hotwire&logoColor=white)](https://turbo.hotwired.dev/)
 
 A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), the headless browser built in Zig. Same Capybara DSL, no Chromium to install, boot or keep in memory: ~17 MB per worker against ~280 MB for Chrome on a 24-test Rails 8.1 suite, at the same wall-clock time (6.89s vs 7.09s).
 
 Self-contained: the CDP client is built in, no external browser-client gem required. The driver runs weekly against the specs of [seven production Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
-**[Documentation](https://navidemad.github.io/capybara-lightpanda/docs/)** — configuration · setup recipes · Turbo Rails · known limitations · troubleshooting
-
-## Install
-
-Add this to your `Gemfile` and run `bundle install`:
-
 ```ruby
-group :test do
-  gem "capybara-lightpanda"
-end
-```
+# Gemfile
+gem "capybara-lightpanda", group: :test
 
-The driver registers itself as `:lightpanda`, and the Lightpanda binary is downloaded on first use — no separate install step.
-
-**Rails system tests**
-
-```ruby
 # test/application_system_test_case.rb
-require "test_helper"
-require "capybara-lightpanda"
-
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :lightpanda
 end
 ```
+
+Not for every suite: Lightpanda has no layout engine, so specs that rely on screenshots, pixel geometry or real scrolling [won't pass](#what-wont-pass).
+
+**[Documentation](https://navidemad.github.io/capybara-lightpanda/docs/)** — configuration · setup recipes · Turbo Rails · known limitations · troubleshooting
+
+## Install
+
+The snippet above is all a Rails app needs: `bundle install`, and the driver registers itself as `:lightpanda`. The Lightpanda binary is downloaded on first use — no separate install step.
 
 **RSpec, or Capybara on its own**
 
