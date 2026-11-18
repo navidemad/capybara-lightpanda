@@ -33,7 +33,7 @@ module Readability
 
   # A dot inside a token ("README.md", "1.0.4", "x86_64") ends nothing.
   def sentences(text)
-    text.split(/(?<=[.!?:])\s+|\n\s*\n/).map(&:strip).select { |s| s.match?(/[a-zA-Z]/) }
+    text.split(/(?<=[.!?:])\s+|\n\s*\n/).map(&:strip).grep(/[a-zA-Z]/)
   end
 
   def words(text)
