@@ -79,6 +79,8 @@ class SeleniumContractTest < Minitest::Test
     assert_equal({ name: "consent", value: "essential", path: "/", domain: URI(url).host,
                    secure: false, http_only: true, same_site: "Lax", }, cookie.except(:expires))
     assert_equal(["consent"], manager.all_cookies.map { |entry| entry[:name] })
+    @browser.execute_cdp("Network.setCookie", name: "", value: "anonymous", url: url, path: "/")
+    assert_equal "anonymous", manager.cookie_named("")[:value]
     manager.delete_all_cookies
     assert_empty manager.all_cookies
     assert_raises(Selenium::WebDriver::Error::NoSuchCookieError) { manager.cookie_named("consent") }

@@ -118,7 +118,7 @@ module Capybara
             url = @browser.frame_url
             expired = document_cookies(url).map do |cookie|
               scope = cookie.fetch("domain").start_with?(".") ? { domain: cookie["domain"] } : { url: url }
-              cookie.slice("name", "path", "secure", "httpOnly").merge(scope, value: "", expires: 1)
+              cookie.slice("name", "value", "path", "secure", "httpOnly").merge(scope, expires: 1)
             end
             @browser.execute_cdp("Network.setCookies", cookies: expired) unless expired.empty?
             nil
