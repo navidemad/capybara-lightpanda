@@ -113,17 +113,21 @@ module Capybara
           end
 
           def delete_all_cookies
-            document_cookies.each do |cookie|
-              @browser.execute_cdp("Network.deleteCookies", name: cookie.fetch("name"),
-                                                            domain: cookie.fetch("domain"), path: cookie.fetch("path"))
+            # Network.deleteCookies strips the leading dot and can remove a
+            # parent host's private cookie with the same name and path.
+            url = @browser.frame_url
+            expired = document_cookies(url).map do |cookie|
+              scope = cookie.fetch("domain").start_with?(".") ? { domain: cookie["domain"] } : { url: url }
+              cookie.slice("name", "path", "secure", "httpOnly").merge(scope, value: "", expires: 1)
             end
+            @browser.execute_cdp("Network.setCookies", cookies: expired) unless expired.empty?
             nil
           end
 
           private
 
-          def document_cookies
-            @browser.execute_cdp("Network.getCookies", urls: [@browser.frame_url]).fetch("cookies")
+          def document_cookies(url = @browser.frame_url)
+            @browser.execute_cdp("Network.getCookies", urls: [url]).fetch("cookies")
           end
         end
 

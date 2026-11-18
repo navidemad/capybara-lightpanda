@@ -48,6 +48,21 @@ class SeleniumContractTest < Minitest::Test
     end
   end
 
+  def test_sign_out_on_a_subdomain_preserves_the_parent_hosts_private_cookie
+    url = URI(@page.current_url)
+    url.host = "child.parent.localhost"
+    @page.visit(url.to_s)
+    @browser.execute_cdp("Network.setCookie", name: "login", value: "private", domain: "parent.localhost", path: "/")
+    @browser.execute_cdp("Network.setCookie", name: "login", value: "shared", domain: ".parent.localhost", path: "/")
+    assert_equal "shared", @browser.manage.cookie_named("login")[:value]
+    @browser.manage.delete_all_cookies
+    assert_empty @browser.manage.all_cookies
+
+    url.host = "parent.localhost"
+    @page.visit(url.to_s)
+    assert_equal "private", @browser.manage.cookie_named("login")[:value]
+  end
+
   def test_consent_cookie_metadata_and_scoped_sign_out
     url = @page.current_url
     expires = Time.now.to_i + 3600
