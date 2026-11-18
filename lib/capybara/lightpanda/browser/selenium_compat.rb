@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "date"
+
 module Capybara
   module Lightpanda
     class Browser
@@ -80,6 +82,57 @@ module Capybara
         # "all ivars initialized in the constructor" rule for these modules.
         def logs
           Logs.new(self)
+        end
+
+        # WebDriver's cookie commands operate on the active document. The native
+        # cookie jar spans the whole browser context, including other hosts.
+        class Manager
+          def initialize(browser)
+            @browser = browser
+          end
+
+          def all_cookies
+            document_cookies.map do |raw|
+              cookie = Cookies::Cookie.new(raw)
+              { name: cookie.name, value: cookie.value, domain: cookie.domain, path: cookie.path,
+                expires: cookie.expires&.utc&.to_datetime, secure: cookie.secure?, http_only: cookie.httponly?,
+                same_site: cookie.same_site || "Lax", }
+            end
+          end
+
+          def cookie_named(name)
+            cookie = all_cookies.find { |entry| entry[:name] == name }
+            return cookie if cookie
+
+            error = if defined?(::Selenium::WebDriver::Error::NoSuchCookieError)
+                      ::Selenium::WebDriver::Error::NoSuchCookieError
+                    else
+                      NoSuchCookieError
+                    end
+            raise error, "No cookie named #{name.inspect} for the current document"
+          end
+
+          def delete_all_cookies
+            # Network.deleteCookies strips the leading dot and can remove a
+            # parent host's private cookie with the same name and path.
+            url = @browser.frame_url
+            expired = document_cookies(url).map do |cookie|
+              scope = cookie.fetch("domain").start_with?(".") ? { domain: cookie["domain"] } : { url: url }
+              cookie.slice("name", "value", "path", "secure", "httpOnly").merge(scope, expires: 1)
+            end
+            @browser.execute_cdp("Network.setCookies", cookies: expired) unless expired.empty?
+            nil
+          end
+
+          private
+
+          def document_cookies(url = @browser.frame_url)
+            @browser.execute_cdp("Network.getCookies", urls: [url]).fetch("cookies")
+          end
+        end
+
+        def manage
+          Manager.new(self)
         end
 
         # Selenium's `execute_async_script`: the script receives a completion

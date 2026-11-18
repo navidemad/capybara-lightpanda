@@ -130,21 +130,6 @@ index 381002a..c592c6c 100644
  end
  
  server_options = { Silent: true, queue_requests: false }
-@@ -150,11 +90,11 @@ RSpec.configure do |config|
-       # JavaScript sets the cookie also for all subdomains but localhost is a
-       # special case.
-       domain = ".#{domain}" unless domain == "localhost"
--      page.driver.browser.execute_cdp(
--        "Network.setCookie",
--        domain:,
-+      # Lightpanda driver: use the gem's cookies API instead of Chrome's execute_cdp.
-+      page.driver.browser.cookies.set(
-         name: Decidim.consent_cookie_name,
-         value: { essential: true }.to_json,
-+        domain: domain,
-         path: "/",
-         expires: 1.day.from_now.to_i,
-         same_site: "Lax"
 @@ -175,7 +115,7 @@ RSpec.configure do |config|
    end
  
