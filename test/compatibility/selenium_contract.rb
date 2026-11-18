@@ -34,6 +34,28 @@ class SeleniumContractTest < Minitest::Test
     @page.driver.quit
   end
 
+  def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
+    @page.execute_script(<<~JS)
+      setTimeout(() => { throw new Error("migration exception"); }, 0);
+      setTimeout(() => { Promise.reject(new Error("migration rejection")); }, 5);
+      Promise.reject(new Error("migration handled")).catch(() => {});
+      setTimeout(() => {
+        console.error("migration console");
+        document.body.dataset.finished = "yes";
+      }, 20);
+    JS
+    @page.assert_selector("body[data-finished=yes]", visible: :all)
+    severe = @browser.logs.get(:browser).select { |entry| entry.level == "SEVERE" }
+    %w[exception rejection console].each do |kind|
+      assert_equal 1, severe.count { |entry| entry.message.include?("migration #{kind}") }, severe.inspect
+    end
+    refute(severe.any? { |entry| entry.message.include?("migration handled") })
+
+    @page.reset_session!
+    @page.visit("/")
+    refute(@page.driver.browser.logs.get(:browser).any? { |entry| entry.message.include?("migration") })
+  end
+
   def test_cookie_manager_follows_the_current_frame
     @browser.execute_cdp("Network.setCookie", name: "inside", value: "frame", url: @page.current_url, path: "/admin")
     manager = @browser.manage

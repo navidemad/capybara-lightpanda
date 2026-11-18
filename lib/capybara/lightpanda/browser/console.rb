@@ -93,7 +93,7 @@ module Capybara
         def self.page_error_message(exception, stack, rejection)
           return primitive_text(exception) unless stack
 
-          summary = stack.split(/\n\s+at /, 2).first
+          summary = stack.split(/\n\s+at /, 2).first || exception["className"] || "Error"
           prefix = "#{exception['className']}: "
           rejection && summary.start_with?(prefix) ? summary.delete_prefix(prefix) : summary
         end
