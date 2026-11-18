@@ -11,12 +11,13 @@ group :development do
 end
 
 group :test do
-  gem "launchy", "~> 2.5"
+  gem "cuprite", "= 0.20.1", require: false
+  gem "launchy", "~> 3.1"
   gem "logger"
-  gem "minitest", "~> 6.0"
-  gem "mocha", "~> 2.0"
+  gem "minitest", "~> 6.1"
+  gem "mocha", "~> 3.1"
   gem "ostruct"
-  gem "puma", "~> 6"
+  gem "puma", "~> 8"
   gem "rspec", "~> 3.0"
-  gem "sinatra", "~> 3.0"
+  gem "sinatra", "~> 4.2"
 end

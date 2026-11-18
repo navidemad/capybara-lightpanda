@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "network/exchange"
+
 module Capybara
   module Lightpanda
     class Network
@@ -14,10 +16,14 @@ module Capybara
       # the first navigation completes. Backs Browser#status_code /
       # #response_headers. Captured by #subscribe's handlers.
       attr_reader :last_navigation_response
+      alias response last_navigation_response
+
+      def status = response&.status
 
       def initialize(browser)
         @browser = browser
         @traffic = []
+        @pending = {}
         @traffic_mutex = Mutex.new
         @enabled = false
         @request_handler = @response_handler = @failure_handler = nil
@@ -61,6 +67,8 @@ module Capybara
         # wait_for_idle's pending count on a future call.
         browser.command("Network.disable")
         unsubscribe
+        # Completion events for these requests may arrive while observation is off.
+        @traffic_mutex.synchronize { @pending.clear }
         @enabled = false
       end
 
@@ -68,8 +76,18 @@ module Capybara
         @traffic_mutex.synchronize { @traffic.dup }
       end
 
-      def clear
-        @traffic_mutex.synchronize { @traffic.clear }
+      def clear(type = nil)
+        case type
+        when nil, :traffic
+          # Forget observations while continuing to track active network I/O.
+          @traffic_mutex.synchronize { @traffic.clear }
+          return [] if type.nil?
+        when :cache
+          browser.command("Network.clearBrowserCache")
+        else
+          raise ArgumentError, "expected :traffic or :cache, got #{type.inspect}"
+        end
+        true
       end
 
       # Wipe local state without sending Network.disable. Called by
@@ -80,7 +98,10 @@ module Capybara
       # cleared the Subscriber first.
       def reset
         unsubscribe
-        clear
+        @traffic_mutex.synchronize do
+          @traffic.clear
+          @pending.clear
+        end
         @enabled = false
         @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
         @last_navigation_response = nil
@@ -96,21 +117,18 @@ module Capybara
       def headers=(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = headers
-        browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
+        apply_extra_headers(headers)
       end
 
       def add_headers(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = (@extra_headers || {}).merge(headers)
-        browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
+        apply_extra_headers(extra_headers.merge(headers))
       end
 
       def clear_headers
         enable
-        @extra_headers = {}
-        browser.page_command("Network.setExtraHTTPHeaders", headers: {})
+        apply_extra_headers({})
       end
 
       # Lightpanda refuses a user agent containing "Mozilla" by design, and
@@ -134,10 +152,10 @@ module Capybara
         browser.page_command("Emulation.setUserAgentOverride", userAgent: value.to_s)
       end
 
-      # Count of in-flight requests (no response and no failure recorded yet).
+      # Count through body completion, including requests evicted from the traffic history.
       # Cheap predicate-friendly accessor (ferrum parity).
       def pending_connections
-        @traffic_mutex.synchronize { @traffic.count { |t| open?(t) } }
+        @traffic_mutex.synchronize { @pending.size }
       end
 
       # True when no more than `connections` requests are in-flight.
@@ -145,8 +163,8 @@ module Capybara
         pending_connections <= connections
       end
 
-      def wait_for_idle(timeout: 5, connections: 0)
-        wait_for_idle!(timeout: timeout, connections: connections)
+      def wait_for_idle(timeout: 5, connections: 0, duration: 0.1)
+        wait_for_idle!(timeout: timeout, connections: connections, duration: duration)
       rescue TimeoutError
         false
       end
@@ -154,10 +172,10 @@ module Capybara
       # Raising variant of #wait_for_idle (ferrum parity). Returns true on
       # success, raises TimeoutError on timeout so callers that treat the
       # idle wait as a precondition don't have to remember to check a bool.
-      def wait_for_idle!(timeout: 5, connections: 0) # rubocop:disable Naming/PredicateMethod
+      def wait_for_idle!(timeout: 5, connections: 0, duration: 0.1) # rubocop:disable Naming/PredicateMethod
         Utils::Wait.until(
           timeout: timeout,
-          interval: 0.1,
+          interval: duration,
           message: "Network did not become idle within #{timeout}s " \
                    "(pending=#{pending_connections}, allowed=#{connections})"
         ) { idle?(connections) }
@@ -165,6 +183,10 @@ module Capybara
       end
 
       private
+
+      def apply_extra_headers(headers)
+        browser.page_command("Network.setExtraHTTPHeaders", headers: headers).tap { @extra_headers = headers.dup }
+      end
 
       def warn_on_refused_user_agent(headers)
         value = headers.find { |name, _| name.to_s.casecmp?("user-agent") }&.last
@@ -190,8 +212,10 @@ module Capybara
         @request_handler = build_request_handler
         @response_handler = build_response_handler
         @failure_handler = build_failure_handler
+        @finished_handler = ->(params) { @traffic_mutex.synchronize { finish_request(params["requestId"]) } }
         browser.on("Network.requestWillBeSent", &@request_handler)
         browser.on("Network.responseReceived", &@response_handler)
+        browser.on("Network.loadingFinished", &@finished_handler)
         browser.on("Network.loadingFailed", &@failure_handler)
       end
 
@@ -211,18 +235,12 @@ module Capybara
             @document_request_id = params["requestId"]
             @last_navigation_response = nil
           end
-          entry = {
-            request_id: params["requestId"],
-            url: params.dig("request", "url"),
-            method: params.dig("request", "method"),
-            timestamp: params["timestamp"],
-            response: nil,
-            error: nil,
-          }
+          entry = Exchange.new(params)
+          id = entry[:request_id]
           @traffic_mutex.synchronize do
-            if (redirect = params["redirectResponse"]) && (previous = last_open_entry(params["requestId"]))
-              previous[:response] = response_summary(redirect)
-            end
+            previous = finish_request(id)
+            previous[:response] = Response.new(params["redirectResponse"]) if previous && params["redirectResponse"]
+            @pending[id] = entry
             @traffic << entry
             @traffic.shift(@traffic.size - TRAFFIC_LIMIT) if @traffic.size > TRAFFIC_LIMIT
           end
@@ -231,19 +249,11 @@ module Capybara
 
       def build_response_handler
         lambda do |params|
-          if params["requestId"] == @document_request_id
-            @last_navigation_response = {
-              status: params.dig("response", "status"),
-              headers: params.dig("response", "headers") || {},
-            }
-          end
+          summary = Response.new(params["response"])
+          @last_navigation_response = summary if params["requestId"] == @document_request_id
           @traffic_mutex.synchronize do
-            # Last open entry, not `find`: after a redirect chain several
-            # entries share the requestId and only the newest is still open.
-            request = last_open_entry(params["requestId"])
-            next unless request
-
-            request[:response] = response_summary(params["response"])
+            request = @pending[params["requestId"]]
+            request[:response] = summary if request
           end
         end
       end
@@ -258,7 +268,7 @@ module Capybara
       def build_failure_handler
         lambda do |params|
           @traffic_mutex.synchronize do
-            request = last_open_entry(params["requestId"])
+            request = finish_request(params["requestId"])
             next unless request
 
             request[:error] = params["errorText"].to_s
@@ -275,30 +285,21 @@ module Capybara
       end
 
       # Caller holds @traffic_mutex.
-      def last_open_entry(request_id)
-        @traffic.reverse_each.find { |t| t[:request_id] == request_id && open?(t) }
-      end
-
-      def open?(entry)
-        entry[:response].nil? && entry[:error].nil?
-      end
-
-      def response_summary(response)
-        response ||= {}
-        {
-          status: response["status"],
-          headers: response["headers"],
-          mime_type: response["mimeType"],
-        }
+      def finish_request(id)
+        entry = @pending.delete(id)
+        entry&.finish!
+        entry
       end
 
       def unsubscribe
         browser.off("Network.requestWillBeSent", @request_handler) if @request_handler
         browser.off("Network.responseReceived", @response_handler) if @response_handler
+        browser.off("Network.loadingFinished", @finished_handler) if @finished_handler
         browser.off("Network.loadingFailed", @failure_handler) if @failure_handler
         @request_handler = nil
         @response_handler = nil
         @failure_handler = nil
+        @finished_handler = nil
       end
     end
   end

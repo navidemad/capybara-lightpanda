@@ -30,7 +30,7 @@ module Capybara
           @browser = nil
           dead.quit
         end
-        @browser ||= Browser.new(@options)
+        @browser ||= build_browser
       end
 
       def browser_alive?
@@ -123,9 +123,9 @@ module Capybara
       # Block until in-flight HTTP traffic settles. Auto-enables the tracker
       # on first call so callers don't have to remember to flip it on.
       # Returns true on success, false on timeout.
-      def wait_for_network_idle(timeout: 5, connections: 0)
+      def wait_for_network_idle(timeout: 5, connections: 0, **)
         network.enable
-        network.wait_for_idle(timeout: timeout, connections: connections)
+        network.wait_for_idle(timeout: timeout, connections: connections, **)
       end
 
       # -- Downloads --
@@ -239,6 +239,12 @@ module Capybara
         browser.set_viewport(width, height)
       end
 
+      # Cuprite's `page.driver.resize(width, height)`. Same viewport, same
+      # resize-then-visit rule as `current_window.resize_to`.
+      def resize(width, height)
+        browser.set_viewport(width, height)
+      end
+
       # No window manager and no layout, so "as large as the screen" has no
       # meaning beyond the configured size. Both reset to it rather than
       # raising, because suites call maximize defensively in setup and a
@@ -313,6 +319,10 @@ module Capybara
 
       def headers=(headers)
         browser.network.headers = headers
+      end
+
+      def add_header(name, value, permanent: true)
+        browser.headers.add({ name => value }, permanent: permanent)
       end
 
       def add_headers(headers)
@@ -391,6 +401,10 @@ module Capybara
       end
 
       private
+
+      def build_browser
+        Browser.new(@options)
+      end
 
       # A node found while a frame is switched to lives in that frame's
       # document, which Node#call checks for a frame navigation.

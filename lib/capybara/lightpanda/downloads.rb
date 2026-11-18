@@ -20,7 +20,7 @@ module Capybara
     # Structure deliberately mirrors Network (same browser ref, same mutex +
     # subscribe/unsubscribe lifecycle, same reset-after-disposeBrowserContext
     # contract) so the two trackers behave identically under create_page/reset.
-    class Downloads
+    class Downloads # rubocop:disable Metrics/ClassLength
       attr_reader :browser, :path
 
       # How long #wait gives a download to BEGIN (the downloadWillBegin frame
@@ -64,6 +64,26 @@ module Capybara
         @enabled = true
       end
 
+      # Ferrum's `downloads.set_behavior(save_path:, behavior: :allow)`, which
+      # Cuprite suites call in setup to pick the download directory. `:allow`
+      # (re)points downloads at `save_path`; `:deny` and `:default` turn them
+      # off. Files already recorded stay listed. Lasts until the next
+      # `reset!`, which goes back to the configured `save_path`, so call it
+      # per test as those suites do.
+      BEHAVIORS = { allow: "allow", deny: "deny", default: "default" }.freeze
+
+      def set_behavior(save_path:, behavior: :allow)
+        wire = BEHAVIORS.fetch(behavior.to_sym) do
+          raise ArgumentError, "unknown download behavior #{behavior.inspect} (use :allow, :deny or :default)"
+        end
+        unsubscribe
+        @enabled = false
+        @path = nil
+        return enable(save_path) if wire == "allow"
+
+        browser.command("Browser.setDownloadBehavior", behavior: wire, eventsEnabled: false)
+      end
+
       # Absolute paths of downloads completed this session (newest last).
       def files
         @mutex.synchronize { @files.dup }
@@ -90,17 +110,20 @@ module Capybara
       # give a download up to DOWNLOAD_BEGIN_GRACE to begin (tracked by the
       # monotonic @started counter, immune to the queue already having drained),
       # then wait up to `timeout` for every in-flight download to finish.
-      def wait(timeout: 5)
+      # With a trigger block the caller expects a new download: record the
+      # baseline before yielding and allow the full timeout for it to start.
+      def wait(seconds = 5, timeout: seconds)
         baseline = started_count
-        clock = -> { ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) }
-        hard_deadline = clock.call + timeout
-        begin_deadline = clock.call + [timeout, DOWNLOAD_BEGIN_GRACE].min
+        yield if block_given?
 
+        deadline = Utils::Wait.deadline(timeout)
+        begin_deadline = block_given? ? deadline : Utils::Wait.deadline([timeout, DOWNLOAD_BEGIN_GRACE].min)
         loop do
-          began = started_count > baseline
-          done = (began ? !in_progress? : clock.call >= begin_deadline) || clock.call >= hard_deadline
-          return files if done
-
+          now = Utils::Wait.monotonic_time
+          @mutex.synchronize do
+            began = @started > baseline
+            return @files.dup if now >= deadline || (@pending.empty? && (began || now >= begin_deadline))
+          end
           sleep 0.02
         end
       end

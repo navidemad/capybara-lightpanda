@@ -13,6 +13,7 @@ require_relative "capybara/lightpanda/utils/attempt"
 require_relative "capybara/lightpanda/utils/wait"
 require_relative "capybara/lightpanda/client"
 require_relative "capybara/lightpanda/headers"
+require_relative "capybara/lightpanda/request_headers"
 require_relative "capybara/lightpanda/network"
 require_relative "capybara/lightpanda/downloads"
 require_relative "capybara/lightpanda/cookies"
@@ -22,6 +23,7 @@ require_relative "capybara/lightpanda/auto_scripts"
 require_relative "capybara/lightpanda/node"
 require_relative "capybara/lightpanda/element_extension"
 require_relative "capybara/lightpanda/driver"
+require_relative "capybara/lightpanda/cuprite_driver"
 require_relative "capybara/lightpanda/railtie" if defined?(Rails::Railtie)
 
 module Capybara
