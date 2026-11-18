@@ -40,15 +40,7 @@ class CupriteContractTest < Minitest::Test
 
   def setup
     @directory = Dir.mktmpdir
-    options = { save_path: @directory, window_size: [900, 700] }
-    if ENV.fetch("CONTRACT_DRIVER", "lightpanda") == "cuprite"
-      options[:process_timeout] = 30
-      options[:browser_path] = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
-      Capybara.register_driver(:store_system) { |app| Capybara::Cuprite::Driver.new(app, options) }
-    else
-      options[:browser_path] = ENV["LIGHTPANDA_BIN"] if ENV["LIGHTPANDA_BIN"]
-      Capybara::Lightpanda.register_cuprite_driver(:store_system, **options)
-    end
+    register_driver(:store_system, save_path: @directory, window_size: [900, 700])
     Capybara.server = :puma, { Silent: true }
     @stream_started = Queue.new
     @release_stream = Queue.new
@@ -66,6 +58,17 @@ class CupriteContractTest < Minitest::Test
     @page = Capybara::Session.new(:store_system, app)
   end
 
+  def register_driver(name, **options)
+    if ENV.fetch("CONTRACT_DRIVER", "lightpanda") == "cuprite"
+      options[:process_timeout] = 30
+      options[:browser_path] = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
+      Capybara.register_driver(name) { |app| Capybara::Cuprite::Driver.new(app, options) }
+    else
+      options[:browser_path] = ENV["LIGHTPANDA_BIN"] if ENV["LIGHTPANDA_BIN"]
+      Capybara::Lightpanda.register_cuprite_driver(name, **options)
+    end
+  end
+
   def teardown
     @page.driver.quit
     FileUtils.remove_entry(@directory)
@@ -78,6 +81,37 @@ class CupriteContractTest < Minitest::Test
     @page.fill_in("Name", with: "Ada")
     assert_equal "Ada", @page.find_field("Name").value
     assert_equal [900, 700], @page.current_window.size
+  end
+
+  def test_forem_registration_allows_a_visit_to_return_while_a_script_is_pending
+    register_driver(:better_cuprite, browser_options: {}, pending_connection_errors: false, timeout: 1)
+    started = Queue.new
+    release = Queue.new
+    app = lambda do |env|
+      if env["PATH_INFO"] == "/slow.js"
+        started << true
+        released = release.pop(timeout: 10)
+        script = released ? "document.body.dataset.loaded = 'yes'" : ""
+        [200, { "content-type" => "application/javascript" }, [script]]
+      else
+        [200, { "content-type" => "text/html" }, ['<body><script defer src="/slow.js"></script></body>']]
+      end
+    end
+    page = Capybara::Session.new(:better_cuprite, app)
+    page.visit("/")
+    assert started.pop(timeout: 2), "the script must have reached the server"
+    release << true
+    assert page.has_selector?("body[data-loaded=yes]", visible: :all, wait: 5)
+  ensure
+    release&.push(true)
+    page&.driver&.quit
+  end
+
+  def test_registration_rejects_custom_chrome_flags_and_required_pending_errors
+    [{ browser_options: { proxy: "proxy.test" } }, { pending_connection_errors: true }].each do |settings|
+      error = assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:custom, **settings) }
+      assert_includes error.message, settings.keys.first.to_s
+    end
   end
 
   def test_permanent_referer_replaces_the_navigation_only_referer
