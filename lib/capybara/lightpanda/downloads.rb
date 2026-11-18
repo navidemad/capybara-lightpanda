@@ -110,17 +110,20 @@ module Capybara
       # give a download up to DOWNLOAD_BEGIN_GRACE to begin (tracked by the
       # monotonic @started counter, immune to the queue already having drained),
       # then wait up to `timeout` for every in-flight download to finish.
-      def wait(timeout: 5)
+      # With a trigger block the caller expects a new download: record the
+      # baseline before yielding and allow the full timeout for it to start.
+      def wait(seconds = 5, timeout: seconds)
         baseline = started_count
-        clock = -> { ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) }
-        hard_deadline = clock.call + timeout
-        begin_deadline = clock.call + [timeout, DOWNLOAD_BEGIN_GRACE].min
+        yield if block_given?
 
+        deadline = Utils::Wait.deadline(timeout)
+        begin_deadline = block_given? ? deadline : Utils::Wait.deadline([timeout, DOWNLOAD_BEGIN_GRACE].min)
         loop do
-          began = started_count > baseline
-          done = (began ? !in_progress? : clock.call >= begin_deadline) || clock.call >= hard_deadline
-          return files if done
-
+          now = Utils::Wait.monotonic_time
+          @mutex.synchronize do
+            began = @started > baseline
+            return @files.dup if now >= deadline || (@pending.empty? && (began || now >= begin_deadline))
+          end
           sleep 0.02
         end
       end

@@ -229,6 +229,16 @@ The registration checks copied options before a browser starts. Use `ws_url:` fo
 WebSocket endpoint. A Cuprite HTTP `url:`, Chrome flags and proxy settings raise an option error.
 Both `:cuprite` and `:lightpanda` remain available when you load both gems.
 
+With this registration, existing helpers can call `browser.headers.set/add/get/clear`,
+`browser.cookies.all.fetch("session")`, and `browser.network.traffic.first.request.url`.
+Cookie enumeration includes entries that share a name across paths. Network entries also support
+Lightpanda’s existing hash access. Use `network.clear(:traffic)` to forget observations and
+`network.clear(:cache)` to clear the HTTP cache.
+
+For downloads, set `save_path:` on the driver or configure `Capybara.save_path`, then use
+`page.driver.browser.downloads.wait { click_link("Download report") }`. The block runs once.
+Lightpanda’s `downloads.files` returns absolute paths. Existing click-then-wait calls still work.
+
 Run the shared compatibility examples with `bundle exec ruby test/compatibility/cuprite_contract.rb`.
 Run them again with `CONTRACT_DRIVER=cuprite` for the Chrome reference. Set `CHROME_BIN` or
 `LIGHTPANDA_BIN` to select a local executable.

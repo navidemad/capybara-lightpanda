@@ -18,6 +18,11 @@ end
 class CupriteContractTest < Minitest::Test
   APP = lambda do |env|
     case env["PATH_INFO"]
+    when "/reports"
+      next [200, { "content-type" => "text/html" }, ['<a href="/report.csv" download>Download report</a>']]
+    when "/report.csv"
+      next [200, { "content-type" => "text/csv", "content-disposition" => 'attachment; filename="report.csv"' },
+            ["item,total\ncoffee,7\n"],]
     when "/redirect"
       next [302, { "location" => "/parent" }, []]
     when "/parent"
@@ -165,6 +170,32 @@ class CupriteContractTest < Minitest::Test
     failed = network.traffic.find { |hop| hop.request&.url&.end_with?("/closed") }
     assert_predicate failed, :finished?
     assert failed.error
+  end
+
+  def test_download_block_yields_once_and_waits_for_the_file
+    @page.visit("/reports")
+    calls = 0
+    @page.driver.browser.downloads.wait(3) do
+      calls += 1
+      @page.click_link("Download report")
+    end
+    assert_equal 1, calls
+    assert_equal "item,total\ncoffee,7\n", File.read(File.join(@directory, "report.csv"))
+  end
+
+  def test_block_wait_includes_a_download_started_asynchronously
+    @page.visit("/reports")
+    @page.driver.browser.downloads.wait(4) do
+      @page.execute_script("setTimeout(() => document.querySelector('a').click(), 1250)")
+    end
+    assert_equal "item,total\ncoffee,7\n", File.read(File.join(@directory, "report.csv"))
+  end
+
+  def test_download_trigger_exceptions_reach_the_test
+    error = assert_raises(RuntimeError) do
+      @page.driver.browser.downloads.wait { raise "trigger failed" }
+    end
+    assert_equal "trigger failed", error.message
   end
 
   def test_copied_remote_and_chrome_options_fail_before_launch
