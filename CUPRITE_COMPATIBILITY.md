@@ -28,6 +28,8 @@ Decidim’s comments helper resizes to 375×667 before visiting a mobile view an
 
 Set the viewport at the start of each responsive example, before visiting. Lightpanda restores its configured dimensions on session reset. Selenium/Chrome retains the resized window. JavaScript sees the new viewport immediately. Lightpanda evaluates stylesheet media rules when parsing a document and has synthetic element geometry. Keep a Chrome lane for live reflow, window positioning and rendered pixel assertions. [Viewport implementation](lib/capybara/lightpanda/browser.rb) · [Differential contract](test/compatibility/selenium_contract.rb)
 
+Decidim’s download hook sets `page.driver.browser.download_path = DownloadHelper::PATH.to_s` before each export. Its original open-data spec passed on Selenium/Chrome and Lightpanda, opening the downloaded ZIP and checking all seven expected CSV entries. Set an absolute directory accessible to the browser process. Both sessions restore their configured destination on reset. The differential contract switches destinations twice and reads the bytes from disk. [Download hook](https://github.com/decidim/decidim/blob/d22e3584e07045fea4f1c759454cbfd5478168e7/decidim-dev/lib/decidim/dev/test/rspec_support/z_download_helper.rb) · [Open-data system spec](https://github.com/decidim/decidim/blob/d22e3584e07045fea4f1c759454cbfd5478168e7/decidim-core/spec/system/download_open_data_files_spec.rb)
+
 ## Original probe results
 
 The table below is historical. It records the pre-adapter comparison at `1c93471` on 18 November 2026 with Lightpanda 1.0.4 and Chrome for Testing 156.0.8078.4. In the table, `b` is `page.driver.browser`.

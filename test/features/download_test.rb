@@ -116,6 +116,18 @@ describe "Capybara::Lightpanda downloads" do
       refute File.exist?(downloaded_file), "the configured save_path must no longer receive the file"
     end
 
+    it "keeps tracking the original destination if the replacement directory cannot be created" do
+      browser = session.driver.browser
+      browser.download_path = other_dir
+      File.write(File.join(other_dir, "regular-file"), "occupied")
+      assert_raises(Errno::EEXIST) do
+        browser.download_path = File.join(other_dir, "regular-file")
+      end
+      files = browser.downloads.wait { session.click_link("Download report") }
+      assert_equal [File.join(other_dir, "report.csv")], files
+      assert_includes File.read(files.first), "lightpanda,100"
+    end
+
     it "records a download once after being called twice" do
       2.times { session.driver.browser.downloads.set_behavior(save_path: other_dir) }
 

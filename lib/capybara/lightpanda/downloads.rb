@@ -34,7 +34,7 @@ module Capybara
         @path = nil
         @enabled = false
         @mutex = Mutex.new
-        @pending = {}  # guid => on-disk basename (from suggestedFilename)
+        @pending = {}  # guid => absolute path when the download began
         @files = []    # absolute paths of completed downloads, in order
         @started = 0   # monotonic count of downloads begun this session
         @will_handler = nil
@@ -50,18 +50,7 @@ module Capybara
       def enable(save_path)
         return if @enabled || save_path.to_s.empty?
 
-        @path = File.expand_path(save_path.to_s)
-        FileUtils.mkdir_p(@path)
-        subscribe
-        begin
-          browser.command("Browser.setDownloadBehavior",
-                          behavior: "allow", downloadPath: @path, eventsEnabled: true)
-        rescue StandardError
-          unsubscribe
-          @path = nil
-          raise
-        end
-        @enabled = true
+        allow_downloads(save_path)
       end
 
       # Ferrum's `downloads.set_behavior(save_path:, behavior: :allow)`, which
@@ -76,12 +65,17 @@ module Capybara
         wire = BEHAVIORS.fetch(behavior.to_sym) do
           raise ArgumentError, "unknown download behavior #{behavior.inspect} (use :allow, :deny or :default)"
         end
+        return allow_downloads(save_path) if wire == "allow" && !save_path.to_s.empty?
+
+        wire = "deny" if wire == "allow"
+        result = browser.command("Browser.setDownloadBehavior", behavior: wire, eventsEnabled: false)
         unsubscribe
         @enabled = false
-        @path = nil
-        return enable(save_path) if wire == "allow"
-
-        browser.command("Browser.setDownloadBehavior", behavior: wire, eventsEnabled: false)
+        @mutex.synchronize do
+          @path = nil
+          @pending.clear
+        end
+        result
       end
 
       # Absolute paths of downloads completed this session (newest last).
@@ -148,6 +142,23 @@ module Capybara
 
       private
 
+      def allow_downloads(save_path)
+        destination = File.expand_path(save_path.to_s)
+        FileUtils.mkdir_p(destination)
+        previous = @path
+        subscribe unless @enabled
+        @mutex.synchronize { @path = destination }
+        begin
+          browser.command("Browser.setDownloadBehavior", behavior: "allow", downloadPath: destination,
+                                                         eventsEnabled: true)
+        rescue StandardError
+          @mutex.synchronize { @path = previous }
+          unsubscribe unless @enabled
+          raise
+        end
+        @enabled = true
+      end
+
       def subscribe
         @will_handler = build_will_handler
         @progress_handler = build_progress_handler
@@ -157,7 +168,7 @@ module Capybara
 
       # downloadWillBegin carries {guid, url, suggestedFilename}. behavior
       # "allow" writes the file under the (path-stripped) suggested name, so
-      # remember guid => basename to resolve the absolute path on completion.
+      # record the directory here in case the next download uses another one.
       def build_will_handler
         lambda do |params|
           guid = params["guid"]
@@ -165,7 +176,9 @@ module Capybara
           next if guid.nil? || name.empty?
 
           @mutex.synchronize do
-            @pending[guid] = name
+            next unless @path
+
+            @pending[guid] = File.join(@path, name)
             @started += 1
           end
         end
@@ -179,8 +192,8 @@ module Capybara
           case params["state"]
           when "completed"
             @mutex.synchronize do
-              name = @pending.delete(guid)
-              @files << File.join(@path, name) if name && @path
+              path = @pending.delete(guid)
+              @files << path if path
             end
           when "canceled"
             @mutex.synchronize { @pending.delete(guid) }

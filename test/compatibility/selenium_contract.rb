@@ -3,23 +3,32 @@
 require "minitest/autorun"
 require "capybara-lightpanda"
 require "selenium-webdriver"
+require "tmpdir"
 
 class SeleniumContractTest < Minitest::Test
   APP = lambda do |env|
+    if env["PATH_INFO"] == "/export"
+      headers = { "content-type" => "application/octet-stream",
+                  "content-disposition" => 'attachment; filename="report.bin"', }
+      next [200, headers, [env.fetch("QUERY_STRING")]]
+    end
     body = env["PATH_INFO"] == "/" ? '<iframe src="/admin/frame"></iframe>' : "<title>Consent</title>"
     [200, { "content-type" => "text/html" }, [body]]
   end
 
   def setup
+    @default_directory = Dir.mktmpdir
     driver = ENV.fetch("CONTRACT_DRIVER", "lightpanda")
     Capybara.register_driver(:migration_browser) do |app|
       case driver
       when "selenium"
         options = Selenium::WebDriver::Chrome::Options.new(args: ["--headless", "--no-sandbox"])
+        options.add_preference("download.default_directory", @default_directory)
         options.binary = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
         Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
       when "lightpanda"
-        Capybara::Lightpanda::Driver.new(app, browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
+        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory,
+                                              browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
       else
         raise ArgumentError, "unknown contract driver #{driver.inspect}"
       end
@@ -31,7 +40,31 @@ class SeleniumContractTest < Minitest::Test
   end
 
   def teardown
-    @page.driver.quit
+    @page&.driver&.quit
+    FileUtils.remove_entry(@default_directory)
+  end
+
+  def test_download_helper_reads_each_export_from_the_selected_directory
+    %w[first second].each do |report|
+      path = File.join(@default_directory, report)
+      Dir.mkdir(path)
+      assert_equal({}, @browser.public_send(:download_path=, path))
+      assert_raises(Selenium::WebDriver::Error::InvalidArgumentError) { @browser.download_path = nil }
+      download_report(report, path)
+    end
+
+    @page.reset_session!
+    @page.visit("/")
+    download_report("after-reset", @default_directory)
+    assert_equal "first", File.binread(File.join(@default_directory, "first", "report.bin"))
+    assert_equal "second", File.binread(File.join(@default_directory, "second", "report.bin"))
+  end
+
+  def download_report(report, destination)
+    @page.execute_script("document.body.innerHTML = '<a href=/export?#{report}>Export</a>'")
+    @page.click_link("Export")
+    file = File.join(destination, "report.bin")
+    Capybara::Lightpanda::Utils::Wait.until(timeout: 5) { File.file?(file) && File.binread(file) == report }
   end
 
   def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
