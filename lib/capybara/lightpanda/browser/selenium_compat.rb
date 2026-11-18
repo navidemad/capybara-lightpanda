@@ -46,8 +46,8 @@ module Capybara
           def perform
             unless @keys.empty?
               @browser.keyboard.type(*@keys)
-              @browser.wait_for_idle
               @keys.clear
+              @browser.wait_for_idle
             end
             nil
           end

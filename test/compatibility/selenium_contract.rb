@@ -30,7 +30,7 @@ class SeleniumContractTest < Minitest::Test
         options.binary = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
         Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
       when "lightpanda"
-        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory,
+        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory, raise_on_unhandled_modal: true,
                                               browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
       else
         raise ArgumentError, "unknown contract driver #{driver.inspect}"
@@ -66,6 +66,23 @@ class SeleniumContractTest < Minitest::Test
     assert_equal "yes", @page.evaluate_script("document.body.dataset.open")
     assert_equal [%w[ArrowRight ArrowRight], %w[ArrowLeft ArrowLeft], %w[Enter NumpadEnter]],
                  @page.evaluate_script("window.keys.map(e => e.slice(1))")
+  end
+
+  def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
+    @page.execute_script(<<~JS)
+      window.keys = [];
+      document.onkeydown = e => {
+        window.keys.push(e.key);
+        if (window.keys.length === 1) alert("Picture opened");
+      };
+    JS
+    actions = @browser.action
+    assert_raises(Capybara::Lightpanda::UnhandledModalError, Selenium::WebDriver::Error::UnexpectedAlertOpenError) do
+      actions.send_keys(:arrow_right).perform
+      @page.evaluate_script("window.keys.length")
+    end
+    actions.perform
+    assert_equal ["ArrowRight"], @page.evaluate_script("window.keys")
   end
 
   def test_download_helper_reads_each_export_from_the_selected_directory
