@@ -129,6 +129,15 @@ describe "Capybara::Lightpanda downloads" do
       assert_includes File.read(files.first), "lightpanda,100"
     end
 
+    it "restores the configured download directory on a fresh Lightpanda context" do
+      session.driver.browser.download_path = other_dir
+      session.reset_session!
+      session.visit("/lightpanda/download_page")
+      files = session.driver.browser.downloads.wait { session.click_link("Download report") }
+      assert_equal [downloaded_file], files
+      assert_includes File.read(downloaded_file), "lightpanda,100"
+    end
+
     it "records a download once after being called twice" do
       2.times { session.driver.browser.downloads.set_behavior(save_path: other_dir) }
 

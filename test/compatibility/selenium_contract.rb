@@ -54,7 +54,10 @@ class SeleniumContractTest < Minitest::Test
 
     @page.reset_session!
     @page.visit("/")
-    download_report("after-reset", @default_directory)
+    # Decidim configures the destination before every download example.
+    after_reset = File.join(@default_directory, "after-reset")
+    @page.driver.browser.download_path = after_reset
+    download_report("after-reset", after_reset)
     assert_equal "first", File.binread(File.join(@default_directory, "first", "report.bin"))
     assert_equal "second", File.binread(File.join(@default_directory, "second", "report.bin"))
   end
