@@ -103,9 +103,22 @@ class CupriteContractTest < Minitest::Test
       assert_equal id, @page.evaluate_script(current_zone)
       assert_equal offsets, @page.evaluate_script("[0, 6].map(m => new Date(Date.UTC(2024, m, 1)).getTimezoneOffset())")
     end
+    browser.page.command(method, timezoneId: "GMT")
+    assert_equal 0, @page.evaluate_script("new Date().getTimezoneOffset()")
     browser.page.command(method, timezoneId: "")
     assert_equal original, @page.evaluate_script(current_zone)
     assert_equal "Unsaved", @page.find_field("Name").value
+  end
+
+  def test_cached_page_handle_cannot_mutate_the_next_session
+    @page.visit("/")
+    cached = @page.driver.browser.page
+    @page.reset!
+    @page.visit("/")
+    assert_raises(Ferrum::BrowserError, Capybara::Lightpanda::BrowserError) do
+      cached.command("Runtime.evaluate", expression: "document.title = 'changed'")
+    end
+    assert_equal "Store", @page.title
   end
 
   def test_application_registration_preserves_the_stock_drivers
