@@ -13,7 +13,7 @@ module Capybara
       # already Lightpanda's behavior. Other values need a different driver.
       settings.delete(:browser_options) if settings[:browser_options] == {}
       settings.delete(:pending_connection_errors) if settings[:pending_connection_errors] == false
-      settings.delete(:slowmo) if settings[:slowmo].nil?
+      settings.delete(:slowmo) if [nil, 0].include?(settings[:slowmo])
       settings.delete(:inspector) if [nil, false].include?(settings[:inspector])
       CupriteDriver.validate_options!(settings)
       Capybara.register_driver(name) { |app| CupriteDriver.new(app, options.to_h.merge(settings)) }

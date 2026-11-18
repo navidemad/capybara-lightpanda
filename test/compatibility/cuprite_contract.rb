@@ -101,13 +101,15 @@ class CupriteContractTest < Minitest::Test
   end
 
   def test_disabled_debug_options_allow_headless_dashboard_navigation
-    register_driver(:dashboard, slowmo: nil, inspector: nil, browser_options: {}, headless: true)
-    page = Capybara::Session.new(:dashboard, APP)
-    page.visit("/")
-    page.fill_in("Name", with: "GoodJob")
-    assert_equal "GoodJob", page.find_field("Name").value
-  ensure
-    page&.driver&.quit
+    [nil, 0.0].each do |delay|
+      register_driver(:dashboard, slowmo: delay, inspector: nil, browser_options: {}, headless: true)
+      page = Capybara::Session.new(:dashboard, APP)
+      page.visit("/")
+      page.fill_in("Name", with: "GoodJob")
+      assert_equal "GoodJob", page.find_field("Name").value
+    ensure
+      page&.driver&.quit
+    end
   end
 
   def test_requested_debug_features_remain_explicit
