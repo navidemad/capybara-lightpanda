@@ -83,6 +83,20 @@ class CupriteContractTest < Minitest::Test
     assert_equal [900, 700], @page.current_window.size
   end
 
+  def test_refused_visit_raises_and_a_later_http_response_is_usable
+    port = TCPServer.open("127.0.0.1", 0) { |server| server.addr[1] }
+    url = "http://127.0.0.1:#{port}/unavailable"
+    error = assert_raises(Ferrum::StatusError) { @page.visit(url) }
+    refute_kind_of Ferrum::PendingConnectionsError, error
+    assert_includes error.message, url
+
+    @page.visit("/child")
+    assert_equal 404, @page.status_code
+    assert_equal "missing", @page.text
+    @page.visit("/parent")
+    assert_equal 200, @page.status_code
+  end
+
   def test_forem_registration_allows_a_visit_to_return_while_a_script_is_pending
     register_driver(:better_cuprite, browser_options: {}, pending_connection_errors: false, timeout: 1)
     started = Queue.new
