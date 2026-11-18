@@ -53,13 +53,15 @@ module Capybara
       # not-visible element reads as "" — WebDriver semantics) and otherwise
       # hands the rendered-text collection (block line breaks + display:none
       # descendant skipping) to native innerText (#2785/#2795). We normalize the
-      # whitespace here to match Capybara's expected Chrome semantics.
+      # whitespace here to match Capybara's expected Chrome semantics. A tab
+      # stays: innerText puts one between table cells, Chrome drivers return
+      # it, and suites assert "Total due\t$0.00".
       def visible_text
         call(VISIBLE_TEXT_JS).to_s
                              .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
                              .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
-                             .gsub(/[ \t\f\v]+/, " ")
-                             .gsub(/[ \t\f\v]*\n[ \t\f\v\n]*/, "\n")
+                             .gsub(/[ \f\v]+/, " ")
+                             .gsub(/[ \f\v]*\n[ \f\v\n]*/, "\n")
                              .tr("\u00A0", " ")
       end
 
@@ -619,6 +621,10 @@ module Capybara
           // that element, not inside its first child. A multi select2 holding
           // a choice is the case: descending into the choice is a click
           // select2 deliberately ignores, while the choices list opens it.
+          // The walk also stops at an element holding text of its own: the
+          // centred pointer lands on that text, not on a small child beside
+          // it. A select2 v4 with allowClear renders `<span>×</span>Alpha`,
+          // and descending pressed the "×", which cleared the selection.
           // The descent never starts from an interactive element, so a normal
           // button/link/input click still lands exactly on `this`.
           var INTERACTIVE = { A: 1, BUTTON: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1,
@@ -635,6 +641,11 @@ module Capybara
               }
             }
             if (!next || (hit !== this && visible > 1)) break;
+            var ownText = false;
+            for (var n = hit.firstChild; n && !ownText; n = n.nextSibling) {
+              ownText = n.nodeType === 3 && n.nodeValue.trim() !== '';
+            }
+            if (ownText) break;
             hit = next;
           }
           // Real pointer clicks are a mousedown -> mouseup -> click sequence,
