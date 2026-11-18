@@ -47,6 +47,16 @@ class SeleniumContractTest < Minitest::Test
     FileUtils.remove_entry(@default_directory)
   end
 
+  # Solidus's order page asserts have_content("Tracking Number FOOBAR") across
+  # a <th>/<td> row. WebDriver's text separates table cells with a space.
+  def test_table_row_text_reads_cells_with_a_space
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<table><tr id="tracking"><th>Tracking Number</th><td>FOOBAR</td></tr></table>';
+    JS
+    assert_equal "Tracking Number FOOBAR", @page.find("#tracking").text
+    assert @page.has_content?("Tracking Number FOOBAR", wait: 0)
+  end
+
   def test_picture_overlay_keyboard_shortcuts_use_focus_at_perform_time
     @page.execute_script(<<~JS)
       document.body.innerHTML = '<button id="picture">Open picture</button>';

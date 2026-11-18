@@ -16,7 +16,7 @@
 ### Fixed
 
 - **Clicking a select2 that can be cleared no longer clears it.** With `allowClear` and a value, select2 4 puts its "×" just before the selected text. The click landed on the "×", so the value was emptied and `change` fired before the list opened; a page that reloads on change then lost the list, and the option was never found. The click now lands on the text, as a pointer in the middle of the field does.
-- **`text` keeps the tab between table cells.** A row reads `"Total due\t$0.00"`, as with Chrome drivers. The tab was turned into a space, so an assertion on the exact text failed.
+- **Table rows read like your previous driver's.** The two Chrome drivers disagree on the text of a table row: Cuprite separates cells with a tab (`"Total due\t$0.00"`), Selenium with a space (`"Total due $0.00"`). The `register_cuprite_driver` registration now keeps the tab, as Cuprite does; the stock `:lightpanda` driver keeps the space, as Selenium and every earlier release do.
 - **`send_keys` reaches a rich-text editor in an iframe.** When the iframe's `<body>` is the editable area (TinyMCE, CKEditor 4), the keys were dropped, or typed into whatever field the top page had focused. They now go to the editor, after its existing text. `send_keys` on a paragraph inside an editor types into that editor.
 
 ## [0.19.1] - 2026-11-18

@@ -77,6 +77,17 @@ class CupriteContractTest < Minitest::Test
     FileUtils.remove_entry(@directory)
   end
 
+  # Cuprite returns innerText's tab between table cells; Selenium a space
+  # (selenium_contract.rb). Each registration matches its own reference.
+  def test_table_row_text_keeps_the_tab_between_cells
+    @page.visit("/")
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<table><tr id="total"><th>Total due</th><td>$0.00</td></tr></table>';
+    JS
+    assert_equal "Total due\t$0.00", @page.find("#total").text
+    assert @page.has_content?("Total due\t$0.00", wait: 0)
+  end
+
   def test_coordinate_mouse_input_for_chart_interactions
     @page.visit("/")
     @page.execute_script("window.addEventListener('mousemove', e => { window.lastPoint = [e.clientX, e.clientY] })")

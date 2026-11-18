@@ -53,17 +53,29 @@ module Capybara
       # not-visible element reads as "" — WebDriver semantics) and otherwise
       # hands the rendered-text collection (block line breaks + display:none
       # descendant skipping) to native innerText (#2785/#2795). We normalize the
-      # whitespace here to match Capybara's expected Chrome semantics. A tab
-      # stays: innerText puts one between table cells, Chrome drivers return
-      # it, and suites assert "Total due\t$0.00".
+      # whitespace here to match Capybara's expected Chrome semantics.
+      #
+      # innerText puts a tab between table cells. The two Chrome drivers
+      # disagree on it (verified 2026-11-19, Chrome for Testing 158): Cuprite
+      # returns the tab ("Total due\t$0.00"), Selenium's WebDriver text a
+      # space ("Total due $0.00"). The stock driver keeps the space, which is
+      # what every released version returned and what `driven_by :selenium`
+      # suites assert (Solidus "Tracking Number FOOBAR"); the opt-in Cuprite
+      # registration keeps the tab (Driver#keep_cell_tabs?).
       def visible_text
+        blanks, line_break = driver.keep_cell_tabs? ? TAB_KEEPING_BLANKS : BLANKS
         call(VISIBLE_TEXT_JS).to_s
                              .gsub(/\A[[:space:]&&[^\u00A0]]+/, "")
                              .gsub(/[[:space:]&&[^\u00A0]]+\z/, "")
-                             .gsub(/[ \f\v]+/, " ")
-                             .gsub(/[ \f\v]*\n[ \f\v\n]*/, "\n")
+                             .gsub(blanks, " ")
+                             .gsub(line_break, "\n")
                              .tr("\u00A0", " ")
       end
+
+      # [run of blanks, line break with the blanks around it]
+      BLANKS = [/[ \t\f\v]+/, /[ \t\f\v]*\n[ \t\f\v\n]*/].freeze
+      TAB_KEEPING_BLANKS = [/[ \f\v]+/, /[ \f\v]*\n[ \f\v\n]*/].freeze
+      private_constant :BLANKS, :TAB_KEEPING_BLANKS
 
       def rect
         call(GET_RECT_JS)
