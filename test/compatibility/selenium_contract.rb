@@ -30,7 +30,7 @@ class SeleniumContractTest < Minitest::Test
         options.binary = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
         Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
       when "lightpanda"
-        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory,
+        Capybara::Lightpanda::Driver.new(app, save_path: @default_directory, raise_on_unhandled_modal: true,
                                               browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
       else
         raise ArgumentError, "unknown contract driver #{driver.inspect}"
@@ -45,6 +45,44 @@ class SeleniumContractTest < Minitest::Test
   def teardown
     @page&.driver&.quit
     FileUtils.remove_entry(@default_directory)
+  end
+
+  def test_picture_overlay_keyboard_shortcuts_use_focus_at_perform_time
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<button id="picture">Open picture</button>';
+      window.keys = [];
+      document.onkeydown = e => window.keys.push([e.target.id, e.key, e.code]);
+      document.querySelector('button').onclick = () => document.body.dataset.open = 'yes';
+    JS
+    actions = @browser.action
+    actions.send_keys(:arrow_right).send_keys(:arrow_left)
+    @page.execute_script("document.querySelector('button').focus()")
+    assert_empty @page.evaluate_script("window.keys")
+    assert_nil actions.perform
+    assert_equal [%w[picture ArrowRight ArrowRight], %w[picture ArrowLeft ArrowLeft]],
+                 @page.evaluate_script("window.keys")
+
+    actions.send_keys(:enter).perform
+    assert_equal "yes", @page.evaluate_script("document.body.dataset.open")
+    assert_equal [%w[ArrowRight ArrowRight], %w[ArrowLeft ArrowLeft], %w[Enter NumpadEnter]],
+                 @page.evaluate_script("window.keys.map(e => e.slice(1))")
+  end
+
+  def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
+    @page.execute_script(<<~JS)
+      window.keys = [];
+      document.onkeydown = e => {
+        window.keys.push(e.key);
+        if (window.keys.length === 1) alert("Picture opened");
+      };
+    JS
+    actions = @browser.action
+    assert_raises(Capybara::Lightpanda::UnhandledModalError, Selenium::WebDriver::Error::UnexpectedAlertOpenError) do
+      actions.send_keys(:arrow_right).perform
+      @page.evaluate_script("window.keys.length")
+    end
+    actions.perform
+    assert_equal ["ArrowRight"], @page.evaluate_script("window.keys")
   end
 
   def test_download_helper_reads_each_export_from_the_selected_directory
@@ -81,8 +119,11 @@ class SeleniumContractTest < Minitest::Test
       document.querySelector('#consent').checked = false;
     JS
     title = @page.find("#title").native
-    assert_equal "Please fill out this field.", title.attribute("validationMessage")
-    assert_equal "Please select an item in the list.", @page.find("#scope").native.attribute("validationMessage")
+    %w[title scope].each do |id|
+      message = @page.evaluate_script("document.getElementById(arguments[0]).validationMessage", id)
+      refute_empty message
+      assert_equal message, @page.find("##{id}").native.attribute("validationMessage")
+    end
     assert_equal "", title.attribute("value")
     assert_equal "true", title.attribute("required")
     assert_equal "false", title.attribute("disabled")

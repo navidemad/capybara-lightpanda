@@ -31,6 +31,7 @@ module Capybara
         delete: { key: "Delete", code: "Delete", keyCode: 46 },
         semicolon: { key: ";", code: "Semicolon", keyCode: 186, text: ";" },
         equals: { key: "=", code: "Equal", keyCode: 187, text: "=" },
+        numpad_enter: { key: "Enter", code: "NumpadEnter", keyCode: 13, text: "\r" },
         numpad0: { key: "0", code: "Numpad0", keyCode: 96, text: "0" },
         numpad1: { key: "1", code: "Numpad1", keyCode: 97, text: "1" },
         numpad2: { key: "2", code: "Numpad2", keyCode: 98, text: "2" },
