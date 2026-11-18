@@ -29,9 +29,10 @@ module Capybara
               last_error = e
             end
 
-            break if monotonic_time > deadline
+            left = deadline - monotonic_time
+            break unless left.positive?
 
-            sleep interval
+            sleep [interval, left].min
           end
 
           msg = message || "timed out after #{timeout}s"

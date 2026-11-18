@@ -82,6 +82,14 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  it "keeps the last accepted header set when the browser rejects a replacement" do
+    network.headers = { "X-First" => "original" }
+    browser.expects(:page_command).with("Network.setExtraHTTPHeaders", headers: { "X-Next" => "bad" })
+           .raises(Capybara::Lightpanda::BrowserError)
+    assert_raises(Capybara::Lightpanda::BrowserError) { network.headers = { "X-Next" => "bad" } }
+    assert_equal({ "X-First" => "original" }, network.extra_headers)
+  end
+
   describe "#user_agent=" do
     it "overrides through Emulation, which also moves navigator.userAgent" do
       network.user_agent = "Lightpanda/1.0 (iPhone) Mobile"
@@ -173,6 +181,18 @@ describe Capybara::Lightpanda::Network do
       assert_equal 1, network.pending_connections, "receiving headers does not finish the body"
       browser.fire("Network.loadingFinished", { "requestId" => "r1" })
       assert_equal 0, network.pending_connections
+      assert_predicate network, :idle?
+    end
+
+    it "clears recorded traffic without declaring an unfinished response idle" do
+      network.enable
+      browser.fire("Network.requestWillBeSent", { "requestId" => "stream" })
+      exchange = network.traffic.fetch(0)
+      network.clear(:traffic)
+      assert_empty network.traffic
+      refute_predicate network, :idle?
+      browser.fire("Network.loadingFinished", { "requestId" => "stream" })
+      assert_predicate exchange, :finished?
       assert_predicate network, :idle?
     end
 
@@ -339,6 +359,7 @@ describe Capybara::Lightpanda::Network do
       # by dropping local state without sending Network.disable.
       network.reset
       assert_empty network.traffic
+      assert_predicate network, :idle?
 
       # After reset, a fresh enable must re-issue Network.enable AND
       # re-install handlers, otherwise traffic tracking is silently dead.

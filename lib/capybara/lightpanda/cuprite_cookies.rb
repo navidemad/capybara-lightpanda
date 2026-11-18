@@ -26,8 +26,21 @@ module Capybara
 
       def remove(name:, domain: nil, url: nil, path: nil) # rubocop:disable Naming/PredicateMethod
         domain ||= @default_domain.call unless url
-        super
+        if path || url
+          super
+        else
+          # Lightpanda applies "/" when deleteCookies omits the path. Chrome
+          # removes every path for this name/domain. Keep other hosts intact.
+          paths_for(name, domain).each { |scope| super(name: name, domain: domain, path: scope) }
+        end
         true
+      end
+
+      private
+
+      def paths_for(name, domain)
+        host = domain.delete_prefix(".").downcase
+        filter_map { |cookie| cookie.path if cookie.name == name && cookie.domain.delete_prefix(".").downcase == host }
       end
     end
   end

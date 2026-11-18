@@ -79,11 +79,9 @@ module Capybara
       def clear(type = nil)
         case type
         when nil, :traffic
-          result = @traffic_mutex.synchronize do
-            @pending.clear
-            @traffic.clear
-          end
-          return result if type.nil?
+          # Forget observations while continuing to track active network I/O.
+          @traffic_mutex.synchronize { @traffic.clear }
+          return [] if type.nil?
         when :cache
           browser.command("Network.clearBrowserCache")
         else
@@ -100,7 +98,10 @@ module Capybara
       # cleared the Subscriber first.
       def reset
         unsubscribe
-        clear
+        @traffic_mutex.synchronize do
+          @traffic.clear
+          @pending.clear
+        end
         @enabled = false
         @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
         @last_navigation_response = nil
@@ -116,21 +117,18 @@ module Capybara
       def headers=(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = headers
-        browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
+        apply_extra_headers(headers)
       end
 
       def add_headers(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = (@extra_headers || {}).merge(headers)
-        browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
+        apply_extra_headers(extra_headers.merge(headers))
       end
 
       def clear_headers
         enable
-        @extra_headers = {}
-        browser.page_command("Network.setExtraHTTPHeaders", headers: {})
+        apply_extra_headers({})
       end
 
       # Lightpanda refuses a user agent containing "Mozilla" by design, and
@@ -185,6 +183,10 @@ module Capybara
       end
 
       private
+
+      def apply_extra_headers(headers)
+        browser.page_command("Network.setExtraHTTPHeaders", headers: headers).tap { @extra_headers = headers.dup }
+      end
 
       def warn_on_refused_user_agent(headers)
         value = headers.find { |name, _| name.to_s.casecmp?("user-agent") }&.last
