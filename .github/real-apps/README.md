@@ -9,8 +9,12 @@ against actual production-shape codebases.
 ```
 .github/real-apps/
 ├── README.md                   # this file
+├── NEXT-SESSION.md             # working notes for the next baseline session
 ├── causes.yml                  # why each baseline failure fails
+├── check_baseline.rb           # compares a run with its baseline, tallies causes
+├── aggregate_baseline.rb       # cross-target summary for the aggregate job
 ├── minitest_report.rb          # RSpec-shaped JSON report for Minitest targets
+├── baselines/<target>.txt      # known failures per target (may be empty, must exist)
 └── patches/
     ├── forem.patch             # was on Chrome over CDP
     ├── solidus.patch           # was on Selenium
@@ -18,7 +22,10 @@ against actual production-shape codebases.
     ├── decidim.patch           # was on Selenium
     ├── mastodon.patch          # was on Playwright
     ├── alonetone.patch         # was on Playwright (MySQL app)
-    └── campfire.patch          # was on Selenium (Minitest app)
+    ├── campfire.patch          # was on Selenium (Minitest app)
+    ├── goodjob.patch           # was on Cuprite
+    ├── tryruby.patch           # was on Cuprite
+    └── alchemycms.patch        # was on Selenium
 
 .github/workflows/
 └── real-apps.yml               # matrix workflow
@@ -52,16 +59,15 @@ of those is safe to ship on.
 (`confirmed` / `likely` / `unknown`), an optional reference to the wishlist or
 an upstream issue, and the regexps that match it against the baseline key and
 the run's failure message. `check_baseline.rb` prints the per-cause tally and
-lists anything matching no cause:
+lists anything matching no cause. The shape of its output (illustrative):
 
 ```
-solidus: 338 examples, 5 failed (baseline 5) — 0 new, 0 fixed
+solidus: 338 examples, 3 failed (baseline 3) — 0 new, 0 fixed
 
 Known failures by cause:
-  customer-switch-refill         2  (unknown)
   selenium-only-api              1  (confirmed)
-  select2-v3-flow                1  (likely)
-  selenium-textarea-text         1  (likely)
+  select2-v3-flow                1  (confirmed)
+  selenium-textarea-text         1  (confirmed)
 ```
 
 The number to drive down is the unattributed count, then the `unknown` and
@@ -105,7 +111,5 @@ carry.
 
 A small, fast subset per target — enough to prove the swap works and the gem
 boots a Lightpanda process, not a full suite. See `spec:` in each matrix entry
-for the exact files. Broader local results (~89% pass on Forem, 77% on Solidus,
-47% on Spree, mostly-clean on Decidim) are documented in
-[`TESTING_PROGRESS.md`](https://github.com/.../TESTING_PROGRESS.md) of the
-exercise scratch directory.
+for the exact files. Each target's `baselines/<target>.txt` lists the failures
+that subset is known to have; the run's job summary gives the current counts.
