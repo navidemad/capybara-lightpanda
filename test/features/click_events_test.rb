@@ -42,4 +42,39 @@ describe "Capybara::Lightpanda::Node#click event sequence" do
 
     assert_equal "Clothing", session.find(:css, "#multi-drop").text
   end
+
+  # A select2 v4 with allowClear renders the value as `<span>×</span>Alpha`.
+  # A centred pointer lands on the value's text, so the dropdown opens and the
+  # selection stays. Descending into the first child pressed the "×": the
+  # value was cleared, `change` fired, and an app that reloads on change threw
+  # the dropdown away before the test could pick an option.
+  it "opens a clearable select2 without pressing its clear button" do
+    session.find(:css, "#clearable").click
+
+    assert_equal "Beta", session.find(:css, "#clearable-drop").text
+    assert_equal "", session.find(:css, "#clearable-log", visible: :all).text(:all)
+  end
+
+  it "opens a clearable select2 clicked on its rendered value" do
+    session.find(:css, "#clearable-rendered").click
+
+    assert_equal "Beta", session.find(:css, "#clearable-drop").text
+    assert_equal "", session.find(:css, "#clearable-log", visible: :all).text(:all)
+  end
+
+  # The "×" itself stays clickable: the text rule must not swallow a click
+  # aimed at it.
+  it "still presses the clear button when it is the target" do
+    session.find(:css, "#clearable-x").click
+
+    assert_equal "cleared", session.find(:css, "#clearable-log").text
+  end
+
+  # innerText separates table cells with a tab, and Chrome drivers return it:
+  # suites assert "Total due\t$0.00". Collapsing every run of blanks to one
+  # space turned the tab into a space.
+  it "keeps the tab between table cells in text" do
+    assert_equal "Total due\t$0.00", session.find(:css, "#total-row").text
+    assert session.has_text?("Total due\t$0.00", wait: 0)
+  end
 end
