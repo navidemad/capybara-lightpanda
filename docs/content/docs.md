@@ -447,7 +447,8 @@ included.
 | [mastodon](https://github.com/mastodon/mastodon) | Playwright | `home`, `log_in`, `log_out` system specs | 11 | **0** |
 | [alonetone](https://github.com/sudara/alonetone) | Playwright | `pages`, `account_requests`, `users` features | 5 | **0** |
 
-That is 681 examples with 6 known failures (baselines as of 2026-11-16).
+On the latest run (2026-11-18), 674 of 681 examples passed: the 6 catalogued
+failures in the table, plus one Campfire composer test still being diagnosed.
 Apart from Solidus's admin features and Campfire's system suite, these are
 deliberate spec subsets, not whole suites — chosen to cover the interactive
 surface without a 40-minute job. Every known failure is catalogued in
