@@ -28,6 +28,7 @@ bundle exec rake spec:shared          # Run spec/features/session_spec.rb (~5-6 
 bundle exec rake spec:shared:parallel # Same suite split across workers (default: Etc.nprocessors/2; override with RSPEC_WORKERS=N).
                                       #   Partitions examples by CRC32 of full description. ~90s on 4 workers, ~50s on 8.
 bundle exec rake suite                # Full suite: test:all + spec:shared
+bundle exec rake readme:readability   # README reading level (Flesch-Kincaid grade + share of basic English words). Fails above grade 9.
 bundle exec rubocop                   # Lint
 bundle exec rubocop -a                # Lint with auto-fix
 ```
