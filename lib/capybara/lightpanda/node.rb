@@ -128,6 +128,12 @@ module Capybara
         call(PROPERTY_OR_ATTRIBUTE_JS, name.to_s)
       end
 
+      # Selenium's native element reads live properties such as validationMessage
+      # and returns strings. Capybara's [] has its own boolean and URL contract.
+      def attribute(name)
+        call(WEBDRIVER_ATTRIBUTE_JS, name.to_s)
+      end
+
       def value
         call(GET_VALUE_JS)
       end
@@ -972,6 +978,38 @@ module Capybara
 
       VISIBLE_TEXT_JS = "function() { return _lightpanda.visibleText(this); }"
 
+      # Selenium WebDriver 4.41, javascript/webdriver/atoms/attribute.js.
+      WEBDRIVER_ATTRIBUTE_JS = <<~JS
+        function(name) {
+          const key = name.toLowerCase();
+          const tag = this.localName;
+          const raw = this.getAttribute(name);
+          if (key === 'style') return this.style.cssText;
+          if ((tag === 'a' && key === 'href') || (tag === 'img' && key === 'src')) {
+            return raw ? this[key] : raw;
+          }
+          if (key === 'selected' || key === 'checked') {
+            if (tag === 'option') return this.selected ? 'true' : null;
+            if (tag === 'input' && (this.type === 'checkbox' || this.type === 'radio')) {
+              return this.checked ? 'true' : null;
+            }
+          }
+          if (key === 'spellcheck' && /^(true|false)$/i.test(raw)) return raw.toLowerCase();
+          const prop = name === 'class' ? 'className' : name === 'readonly' ? 'readOnly' : name;
+          let value;
+          try { value = this[prop]; } catch (_) { return raw; }
+          if (key === 'spellcheck') return String(this.spellcheck);
+          const booleans = 'allowfullscreen allowpaymentrequest allowusermedia async autofocus autoplay checked ' +
+            'compact complete controls declare default defaultchecked defaultselected defer disabled ended ' +
+            'formnovalidate hidden indeterminate iscontenteditable ismap itemscope loop multiple muted nohref nomodule noresize ' +
+            'noshade novalidate nowrap open paused playsinline pubdate readonly required reversed scoped ' +
+            'seamless seeking selected truespeed typemustmatch willvalidate';
+          if (booleans.split(' ').includes(key)) return raw !== null || value ? 'true' : null;
+          if (value == null || typeof value === 'object' || typeof value === 'function') return raw;
+          return String(value);
+        }
+      JS
+
       PROPERTY_OR_ATTRIBUTE_JS = <<~JS
         function(name) {
           var tag = this.tagName.toLowerCase();
@@ -1253,7 +1291,7 @@ module Capybara
       # of private_constant for its JS snippets.
       private_constant :CLICK_JS, :TRIGGER_JS, :DROP_JS, :CREATE_DROP_INPUT_JS, :SHADOW_ROOT_JS, :VISIBLE_JS,
                        :VISIBLE_TEXT_JS,
-                       :PROPERTY_OR_ATTRIBUTE_JS, :GET_VALUE_JS, :SET_VALUE_JS,
+                       :WEBDRIVER_ATTRIBUTE_JS, :PROPERTY_OR_ATTRIBUTE_JS, :GET_VALUE_JS, :SET_VALUE_JS,
                        :IMPLICIT_SUBMIT_JS, :SELECT_OPTION_JS, :UNSELECT_OPTION_JS,
                        :SET_CHECKBOX_JS, :EDITABLE_HOST_JS, :DISABLED_JS, :GET_STYLE_JS,
                        :GET_RECT_JS, :OBSCURED_JS, :GET_PATH_JS
