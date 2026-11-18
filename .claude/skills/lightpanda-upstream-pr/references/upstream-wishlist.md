@@ -362,7 +362,7 @@ Three independent issues:
 - **Want**: no decoding or output. Read the duration from the container header (WAV/MP3/MP4/WebM, or even WAV + MP4 first), fire `loadedmetadata`/`durationchange`/`canplay`, then advance `currentTime` on the page clock while playing, with `timeupdate` (~4 Hz), `seeking`/`seeked` and `ended`.
 - **Gem workaround**: none, deliberately.
 - **Drop-on-fix**: nothing in the gem; update the limitations rows.
-- **Upstream issue**: none filed.
+- **Upstream issue**: #4702, **Upstream PR**: #4703 (both open as of 2026-11-18). The PR gives a timeline only to a WAV file in a `data:` URL (duration from `webaudio/dsp/wav.zig`, nothing fetched): metadata events, clock at `playbackRate`, `timeupdate` every 250 ms, `seeking`/`seeked`, `loop`, `pause` + `ended`. Any other source keeps the faked playback (`duration NaN`, no clock). Follow-ups listed in #4702: `http(s):`/`blob:` sources through a `partial` request behind `--load-resources`, more containers (MP4, MP3, WebM, Ogg, FLAC), `error`/`MediaError` instead of faking, `buffered`/`seekable`/`played`, `autoplay`.
 
 ### A63. `Element.scrollIntoView()` ignores its options — always aligns the element's top with the viewport's
 
