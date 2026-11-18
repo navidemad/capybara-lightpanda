@@ -1277,6 +1277,37 @@ class TestApp
   # control: a cancelable trusted `beforeinput`, then `input`, both carrying
   # inputType deleteContentBackward / deleteContentForward. The log records
   # every such event so the assertions can prove which fired and which didn't.
+  # A filter that only listens for key events, as DataTables column filters
+  # and autocompletes commonly do, and an iframe whose <body> is the editing
+  # host, as in TinyMCE and CKEditor 4.
+  get "/lightpanda/key_listeners" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <label for="filter">Province</label> <input id="filter">
+          <p id="info">Showing 3 of 3 entries</p>
+          <p id="keys"></p>
+          <input id="top-field">
+          <iframe id="editor" srcdoc="<body contenteditable='true'><p>Draft</p></body>"></iframe>
+          <script>
+            var provinces = ['ON', 'QC', 'NT'];
+            var filter = document.getElementById('filter');
+            filter.addEventListener('keyup', function() {
+              var shown = provinces.filter(function(p) { return p.indexOf(filter.value) === 0; }).length;
+              document.getElementById('info').textContent = 'Showing ' + shown + ' of 3 entries';
+            });
+            ['keydown', 'keypress', 'keyup'].forEach(function(type) {
+              filter.addEventListener(type, function(e) {
+                document.getElementById('keys').textContent += type + ':' + e.key + ' ';
+              });
+            });
+          </script>
+        </body>
+      </html>
+    HTML
+  end
+
   get "/lightpanda/keyboard_editing" do
     <<~HTML
       <!DOCTYPE html>

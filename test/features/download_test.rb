@@ -98,4 +98,49 @@ describe "Capybara::Lightpanda downloads" do
       assert_equal 1, session.driver.browser.downloads.started_count
     end
   end
+
+  # Ferrum's API, which Cuprite suites call in setup to choose where files
+  # land. Without it a suite ported from Cuprite died on NoMethodError before
+  # its first download.
+  describe "downloads.set_behavior (Ferrum/Cuprite API)" do
+    let(:other_dir) { File.join(Capybara.save_path, "elsewhere") }
+
+    it "sends the next download to the given directory and records it there" do
+      session.driver.browser.downloads.set_behavior(save_path: other_dir)
+
+      session.click_link("Download report")
+      session.driver.wait_for_download(timeout: 5)
+
+      assert_equal [File.join(other_dir, "report.csv")], session.driver.downloads
+      assert_includes File.read(File.join(other_dir, "report.csv")), "lightpanda,100"
+      refute File.exist?(downloaded_file), "the configured save_path must no longer receive the file"
+    end
+
+    it "records a download once after being called twice" do
+      2.times { session.driver.browser.downloads.set_behavior(save_path: other_dir) }
+
+      session.click_link("Download report")
+      session.driver.wait_for_download(timeout: 5)
+
+      assert_equal 1, session.driver.downloads.size
+      assert_equal 1, session.driver.browser.downloads.started_count
+    end
+
+    it "stops downloading with behavior: :deny" do
+      session.driver.browser.downloads.set_behavior(save_path: other_dir, behavior: :deny)
+
+      session.click_link("Download report")
+      session.driver.wait_for_download(timeout: 1)
+
+      assert_empty session.driver.downloads
+      refute File.exist?(downloaded_file)
+    end
+
+    it "rejects a behavior the browser does not have" do
+      error = assert_raises(ArgumentError) do
+        session.driver.browser.downloads.set_behavior(save_path: other_dir, behavior: :sideways)
+      end
+      assert_includes error.message, ":sideways"
+    end
+  end
 end

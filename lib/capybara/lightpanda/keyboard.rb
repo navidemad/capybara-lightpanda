@@ -87,6 +87,33 @@ module Capybara
         SHIFT_MAP[char] || char.upcase
       end
 
+      # US-layout physical key (`code`, `keyCode`) behind each printable ASCII
+      # character, so a typed character reports what Chrome reports: "a" and
+      # "A" are KeyA/65, "1" and "!" are Digit1/49.
+      PUNCTUATION_KEYS = {
+        " " => ["Space", 32], "`" => ["Backquote", 192], "-" => ["Minus", 189],
+        "=" => ["Equal", 187], "[" => ["BracketLeft", 219], "]" => ["BracketRight", 221],
+        "\\" => ["Backslash", 220], ";" => ["Semicolon", 186], "'" => ["Quote", 222],
+        "," => ["Comma", 188], "." => ["Period", 190], "/" => ["Slash", 191],
+      }.freeze
+      UNSHIFT_MAP = SHIFT_MAP.invert.freeze
+      private_constant :PUNCTUATION_KEYS, :UNSHIFT_MAP
+
+      # Key definition for a character a US keyboard can type, nil for any
+      # other (accented letters, emoji, control characters).
+      def self.char_definition(char)
+        base = UNSHIFT_MAP[char] || char.downcase
+        code, key_code =
+          case base
+          when /\A[a-z]\z/ then ["Key#{base.upcase}", base.upcase.ord]
+          when /\A[0-9]\z/ then ["Digit#{base}", base.ord]
+          else PUNCTUATION_KEYS[base]
+          end
+        return unless code
+
+        { key: char, code: code, keyCode: key_code, text: char }
+      end
+
       def initialize(browser)
         @browser = browser
       end
@@ -173,7 +200,17 @@ module Capybara
         raw_dispatch(key_definition(key))
       end
 
+      # A character on the US layout is a key press: keydown, keypress,
+      # beforeinput, input, keyup, as when a user types it. `Input.insertText`
+      # alone fired `input` only, so a filter or autocomplete bound to `keyup`
+      # or `keydown` never ran. Lightpanda inserts the keyDown's `text` itself
+      # (upstream #3542), so nothing is typed twice. Characters no US key
+      # produces (accents, emoji, newlines) stay on `Input.insertText`, the
+      # IME/paste path, as in Puppeteer.
       def dispatch_char(char)
+        definition = self.class.char_definition(char)
+        return raw_dispatch(definition) if definition
+
         @browser.page_command("Input.insertText", text: char)
       end
 

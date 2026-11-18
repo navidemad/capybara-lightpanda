@@ -120,7 +120,7 @@ describe Capybara::Lightpanda::Keyboard do
     it "types an Integer in an array group, before the key that follows it" do
       keyboard.type([1, :tab])
 
-      insert_one = browser.events.index { |method, params| method == "Input.insertText" && params[:text] == "1" }
+      insert_one = browser.events.index { |_, params| params[:type] == "keyDown" && params[:text] == "1" }
       tab_down = browser.events.index { |method, params| method == "Input.dispatchKeyEvent" && params[:key] == "Tab" }
       refute_nil insert_one, "the 1 was dropped"
       assert insert_one < tab_down, "the 1 must be typed before the Tab moves focus away"
@@ -129,14 +129,38 @@ describe Capybara::Lightpanda::Keyboard do
     it "types a top-level Integer as its digits" do
       keyboard.type(42)
 
-      typed = browser.events.filter_map { |method, params| params[:text] if method == "Input.insertText" }
+      typed = key_events.filter_map { |params| params[:text] if params[:type] == "keyDown" }
       assert_equal %w[4 2], typed
     end
 
     it "types nothing for nil" do
       keyboard.type(nil, [nil, :tab])
 
+      assert_equal(%w[Tab Tab], key_events.map { |e| e[:key] })
+    end
+
+    # A beta suite's table filter listened on `keyup` and never ran: plain
+    # text went through Input.insertText, which fires `input` and no key
+    # event. A character a US keyboard types must reach the page as a key
+    # press, naming the physical key Chrome names.
+    it "types a US-layout character as a key press, not as inserted text" do
+      keyboard.type("a!")
+
+      assert_equal(
+        [["keyDown", "a", "KeyA", 65, "a"], ["keyUp", "a", "KeyA", 65, "a"],
+         ["keyDown", "!", "Digit1", 49, "!"], ["keyUp", "!", "Digit1", 49, "!"],],
+        key_events.map { |e| e.values_at(:type, :key, :code, :windowsVirtualKeyCode, :text) }
+      )
       refute(browser.events.any? { |method, _| method == "Input.insertText" })
+    end
+
+    # No US key produces these, so there is no honest key event to send: they
+    # are inserted the way an IME or a paste would. A newline must stay here
+    # too: as a key press it would be Enter and submit the form.
+    it "inserts a character no US key produces, and a newline, as text" do
+      keyboard.type("é\n")
+
+      assert_equal([["Input.insertText", { text: "é" }], ["Input.insertText", { text: "\n" }]], browser.events)
     end
 
     it "raises ArgumentError (not NoMethodError) for an unknown key symbol" do
@@ -147,12 +171,12 @@ describe Capybara::Lightpanda::Keyboard do
     it "releases array-grouped modifiers before the next argument — they don't leak" do
       keyboard.type([:shift, "a"], "b")
 
-      # "b" arrives after the Shift keyUp, as plain insertText.
+      # "b" arrives after the Shift keyUp, as an unmodified key press.
       shift_up_index = browser.events.index do |method, params|
         method == "Input.dispatchKeyEvent" && params[:type] == "keyUp" && params[:key] == "Shift"
       end
-      insert_b_index = browser.events.index do |method, params|
-        method == "Input.insertText" && params[:text] == "b"
+      insert_b_index = browser.events.index do |_, params|
+        params[:type] == "keyDown" && params[:text] == "b" && !params[:modifiers]
       end
       assert shift_up_index < insert_b_index, "Shift release must precede the unmodified 'b'"
     end

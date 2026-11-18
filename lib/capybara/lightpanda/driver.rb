@@ -239,6 +239,12 @@ module Capybara
         browser.set_viewport(width, height)
       end
 
+      # Cuprite's `page.driver.resize(width, height)`. Same viewport, same
+      # resize-then-visit rule as `current_window.resize_to`.
+      def resize(width, height)
+        browser.set_viewport(width, height)
+      end
+
       # No window manager and no layout, so "as large as the screen" has no
       # meaning beyond the configured size. Both reset to it rather than
       # raising, because suites call maximize defensively in setup and a

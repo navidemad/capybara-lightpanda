@@ -314,6 +314,11 @@ page.driver.wait_for_download(timeout: 10)   # blocks, returns the file list
 page.driver.downloads                        # => ["/…/tmp/downloads/export.csv"]
 ```
 
+Coming from Cuprite, `page.driver.browser.downloads.set_behavior(save_path: dir)`
+works as it does there: it sends later downloads to `dir` until the next
+`reset!` (`behavior: :deny` turns them off). `page.driver.resize(width, height)`
+is accepted too, and is the same call as `current_window.resize_to`.
+
 ### Network inspection
 
 ```ruby
@@ -436,6 +441,7 @@ These are upstream Lightpanda limits, not driver bugs:
 | Shadow DOM | `shadow_root` and `tag_name` on a root work, and finding inside an open shadow root works. `Node#path` doesn't cross shadow boundaries, so Capybara's `:shadow_dom` shared specs stay opted out — treat shadow DOM as usable but not certified |
 | Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
 | `window.getComputedStyle()` | Partial — CSSOM-backed values resolve (inline styles, `<style>` + external stylesheet rules, `checkVisibility`); full cascade-resolved lookups don't |
+| Text casing and whitespace | `text` applies `text-transform: uppercase` / `lowercase`, as Chrome does. It does not apply `capitalize` or `::first-letter`, and Lightpanda ignores rules inside `@supports` and values given as `var(--x)`, so a label styled that way reads as written in the HTML. Match with a case-insensitive regexp (`text: /total due/i`). Table cells are joined by a space, as on Selenium; Cuprite returns a tab there, so compare with `normalize_ws: true` when a suite must pass on both |
 | CSS: external `<link>`, `@media`, `matchMedia` | Fetched, parsed, and evaluated against the configured `window_size` — responsive variants resolve at the width you set. What's absent is reflow, not the media query |
 | User agent | `Lightpanda/1.0` by default. `page.driver.user_agent=` overrides it until `reset!`, but a value containing `Mozilla` is refused by design — keep the device tokens, drop the prefix (see [driver API](#driver-api)). App-side bot detection that wants a `Mozilla` prefix still flags the driver; allowlist `Lightpanda` in your test environment |
 | Time zone | `Emulation.setTimezoneOverride` is accepted and ignored upstream. Use the `timezone` driver option: one zone per browser process, not per test |
