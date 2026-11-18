@@ -109,6 +109,7 @@ module Capybara
 
       def evaluate_async_script(script, *args)
         unwrap_script_result(browser.evaluate_async(script.strip, *native_args(args),
+                                                    wait: session_options.default_max_wait_time,
                                                     frame: browser.frame_stack.last))
       end
 

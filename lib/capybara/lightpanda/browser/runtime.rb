@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "singleton"
+require "securerandom"
 
 module Capybara
   module Lightpanda
@@ -104,21 +105,27 @@ module Capybara
         # the callback as its last argument (`arguments[arguments.length - 1]`),
         # matching Capybara's evaluate_async_script contract.
         def evaluate_async(expression, *args, wait: @options.timeout, frame: nil)
-          timeout_ms = (wait * 1000).to_i
+          # A private scalar lets the timer report expiry without interpreting
+          # an application's exception class or changing its callback value.
+          expired = SecureRandom.uuid
           wrapped = <<~JS
             function() {
-              var __args = Array.prototype.slice.call(arguments);
-              return new Promise(function(__resolve, __reject) {
-                var __timer = setTimeout(function() {
-                  __reject(new Error('Async script timeout after #{timeout_ms}ms'));
-                }, #{timeout_ms});
-                var __done = function(val) { clearTimeout(__timer); __resolve(val); };
+              var __args = Array.from(arguments), __timer;
+              var __deadline = new Promise(__resolve => {
+                __timer = setTimeout(() => __resolve('#{expired}'), #{(wait * 1000).to_i});
+              });
+              var __result = new Promise(__done => {
                 __args.push(__done);
                 (function() { #{expression} }).apply(null, __args);
               });
+              return Promise.race([__result, __deadline]).finally(() => clearTimeout(__timer));
             }
           JS
-          call_with_args(wrapped, args, frame: frame)
+          # Give the browser time to return the result of the race over CDP.
+          result = call_with_args(wrapped, args, frame: frame, command_timeout: wait + 1)
+          raise ScriptTimeoutError, "Async script callback timed out after #{wait}s" if result == expired
+
+          result
         end
 
         # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
@@ -214,7 +221,7 @@ module Capybara
         # callFunctionOn in the top context, so node handles found inside a
         # frame belong to that context and can't be passed into another
         # ("Argument should belong to the same JavaScript world").
-        def call_with_args(function_declaration, args, return_by_value: false, frame: nil)
+        def call_with_args(function_declaration, args, return_by_value: false, frame: nil, command_timeout: nil)
           arguments = args.map { |a| serialize_argument(a) }
           if frame
             target = frame.remote_object_id
@@ -233,7 +240,8 @@ module Capybara
             awaitPromise: true,
             arguments: arguments,
           }
-          response = page_command("Runtime.callFunctionOn", **params)
+          response = @client.command("Runtime.callFunctionOn", params, session_id: @session_id,
+                                                                       timeout: command_timeout)
           raise_on_js_error!("call_with_args", function_declaration, response)
 
           return unwrap_call_result(response["result"]) unless return_by_value
