@@ -71,6 +71,11 @@ jobs:
         # under test/features/ (turbo_load, drop, teardown, upstream_bugs, …)
         # that previously never ran in CI.
         run: bundle exec rake test:all
+      - name: Cuprite helper contracts on Lightpanda and Chrome
+        if: matrix.ruby == '3.3'
+        run: |
+          bundle exec ruby test/compatibility/cuprite_contract.rb
+          CONTRACT_DRIVER=cuprite bundle exec ruby test/compatibility/cuprite_contract.rb
       - name: Cache examples' inline-bundle gems
         uses: actions/cache@v6
         with:

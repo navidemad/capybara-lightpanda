@@ -212,3 +212,23 @@ It checks that the text is still easy to read.
 ## License
 
 [MIT License](LICENSE.txt)
+
+### Migrating a Cuprite registration
+
+Keep your application's driver name and register it with Lightpanda in test setup.
+
+```ruby
+require "capybara-lightpanda"
+
+Capybara::Lightpanda.register_cuprite_driver(:store_system, window_size: [1200, 800])
+# In Rails system tests
+# driven_by :store_system
+```
+
+The registration checks copied options before a browser starts. Use `ws_url:` for a remote Lightpanda
+WebSocket endpoint. A Cuprite HTTP `url:`, Chrome flags and proxy settings raise an option error.
+Both `:cuprite` and `:lightpanda` remain available when you load both gems.
+
+Run the shared compatibility examples with `bundle exec ruby test/compatibility/cuprite_contract.rb`.
+Run them again with `CONTRACT_DRIVER=cuprite` for the Chrome reference. Set `CHROME_BIN` or
+`LIGHTPANDA_BIN` to select a local executable.
