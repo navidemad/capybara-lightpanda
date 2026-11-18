@@ -76,6 +76,11 @@ jobs:
         run: |
           bundle exec ruby test/compatibility/cuprite_contract.rb
           CONTRACT_DRIVER=cuprite bundle exec ruby test/compatibility/cuprite_contract.rb
+      - name: Selenium helper contracts on Lightpanda and Chrome
+        if: matrix.ruby == '3.3'
+        run: |
+          bundle exec ruby test/compatibility/selenium_contract.rb
+          CONTRACT_DRIVER=selenium bundle exec ruby test/compatibility/selenium_contract.rb
       - name: Cache examples' inline-bundle gems
         uses: actions/cache@v6
         with:
