@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "English"
+require "tmpdir"
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
 require "rake/testtask"
@@ -254,36 +255,40 @@ namespace :examples do
   # Bundler clears BUNDLE_* inside with_unbundled_env, so re-set BUNDLE_PATH there
   # to redirect `bundler/inline` installs into a stable, cacheable directory.
   # EXAMPLES_BUNDLE_PATH overrides the local default (set by CI to a cached path).
-  examples_bundle_path = ENV.fetch("EXAMPLES_BUNDLE_PATH") do
+  examples_bundle_path = File.expand_path(ENV.fetch("EXAMPLES_BUNDLE_PATH") do
     File.expand_path("tmp/example-bundles", __dir__)
+  end)
+
+  # Each example runs from an empty temporary directory, not the repo root.
+  # An inline gemfile takes the directory it runs from as its root and reads
+  # that root's .bundle/config, where setup-ruby's bundler-cache writes
+  # `deployment: true`. Bundler 4.1's `gemfile` clears BUNDLE_* from ENV and,
+  # after installing in a fork, reloads settings without its own
+  # `deployment: false` override, so the inline bundle went frozen with no
+  # platforms and every example aborted with Bundler::ProductionError.
+  run_examples = lambda do |files|
+    files.each do |file|
+      path = File.expand_path(File.join("examples", file), __dir__)
+      puts "\n=== #{file} ==="
+      Dir.mktmpdir("capybara-lightpanda-example") do |dir|
+        Bundler.with_unbundled_env do
+          ENV["BUNDLE_PATH"] = examples_bundle_path
+          sh "ruby", path, chdir: dir do |ok, _|
+            abort "#{file} failed" unless ok
+          end
+        end
+      end
+    end
   end
 
   desc "Run plain Rails examples (Minitest + RSpec)"
   task :plain do
-    %w[rails_minitest_example.rb rails_rspec_example.rb].each do |file|
-      path = File.join("examples", file)
-      puts "\n=== #{file} ==="
-      Bundler.with_unbundled_env do
-        ENV["BUNDLE_PATH"] = examples_bundle_path
-        sh "ruby #{path}" do |ok, _|
-          abort "#{file} failed" unless ok
-        end
-      end
-    end
+    run_examples.call(%w[rails_minitest_example.rb rails_rspec_example.rb])
   end
 
   desc "Run Turbo Rails examples (Minitest + RSpec) — requires network for CDN"
   task :turbo do
-    %w[rails_turbo_minitest_example.rb rails_turbo_rspec_example.rb].each do |file|
-      path = File.join("examples", file)
-      puts "\n=== #{file} ==="
-      Bundler.with_unbundled_env do
-        ENV["BUNDLE_PATH"] = examples_bundle_path
-        sh "ruby #{path}" do |ok, _|
-          abort "#{file} failed" unless ok
-        end
-      end
-    end
+    run_examples.call(%w[rails_turbo_minitest_example.rb rails_turbo_rspec_example.rb])
   end
 
   desc "Run all examples"
