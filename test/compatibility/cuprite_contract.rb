@@ -433,10 +433,15 @@ class CupriteContractTest < Minitest::Test
   def test_download_block_yields_once_and_waits_for_the_file
     @page.visit("/reports")
     calls = 0
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     @page.driver.browser.downloads.wait(3) do
       calls += 1
       @page.click_link("Download report")
     end
+    # The wait ends when the download it started completes, not at the
+    # deadline: a baseline taken after the block counts that download as
+    # already begun and stalls the full 3 seconds.
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 2
     assert_equal 1, calls
     assert_equal "item,total\ncoffee,7\n", File.read(File.join(@directory, "report.csv"))
   end

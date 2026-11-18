@@ -16,6 +16,23 @@ describe "Async script deadlines" do
     assert_equal "saved", value
   end
 
+  # Selenium and Cuprite give the callback the session's wait. Until 0.20 this
+  # driver gave it its own 15 s command timeout and returned the late value,
+  # so a helper written for Chrome hung where it should have failed. Pinned so
+  # the budget can't silently drift back.
+  it "gives the callback Capybara's wait, not the driver timeout" do
+    session.visit("/lightpanda/simple")
+    assert_operator session.driver.browser.options.timeout, :>, 2
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert_raises(Capybara::Lightpanda::ScriptTimeoutError) do
+      session.using_wait_time(0.5) do
+        session.evaluate_async_script("setTimeout(arguments[0], 1500, 'late')")
+      end
+    end
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 1.4
+  end
+
   it "reports a connection lost while waiting for a callback" do
     session.visit("/lightpanda/simple")
     browser = session.driver.browser
