@@ -28,6 +28,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The gem defaults to the Lightpanda release it ships with. This repo's own
+# suites stay on the rolling nightly on purpose: that is how an upstream
+# regression is seen before it reaches a release. The release itself is
+# guarded by ci.yml's release-channel job.
+env:
+  LIGHTPANDA_VERSION: nightly
+
 jobs:
   smoke:
     runs-on: ubuntu-26.04
@@ -407,16 +414,26 @@ jobs:
         # bump invalidates the cache — otherwise restore-keys resurrects a
         # sub-floor binary the gem then rejects with BinaryError. The gem is
         # checked out under capybara-lightpanda/ in this workflow.
+        #
+        # The second half is the publish time of the rolling nightly's newest
+        # asset, not today's date: a date key let a second run on the same day
+        # reuse a binary cached before that day's nightly was published. If
+        # the API call fails, fall back to the date (the old behavior).
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "floor=$(grep 'MINIMUM_NIGHTLY_BUILD = Gem::Version' capybara-lightpanda/lib/capybara/lightpanda/process.rb | grep -oE '[0-9]+')" >> "$GITHUB_OUTPUT"
-          echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          nightly=$(gh api repos/lightpanda-io/browser/releases/tags/nightly --jq '[.assets[].updated_at] | max' 2>/dev/null || true)
+          [ -n "$nightly" ] && [ "$nightly" != "null" ] || nightly=$(date -u +%Y-%m-%d)
+          echo "nightly=$(printf '%s' "$nightly" | tr -c 'A-Za-z0-9-' '-')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Lightpanda nightly binary
         if: steps.guard.outputs.skip != 'true'
+        id: lightpanda-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda
-          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.today }}
+          key: lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-${{ steps.lightpanda-cache-key.outputs.nightly }}
           restore-keys: |
             lightpanda-${{ runner.os }}-${{ steps.lightpanda-cache-key.outputs.floor }}-
 
@@ -431,9 +448,14 @@ jobs:
         # before the spec run. The Run spec step then sets LIGHTPANDA_CACHE_TIME=0
         # so the present binary is treated as fresh and never re-fetched.
         #
-        # Default freshness is kept HERE (not 0): on a cross-day cache restore the
-        # cached binary is >24h old, so this re-downloads the latest nightly —
-        # the whole point of the scheduled smoke test. Retries absorb GitHub 5xx.
+        # Freshness follows the cache: an exact key hit already holds the
+        # current nightly, so it is kept (0 = always fresh). Anything else — a
+        # restore-keys fallback holding an older nightly, or nothing — must
+        # re-download, whatever the file's age: the restored binary can be
+        # less than 24h old and still predate the nightly the smoke test is
+        # meant to exercise (1 = stale after a second). Retries absorb GitHub 5xx.
+        env:
+          LIGHTPANDA_CACHE_TIME: ${{ steps.lightpanda-cache.outputs.cache-hit == 'true' && '0' || '1' }}
         run: |
           set -euo pipefail
           ok=

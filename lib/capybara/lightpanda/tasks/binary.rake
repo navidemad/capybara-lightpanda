@@ -15,7 +15,7 @@ namespace :lightpanda do
       end
     end
 
-    desc "Download the Lightpanda binary (optionally pinned: rake lightpanda:binary:update[0.3.0])"
+    desc "Download the Lightpanda binary (a release tag or nightly: rake lightpanda:binary:update[1.0.4])"
     task :update, [:version] do |_, args|
       Capybara::Lightpanda::Binary.required_version = args[:version] if args[:version]
       path = Capybara::Lightpanda::Binary.update

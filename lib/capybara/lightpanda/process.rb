@@ -314,7 +314,20 @@ module Capybara
       # (11012), ShadowRoot hit testing #4184 (11071), same-document
       # navigateToHistoryEntry #3903 (11113), native isContentEditable #4210
       # (11229), contenteditable Backspace/Delete/Ctrl+A #4415 (11610).
-      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("11647")
+      #
+      # 2026-11-16 bump 11647 -> 12015 (= release 1.0.4, the new lockstep cap;
+      # inert-aware hit testing #4548 at 12019 and xhr.upload events #4529 at
+      # 12116 stay above it). The reason: 1.0.3's x86_64-macos binary has no
+      # CPU baseline and dies with SIGILL on the first HTTPS request on CPUs
+      # without ADX (#4433); the baseline #4450 (11672) first ships in 1.0.4.
+      # Rides along: bad-port block #4430 (11651), CORS exposed headers #4242
+      # (11663), postMessage targetOrigin #4382 (11676), cross-site SameSite
+      # cookies #4442 (11688), multi-target CDP #3945 (11844), apple_m1 CPU pin
+      # #4533 (11915), readyState `interactive` before deferred scripts #4554
+      # (11988), CSS animation events opt-in #4559 (11991). No version gate
+      # sat between the two floors, so nothing is retired. Validated on the
+      # 1.0.4 aarch64-macos binary: test:all and spec:shared:parallel green.
+      MINIMUM_NIGHTLY_BUILD = Gem::Version.new("12015")
 
       # Lines of browser output #output keeps (ferrum keeps the same 100).
       OUTPUT_LINES = 100
@@ -326,16 +339,18 @@ module Capybara
       # bare "0.3.6" carrying no commit counter at all, and MINIMUM_NIGHTLY_BUILD
       # has nothing to compare against. Releases are cut from the same trunk, so
       # a release is acceptable exactly when its own commit count clears the
-      # nightly floor. 1.0.3 (2026-11-05) is build 11647 — exactly the nightly
+      # nightly floor. 1.0.4 (2026-11-13) is build 12015 — exactly the nightly
       # floor, which is no accident: the floor was raised *to* the release so
-      # both channels gate the same commit. (1.0.2 = 10965 predates fixes the
-      # floor exists for.)
+      # both channels gate the same commit. (1.0.3 = 11647 predates the
+      # x86_64-macos CPU baseline the floor exists for.)
       #
       # INVARIANT: every MINIMUM_NIGHTLY_BUILD bump must also move this to the
       # first release containing that build (`git rev-list --count <tag>` in the
       # browser repo tells you). Leaving it behind would let the release channel
-      # silently accept a binary the nightly channel rejects.
-      MINIMUM_RELEASE = Gem::Version.new("1.0.3")
+      # silently accept a binary the nightly channel rejects. Move
+      # Binary::DEFAULT_VERSION with it: that is the release a fresh install
+      # downloads, and it must clear this floor.
+      MINIMUM_RELEASE = Gem::Version.new("1.0.4")
 
       # A release-candidate binary: "<x.y.z>-rc<N>.<git rev-list --count>+<hash>".
       # Captures the commit counter.

@@ -1314,6 +1314,7 @@ class TestApp
           <button type="button" id="disabled-button" disabled>Disabled</button>
           <div id="plain">Plain text</div>
           <div id="editor" contenteditable="true"><p id="editor-child">Edit me</p></div>
+          <div id="flat-editor" contenteditable="true">Edit me</div>
           <div id="guarded"><span id="guarded-inner">Keeps focus</span></div>
           <select id="pets">
             <option value="cat">Cat</option>
@@ -1440,6 +1441,94 @@ class TestApp
         document.getElementById("result").textContent = "handled";
       });
     JS
+  end
+
+  # -- visit readiness. go_to waits 2 s for Page.loadEventFired, then polls
+  # document.readyState. A module script arriving after that wait leaves the
+  # document `interactive` while it is pending (Lightpanda #4554, 11988), so
+  # these delays must exceed the 2 s event wait.
+  VISIT_SCRIPT_DELAY = 2.5
+  VISIT_IFRAME_DELAY = 8
+
+  get "/lightpanda/visit_wait/late_module" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Late module</title>
+          <script type="module" src="/lightpanda/visit_wait/late_module.js"></script>
+        </head>
+        <body><div id="result">pending</div></body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/visit_wait/late_module.js" do
+    sleep VISIT_SCRIPT_DELAY
+    content_type "text/javascript"
+    'document.getElementById("result").textContent = "ran";'
+  end
+
+  # DOMContentLoaded fires at once, but the iframe holds the load event back
+  # for VISIT_IFRAME_DELAY: the document stays `interactive` the whole time.
+  get "/lightpanda/visit_wait/slow_iframe" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Slow iframe</title></head>
+        <body>
+          <div id="ready">ready</div>
+          <iframe src="/lightpanda/visit_wait/slow_iframe_body"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/visit_wait/slow_iframe_body" do
+    sleep VISIT_IFRAME_DELAY
+    "<!DOCTYPE html><html><body>late frame</body></html>"
+  end
+
+  # Lightpanda sends Page.loadEventFired and Page.domContentEventFired for
+  # every frame, with no frameId. Here the iframe finishes long before the
+  # page, whose deferred script holds DOMContentLoaded and load back for
+  # VISIT_DEFER_DELAY — under the 2 s event wait, so only an event can end
+  # the wait early. Forem's comment permalink page (a Twitter widget iframe,
+  # deferred dropdown script) failed exactly this way.
+  VISIT_DEFER_DELAY = 1.2
+
+  get "/lightpanda/visit_wait/fast_iframe" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Fast iframe</title>
+          <script defer src="/lightpanda/visit_wait/slow_defer.js"></script>
+        </head>
+        <body>
+          <div id="result">pending</div>
+          <iframe src="/lightpanda/visit_wait/fast_frame"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
+  get "/lightpanda/visit_wait/fast_frame" do
+    "<!DOCTYPE html><html><body>fast frame</body></html>"
+  end
+
+  get "/lightpanda/visit_wait/slow_defer.js" do
+    sleep VISIT_DEFER_DELAY
+    content_type "text/javascript"
+    'document.getElementById("result").textContent = "ran";'
+  end
+
+  get "/lightpanda/visit_wait/link_to_fast_iframe" do
+    <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>Link</title></head>
+      <body><a id="go" href="/lightpanda/visit_wait/fast_iframe">Go</a></body></html>
+    HTML
   end
 
   # -- go_back / go_forward across history entries. /lightpanda/history/*

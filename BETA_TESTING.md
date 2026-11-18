@@ -1,7 +1,7 @@
 # Beta testing capybara-lightpanda
 
 <!-- version-bearing — keep in sync with lib/capybara/lightpanda/version.rb -->
-`capybara-lightpanda` is `0.17.1` — public beta. Real Rails suites are how we find the edges. This guide is the shortest path from "I'm curious" to "I have data and an opinion."
+`capybara-lightpanda` is `0.19.0` — public beta. Real Rails suites are how we find the edges. This guide is the shortest path from "I'm curious" to "I have data and an opinion."
 
 ## TL;DR — try it in 5 minutes
 
@@ -34,15 +34,15 @@ If your test helpers call `Capybara.use_default_driver` (a common pattern in
 setup/teardown blocks), gate `Capybara.default_driver` the same way too —
 otherwise those blocks silently switch you back to your old driver mid-suite.
 
-**Pin the browser before you trust a CI signal.** Unpinned, the gem tracks Lightpanda's rolling `nightly` tag and refreshes it daily — so a suite can turn red without a single line changing, and since nightlies aren't archived you can't go back to the build that was green. One line makes the browser reproducible:
+**The browser version is tied to the gem version.** Each gem release downloads the Lightpanda release it was validated against into a version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.4`), never refreshes it on age, and fetches the next one when you upgrade the gem. Cache that directory in CI. To run another release, or the rolling nightly (which moves daily and isn't archived), set it yourself:
 
 ```ruby
-Capybara::Lightpanda::Binary.required_version = "0.3.5"  # a tag from lightpanda-io/browser/releases
+Capybara::Lightpanda::Binary.required_version = "nightly"  # or a tag from lightpanda-io/browser/releases
 ```
 
-Pins download once into a version-scoped file (`~/.cache/lightpanda/lightpanda-0.3.5`), are never age-refreshed, and are never satisfied by a leftover nightly. Cache that directory in CI. If you hit a bug, the pinned version is the single most useful thing to put in the report — `page.driver.browser.version` prints exactly what ran.
+`LIGHTPANDA_VERSION=nightly` does the same from the environment. If you hit a bug, the version is the single most useful thing to put in the report — `page.driver.browser.version` prints exactly what ran.
 
-**Binary install is optional.** By default the gem auto-downloads the nightly Lightpanda binary into `~/.cache/lightpanda/lightpanda` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
+**Binary install is optional.** By default the gem auto-downloads the Lightpanda binary into `~/.cache/lightpanda/` on first use. If you'd rather manage it yourself (or your test setup blocks outbound HTTP via VCR/WebMock), install it ahead of time and the gem will pick it up from `PATH`:
 
 ```bash
 # macOS
@@ -62,10 +62,10 @@ WebMock.disable_net_connect!(
   allow: ["github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"])
 ```
 
-or provision the binary once from an unstubbed process and the cached copy is used from then on (the `remove` forces a refresh even when a too-old binary is already cached):
+or provision the binary from an unstubbed process — in `bin/setup` and as a CI step before the tests — and the cached copy is used from then on:
 
 ```bash
-bundle exec ruby -r capybara-lightpanda -e 'Capybara::Lightpanda::Binary.remove; puts Capybara::Lightpanda::Binary.update'
+bundle exec capybara-lightpanda install
 ```
 
 Heads-up for VCR users: VCR's request-blocking error is a `StandardError`, so a blocked download falls back to whatever binary is already cached (with a loud warning on stderr). If you later see a "Lightpanda … is too old" error, that warning is the reason — run the provision one-liner above.

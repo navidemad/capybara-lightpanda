@@ -108,7 +108,11 @@ fi
 # `path:` entry resolves to THIS gem checkout.
 PATCH="$GEM_DIR/.github/real-apps/patches/$RA_NAME.patch"
 [ -f "$PATCH" ] || die "missing patch: $PATCH"
-PATCH_SUM="$(checksum "$PATCH")"
+# Checksum the patch AFTER substitution: the gem path is part of what gets
+# applied, so booting from another worktree must re-patch. Keyed on the raw
+# patch alone, a warm target kept pointing its Gemfile at a deleted worktree
+# and every spec run died in `bundle` (2026-11-16).
+PATCH_SUM="$(sed "s|__CAPYBARA_LIGHTPANDA_PATH__|$GEM_DIR|g" "$PATCH" | shasum -a 256 | cut -d' ' -f1)"
 
 if ! step_done "patch-$PATCH_SUM"; then
   log "applying patch ($RA_NAME.patch → $GEM_DIR)"

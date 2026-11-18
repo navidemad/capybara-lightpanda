@@ -156,7 +156,7 @@ Invariants:
 |---|---|---|
 | `@default_context_event` | `Runtime.executionContextsCleared` | `executionContextCreated` with `isDefault` |
 | `@navigation_event` | main-frame, cross-document `Page.frameStartedNavigating` | main frame's new default context, main-frame `frameStoppedLoading`, `loadingFailed` for the main Document request |
-| `@document_ready_event` | same as navigation | `domContentEventFired`, `loadEventFired`, main-frame `frameStoppedLoading`, main Document `loadingFailed` |
+| `@document_ready_event` | same as navigation | main-frame `lifecycleEvent` (`DOMContentLoaded`, `load`), main-frame `frameStoppedLoading`, main Document `loadingFailed` |
 
 Invariants:
 
@@ -170,10 +170,10 @@ Invariants:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Triggered: enable_page_events, subscribe loadEventFired, send
-  Triggered --> Loaded: loadEventFired within min(2s, timeout)
+  [*] --> Triggered: enable_page_events, subscribe main-frame frameStoppedLoading, send
+  Triggered --> Loaded: main-frame frameStoppedLoading within min(2s, timeout)
   Triggered --> Polling: no load event
-  Polling --> Loaded: readyState interactive/complete at a new URL
+  Polling --> Loaded: readyState complete, or interactive after DOMContentLoaded, at a new URL
   Polling --> Loaded: client closed (crash)
   Polling --> Loaded: deadline (TimeoutError swallowed)
   Loaded --> CrashCheck: unsubscribe (ensure)
@@ -188,6 +188,7 @@ stateDiagram-v2
 Invariants:
 
 - One deadline for the whole navigation, so the worst case is 1× timeout.
+- `interactive` alone is not loaded: from Lightpanda #4554 (11988) it starts before deferred and module scripts run. The poll reads DOMContentLoaded from the navigation timing entry (`domContentLoadedEventStart > 0`) and trusts `interactive` only when the page has no entry. Pinned by `test/features/visit_readiness_test.rb`.
 - At most one reconnect per `go_to` (the `retried:` flag).
 - `reconnect` restarts the process only when it is really gone. That needs `Process#alive?` to treat a zombie as dead (D2, fixed).
 - A transport already dead **before** `go_to` raises `DeadBrowserError` from the send. This path is not recovered here: `Driver#browser` respawns on the next call.

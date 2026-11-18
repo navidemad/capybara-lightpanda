@@ -4,6 +4,10 @@
 # Kept bash-3.2 compatible (macOS ships /bin/bash 3.2): no associative arrays,
 # no `readarray`, no `${!prefix@}`.
 
+# Same channel as real-apps.yml (its workflow-level env): the rolling
+# nightly, not the release the gem defaults to.
+export LIGHTPANDA_VERSION="${LIGHTPANDA_VERSION:-nightly}"
+
 log() { printf '\033[1;34m[real-app]\033[0m %b\n' "$*"; }
 die() { printf '\033[1;31m[real-app] %b\033[0m\n' "$*" >&2; exit 1; }
 

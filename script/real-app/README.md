@@ -160,7 +160,7 @@ XDG_CACHE_HOME=/tmp/lp-xdg MISE_CACHE_DIR="$(mise cache path)" \
 
 The run prints no binary path, so check what the gem resolves with the same
 environment:
-`XDG_CACHE_HOME=/tmp/lp-xdg LIGHTPANDA_CACHE_TIME=0 ruby -Ilib -r capybara/lightpanda/errors -r capybara/lightpanda/binary -e 'p Capybara::Lightpanda::Binary.update'`.
+`XDG_CACHE_HOME=/tmp/lp-xdg LIGHTPANDA_VERSION=nightly LIGHTPANDA_CACHE_TIME=0 ruby -Ilib -r capybara/lightpanda/errors -r capybara/lightpanda/binary -e 'p Capybara::Lightpanda::Binary.update'`.
 
 ## Related
 

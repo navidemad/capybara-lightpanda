@@ -101,9 +101,10 @@ RSpec.configure do |config|
       # (`_user_edited`), exactly like Chrome; drivers that type real keystrokes pass
       # only because of that.
       /#has_field with valid should be false if field is invalid/,
-      # Node #obscured? sub-tests requiring viewport / overlap detection.
+      # Node #obscured? sub-tests requiring viewport / frame-offset detection.
+      # "should see overlapped elements as obscured" was dropped 2026-11-18:
+      # AUDIT_SKIPS found it passing on 1.0.4 (the floor) and nightly 12226.
       /node #obscured\? should see elements outside the viewport as obscured/,
-      /node #obscured\? should see overlapped elements as obscured/,
       /node #obscured\? should work in frames/,
       /node #obscured\? should work in nested iframes/,
       # `obscured: true/false` for nodes outside viewport — needs real

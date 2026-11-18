@@ -91,8 +91,14 @@ module Capybara
           evaluate_async(script.to_s.strip, *, frame: frame_stack.last)
         end
 
-        # Selenium's raw-CDP escape hatch, as used by
-        # `page.driver.browser.execute_cdp("Network.setBlockedURLs", urls: [...])`.
+        # Selenium's raw-CDP escape hatch,
+        # `page.driver.browser.execute_cdp(method, **params)`. The parameters
+        # are Lightpanda's, not Chrome's: a suite's
+        # `execute_cdp("Network.setBlockedURLs", urls: [...])` gets InvalidParams,
+        # because Lightpanda takes only
+        # `urlPatterns: [{ urlPattern: "*.png", block: true }]`. That list is
+        # also browser-wide and survives `reset!`, so clear it
+        # (`urlPatterns: []`) when the test that set it is done.
         # Scoped to the page session, matching Selenium — that covers the
         # Page / Runtime / DOM / Network / Emulation domains a suite would
         # reach for. Browser-scoped commands (Target.*, Browser.*) still go
