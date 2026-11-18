@@ -82,6 +82,14 @@ describe Capybara::Lightpanda::Network do
     end
   end
 
+  it "keeps the last accepted header set when the browser rejects a replacement" do
+    network.headers = { "X-First" => "original" }
+    browser.expects(:page_command).with("Network.setExtraHTTPHeaders", headers: { "X-Next" => "bad" })
+           .raises(Capybara::Lightpanda::BrowserError)
+    assert_raises(Capybara::Lightpanda::BrowserError) { network.headers = { "X-Next" => "bad" } }
+    assert_equal({ "X-First" => "original" }, network.extra_headers)
+  end
+
   describe "#user_agent=" do
     it "overrides through Emulation, which also moves navigator.userAgent" do
       network.user_agent = "Lightpanda/1.0 (iPhone) Mobile"
