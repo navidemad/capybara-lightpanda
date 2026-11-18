@@ -24,11 +24,12 @@ module Capybara
         def go_to(url, wait: true)
           enable_page_events
 
-          if wait
-            wait_for_page_load(url)
-          else
-            page_command("Page.navigate", **navigation_params(url))
-          end
+          result = if wait
+                     wait_for_page_load(url)
+                   else
+                     page_command("Page.navigate", **navigation_params(url))
+                   end
+          yield result if block_given?
           check_unhandled_modal!
         end
         alias goto go_to
@@ -69,9 +70,13 @@ module Capybara
         end
 
         def wait_for_page_load(url, retried: false)
-          deadline = await_navigation do
-            @client.command("Page.navigate", navigation_params(url), async: true, session_id: @session_id)
+          deadline = nil
+          result = @client.observe_async_command("Page.navigate", navigation_params(url),
+                                                 session_id: @session_id) do |send|
+            deadline = await_navigation(&send)
           end
+          return result unless @client.closed?
+
           handle_navigation_crash(url, deadline, retried: retried)
         end
 
@@ -89,7 +94,7 @@ module Capybara
                 # bookkeeping into its public signature. enable_page_events is
                 # needed again: reconnect's clear_session_state reset the flag.
                 enable_page_events
-                wait_for_page_load(url, retried: true)
+                return wait_for_page_load(url, retried: true)
               end
             rescue DeadBrowserError
               raise

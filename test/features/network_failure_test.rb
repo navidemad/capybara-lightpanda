@@ -15,6 +15,12 @@ describe "Capybara::Lightpanda failed network requests" do
 
   after { session.reset_session! }
 
+  it "lets a native session inspect the browser's error document after a refused visit" do
+    session.visit("http://127.0.0.1:#{TestApp::REFUSED_PORT}/unavailable")
+    assert session.has_text?("Navigation failed")
+    assert_nil session.status_code
+  end
+
   it "does not count a CORS-blocked request as in flight" do
     session.visit("/lightpanda/cross_origin_fetch")
     assert session.has_no_css?("#result", text: "pending")
