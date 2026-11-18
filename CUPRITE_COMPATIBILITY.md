@@ -1,7 +1,5 @@
 # Migrating Cuprite and Selenium suites to Lightpanda
 
-Everything below needs capybara-lightpanda 0.20.0 or newer; 0.19.1 and earlier have none of these helpers. Until 0.20.0 is released, use the gem from `main` (`gem "capybara-lightpanda", github: "navidemad/capybara-lightpanda"`).
-
 The first migration round landed on `main` at `bb8303a`. An application can keep its driver name and use the registration, header, cookie, network and download helpers below. The comparison targets Cuprite 0.20.1, Ferrum 0.20.1 and Capybara 3.40.0. Cuprite deprecates several driver-level helpers in favor of their browser-level equivalents. [Cuprite deprecations](https://github.com/rubycdp/cuprite/blob/v0.20.1/CHANGELOG.md)
 
 ## Landed on main

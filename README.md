@@ -212,14 +212,6 @@ It checks that the text is still easy to read.
 
 ## Migrate a test suite
 
-> [!IMPORTANT]
-> The helpers in this part need version 0.20.0 or newer.<br>
-> Until 0.20.0 is out, take the gem from GitHub:
->
-> ```ruby
-> gem "capybara-lightpanda", github: "navidemad/capybara-lightpanda", group: :test
-> ```
-
 ### From Cuprite
 
 Keep your application's driver name and register it with Lightpanda in test setup.
