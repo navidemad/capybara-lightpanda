@@ -51,7 +51,7 @@ diff --git a/spec/support/initializers/cuprite.rb b/spec/support/initializers/cu
 index 6860b14..f109b7b 100644
 --- a/spec/support/initializers/cuprite.rb
 +++ b/spec/support/initializers/cuprite.rb
-@@ -1,36 +1,8 @@
+@@ -1,36 +1,9 @@
 -require "capybara/cuprite"
 -
 -REMOTE_CHROME_URL = ENV.fetch("CHROME_URL", nil)
@@ -94,7 +94,8 @@ index 6860b14..f109b7b 100644
 +  :better_cuprite, window_size: [1200, 800],
 +  browser_options: {}, process_timeout: 60, timeout: 15,
 +  pending_connection_errors: false,
-+  headless: !ENV["HEADLESS"].in?(%w[n 0 no false])
++  headless: !ENV["HEADLESS"].in?(%w[n 0 no false]),
++  **{ ws_url: ENV["CHROME_URL"] }.compact
 +)
 diff --git a/spec/system/articles/feeds/basic_spec.rb b/spec/system/articles/feeds/basic_spec.rb
 --- a/spec/system/articles/feeds/basic_spec.rb
