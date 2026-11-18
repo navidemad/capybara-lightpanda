@@ -124,12 +124,11 @@ git status                                  # sanity-check nothing untracked is 
 git checkout -b release/vX.Y.Z
 git commit -m "Release X.Y.Z"
 git push -u origin release/vX.Y.Z
-gh pr create --title "Release X.Y.Z" --body "$(cat <<'EOF'
-Version bump for X.Y.Z. After merge, the `vX.Y.Z` tag will be pushed to trigger the trusted-publishing workflow.
-
-See `CHANGELOG.md` for the user-facing summary.
-EOF
-)"
+BODY="$(mktemp)"
+printf '%s\n\n%s\n' \
+  'Version bump for X.Y.Z. After merge, the `vX.Y.Z` tag will be pushed to trigger the trusted-publishing workflow.' \
+  'See `CHANGELOG.md` for the user-facing summary.' > "$BODY"
+gh pr create --title "Release X.Y.Z" --body-file "$BODY"
 gh pr merge <pr-number> --squash --delete-branch=false   # keep the local branch; Step 6 cleans it up
 
 # Tag the squash-merge SHA on main (NOT the local release-branch SHA — squash creates a different commit)
