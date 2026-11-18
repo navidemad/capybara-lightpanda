@@ -142,11 +142,13 @@ module Capybara
       end
 
       def right_click(keys = [], **_options)
-        call(DISPATCH_MOUSE_EVENT_JS, "contextmenu", mouse_event_options(keys))
+        call(CLICK_JS, mouse_event_options(keys, button: 2))
+        driver.browser.wait_for_idle
       end
 
       def double_click(keys = [], **_options)
-        call(DISPATCH_MOUSE_EVENT_JS, "dblclick", mouse_event_options(keys))
+        call(CLICK_JS, mouse_event_options(keys, detail: 2))
+        driver.browser.wait_for_idle
       end
 
       # A real pointer entering an element fires `mouseover` (bubbling) AND
@@ -378,10 +380,10 @@ module Capybara
 
       private
 
-      def mouse_event_options(keys)
+      def mouse_event_options(keys, button: 0, detail: 1)
         names = Array(keys).map(&:to_s)
         {
-          bubbles: true, cancelable: true,
+          bubbles: true, cancelable: true, button: button, detail: detail,
           shiftKey: names.include?("shift"), ctrlKey: names.intersect?(%w[control ctrl]),
           altKey: names.include?("alt"), metaKey: names.intersect?(%w[meta command]),
         }
@@ -662,7 +664,8 @@ module Capybara
           // Cancelling mousedown suppresses focus/text-selection in a real
           // browser but never the click, so the click below is dispatched
           // unconditionally.
-          var pressed = hit.dispatchEvent(new EventCtor('mousedown', mouseOptions));
+          var held = { ...mouseOptions, buttons: mouseOptions.button === 2 ? 2 : 1 };
+          var pressed = hit.dispatchEvent(new EventCtor('mousedown', held));
           // mousedown's default action moves focus. Ours is untrusted, so the
           // browser won't do it (and since upstream #3702 its click handling
           // doesn't either): focus what the press landed on, or blur the
@@ -677,6 +680,11 @@ module Capybara
               doc.activeElement.blur();
             }
           }
+          if (mouseOptions.button === 2) {
+            hit.dispatchEvent(new EventCtor('contextmenu', { ...held, detail: 0 }));
+            hit.dispatchEvent(new EventCtor('mouseup', mouseOptions));
+            return;
+          }
           hit.dispatchEvent(new EventCtor('mouseup', mouseOptions));
           var clickEvt = new EventCtor('click', mouseOptions);
           // A link to a scheme the browser can't fetch (mailto:, tel:, sms:…)
@@ -687,6 +695,7 @@ module Capybara
           var scheme = link && /^\\s*([a-z][a-z0-9+.-]*):/i.exec(link.getAttribute('href'));
           var external = !!scheme && !/^(https?|about|blob|data|file|javascript)$/i.test(scheme[1]);
           var notCancelled = hit.dispatchEvent(clickEvt);
+          if (mouseOptions.detail === 2) hit.dispatchEvent(new EventCtor('dblclick', mouseOptions));
           if (external || !notCancelled || clickEvt.defaultPrevented) return;
           // Native activation has already started the download (upstream
           // #4124, 11097, in the floor). Navigating again cancels it and
@@ -728,11 +737,6 @@ module Capybara
           }
         }
       JS
-
-      DISPATCH_MOUSE_EVENT_JS = <<~JS
-        function(type, options) { this.dispatchEvent(new MouseEvent(type, options)); }
-      JS
-      private_constant :DISPATCH_MOUSE_EVENT_JS
 
       # Picks the right Event constructor based on the event name so listeners
       # that key on `event instanceof MouseEvent` / `instanceof SubmitEvent`

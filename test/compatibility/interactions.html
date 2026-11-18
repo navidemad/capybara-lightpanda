@@ -12,7 +12,8 @@
     window.mouseEvents = [];
     for (const type of ["mousedown", "mouseup", "click", "dblclick", "contextmenu"]) {
       select.addEventListener(type, event => {
-        window.mouseEvents.push([type, event.shiftKey, event.ctrlKey, event.altKey, event.metaKey]);
+        const modifiers = ["shift", "ctrl", "alt", "meta"].filter(key => event[key + "Key"]);
+        window.mouseEvents.push([type, modifiers, event.button, event.buttons, event.detail]);
         if (type === "contextmenu") event.preventDefault();
       });
     }

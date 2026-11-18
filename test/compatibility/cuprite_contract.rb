@@ -217,8 +217,9 @@ class CupriteContractTest < Minitest::Test
     button = @page.find_button("Select row")
     button.click(:shift, :alt)
     button.click
-    flags = [[true, false, true, false], [false, false, false, false]]
-    expected = flags.flat_map { |keys| %w[mousedown mouseup click].map { |type| [type, *keys] } }
+    expected = [%w[shift alt], []].flat_map do |modifiers|
+      [["mousedown", modifiers, 0, 1, 1], ["mouseup", modifiers, 0, 0, 1], ["click", modifiers, 0, 0, 1]]
+    end
     assert_equal expected, @page.evaluate_script("window.mouseEvents")
   end
 
@@ -227,8 +228,15 @@ class CupriteContractTest < Minitest::Test
     button = @page.find_button("Select row")
     button.right_click(:control, :alt)
     button.double_click(:meta)
-    events = @page.evaluate_script("window.mouseEvents.filter(e => ['dblclick', 'contextmenu'].includes(e[0]))")
-    assert_equal [["contextmenu", false, true, true, false], ["dblclick", false, false, false, true]], events
+    events = @page.evaluate_script("window.mouseEvents")
+    right = %w[ctrl alt]
+    double = %w[meta]
+    expected = [
+      ["mousedown", right, 2, 2, 1], ["contextmenu", right, 2, 2, 0], ["mouseup", right, 2, 0, 1],
+      ["mousedown", double, 0, 1, 2], ["mouseup", double, 0, 0, 2],
+      ["click", double, 0, 0, 2], ["dblclick", double, 0, 0, 2],
+    ]
+    assert_equal expected, events
   end
 
   def test_confirm_wrappers_choose_the_application_branch
