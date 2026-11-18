@@ -87,6 +87,7 @@ select2-v3-flow:
     their children. Use a rendering browser for the geometry check.
   patterns:
     - 'select2-input|select2-focused|select2-drop'
+    - 'products/edit/taxons_spec\.rb # [^\n]*\nUnable to find visible css "\.edit_product"'
 
 decidim-account-js:
   confidence: confirmed
