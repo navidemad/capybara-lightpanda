@@ -4,9 +4,11 @@
 [![Total downloads](https://img.shields.io/gem/dt/capybara-lightpanda?label=downloads)](https://rubygems.org/gems/capybara-lightpanda)
 [![Tests](https://img.shields.io/github/actions/workflow/status/navidemad/capybara-lightpanda/ci.yml?branch=main&logo=github&label=tests)](https://github.com/navidemad/capybara-lightpanda/actions/workflows/ci.yml)
 
-A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), the headless browser built in Zig. Same Capybara DSL, no Chromium to install, boot or keep in memory: ~17 MB per worker against ~280 MB for Chrome on a 24-test Rails 8.1 suite, at the same wall-clock time (6.89s vs 7.09s).
+A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), a headless browser written in Zig.
 
-Self-contained: the CDP client is built in, no external browser-client gem required. The driver runs weekly against the specs of [seven production Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
+You keep the Capybara DSL you already use. You do not install Chromium, and your tests do not start it. Each test worker uses about 17 MB of memory. With Chrome, a worker uses about 280 MB. We measured this on a Rails 8.1 app with 24 system tests. Both drivers took about 7 seconds.
+
+The gem includes its own CDP client, so you do not need another browser gem. Every week, CI runs the driver against the tests of [seven real Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
 ```ruby
 # Gemfile
@@ -18,15 +20,16 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 end
 ```
 
-Not for every suite: Lightpanda has no layout engine, so specs that rely on screenshots, pixel geometry or real scrolling [won't pass](#what-wont-pass).
+> [!IMPORTANT]
+> Lightpanda does not compute page layout. Tests that need screenshots, pixel positions or real scrolling will fail. See [Limits](#limits).
 
 **[Documentation](https://navidemad.github.io/capybara-lightpanda/docs/)** — configuration · setup recipes · Turbo Rails · known limitations · troubleshooting
 
 ## Install
 
-The snippet above is all a Rails app needs: `bundle install`, and the driver registers itself as `:lightpanda`. The Lightpanda binary is downloaded on first use — no separate install step.
+A Rails app only needs the two snippets above. Run `bundle install`. The gem registers the driver under the name `:lightpanda`. The gem downloads the Lightpanda browser the first time you run a test.
 
-**RSpec, or Capybara on its own**
+With RSpec, or with Capybara outside Rails, use this instead:
 
 ```ruby
 # spec/support/capybara.rb
@@ -40,9 +43,12 @@ RSpec.configure do |config|
 end
 ```
 
+> [!NOTE]
+> Lightpanda runs on Linux and macOS, on `x86_64` and `arm64`. On Windows, use WSL2. On Linux `arm64`, the browser needs glibc 2.38 or newer. Debian 12 and Ubuntu 22.04 are too old for it. Use Ubuntu 24.04 or Debian 13.
+
 ## Configure
 
-Every option has a working default; set only what you need:
+Every option has a default value. Change only the options you need:
 
 ```ruby
 Capybara::Lightpanda.configure do |config|
@@ -51,43 +57,59 @@ Capybara::Lightpanda.configure do |config|
 end
 ```
 
-All options are listed under [Configuration](https://navidemad.github.io/capybara-lightpanda/docs/#configuration).
+The documentation lists [all options](https://navidemad.github.io/capybara-lightpanda/docs/#configuration).
+
+Each version of the gem downloads one Lightpanda release, currently 1.0.4. We test the gem against that release. The browser changes only when you upgrade the gem. To use another release, see [Choosing the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
 
 > [!TIP]
-> The gem downloads the Lightpanda release it was validated against (currently 1.0.4), so the browser only changes when you upgrade the gem. If your suite stubs HTTP (VCR/WebMock), run `bundle exec capybara-lightpanda install` in `bin/setup` and in CI before the tests. To pick another release or the rolling nightly, see [Choosing the browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
+> Does your test suite block HTTP requests with VCR or WebMock? Then download the browser before the tests start. Run `bundle exec capybara-lightpanda install` in `bin/setup` and in CI.
 
-## What won't pass
+## Limits
 
-Lightpanda is a headless browser without a layout engine. External stylesheets are fetched and applied, and `@media` / `matchMedia` resolve at the `window_size` you configure — but nothing reflows. Specs that depend on any of these can't pass here:
+Lightpanda loads your stylesheets and applies them. Media queries use the `window_size` you set. But Lightpanda does not compute layout, so elements have no real position or size.
 
-- pixel geometry (`getBoundingClientRect` is synthetic)
+Tests that need one of these things will fail:
+
+- pixel positions (`getBoundingClientRect` returns approximate values)
 - real scrolling
 - screenshots
 - a second browser tab or window
-- a menu revealed purely by CSS `:hover`
+- a menu that only CSS `:hover` opens
 
-See [known limitations](https://navidemad.github.io/capybara-lightpanda/docs/#limits) for the full list.
+The documentation has the [full list of limits](https://navidemad.github.io/capybara-lightpanda/docs/#limits).
 
 ## Examples
 
-Runnable single-file Rails demos live in [`examples/`](examples/): [Minitest](examples/rails_minitest_example.rb), [RSpec](examples/rails_rspec_example.rb), Turbo Drive + Frames ([Minitest](examples/rails_turbo_minitest_example.rb) · [RSpec](examples/rails_turbo_rspec_example.rb)), and a [click-to-open dropdown](examples/rails_dropdown_minitest_example.rb).
+The [`examples/`](examples/) folder has small Rails apps. Each app is one file that you can run:
+
+- [Minitest](examples/rails_minitest_example.rb) and [RSpec](examples/rails_rspec_example.rb)
+- Turbo Drive and Turbo Frames, with [Minitest](examples/rails_turbo_minitest_example.rb) and [RSpec](examples/rails_turbo_rspec_example.rb)
+- [A dropdown menu](examples/rails_dropdown_minitest_example.rb) that opens on click
 
 ## Upgrading
 
-A gem release can raise the minimum Lightpanda version it accepts; the driver refuses an older browser and names the version it found. Read [CHANGELOG.md](CHANGELOG.md) before bumping.
+A new version of the gem can require a newer Lightpanda. If your browser is too old, the driver stops and tells you which version it found. Read [CHANGELOG.md](CHANGELOG.md) before you upgrade.
 
 ## Credits
 
-- [Lightpanda](https://lightpanda.io/) — the headless browser
-- [Capybara](https://github.com/teamcapybara/capybara) — the test framework
-- Inspired by the [Ferrum](https://github.com/rubycdp/ferrum) architecture and [`lightpanda-ruby`](https://github.com/marcoroth/lightpanda-ruby)
+- [Lightpanda](https://lightpanda.io/) is the headless browser.
+- [Capybara](https://github.com/teamcapybara/capybara) is the test framework.
+- [Ferrum](https://github.com/rubycdp/ferrum) and [`lightpanda-ruby`](https://github.com/marcoroth/lightpanda-ruby) inspired the design.
 
-Patterns adapted from these MIT-licensed projects (cookies API, frame switching, node call/error conventions, retry/event utilities) are acknowledged with the original copyright notices in [NOTICE.md](NOTICE.md).
+We adapted some code patterns from these MIT-licensed projects. [NOTICE.md](NOTICE.md) names them and keeps their copyright notices.
 
 ## Contributing
 
-Bug reports and pull requests are welcome on [GitHub](https://github.com/navidemad/capybara-lightpanda).<br>
-For beta-testing tips and how to file useful feedback, see [BETA_TESTING.md](BETA_TESTING.md).
+We welcome bug reports and pull requests on [GitHub](https://github.com/navidemad/capybara-lightpanda). [BETA_TESTING.md](BETA_TESTING.md) explains how to try the gem and how to send useful feedback.
+
+Where to find things in this repository:
+
+- `lib/` is the driver and its CDP client.
+- `test/` is the Minitest suite. `spec/` runs the shared tests that the Capybara gem provides.
+- `examples/` has the Rails apps listed above.
+- `docs/` is the source of the website. It is not part of the gem.
+- `script/real-app/` reproduces a failure from the weekly real-app CI run on your machine.
+- [STATE_MACHINES.md](STATE_MACHINES.md) describes how the driver tracks the browser, the connection and page navigation.
 
 ## License
 
