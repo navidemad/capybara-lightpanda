@@ -34,6 +34,7 @@ module Capybara
         @path = nil
         @enabled = false
         @mutex = Mutex.new
+        @configuration_mutex = Mutex.new
         @pending = {}  # guid => absolute path when the download began
         @files = []    # absolute paths of completed downloads, in order
         @started = 0   # monotonic count of downloads begun this session
@@ -48,9 +49,9 @@ module Capybara
       # method is a no-op without one). Subscribe BEFORE the wire toggle so no
       # event can slip past, and roll the handlers back if the command fails.
       def enable(save_path)
-        return if @enabled || save_path.to_s.empty?
-
-        allow_downloads(save_path)
+        @configuration_mutex.synchronize do
+          allow_downloads(save_path) unless @enabled || save_path.to_s.empty?
+        end
       end
 
       # Ferrum's `downloads.set_behavior(save_path:, behavior: :allow)`, which
@@ -65,17 +66,17 @@ module Capybara
         wire = BEHAVIORS.fetch(behavior.to_sym) do
           raise ArgumentError, "unknown download behavior #{behavior.inspect} (use :allow, :deny or :default)"
         end
-        return allow_downloads(save_path) if wire == "allow" && !save_path.to_s.empty?
+        @configuration_mutex.synchronize do
+          return allow_downloads(save_path) if wire == "allow" && !save_path.to_s.empty?
 
-        wire = "deny" if wire == "allow"
-        result = browser.command("Browser.setDownloadBehavior", behavior: wire, eventsEnabled: false)
-        unsubscribe
-        @enabled = false
-        @mutex.synchronize do
-          @path = nil
-          @pending.clear
+          disable_downloads(wire == "allow" ? "deny" : wire)
         end
-        result
+      end
+
+      # Chromium accepts the directory when configuring the page. Lightpanda
+      # creates it on the browser host when the first attachment arrives.
+      def download_path=(destination)
+        @configuration_mutex.synchronize { allow_downloads(destination, prepare_directory: false) }
       end
 
       # Absolute paths of downloads completed this session (newest last).
@@ -134,25 +135,36 @@ module Capybara
       # the subscriptions and the per-connection download config — leaving
       # @enabled true would no-op the next #enable. Mirrors Network#reset.
       def reset
-        unsubscribe
-        clear
-        @enabled = false
-        @path = nil
+        @configuration_mutex.synchronize do
+          unsubscribe
+          clear
+          @enabled = false
+          @path = nil
+        end
       end
 
       private
 
-      def allow_downloads(save_path)
+      def disable_downloads(behavior)
+        result = browser.command("Browser.setDownloadBehavior", behavior: behavior, eventsEnabled: false)
+        unsubscribe
+        @enabled = false
+        @mutex.synchronize do
+          @path = nil
+          @pending.clear
+        end
+        result
+      end
+
+      def allow_downloads(save_path, prepare_directory: true)
         destination = File.expand_path(save_path.to_s)
-        FileUtils.mkdir_p(destination)
-        previous = @path
+        FileUtils.mkdir_p(destination) if prepare_directory
         subscribe unless @enabled
-        @mutex.synchronize { @path = destination }
         begin
-          browser.command("Browser.setDownloadBehavior", behavior: "allow", downloadPath: destination,
-                                                         eventsEnabled: true)
+          params = { behavior: "allow", downloadPath: destination, eventsEnabled: true }
+          browser.client.command("Browser.setDownloadBehavior", params,
+                                 on_success: -> { @mutex.synchronize { @path = destination } })
         rescue StandardError
-          @mutex.synchronize { @path = previous }
           unsubscribe unless @enabled
           raise
         end

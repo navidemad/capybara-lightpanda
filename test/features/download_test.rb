@@ -119,9 +119,10 @@ describe "Capybara::Lightpanda downloads" do
     it "keeps tracking the original destination if the replacement directory cannot be created" do
       browser = session.driver.browser
       browser.download_path = other_dir
+      FileUtils.mkdir_p(other_dir)
       File.write(File.join(other_dir, "regular-file"), "occupied")
       assert_raises(Errno::EEXIST) do
-        browser.download_path = File.join(other_dir, "regular-file")
+        browser.downloads.set_behavior(save_path: File.join(other_dir, "regular-file"))
       end
       files = browser.downloads.wait { session.click_link("Download report") }
       assert_equal [File.join(other_dir, "report.csv")], files

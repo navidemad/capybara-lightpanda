@@ -131,7 +131,7 @@ module Capybara
             raise error, "download_path must be a directory path"
           end
 
-          downloads.set_behavior(save_path: File.absolute_path(path))
+          downloads.download_path = File.absolute_path(path)
           {}
         end
 

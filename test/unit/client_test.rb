@@ -126,6 +126,29 @@ describe Capybara::Lightpanda::Client do
       client.instance_variable_set(:@options, Capybara::Lightpanda::Options.new(timeout: 5))
     end
 
+    it "updates acknowledged state between surrounding events, even before the waiting caller resumes" do
+      destination = :old
+      seen = []
+      subscriber = Capybara::Lightpanda::Client::Subscriber.new
+      subscriber.subscribe("Browser.downloadWillBegin") { seen << destination }
+      client.instance_variable_set(:@subscriber, subscriber)
+      ws = fake_ws(0) do |wire|
+        id = JSON.parse(wire).fetch("id")
+        event = { "method" => "Browser.downloadWillBegin", "params" => {} }
+        client.send(:handle_message, event)
+        2.times { client.send(:handle_message, { "id" => id, "result" => {} }) }
+        client.send(:handle_message, event)
+      end
+      client.instance_variable_set(:@ws, ws)
+      transitions = 0
+      client.command("Browser.setDownloadBehavior", on_success: lambda {
+        transitions += 1
+        destination = :new
+      })
+      assert_equal %i[old new], seen
+      assert_equal 1, transitions
+    end
+
     it "counts the time spent sending against the command's timeout" do
       client.instance_variable_set(:@ws, fake_ws(0.4))
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)

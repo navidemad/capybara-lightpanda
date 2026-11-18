@@ -47,7 +47,6 @@ class SeleniumContractTest < Minitest::Test
   def test_download_helper_reads_each_export_from_the_selected_directory
     %w[first second].each do |report|
       path = File.join(@default_directory, report)
-      Dir.mkdir(path)
       assert_equal({}, @browser.public_send(:download_path=, path))
       assert_raises(Selenium::WebDriver::Error::InvalidArgumentError) { @browser.download_path = nil }
       download_report(report, path)
