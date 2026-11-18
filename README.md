@@ -1,5 +1,3 @@
-<div align="center">
-
 # Capybara::Lightpanda
 
 [![Gem version](https://img.shields.io/gem/v/capybara-lightpanda?logo=rubygems&logoColor=white&label=gem)](https://rubygems.org/gems/capybara-lightpanda)
@@ -8,18 +6,11 @@
 [![Rails compatible](https://img.shields.io/badge/Rails-compatible-CC0000?logo=rubyonrails&logoColor=white)](https://rubyonrails.org/)
 [![Turbo friendly](https://img.shields.io/badge/Turbo-friendly-CC0000?logo=hotwire&logoColor=white)](https://turbo.hotwired.dev/)
 
-A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), the fast headless browser built in Zig.<br>
-Self-contained — built-in CDP client, no external browser-client gem required.
+A [Capybara](https://github.com/teamcapybara/capybara) driver for [Lightpanda](https://lightpanda.io/), the headless browser built in Zig. Same Capybara DSL, no Chromium to install, boot or keep in memory: ~17 MB per worker against ~280 MB for Chrome on a 24-test Rails 8.1 suite, at the same wall-clock time (6.89s vs 7.09s).
 
-<strong>Capybara</strong>&nbsp;&nbsp;→&nbsp;&nbsp;<code>capybara-lightpanda</code>&nbsp;&nbsp;→&nbsp;&nbsp;<a href="https://lightpanda.io/"><img src="docs/static/img/lightpanda-logo.svg" alt="Lightpanda" height="22" valign="middle"></a>&nbsp;<a href="https://github.com/lightpanda-io/browser/stargazers"><img src="https://img.shields.io/github/stars/lightpanda-io/browser?logo=github&label=stars" alt="GitHub stars" valign="middle"></a>
+Self-contained: the CDP client is built in, no external browser-client gem required. The driver runs weekly against the specs of [seven production Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
 **[Documentation](https://navidemad.github.io/capybara-lightpanda/docs/)** — configuration · setup recipes · Turbo Rails · known limitations · troubleshooting
-
-</div>
-
-## Why
-
-Same Capybara DSL, no Chromium to install, boot or keep in memory: ~17 MB per worker against ~280 MB for Chrome on a 24-test Rails 8.1 suite, at the same wall-clock time (6.89s vs 7.09s). The driver also runs weekly against the specs of [seven production Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
 ## Install
 
