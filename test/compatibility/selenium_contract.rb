@@ -102,8 +102,11 @@ class SeleniumContractTest < Minitest::Test
       document.querySelector('#consent').checked = false;
     JS
     title = @page.find("#title").native
-    assert_equal "Please fill out this field.", title.attribute("validationMessage")
-    assert_equal "Please select an item in the list.", @page.find("#scope").native.attribute("validationMessage")
+    %w[title scope].each do |id|
+      message = @page.evaluate_script("document.getElementById(arguments[0]).validationMessage", id)
+      refute_empty message
+      assert_equal message, @page.find("##{id}").native.attribute("validationMessage")
+    end
     assert_equal "", title.attribute("value")
     assert_equal "true", title.attribute("required")
     assert_equal "false", title.attribute("disabled")
