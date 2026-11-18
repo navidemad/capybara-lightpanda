@@ -17,7 +17,14 @@ end
 
 class CupriteContractTest < Minitest::Test
   APP = lambda do |env|
-    if env["PATH_INFO"] == "/headers"
+    case env["PATH_INFO"]
+    when "/redirect"
+      next [302, { "location" => "/parent" }, []]
+    when "/parent"
+      next [200, { "content-type" => "text/html" }, ['<iframe src="/child"></iframe>']]
+    when "/child"
+      next [404, { "content-type" => "text/html" }, ["missing"]]
+    when "/headers"
       values = env.select { |key, _| key.start_with?("HTTP_") }
       next [200, { "content-type" => "text/html" }, ["<pre>#{CGI.escapeHTML(values.to_json)}</pre>"]]
     end
@@ -35,7 +42,20 @@ class CupriteContractTest < Minitest::Test
       Capybara::Lightpanda.register_cuprite_driver(:store_system, **options)
     end
     Capybara.server = :puma, { Silent: true }
-    @page = Capybara::Session.new(:store_system, APP)
+    @stream_started = Queue.new
+    @release_stream = Queue.new
+    app = lambda do |env|
+      next APP.call(env) unless env["PATH_INFO"] == "/stream"
+
+      body = Enumerator.new do |out|
+        out << "first"
+        @stream_started << true
+        @release_stream.pop(timeout: 5)
+        out << "last"
+      end
+      [200, { "content-type" => "text/plain" }, body]
+    end
+    @page = Capybara::Session.new(:store_system, app)
   end
 
   def teardown
@@ -105,6 +125,46 @@ class CupriteContractTest < Minitest::Test
     assert_equal "before", jar["session"].value
     @page.reset_session!
     assert_nil @page.driver.browser.cookies["session"]
+  end
+
+  def test_redirect_and_iframe_keep_distinct_responses
+    @page.visit("/redirect")
+    network = @page.driver.browser.network
+    assert network.wait_for_idle(duration: 0.01)
+    assert_equal 200, network.status
+    assert_equal 200, network.response.status
+    statuses = network.traffic.to_h { |hop| [URI(hop.request.url).path, hop.response&.status] }
+    assert_equal [302, 200, 404], statuses.values_at("/redirect", "/parent", "/child")
+    assert_equal statuses.keys, @page.driver.network_traffic(:all).map { |hop| URI(hop.request.url).path }.uniq
+    network.clear(:cache)
+    refute_empty network.traffic
+    network.clear(:traffic)
+    assert_empty network.traffic
+    assert_equal 200, network.status
+  end
+
+  def test_idle_waits_for_the_response_body
+    @page.visit("/")
+    @page.execute_script("fetch('/stream').then(r => r.text()); void 0")
+    assert @stream_started.pop(timeout: 5), "the server must start streaming"
+    network = @page.driver.browser.network
+    refute network.wait_for_idle(timeout: 0.05, duration: 0.01)
+    @release_stream << true
+    assert network.wait_for_idle(timeout: 3, duration: 0.01)
+    stream = network.traffic.find { |hop| URI(hop.request.url).path == "/stream" }
+    assert_predicate stream, :finished?
+  ensure
+    @release_stream << true
+  end
+
+  def test_failed_fetch_releases_the_idle_wait
+    @page.visit("/")
+    @page.evaluate_async_script("fetch('http://127.0.0.1:1/closed').catch(arguments[0])")
+    network = @page.driver.browser.network
+    assert network.wait_for_idle(timeout: 2, duration: 0.01)
+    failed = network.traffic.find { |hop| hop.request&.url&.end_with?("/closed") }
+    assert_predicate failed, :finished?
+    assert failed.error
   end
 
   def test_copied_remote_and_chrome_options_fail_before_launch

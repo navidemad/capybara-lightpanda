@@ -156,7 +156,7 @@ describe Capybara::Lightpanda::Network do
   end
 
   describe "#pending_connections / #idle?" do
-    it "counts requests with no response as pending" do
+    it "counts requests as pending until their response body finishes" do
       network.enable
       browser.fire("Network.requestWillBeSent", {
                      "requestId" => "r1",
@@ -170,6 +170,8 @@ describe Capybara::Lightpanda::Network do
                      "requestId" => "r1",
                      "response" => { "status" => 200, "headers" => {}, "mimeType" => "text/html" },
                    })
+      assert_equal 1, network.pending_connections, "receiving headers does not finish the body"
+      browser.fire("Network.loadingFinished", { "requestId" => "r1" })
       assert_equal 0, network.pending_connections
       assert_predicate network, :idle?
     end
@@ -449,6 +451,7 @@ describe Capybara::Lightpanda::Network do
                      "requestId" => id,
                      "response" => { "status" => status, "headers" => {}, "mimeType" => "text/html" },
                    })
+      browser.fire("Network.loadingFinished", { "requestId" => id })
     end
 
     it "closes the previous hop from redirectResponse so a redirect leaves nothing pending" do
