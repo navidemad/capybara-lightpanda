@@ -8,7 +8,7 @@ require_relative "client/subscriber"
 
 module Capybara
   module Lightpanda
-    class Client
+    class Client # rubocop:disable Metrics/ClassLength
       def initialize(ws_url, options)
         @options = options
         @ws = WebSocket.new(ws_url, options)
@@ -50,6 +50,21 @@ module Capybara
         handle_error(response) if response["error"]
 
         response["result"]
+      ensure
+        @pendings.delete(message[:id]) if message
+      end
+
+      # Let navigation arm its event handlers before sending and use its own
+      # readiness deadline. A reply that arrives later must never delay the
+      # page or get mistaken for the next visit's response.
+      def observe_async_command(method, params, session_id:)
+        message = build_message(method, params, session_id: session_id)
+        pending = Concurrent::IVar.new
+        @pendings[message[:id]] = pending
+        yield lambda {
+          @ws.send_message(JSON.generate(message), deadline: Utils::Wait.deadline(@options.timeout))
+        }
+        pending.value(0)&.dig("result")
       ensure
         @pendings.delete(message[:id]) if message
       end
