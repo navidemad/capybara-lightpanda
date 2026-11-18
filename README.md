@@ -11,6 +11,12 @@ You write the same Capybara tests as before. You do not need Chromium. Each test
 
 The gem comes with its own CDP client, so you do not need another browser gem. Each week, we run the driver on the tests of [seven real Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
+Read the [docs](https://navidemad.github.io/capybara-lightpanda/docs/) for setup, options, Turbo and help with errors.
+
+## Install
+
+Add the gem, then name the driver in your system tests:
+
 ```ruby
 # Gemfile
 gem "capybara-lightpanda", group: :test
@@ -21,14 +27,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 end
 ```
 
-> [!IMPORTANT]
-> Lightpanda has no layout engine. It does not know where things are on the page. Tests that need screenshots, pixel positions or real scrolling will fail. See [Limits](#limits).
-
-Read the [docs](https://navidemad.github.io/capybara-lightpanda/docs/) for setup, options, Turbo, limits and help with errors.
-
-## Install
-
-A Rails app only needs the code above. Run `bundle install`. The gem adds a driver with the name `:lightpanda`. The first time you run a test, the gem gets the Lightpanda browser for you.
+Run `bundle install`. The first time you run a test, the gem gets the Lightpanda browser for you.
 
 Do you use RSpec, or Capybara without Rails? Then use this code:
 
@@ -44,8 +43,7 @@ RSpec.configure do |config|
 end
 ```
 
-> [!NOTE]
-> Lightpanda works on Linux and macOS, on `x86_64` and `arm64`. On Windows, use WSL2. On Linux `arm64`, the browser needs glibc 2.38 or above. Debian 12 and Ubuntu 22.04 are too old for it. Use Ubuntu 24.04 or Debian 13.
+You can try it next to your current driver. [BETA_TESTING.md](BETA_TESTING.md) shows how to turn it on with one env var. To go back, drop the env var.
 
 ## Configure
 
@@ -65,19 +63,13 @@ Each gem version gets one Lightpanda version. Today it is 1.0.4. We test the gem
 > [!TIP]
 > Do your tests block HTTP calls with VCR or WebMock? Then get the browser before the tests start. Run `bundle exec capybara-lightpanda install` in `bin/setup` and in CI.
 
-## Limits
+## What to expect
 
-Lightpanda reads your CSS and uses it. Media queries use the `window_size` you set. But Lightpanda has no layout engine. So an element has no real place or size on the page.
+Lightpanda runs your JavaScript, reads your CSS and works with Turbo. On the real Rails apps we test each week, almost all tests pass with no change.
 
-Tests that need one of these things will fail:
+Lightpanda has no layout engine. So a few kinds of tests still need your old driver: tests with screenshots, pixel positions, real scrolling, a second tab, or a menu that only CSS `:hover` can open. You can keep both drivers in the same app.
 
-- pixel positions (`getBoundingClientRect` gives rough numbers)
-- real scrolling
-- screenshots
-- a second browser tab or window
-- a menu that only CSS `:hover` can open
-
-The docs have the [full list of limits](https://navidemad.github.io/capybara-lightpanda/docs/#limits).
+The docs have the [full list](https://navidemad.github.io/capybara-lightpanda/docs/#limits).
 
 ## Test it with your AI agent
 
@@ -94,7 +86,7 @@ Try the capybara-lightpanda gem on this Rails app, then report what you find.
 3. Run the system tests two times: with the current driver, then with BROWSER=lightpanda.
 4. List each test that passes with the current driver and fails with Lightpanda.
    Skip tests that need screenshots, pixel positions, real scrolling, a second tab
-   or CSS :hover. These are known limits.
+   or CSS :hover. We know about these.
 5. For each other failure, find the smallest test and HTML that still fail.
 6. Write one GitHub issue draft per failure. Use the fields of this form:
    https://github.com/navidemad/capybara-lightpanda/issues/new?template=beta-feedback.yml
