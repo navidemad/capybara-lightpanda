@@ -20,7 +20,7 @@ module Capybara
     # Structure deliberately mirrors Network (same browser ref, same mutex +
     # subscribe/unsubscribe lifecycle, same reset-after-disposeBrowserContext
     # contract) so the two trackers behave identically under create_page/reset.
-    class Downloads
+    class Downloads # rubocop:disable Metrics/ClassLength
       attr_reader :browser, :path
 
       # How long #wait gives a download to BEGIN (the downloadWillBegin frame
@@ -62,6 +62,26 @@ module Capybara
           raise
         end
         @enabled = true
+      end
+
+      # Ferrum's `downloads.set_behavior(save_path:, behavior: :allow)`, which
+      # Cuprite suites call in setup to pick the download directory. `:allow`
+      # (re)points downloads at `save_path`; `:deny` and `:default` turn them
+      # off. Files already recorded stay listed. Lasts until the next
+      # `reset!`, which goes back to the configured `save_path`, so call it
+      # per test as those suites do.
+      BEHAVIORS = { allow: "allow", deny: "deny", default: "default" }.freeze
+
+      def set_behavior(save_path:, behavior: :allow)
+        wire = BEHAVIORS.fetch(behavior.to_sym) do
+          raise ArgumentError, "unknown download behavior #{behavior.inspect} (use :allow, :deny or :default)"
+        end
+        unsubscribe
+        @enabled = false
+        @path = nil
+        return enable(save_path) if wire == "allow"
+
+        browser.command("Browser.setDownloadBehavior", behavior: wire, eventsEnabled: false)
       end
 
       # Absolute paths of downloads completed this session (newest last).

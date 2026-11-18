@@ -81,7 +81,7 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-18 (unchanged since 2026
 
 ### Diverged on purpose
 
-- Peer set types characters ↔ `node.rb#SET_VALUE_JS`: direct value plus input/change is faster and more robust here; use send_keys for keystroke handlers.
+- Peer set types characters ↔ `node.rb#SET_VALUE_JS`: direct value plus input/change is faster and more robust here, with one synthetic keydown/keyup pair around it so keyup-bound filters run (beta feedback 2026-11-18); use send_keys for per-keystroke handlers.
 - Peer coordinate clicks ↔ `node.rb#CLICK_JS`: same constraint as Ferrum; no real layout/mouse fallback.
 - Peer iframe-offset obscuration ↔ `javascripts/predicates.js`: owning-document hit tests descend outer shadow roots first; feature-detect ShadowRoot.elementFromPoint and keep the older-browser host fallback.
 - Peer visibility walker ↔ native checkVisibility: native handles stylesheet/UA cascade more accurately here. Opacity zero remains visible unless a real app requires an explicit check.

@@ -5,11 +5,17 @@
 ### Added
 
 - **`timezone` driver option.** `timezone: "America/New_York"` makes `Date` and `Intl` in the page report that zone, whatever the host or CI runner is set to. Lightpanda accepts `Emulation.setTimezoneOverride` but ignores it, so the zone is given to the browser process alone: your test process and your app keep theirs. It is one zone per browser process, not per test, and has no effect with `ws_url`.
+- **`page.driver.resize(width, height)` and `page.driver.browser.downloads.set_behavior(save_path:, behavior:)`**, the Cuprite and Ferrum spellings, so a suite ported from Cuprite no longer stops on `NoMethodError` in its setup. `resize` drives the same viewport as `current_window.resize_to`; `set_behavior` points downloads at another directory (`:allow`) or turns them off (`:deny`) until the next `reset!`.
 - **`page.driver.user_agent=`** sets the `User-Agent` request header and `navigator.userAgent` together, until the next `reset!`. A `User-Agent` passed to `headers=` only changes the request header.
 
 ### Changed
 
+- **Typing sends key events.** `send_keys("NT")` now fires `keydown`, `keypress` and `keyup` for each character a US keyboard types, as a user's typing does; it used to fire `input` alone. `fill_in` still writes the value in one step, and now fires one `keydown` and one `keyup` around it. A table filter, autocomplete or counter bound to `keyup` or `keydown` runs as it does on Selenium and Cuprite. A page that cancels `keydown` to refuse a character now refuses it under `send_keys` too.
 - **A user agent the browser refuses is no longer silent.** Lightpanda ignores any user agent containing `Mozilla` and answers as if it had applied it, so the suite ran on `Lightpanda/1.0` with no signal. `user_agent=` raises on such a value and `headers=` / `add_headers` print a warning. Drop the `Mozilla/5.0` prefix and keep the device tokens: the `browser` and `device_detector` gems read `Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile` as an iPhone.
+
+### Fixed
+
+- **`send_keys` reaches a rich-text editor in an iframe.** When the iframe's `<body>` is the editable area (TinyMCE, CKEditor 4), the keys were dropped, or typed into whatever field the top page had focused. They now go to the editor, after its existing text. `send_keys` on a paragraph inside an editor types into that editor.
 
 ## [0.19.1] - 2026-11-18
 

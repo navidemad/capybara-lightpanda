@@ -123,6 +123,15 @@ describe "Capybara::Lightpanda window API" do
       assert_equal configured, driver.window_size(driver.current_window_handle)
     end
 
+    # Cuprite's spelling. A suite ported from Cuprite calls it in setup, so
+    # a NoMethodError there fails every example before it starts.
+    it "resizes through Cuprite's driver.resize(width, height)" do
+      driver.resize(375, 667)
+
+      assert_equal [375, 667], session.current_window.size
+      assert session.evaluate_script("window.matchMedia('(max-width: 500px)').matches")
+    end
+
     it "refuses to resize a window that is not the current one" do
       assert_raises(Capybara::Lightpanda::NoSuchPageError) do
         driver.resize_window_to("not-a-real-target", 800, 600)

@@ -984,12 +984,26 @@ module Capybara
         }
       JS
 
+      # The value is written in one step, not typed, but the field still
+      # reports a key press around it: Selenium and Cuprite type `fill_in`, so
+      # suites rely on a `keyup` (or `keydown`) listener running: a table
+      # filter, an autocomplete, a character counter. One keydown/keyup pair
+      # naming the last character stands in for the keystrokes; a listener that
+      # needs one event per character wants `send_keys`.
       SET_VALUE_JS = <<~JS
         function(value) {
           if (this.readOnly || this.hasAttribute('readonly')) return;
+          var chars = Array.from(String(value));
+          var key = chars.length ? chars[chars.length - 1] : 'Backspace';
+          var el = this;
+          var press = function(type) {
+            el.dispatchEvent(new KeyboardEvent(type, {key: key, bubbles: true, cancelable: true}));
+          };
           this.focus();
+          press('keydown');
           this.value = value;
           this.dispatchEvent(new Event('input', {bubbles: true}));
+          press('keyup');
           this.dispatchEvent(new Event('change', {bubbles: true}));
         }
       JS
@@ -1034,14 +1048,40 @@ module Capybara
       # after the last non-blank text, inside its <p>, the position Chrome
       # normalizes WebDriver's collapsed end-of-contents range to; a host with
       # no text gets the end of its children.
+      #
+      # Inside an iframe, Lightpanda sends keys down the chain of focused
+      # <iframe> elements (upstream `focusedFrame`), so every owning <iframe>
+      # must be its document's active element. `focus()` on a field does that;
+      # on a <body> that is the editing host (TinyMCE, CKEditor 4) it does not,
+      # and the keys went to whatever the top page had focused. A <body> is
+      # also `activeElement` whenever nothing is focused, so it never proves
+      # it has focus: it keeps its caret only when the selection is already in
+      # it. A node inside an editing host that can't take focus itself (the
+      # <p> of a rich-text editor) focuses its host, as in Chrome.
       SEND_KEYS_FOCUS_JS = <<~JS
         function() {
           var doc = this.ownerDocument;
-          if (doc.activeElement === this) return;
+          var frameFocused = true;
+          for (var w = doc.defaultView; w && w.frameElement; w = w.frameElement.ownerDocument.defaultView) {
+            var frame = w.frameElement;
+            if (frame.ownerDocument.activeElement !== frame) {
+              frameFocused = false;
+              frame.focus();
+            }
+          }
+          var selection = doc.defaultView && doc.defaultView.getSelection();
+          var caretInside = this !== doc.body ||
+            !!(selection && selection.rangeCount && this.contains(selection.anchorNode));
+          if (doc.activeElement === this && frameFocused && caretInside) return;
           this.focus();
           if (doc.activeElement !== this) {
-            if (doc.activeElement && doc.activeElement !== doc.body && doc.activeElement.blur) doc.activeElement.blur();
-            return;
+            var host = this.isContentEditable ? this.parentElement : null;
+            while (host && host.parentElement && host.parentElement.isContentEditable) host = host.parentElement;
+            if (host && host.isContentEditable) host.focus();
+            if (!host || doc.activeElement !== host) {
+              if (doc.activeElement && doc.activeElement !== doc.body && doc.activeElement.blur) doc.activeElement.blur();
+              return;
+            }
           }
           if (typeof this.setSelectionRange === 'function') {
             // Throws on types without a selection (email, number, …) — those
