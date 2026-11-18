@@ -23,7 +23,7 @@ module Capybara
       # genuinely differs (see #switch_to). We do not grow a Selenium
       # emulation layer.
       module SeleniumCompat
-        # Selenium's `Logs#get(:browser)` shape over Browser#console_logs.
+        # Selenium’s browser log includes console output and uncaught JavaScript errors.
         # `level` is the Selenium severity string ("SEVERE"/"WARNING"/…), not
         # the CDP console type, because that is what callers compare against.
         LogEntry = Struct.new(:level, :message, :timestamp) do
@@ -57,13 +57,19 @@ module Capybara
           def get(type = :browser)
             return [] unless type.to_sym == :browser
 
-            @browser.console_logs.map do |entry|
+            console = @browser.console_logs.map do |entry|
               LogEntry.new(
                 CONSOLE_LEVELS.fetch(entry[:type], "INFO"),
                 entry[:text],
                 entry[:timestamp]
               )
             end
+            errors = @browser.page_errors.map do |error|
+              prefix = error[:kind] == "unhandledrejection" ? "Uncaught (in promise)" : "Uncaught"
+              message = [error[:url], prefix, error[:message]].reject(&:empty?).join(" ")
+              LogEntry.new("SEVERE", message, error[:timestamp])
+            end
+            (console + errors).sort_by { |entry| entry.timestamp || 0 }
           end
 
           def available_types
@@ -75,7 +81,8 @@ module Capybara
         # repeated calls re-report the same entries. Draining would let an
         # earlier reader silently swallow a JS error from a later assertion,
         # and the buffer is already scoped to the session (cleared by
-        # Driver#reset!). Use #clear_console_logs for an explicit reset.
+        # Driver#reset!). Native callers can clear each source with
+        # #clear_console_logs and #clear_page_errors.
         #
         # Not memoized on purpose: Logs holds nothing but a back-reference, and
         # an ivar here would have to be declared in Browser#initialize per the
