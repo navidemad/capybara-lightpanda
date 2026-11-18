@@ -4,24 +4,27 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-18; release v0.20.1, main `1cb5f03edb` (unchanged since 2026-11-15). Open: #685 (out-of-process iframe idle tracking) and #707 (one `Deadline` per composite call, renames `click(wait:)` to `navigation_wait:`, rewrites the concurrency primitives). Immune to #707's fixes: `navigation.rb#go_to` already shares one deadline, `downloads.rb#wait` sets no latch on timeout, and `client/subscriber.rb#unsubscribe` removes by block, not index.
+https://github.com/rubycdp/ferrum — reviewed 2026-11-18; release v0.20.1, main `1cb5f03edb` (unchanged since 2026-11-15). Open: #685 (out-of-process iframe idle tracking) and #707 (one `Deadline` per composite call, renames `click(wait:)` to `navigation_wait:`, rewrites the concurrency primitives). Immune to #707's fixes: `browser/navigation.rb#go_to` already shares one deadline, `downloads.rb#wait` sets no latch on timeout, and `client/subscriber.rb#unsubscribe` removes by block, not index.
 
-Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until Cuprite passes it through; our `node.rb#click` ignores options and sniffs `Browser::SNIFF_WINDOW`); #696 bounding-rect center fallback when content quads fail (immune: no quad or offsetWidth geometry in lib/ or javascripts/); `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once); inverted `Node#moving?` (ours compares rects correctly); `go_to(on_timeout: :raise)` (ours falls back to readyState polling); #699/#700 Fetch-event navigation detection and `AuthRequest#abort` (N/A: no Fetch interception); #703 runs `on(:request|:auth|:dialog)` callbacks as a chain with the object alone, superseding #701 (N/A: no interception, modals use LP pre-arm, and `client/subscriber.rb#dispatch` already passes `params` alone); #705 `ResultTooDeepError` for Chrome's CBOR depth limit (Chrome-specific, not seen on Lightpanda); #704 dedicated-worker close and #706 Cuprite `Page#command` override (N/A). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide.
+Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until Cuprite passes it through; our `node.rb#click` forwards modifier keys but ignores options and sniffs `Browser::SNIFF_WINDOW`); #696 bounding-rect center fallback when content quads fail (immune: no quad or offsetWidth geometry in lib/ or javascripts/); `headers.clear` not reaching Chrome (ours: `network.rb#clear_headers` sends `{}` at once); inverted `Node#moving?` (ours compares rects correctly); `go_to(on_timeout: :raise)` (ours falls back to readyState polling); #699/#700 Fetch-event navigation detection and `AuthRequest#abort` (N/A: no Fetch interception); #703 runs `on(:request|:auth|:dialog)` callbacks as a chain with the object alone, superseding #701 (N/A: no interception, modals use LP pre-arm, and `client/subscriber.rb#dispatch` already passes `params` alone); #705 `ResultTooDeepError` for Chrome's CBOR depth limit (Chrome-specific, not seen on Lightpanda); #704 dedicated-worker close and #706 Cuprite `Page#command` override (N/A). `page.cookies` becomes page-URL-scoped in 0.21 while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide.
 
 ### Adopted
 
 - `ferrum/client.rb` ↔ `client.rb#start_message_thread`, `client/web_socket.rb#start_reader_thread`: connection death releases pending commands; transport exceptions must not abort the host process.
 - `ferrum/node.rb#exists?` ↔ `node.rb#exists?`: attached-guard probe returns false only for obsolete/missing nodes or missing context; unrelated errors escape.
 - `ferrum/utils/event.rb` ↔ `utils/event.rb`: reset iteration counters expose waits raced by a reset.
-- `ferrum/cookies/{cookie.rb,../cookies.rb}` ↔ `cookies.rb`: typed/Enumerable cookies and YAML persistence; ours returns an Array rather than a name-keyed Hash.
+- `ferrum/cookies/{cookie.rb,../cookies.rb}` ↔ `cookies.rb`: typed/Enumerable cookies and YAML persistence; native `all` returns an Array, the opt-in Cuprite driver's `cuprite_cookies.rb#all` the name-keyed Hash.
 - `ferrum/node.rb#wait_for_stop_moving` ↔ `node.rb`: consecutive rect samples; our timeout behavior deliberately differs below.
 - `ferrum/network.rb` ↔ `network.rb`: traffic, idle and headers; close redirectResponse hops and loadingFailed entries to avoid stranded pending requests. Only wait_for_idle! raises.
+- `ferrum/network/exchange.rb` ↔ `network/exchange.rb`: Exchange/Response answer `request.url`, `response.status`, `finished?`, but subclass Hash so symbol-key traffic assertions keep working.
+- `ferrum/headers.rb` ↔ `request_headers.rb`: get/set/add/clear; `add(permanent: false)` keeps a Referer off subrequests and sends it with `Page.navigate` only, as Ferrum does. Session reset clears overrides.
+- Ferrum `Page#wait_for_reload` ↔ `browser/navigation.rb#wait_for_reload`: returns on a main-frame load, a same-document navigation or expiry, truthy either way.
 - `ferrum/contexts.rb#reset` ↔ `browser.rb#reset`, `driver.rb#reset!`: context disposal isolates sessions; Network#reset must forget the disposed domain's enabled state. Failed reset discards the browser.
 - `ferrum/utils/attempt.rb` ↔ `utils/attempt.rb`: bounded retry reused by with_default_context_wait; six attempts at 0.1 s, matching the peer defaults.
 - `ferrum/errors.rb` ↔ `errors.rb`: CDP error hierarchy, response/code/data and JavaScript stack formatting; compat-only classes remain valid rescue constants.
 - Ferrum callback dispatch ↔ `client/subscriber.rb#dispatch`: per-callback rescue prevents one handler from blocking others.
 - `ferrum/frame/runtime.rb` ↔ `browser/runtime.rb`: evaluate awaits promises, execute discards values, evaluate_async supplies Capybara's callback. Ferrum's named-argument API differs; keep Capybara positional arguments here.
-- `ferrum/downloads.rb` ↔ `downloads.rb`: browser-level events and blocking wait; ours needs begin-grace because click may return before downloadWillBegin is processed.
+- `ferrum/downloads.rb` ↔ `downloads.rb`: browser-level events and blocking wait; ours needs begin-grace because click may return before downloadWillBegin is processed. The block form (`wait { click }`) records the baseline before yielding and gives the download the full timeout to start.
 - Ferrum Process::Output ↔ `process.rb#output`, `browser/navigation.rb#crash_output`: retain bounded startup/runtime output for crash diagnosis.
 - Ferrum WebSocket#force_close ↔ `client/web_socket.rb#close_socket`: release the socket even when the connection is already dead.
 - Ferrum bounded write ↔ `client/web_socket.rb#write`: nonblocking send with a no-progress timeout; a stalled browser must not freeze caller and close under the driver mutex.
@@ -35,10 +38,10 @@ Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until C
 - `client.rb#next_command_id` locks ids; WebSocket text/close/parse share @driver_mutex. The handshake parse precedes the reader thread. This avoids the two races described by Ferrum #602.
 - JRuby audit (2026-10-26): script/audit_websocket.rb passed an idle reader plus 100 messages from four senders with pings on MRI 4.0.9/JRuby 10.1.2.0 + websocket-driver 0.8.1. Removing the reader-readiness guard hung past 15 s. Ferrum #680's merged writer queue is not a reason to remove that guard; this is a bounded probe, not universal JRuby safety.
 - `client.rb#command`'s `timeout` is one deadline for lock wait, write and response. A frame still queued behind `@driver_mutex` at the deadline raises TimeoutError and keeps the connection; a frame cut off mid-write raises DeadBrowserError and closes it (a partial frame can't be reused); a response that landed during the send is still returned. Close/pong frames keep the no-progress `options.timeout`.
+- `client.rb#observe_async_command`: navigation arms its handlers before `Page.navigate` is sent and never blocks on the reply, so a late reply can't delay the page or answer the next visit. `command(on_success:)` applies its state change on the message thread before the caller wakes or the next event dispatches; the callback must not issue CDP commands.
 
 ### Outstanding adoption candidates
 
-- **[tiny]** `ferrum/network/exchange.rb` ↔ `network.rb#traffic`: typed request/response/finished predicates could replace loose hashes if callers need richer diagnostics; not currently adopted.
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 
 ### Diverged on purpose
@@ -72,12 +75,14 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-18 (unchanged since 2026
 - Peer page extension setup ↔ `browser.rb#register_auto_scripts`: register for future documents AND evaluate into the initial blank page; the idempotency guard permits both.
 - Capybara finder hints ↔ `driver.rb`/`node.rb`: cache immutable tag names only, keep mutable hints live; text filtering stops at 512 candidates, retains Unicode conservatively, and keeps the first 10 candidates when none holds the text so Capybara keeps its failure message. Contract: `.codex/rules/finder-hints.md`; peer #347 remains unmerged.
 - Peer HTML5 drag script ↔ `node.rb#HTML5_DRAG_JS`: drop only when accepted, otherwise dragleave; never both. Coordinate fallback is unsupported. Keep the port's corrected rect/key variables.
+- Peer registration and driver API ↔ `cuprite_driver.rb` (`Capybara::Lightpanda.register_cuprite_driver`): keeps the app's driver name, rejects before launch what Lightpanda can't honor (HTTP `url:`, non-`ws://` `ws_url`, headed mode, unknown options), and `visit` raises Ferrum's `StatusError` (ours without Ferrum) on a refused navigation. `network_traffic(:blocked)` raises rather than returning empty. Per-area boundaries: `CUPRITE_COMPATIBILITY.md`; shared examples: `test/compatibility/{cuprite,selenium}_contract.rb`.
+- Peer driver.rb#evaluate_async_script + Ferrum ScriptTimeoutError ↔ `driver.rb#evaluate_async_script`, `browser/runtime.rb#evaluate_async`: the Capybara session wait bounds the callback; a miss raises ScriptTimeoutError, transport and JavaScript errors keep their types.
+- Peer click modifiers ↔ `node.rb#mouse_event_options`: Shift/Control/Alt/Meta reach mouse handlers.
 
 ### Outstanding adoption candidates
 
 - **[tiny]** Peer javascripts/index.js#setValue native HTMLInputElement setter ↔ node.rb#SET_VALUE_JS: bypass framework value interception only when a real-app regression motivates it.
-- **[medium]** Peer driver.rb#evaluate_async_script + Ferrum ScriptTimeoutError ↔ driver.rb/browser/runtime.rb: pass Capybara session wait and distinguish script timeout. Ours uses the driver timeout for both page timer and CDP wait, so a missing callback can surface as a command timeout (verified 2026-10-23).
-- **[medium]** Peer driver.rb `url_blocklist`/`url_allowlist` options (#361, legacy `url_blacklist`/`url_whitelist`) ↔ options.rb/browser.rb: the gem has neither. Lightpanda's `Network.setBlockedURLs` takes only `urlPatterns: [{urlPattern, block}]` and sets browser-wide state that context disposal keeps, so a blocklist must be cleared in `reset!`; an allowlist needs Fetch interception.
+- **[medium]** Peer driver.rb `url_blocklist`/`url_allowlist` options (#361, legacy `url_blacklist`/`url_whitelist`) ↔ options.rb/browser.rb: the gem has neither, and `register_cuprite_driver` rejects them before launch. Lightpanda's `Network.setBlockedURLs` takes only `urlPatterns: [{urlPattern, block}]` and sets browser-wide state that context disposal keeps, so a blocklist must be cleared in `reset!`; an allowlist needs Fetch interception.
 
 ### Diverged on purpose
 

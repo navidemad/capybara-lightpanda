@@ -16,26 +16,32 @@ we emulate has actually drifted. This target usually produces no edit at all.
 Ferrum and Cuprite answer "what should we adopt?". Selenium answers a narrower,
 one-directional question:
 
-> Do the four entry points we emulate still have the shape callers expect?
+> Do the entry points we emulate still have the shape callers expect?
 
-We never adopt Selenium's design. We do not grow the emulation layer — that limit
-is stated in `selenium_compat.rb` itself and is a deliberate boundary, not an
-oversight. A finding here is only ever "our shape is stale", never "Selenium has a
-nice pattern we should copy".
+We never adopt Selenium's design. The surface grows only when a real-app helper
+needs an entry point (each one is pinned by `test/compatibility/selenium_contract.rb`
+and listed in `CUPRITE_COMPATIBILITY.md`), never to mirror Selenium's API. A finding
+here is only ever "our shape is stale", never "Selenium has a nice pattern we
+should copy". A Selenium method we don't answer is a feature request, not drift.
 
 ## The only surface in scope
 
-Four entry points, each with its Selenium counterpart:
+Each entry point with its Selenium counterpart (paths under
+`rb/lib/selenium/webdriver/common/`; surface as of 2026-11-18, PRs #277–#283):
 
-| Ours (`selenium_compat.rb`) | Selenium counterpart | What must stay true |
+| Ours | Selenium counterpart | What must stay true |
 | --- | --- | --- |
-| `#logs` → `Logs#get(:browser)` | `rb/lib/selenium/webdriver/common/logs.rb` | entries answer `level` / `message` / `timestamp`; `level` is the severity string (`SEVERE`/`WARNING`/`INFO`/`DEBUG`), not the CDP console type |
-| `#execute_async_script` | `rb/lib/selenium/webdriver/common/driver.rb` | script receives a completion callback as its last argument |
-| `#execute_cdp` | `rb/lib/selenium/webdriver/common/driver.rb` | `(method_string, **params)`, page-session scoped |
-| `#switch_to` | `rb/lib/selenium/webdriver/common/target_locator.rb` | we raise `NotSupportedByDriverError` with a migration message; only revisit if Lightpanda ever gains post-hoc dialog handling |
+| `selenium_compat.rb#logs` → `Logs#get(:browser)`, `#available_types` | `logs.rb`, `log_entry.rb` | entries answer `level` / `message` / `timestamp`; `level` is the severity string (`SEVERE`/`WARNING`/`INFO`/`DEBUG`), not the CDP console type; uncaught page errors are SEVERE entries |
+| `#manage.window.resize_to` | `manager.rb`, `window.rb` | `(width, height)` integers; we reject zero |
+| `#manage.all_cookies` / `cookie_named` / `delete_all_cookies` | `manager.rb` | document-scoped; Hash keys `name value domain path expires(DateTime) secure http_only same_site`; `cookie_named` raises `NoSuchCookieError` |
+| `#download_path=` | `driver_extensions/downloads_files.rb` | directory path |
+| `#execute_async_script` | `driver.rb` | script receives a completion callback as its last argument |
+| `#execute_cdp` | `driver_extensions/has_cdp.rb` | `(method_string, **params)`, page-session scoped |
+| `#switch_to` | `target_locator.rb` | we raise `NotSupportedByDriverError` with a migration message; only revisit if Lightpanda ever gains post-hoc dialog handling |
+| `node.rb#native` (self) + `#attribute` | `element.rb` | `attribute` reads live properties (e.g. `validationMessage`) as strings |
 
 ```bash
-# Has anything touched the three files we imitate?
+# Has anything touched the files we imitate?
 gh api 'repos/SeleniumHQ/selenium/commits?per_page=60&path=rb/lib/selenium/webdriver/common' \
   --jq '.[] | {sha: .sha[0:8], date: .commit.author.date[0:10], msg: (.commit.message | split("\n")[0])}'
 ```
