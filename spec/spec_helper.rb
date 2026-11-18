@@ -68,19 +68,13 @@ RSpec.configure do |config|
     # a `requires:` flag we can pass through `capybara_skip`. Each entry maps
     # to a documented Lightpanda CDP gap in `.claude/rules/lightpanda-io.md`.
     browser_limitation_patterns = [
-      # Click coordinate / modifier / delay tests rely on real geometry and
-      # `Input.dispatchMouseEvent` modifier flags. `Page.getLayoutMetrics`
-      # returns hardcoded 1920x1080 and modifier propagation is incomplete.
-      /node #click should allow modifiers/,
-      /node #click should allow multiple modifiers/,
+      # Coordinate and delay options require pointer behavior beyond synthetic DOM events.
       /node #click should allow to adjust the click offset/,
       /node #click should not retry clicking when wait is disabled/,
       /node #click offset/,
       /node #click delay/,
-      /node #double_click should allow modifiers/,
       /node #double_click should allow to adjust the offset/,
       /node #double_click offset/,
-      /node #right_click should allow modifiers/,
       /node #right_click should allow to adjust the offset/,
       /node #right_click offset/,
       /node #right_click delay/,

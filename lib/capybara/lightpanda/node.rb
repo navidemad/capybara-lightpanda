@@ -136,17 +136,19 @@ module Capybara
         styles.to_h { |style| [style, call(GET_STYLE_JS, style)] }
       end
 
-      def click(_keys = [], **_options)
-        call(CLICK_JS)
+      def click(keys = [], **_options)
+        call(CLICK_JS, mouse_event_options(keys))
         driver.browser.wait_for_idle
       end
 
-      def right_click(_keys = [], **_options)
-        call("function() { this.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true})) }")
+      def right_click(keys = [], **_options)
+        call(CLICK_JS, mouse_event_options(keys, button: 2))
+        driver.browser.wait_for_idle
       end
 
-      def double_click(_keys = [], **_options)
-        call("function() { this.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true})) }")
+      def double_click(keys = [], **_options)
+        call(CLICK_JS, mouse_event_options(keys, detail: 2))
+        driver.browser.wait_for_idle
       end
 
       # A real pointer entering an element fires `mouseover` (bubbling) AND
@@ -378,6 +380,15 @@ module Capybara
 
       private
 
+      def mouse_event_options(keys, button: 0, detail: 1)
+        names = Array(keys).map(&:to_s)
+        {
+          bubbles: true, cancelable: true, button: button, detail: detail,
+          shiftKey: names.include?("shift"), ctrlKey: names.intersect?(%w[control ctrl]),
+          altKey: names.include?("alt"), metaKey: names.intersect?(%w[meta command]),
+        }
+      end
+
       def find_hinted(method, selector, hints)
         driver.browser.find_within_hinted(@remote_object_id, method, selector, self.class.hint_spec(**hints))
               .map { |oid, cache| self.class.new(driver, oid, cache, frame_scoped: @frame_scoped) }
@@ -597,7 +608,7 @@ module Capybara
       # 6167 as duplicate `turbo:submit-start` events; the first request
       # gets aborted by the second and Turbo never renders the response.
       CLICK_JS = <<~JS
-        function() {
+        function(mouseOptions) {
           var EventCtor = (typeof MouseEvent !== 'undefined') ? MouseEvent : Event;
           // Emulate coordinate hit-testing without a layout engine. In a real
           // browser a pointer click on a container lands on its frontmost
@@ -653,7 +664,8 @@ module Capybara
           // Cancelling mousedown suppresses focus/text-selection in a real
           // browser but never the click, so the click below is dispatched
           // unconditionally.
-          var pressed = hit.dispatchEvent(new EventCtor('mousedown', { bubbles: true, cancelable: true }));
+          var held = { ...mouseOptions, buttons: mouseOptions.button === 2 ? 2 : 1 };
+          var pressed = hit.dispatchEvent(new EventCtor('mousedown', held));
           // mousedown's default action moves focus. Ours is untrusted, so the
           // browser won't do it (and since upstream #3702 its click handling
           // doesn't either): focus what the press landed on, or blur the
@@ -668,8 +680,13 @@ module Capybara
               doc.activeElement.blur();
             }
           }
-          hit.dispatchEvent(new EventCtor('mouseup', { bubbles: true, cancelable: true }));
-          var clickEvt = new EventCtor('click', { bubbles: true, cancelable: true });
+          if (mouseOptions.button === 2) {
+            hit.dispatchEvent(new EventCtor('contextmenu', { ...held, detail: 0 }));
+            hit.dispatchEvent(new EventCtor('mouseup', mouseOptions));
+            return;
+          }
+          hit.dispatchEvent(new EventCtor('mouseup', mouseOptions));
+          var clickEvt = new EventCtor('click', mouseOptions);
           // A link to a scheme the browser can't fetch (mailto:, tel:, sms:…)
           // goes to an external app in Chrome and the page stays. The link's
           // own activation is a no-op for it since upstream #3940 (10536, in
@@ -678,6 +695,7 @@ module Capybara
           var scheme = link && /^\\s*([a-z][a-z0-9+.-]*):/i.exec(link.getAttribute('href'));
           var external = !!scheme && !/^(https?|about|blob|data|file|javascript)$/i.test(scheme[1]);
           var notCancelled = hit.dispatchEvent(clickEvt);
+          if (mouseOptions.detail === 2) hit.dispatchEvent(new EventCtor('dblclick', mouseOptions));
           if (external || !notCancelled || clickEvt.defaultPrevented) return;
           // Native activation has already started the download (upstream
           // #4124, 11097, in the floor). Navigating again cancels it and

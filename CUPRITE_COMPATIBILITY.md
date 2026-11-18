@@ -34,15 +34,17 @@ The table below is historical. It records the pre-adapter comparison at `1c93471
 
 The rest of the audit follows the released sources and this repository’s implementation and fixtures. The Forem integration is a useful migration example. Its patch replaces a named Cuprite registration, including optional remote Chrome discovery, with the stock Lightpanda registration. A passing patched spec would exercise its application flow while bypassing the original initializer. [Forem patch](.github/real-apps/patches/forem.patch) · [Cuprite usage examples](https://github.com/rubycdp/cuprite/blob/v0.20.1/README.md)
 
-## Next round of migration gaps
+## Second-round helper contracts
 
-The following gaps remained at the end of #271. Each acceptance example belongs in the shared contract so future changes are checked against the two browser engines.
+The following contracts extend the first round. The shared examples run on both browser engines.
 
-| Priority / effort | Change | Acceptance example |
+| Area | Helper behavior | Verification and scope |
 | --- | --- | --- |
 | Async script callbacks | `evaluate_async_script` uses the session’s Capybara wait. A callback that misses the deadline raises `Capybara::Lightpanda::ScriptTimeoutError`. Transport and JavaScript errors keep their own types. | Covered by the shared callback and application-error examples. Lightpanda also tests an in-flight disconnect and a callback longer than its normal command timeout. |
 | Reload waits | Call `browser.wait_for_reload(seconds)` or legacy `driver.wait_for_reload(seconds)` after scheduling a top-level navigation. Both return on load, same-document navigation or timeout. | The shared contract replaces the document at the same URL and checks expiry while a page holds an unsaved edit. Lightpanda observes main-frame loads. |
-| Next / medium | Forward modifier flags for DOM click handlers where Lightpanda supports them. Exercise explicit modal decisions and document the unwrapped default. Scope input changes to observed app behavior. Assigning `.value` plus input/change and typing characters differ for key listeners and user-edit validation. | Assert shift and ctrl in the handler, confirm both branches with Capybara’s dialog wrappers, and compare a key-driven field plus a controlled input in both browsers. |
+| DOM interactions | Modified clicks carry Shift, Control, Alt and Meta into mouse handlers. Explicit `accept_confirm` and `dismiss_confirm` select the same branches. | Shared examples cover a chord and a following plain click, right/double-click handlers, an input-driven preview and Enter-to-save. Use `send_keys` when an application depends on key events. |
+
+Use explicit dialog wrappers whenever the result matters. An unwrapped confirm accepts on Cuprite and cancels on Lightpanda. Mouse modifier coverage concerns the values application listeners receive. Chrome on macOS opens a context menu for Control-left-click. Keep native gestures and opening another tab in the Chrome lane.
 
 The first round also supplied the legacy cookie and network entry points. Check the adopting suite before adding more aliases such as `resize` and `window_handle`. Script injection via `extensions:`, JavaScript error policy, device emulation and Chrome-only launch options remain migration considerations. The opt-in registration rejects unsupported keys. Browser and session defaults still differ, so set the viewport and timeouts explicitly where they affect the application. [Driver options](lib/capybara/lightpanda/options.rb) · [Registration](lib/capybara/lightpanda/cuprite_driver.rb)
 
