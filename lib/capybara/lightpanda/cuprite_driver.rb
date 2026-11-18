@@ -26,9 +26,8 @@ module Capybara
         if settings.key?(:url)
           raise ArgumentError, "url: is a Cuprite HTTP endpoint. Pass ws_url: with a Lightpanda WebSocket endpoint."
         end
-        if settings[:ws_url] && !settings[:ws_url].to_s.match?(%r{\Awss?://[^/\s]+}i)
-          raise ArgumentError, "ws_url: requires a Lightpanda ws:// or wss:// endpoint"
-        end
+
+        Client::WebSocket.endpoint_uri(settings[:ws_url]) if settings.key?(:ws_url)
         raise ArgumentError, "Lightpanda requires headless mode" if settings[:headless] == false
 
         unsupported = settings.keys - Options.new.to_h.keys - %i[ws_url base_url]
