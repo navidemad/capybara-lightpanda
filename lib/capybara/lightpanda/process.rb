@@ -40,8 +40,9 @@ module Capybara
       # PR #2368 (events: report listener exceptions instead of halting
       # dispatch — load-bearing for the gem's JS bundle dispatch assumptions),
       # PR #2289 (Page.getNavigationHistory + Page.navigateToHistoryEntry —
-      # lets us drop the history.back()/history.forward() JS workaround in
-      # Browser#back / #forward), PR #2305 (XPath 1.0: Document.evaluate,
+      # Browser#back / #forward deliberately keep history.back()/forward() in
+      # the page: navigateToHistoryEntry reloaded pushState entries until #3903,
+      # and a switch has not been validated), PR #2305 (XPath 1.0: Document.evaluate,
       # XPathResult, XPathEvaluator, XPathExpression — lets us drop the
       # ~700 LOC XPath polyfill in javascripts/index.js),
       # PR #2431 (cdp: remove duplicate Page.frameNavigated emission + reuse

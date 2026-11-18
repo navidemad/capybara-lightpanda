@@ -10,7 +10,7 @@ require_relative "../test_helper"
 # lookup with its address, which is what a rebinding attack looks like. That
 # rejected `localhost` too, so a user-supplied `ws_url:` had to say 127.0.0.1.
 #
-# #3256 (build >= 8875, the current floor) carves out the one name browsers
+# #3256 (build >= 8875, in the 12015 floor) carves out the one name browsers
 # hardwire to loopback without a DNS lookup: the exact lowercase
 # `localhost:<port>` form. Bare `localhost`, `LOCALHOST:<port>` and
 # `localhost.evil.com:<port>` are still refused — those rejections are not
@@ -41,9 +41,9 @@ describe "Capybara::Lightpanda ws_url host handling" do
                  "expected the spawned ws_url to be an IP literal — got #{spawned_url}"
 
     # Reuses the already-running browser rather than spawning a second one:
-    # what is under test is the handshake, not process management. Below 8875
-    # `Client.new` raises here, because the server 403s the upgrade before any
-    # CDP traffic flows.
+    # what is under test is the handshake, not process management. Without
+    # #3256 (in the floor) `Client.new` would raise here, because the server
+    # 403s the upgrade before any CDP traffic flows.
     driver = Capybara::Lightpanda::Driver.new(TestApp, ws_url: localhost_url, timeout: 10)
 
     begin

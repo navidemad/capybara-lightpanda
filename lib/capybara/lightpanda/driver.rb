@@ -187,10 +187,13 @@ module Capybara
       end
 
       # -- Window Support --
-      # Single-window driver. Lightpanda's BrowserContext is 1:1:1 with
-      # Session/Page/target and rejects a second Target.createTarget with
-      # TargetAlreadyLoaded (upstream #1962, maintainer-owned), so there is
-      # exactly one window and its handle is the CDP target id.
+      # Single-window driver: the gem drives one CDP target per session, and
+      # Browser's per-page state (target and session ids, frame stack,
+      # navigation sniff) is built around it. That is the gem's own model now:
+      # Lightpanda serves several targets per BrowserContext since upstream
+      # #3945 (11844, in the floor; below it a second Target.createTarget
+      # failed with TargetAlreadyLoaded, #1962). So there is exactly one
+      # window and its handle is the CDP target id.
       #
       # Resizing drives Emulation.setDeviceMetricsOverride, so it is real for
       # window.innerWidth/innerHeight and for what `matchMedia` reports. Two
@@ -259,7 +262,7 @@ module Capybara
 
       def open_new_window(_kind = :tab)
         raise Capybara::NotSupportedByDriverError,
-              "Lightpanda serves a single target per CDP connection (upstream lightpanda-io/browser#1962), " \
+              "capybara-lightpanda drives a single target per session, " \
               "so a second window cannot be opened. Drive the second page in its own Capybara session instead."
       end
 

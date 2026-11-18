@@ -6,15 +6,19 @@ require "spec_helper"
 #
 # This exercises ~200 shared examples from Capybara itself — the same
 # tests every Capybara driver (Selenium, Rack::Test, …) must pass.
-# We skip categories that Lightpanda cannot support (no rendering engine,
-# no modal dialogs, no multi-window, etc.) via capybara_skip.
+# We skip categories the driver cannot support (no rendering engine, a
+# single window, etc.) via capybara_skip.
 
 Capybara::SpecHelper.run_specs(
   TestSessions::Lightpanda,
   "Lightpanda",
-  # Capybara feature flags Lightpanda doesn't support (yet). Each entry has a
-  # corresponding entry in `.claude/rules/lightpanda-io.md`.
-  #   :windows           — `window.open` in flight upstream (PR #2237).
+  # Capybara feature flags the driver doesn't support (yet), each with its
+  # reason. Browser-level limits are detailed in
+  # `.claude/rules/lightpanda-io.md`.
+  #   :windows           — the driver serves a single window: one CDP target
+  #                        per session (see Driver#open_new_window). This is
+  #                        the gem's model, not a browser gap — `window.open`
+  #                        (PR #2237) and multi-target CDP (#3945) have landed.
   #   NOTE :drag is deliberately NOT listed — the `#drag_to HTML5` examples
   #                        inherit it, and those run geometry-free through
   #                        Node#drag_to (HTML5 DragEvent simulation). The
@@ -39,7 +43,8 @@ Capybara::SpecHelper.run_specs(
   #   NOTE :active_element is deliberately NOT listed: Tab moves focus since
   #                        upstream #2699, and CLICK_JS focuses its target
   #                        itself (upstream #3702 stopped doing it), so all 3
-  #                        examples pass on the 9994 floor (audited 2026-10-03).
+  #                        examples pass on the 12015 floor (first audited
+  #                        2026-10-03 on 9994).
   capybara_skip: %i[
     windows
     scroll

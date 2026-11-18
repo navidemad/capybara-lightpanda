@@ -1,9 +1,11 @@
 # JS predicate harness (Bun)
 
-Fast, dev-only unit tests for the DOM predicate logic that ships in the
-injected `_lightpanda` bundle (`lib/capybara/lightpanda/javascripts/`). Runs in
-~0.1s, so you don't have to wait on the 2–6 minute Capybara battery to check a
-change to `visibleText`, `isContentEditable`, `isDisabled`, etc.
+Fast, dev-only unit tests for the logic that ships in the injected
+`_lightpanda` bundle (`lib/capybara/lightpanda/javascripts/`): the DOM
+predicates in `predicates.js`, and the Turbo activity tracker in `turbo.js`
+(`turbo.test.ts`). Runs in ~0.1s, so you don't have to wait on the 2–6 minute
+Capybara battery to check a change to `visibleText`, `isContentEditable`,
+`isDisabled`, the Turbo busy/idle sentinels, etc.
 
 This directory is **not part of the gem** — the gemspec packages `lib/**` only,
 so nothing here (including `node_modules/`) is published to RubyGems.
@@ -21,7 +23,9 @@ contributors without Bun can still run `rake default`.
 
 ## How it works
 
-The loader (`load.ts`) reads the **shipped** `predicates.js` text and evaluates
+The predicate tests go through the loader (`load.ts`); `turbo.test.ts` loads
+`turbo.js` the same way on its own. The loader reads the **shipped**
+`predicates.js` text and evaluates
 it with `new Function(...)` against a [happy-dom](https://github.com/capricorn86/happy-dom)
 `Window`. `new Function` parses its body as a classic script — the same mode
 the browser uses for the injected IIFE — so the tests exercise the exact bytes
@@ -39,8 +43,7 @@ innerText's job) and deep hit-testing to the Capybara battery.
 
 ## Bun
 
-Install Bun via any official method — the Zig→Rust core rewrite (merged
-2026-05-14) did not change installation or the `bun test` CLI:
+Install Bun via any official method:
 
 ```bash
 curl -fsSL https://bun.com/install | bash   # macOS / Linux

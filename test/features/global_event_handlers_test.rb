@@ -5,8 +5,8 @@ require_relative "../test_helper"
 # Window and Document carry the GlobalEventHandlers `on*` attributes, as in
 # Chrome.
 #
-# WHY THIS MATTERS: Lightpanda puts the full set on HTMLElement only, so
-# `'onchange' in window` and `'onsubmit' in window` are false. jQuery 1.x reads
+# WHY THIS MATTERS: Lightpanda used to put the full set on HTMLElement only, so
+# `'onchange' in window` and `'onsubmit' in window` were false. jQuery 1.x reads
 # exactly those two at load time to decide whether change and submit bubble;
 # told they don't, it swaps in IE-only shims and no delegated or ancestor
 # handler ever runs, although the native event bubbles fine. On Solidus's admin

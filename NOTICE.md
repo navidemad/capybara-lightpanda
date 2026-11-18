@@ -6,9 +6,15 @@ below in accordance with the MIT License.
 
 No verbatim source files from these projects are included; the work referenced
 here covers API shape, error-handling conventions, and architectural patterns
-re-implemented for Lightpanda's CDP surface (notably in `Cookies`, `Frame`,
-`Node`, `Driver`, and `Utils::Event`). Code-level pointers to the inspiring
-upstream patterns are kept as comments in the relevant files.
+re-implemented for Lightpanda's CDP surface (notably in `Cookies`, `Node`,
+`Driver`, `Client`, and `Utils::Event`). Comments in the relevant files point at
+the Ferrum and Cuprite patterns they follow; lightpanda-ruby informed the
+overall design, without file-level pointers.
+
+A few public API names (`with_lightpanda_browser`, `with_lightpanda_node`, the
+case-insensitive `Headers`) follow
+[capybara-playwright-driver](https://github.com/YusukeIwaki/capybara-playwright-driver)'s;
+no code is adapted from it, so it is credited here rather than listed below.
 
 ---
 

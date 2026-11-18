@@ -171,7 +171,8 @@ Each app is one file that you can run:
 
 - [Minitest](examples/rails_minitest_example.rb) and [RSpec](examples/rails_rspec_example.rb)
 - Turbo Drive and Turbo Frames, with [Minitest](examples/rails_turbo_minitest_example.rb) and [RSpec](examples/rails_turbo_rspec_example.rb)
-- [A menu](examples/rails_dropdown_minitest_example.rb) that you open with a click
+- [A menu](examples/rails_dropdown_minitest_example.rb) that you open with a click.
+  It shows a bug, so one of its tests fails on purpose.
 
 ## Upgrading
 

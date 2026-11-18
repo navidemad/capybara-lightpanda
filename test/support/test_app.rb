@@ -1250,7 +1250,7 @@ class TestApp
   # Every control here is driven through CDP Input.dispatchKeyEvent, which
   # builds a *trusted* KeyboardEvent — the precondition for the browser's
   # keypress/activation synthesis. The handlers only log, so the assertions
-  # stay independent of #3179 (anchor default action), which is still open.
+  # stay independent of the anchor default action (upstream #3179, closed).
   get "/lightpanda/keyboard_activation" do
     <<~HTML
       <!DOCTYPE html>

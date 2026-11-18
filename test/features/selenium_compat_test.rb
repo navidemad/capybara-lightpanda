@@ -114,10 +114,11 @@ describe "Capybara::Lightpanda selenium compatibility" do
       assert_equal 42, result.dig("result", "value")
     end
 
-    # The point of an escape hatch is reaching surface the gem hasn't wrapped.
-    # Emulation is a good witness: nothing else in the driver routes through it
-    # except set_viewport.
-    it "reaches CDP domains the driver does not otherwise expose" do
+    # The point of an escape hatch is reaching CDP without the gem's wrappers.
+    # Emulation.setDeviceMetricsOverride is a convenient witness: its effect is
+    # readable from the page (`innerWidth`), and here it goes out raw rather
+    # than through Browser#set_viewport, which the `ensure` uses to restore it.
+    it "sends a raw command whose effect the page sees" do
       browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 640, height: 480)
 
       assert_equal 640, session.evaluate_script("window.innerWidth")

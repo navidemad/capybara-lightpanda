@@ -4,10 +4,9 @@ require_relative "../test_helper"
 
 # Pins the exact params of the LP.configureLoading call.
 #
-# The feature test (test/features/frame_loading_test.rb) proves iframes work,
-# but it cannot discriminate below build 8946 — iframes defaulted on there, so
-# it passes whether or not the call is made. This file holds the wiring itself,
-# on every build: the command name, and both flags being explicitly true.
+# The feature test (test/features/frame_loading_test.rb) proves iframes work
+# end to end. This file holds the wiring itself, without a browser: the command
+# name, and both flags being explicitly true.
 #
 # `worker: true` matters as much as `subFrame: true` and is easier to drop by
 # accident, since nothing in the suite fails without it until an app under test

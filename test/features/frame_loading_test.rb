@@ -12,11 +12,10 @@ require_relative "../test_helper"
 #
 # `Browser#configure_loading` sends `LP.configureLoading {subFrame: true,
 # worker: true}` from `create_page` to hold the old behavior. This file is the
-# end-to-end proof. Honest about what it can catch where: on a build below 8946
-# it passes with or without the fix, because iframes defaulted on. It only
-# discriminates from 8946 up — which is precisely the build range where a
-# regression would otherwise reach users as "within_frame stopped working" with
-# no error naming a cause.
+# end-to-end proof. Every supported build (the floor is well above 8946)
+# defaults iframes off, so it fails if that call is dropped — the regression
+# that would otherwise reach users as "within_frame stopped working" with no
+# error naming a cause.
 describe "Capybara::Lightpanda iframe loading" do
   let(:session) { TestSessions::Lightpanda }
 

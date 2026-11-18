@@ -67,7 +67,7 @@ describe "Upstream Lightpanda bug repros & workarounds" do
   # MINIMUM_NIGHTLY_BUILD floor). Kept as a contract/regression test.
   # ───────────────────────────────────────────────
 
-  describe "Bug #4 — HTMLDialogElement polyfill" do
+  describe "Bug #4 — native HTMLDialogElement" do
     it "opens the dialog via showModal() and exposes the [open] attribute" do
       session.visit("/lightpanda/upstream/dialog")
 
@@ -89,7 +89,7 @@ describe "Upstream Lightpanda bug repros & workarounds" do
 
       session.assert_no_selector(:css, "dialog#d[open]")
       events = session.evaluate_script("window.__closeEvents")
-      assert_equal ["done"], events, "expected the polyfilled close() to dispatch a 'close' event"
+      assert_equal ["done"], events, "expected close() to dispatch a 'close' event"
     end
 
     # #3269 (build >= 8868, in the floor) added
@@ -192,9 +192,10 @@ describe "Upstream Lightpanda bug repros & workarounds" do
   end
 
   # ───────────────────────────────────────────────
-  # Bug #1 — Element.click() throws via Runtime.callFunctionOn.
-  # Workaround: CLICK_JS dispatches a synthetic Event('click') and falls
-  # back to form.submit() / location.href for the default action.
+  # Bug #1 — Element.click() threw via Runtime.callFunctionOn.
+  # Workaround: CLICK_JS dispatches a synthetic MouseEvent('click'). The
+  # browser runs a submit button's default action (form submission) itself;
+  # CLICK_JS only navigates links, through `location`.
   # ───────────────────────────────────────────────
 
   describe "Bug #1 — click() workaround" do
@@ -235,7 +236,7 @@ describe "Upstream Lightpanda bug repros & workarounds" do
 
       assert_equal "yes", session.evaluate_script("document.body.getAttribute('data-intercepted')")
       assert_equal "/lightpanda/upstream/click_target", session.current_path,
-                   "form.submit() should NOT run when defaultPrevented was called"
+                   "the form should NOT be submitted when its submit handler called preventDefault()"
     end
   end
 end
