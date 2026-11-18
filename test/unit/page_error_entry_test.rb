@@ -92,6 +92,13 @@ describe "Capybara::Lightpanda::Browser::Console.page_error_entry" do
     assert_equal 4_000, entry(details)[:stack].size
   end
 
+  it "keeps an exception in the browser log when CDP omits the description" do
+    exception = { "type" => "object", "subtype" => "error" }
+    ["Uncaught", "Uncaught (in promise)"].each do |text|
+      assert_equal "Error", entry({ "text" => text, "exception" => exception })[:message]
+    end
+  end
+
   # A malformed event still means the page threw: land it rather than drop it.
   it "survives an event with no details" do
     result = Capybara::Lightpanda::Browser::Console.page_error_entry({})
