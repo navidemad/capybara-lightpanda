@@ -2,6 +2,6 @@
 
 module Capybara
   module Lightpanda
-    VERSION = "0.19.0"
+    VERSION = "0.19.1"
   end
 end
