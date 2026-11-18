@@ -79,11 +79,9 @@ module Capybara
       def clear(type = nil)
         case type
         when nil, :traffic
-          result = @traffic_mutex.synchronize do
-            @pending.clear
-            @traffic.clear
-          end
-          return result if type.nil?
+          # Forget observations while continuing to track active network I/O.
+          @traffic_mutex.synchronize { @traffic.clear }
+          return [] if type.nil?
         when :cache
           browser.command("Network.clearBrowserCache")
         else
@@ -100,7 +98,10 @@ module Capybara
       # cleared the Subscriber first.
       def reset
         unsubscribe
-        clear
+        @traffic_mutex.synchronize do
+          @traffic.clear
+          @pending.clear
+        end
         @enabled = false
         @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
         @last_navigation_response = nil

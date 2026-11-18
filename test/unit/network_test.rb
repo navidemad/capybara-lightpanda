@@ -176,6 +176,18 @@ describe Capybara::Lightpanda::Network do
       assert_predicate network, :idle?
     end
 
+    it "clears recorded traffic without declaring an unfinished response idle" do
+      network.enable
+      browser.fire("Network.requestWillBeSent", { "requestId" => "stream" })
+      exchange = network.traffic.fetch(0)
+      network.clear(:traffic)
+      assert_empty network.traffic
+      refute_predicate network, :idle?
+      browser.fire("Network.loadingFinished", { "requestId" => "stream" })
+      assert_predicate exchange, :finished?
+      assert_predicate network, :idle?
+    end
+
     it "treats up to `connections` pending requests as idle" do
       network.enable
       2.times do |i|
@@ -339,6 +351,7 @@ describe Capybara::Lightpanda::Network do
       # by dropping local state without sending Network.disable.
       network.reset
       assert_empty network.traffic
+      assert_predicate network, :idle?
 
       # After reset, a fresh enable must re-issue Network.enable AND
       # re-install handlers, otherwise traffic tracking is silently dead.
