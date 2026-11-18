@@ -1,0 +1,155 @@
+<!doctype html>
+<!--
+  Source of docs/static/img/banner.png, the site's og:image (1200×630, rendered at 2×).
+  Hugo doesn't publish this file. To regenerate after editing:
+
+    agent-browser --session og open "file://$PWD/docs/og-banner.html"
+    agent-browser --session og set viewport 1200 630 2
+    agent-browser --session og screenshot "$PWD/docs/static/img/banner.png"
+    agent-browser --session og close
+
+  Keep the copy timeless: no version number, no comparison that can go stale.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>capybara-lightpanda — og banner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Funnel+Sans:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap"
+    />
+    <style>
+      :root {
+        --ink: #0c0c0a;
+        --ink-line: #2a2823;
+        --paper: #f1ece0;
+        --paper-mute: #c9c2b1;
+        --paper-dim: #8b8674;
+        --ruby: #d30001;
+        --bamboo: #9bbf6a;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+      body {
+        background: var(--ink);
+        color: var(--paper);
+        font-family: "Funnel Sans", system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 64px 72px 56px;
+        position: relative;
+      }
+      body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(
+          circle at 1px 1px,
+          rgba(241, 236, 224, 0.07) 1px,
+          transparent 0
+        );
+        background-size: 28px 28px;
+        -webkit-mask-image: radial-gradient(
+          ellipse 90% 80% at 30% 30%,
+          #000 0%,
+          transparent 100%
+        );
+        mask-image: radial-gradient(
+          ellipse 90% 80% at 30% 30%,
+          #000 0%,
+          transparent 100%
+        );
+      }
+      body::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 8px;
+        background: var(--ruby);
+      }
+      body > * {
+        position: relative;
+      }
+      .name {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 24px;
+        color: var(--paper-mute);
+        letter-spacing: -0.01em;
+      }
+      .name b {
+        color: var(--ruby);
+        font-weight: 500;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-variation-settings: "opsz" 96;
+        font-weight: 500;
+        font-size: 92px;
+        line-height: 0.96;
+        letter-spacing: -0.036em;
+      }
+      h1 span {
+        display: block;
+      }
+      h1 .accent {
+        color: var(--paper-mute);
+        font-style: italic;
+        font-weight: 400;
+      }
+      .rails {
+        color: var(--ruby);
+      }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 40px;
+        border-top: 1px solid var(--ink-line);
+        padding-top: 28px;
+      }
+      .lede {
+        font-size: 30px;
+        line-height: 1.3;
+        color: var(--paper-mute);
+        max-width: 720px;
+      }
+      .lede em {
+        font-style: normal;
+        color: var(--bamboo);
+      }
+      .chain {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 20px;
+        color: var(--paper-dim);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="name">capybara-<b>lightpanda</b></p>
+    <h1>
+      <span>Faster system tests for <span class="rails" style="display: inline">Rails</span>,</span>
+      <span class="accent">without Chromium.</span>
+    </h1>
+    <div class="foot">
+      <p class="lede">
+        A Capybara driver for the Lightpanda headless browser.
+        <em>Same DSL, no Chrome to install.</em>
+      </p>
+      <p class="chain">Capybara → CDP → Lightpanda</p>
+    </div>
+  </body>
+</html>
