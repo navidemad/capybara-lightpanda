@@ -123,9 +123,9 @@ module Capybara
       # Block until in-flight HTTP traffic settles. Auto-enables the tracker
       # on first call so callers don't have to remember to flip it on.
       # Returns true on success, false on timeout.
-      def wait_for_network_idle(timeout: 5, connections: 0)
+      def wait_for_network_idle(timeout: 5, connections: 0, **)
         network.enable
-        network.wait_for_idle(timeout: timeout, connections: connections)
+        network.wait_for_idle(timeout: timeout, connections: connections, **)
       end
 
       # -- Downloads --

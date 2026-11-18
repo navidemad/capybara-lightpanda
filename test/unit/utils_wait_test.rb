@@ -4,6 +4,13 @@ require_relative "../test_helper"
 require "capybara/lightpanda/utils/wait"
 
 describe Capybara::Lightpanda::Utils::Wait do
+  it "limits each polling sleep to the remaining timeout" do
+    wait = Capybara::Lightpanda::Utils::Wait
+    wait.stubs(:monotonic_time).returns(0.0, 0.75, 1.0)
+    wait.expects(:sleep).with(0.25).once
+    assert_raises(Capybara::Lightpanda::TimeoutError) { wait.until(timeout: 1, interval: 4) { false } }
+  end
+
   it "returns the block's truthy value when it succeeds before timeout" do
     assert_equal :done, Capybara::Lightpanda::Utils::Wait.until(timeout: 0.1) { :done }
   end

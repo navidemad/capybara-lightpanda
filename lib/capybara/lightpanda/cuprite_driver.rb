@@ -14,6 +14,22 @@ module Capybara
     end
 
     class CupriteDriver < Driver
+      def network_traffic(type = nil)
+        if type.to_s == "blocked"
+          raise Capybara::NotSupportedByDriverError, "Lightpanda does not track Cuprite request interception"
+        end
+
+        network.traffic
+      end
+
+      def clear_network_traffic
+        network.clear(:traffic)
+      end
+
+      def clear_memory_cache
+        network.clear(:cache)
+      end
+
       def cookies
         browser.cookies.all
       end
