@@ -100,6 +100,25 @@ class CupriteContractTest < Minitest::Test
     assert_equal 200, @page.status_code
   end
 
+  def test_disabled_debug_options_allow_headless_dashboard_navigation
+    [nil, 0.0].each do |delay|
+      register_driver(:dashboard, slowmo: delay, inspector: nil, browser_options: {}, headless: true)
+      page = Capybara::Session.new(:dashboard, APP)
+      page.visit("/")
+      page.fill_in("Name", with: "GoodJob")
+      assert_equal "GoodJob", page.find_field("Name").value
+    ensure
+      page&.driver&.quit
+    end
+  end
+
+  def test_requested_debug_features_remain_explicit
+    [{ slowmo: 0.5 }, { inspector: true }].each do |settings|
+      error = assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:debug, **settings) }
+      assert_includes error.message, settings.keys.first.to_s
+    end
+  end
+
   def test_forem_registration_allows_a_visit_to_return_while_a_script_is_pending
     register_driver(:better_cuprite, browser_options: {}, pending_connection_errors: false, timeout: 1)
     started = Queue.new
