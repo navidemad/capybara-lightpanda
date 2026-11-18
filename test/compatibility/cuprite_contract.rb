@@ -35,6 +35,7 @@ class CupriteContractTest < Minitest::Test
     @directory = Dir.mktmpdir
     options = { save_path: @directory, window_size: [900, 700] }
     if ENV.fetch("CONTRACT_DRIVER", "lightpanda") == "cuprite"
+      options[:process_timeout] = 30
       options[:browser_path] = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
       Capybara.register_driver(:store_system) { |app| Capybara::Cuprite::Driver.new(app, options) }
     else
@@ -72,6 +73,16 @@ class CupriteContractTest < Minitest::Test
     assert_equal [900, 700], @page.current_window.size
   end
 
+  def test_permanent_referer_replaces_the_navigation_only_referer
+    @page.visit("/")
+    headers = @page.driver.browser.headers
+    base = @page.current_url
+    headers.add({ "Referer" => "#{base}first" }, permanent: false)
+    headers.add({ "Referer" => "#{base}second" })
+    assert_equal "#{base}second", echoed_headers["HTTP_REFERER"]
+    assert_equal "#{base}second", @page.evaluate_script("document.referrer")
+  end
+
   def echoed_headers
     @page.visit("/headers")
     JSON.parse(@page.find("pre").text)
@@ -107,6 +118,16 @@ class CupriteContractTest < Minitest::Test
     @page.driver.add_header("Referer", source, permanent: false)
     assert_equal source, echoed_headers["HTTP_REFERER"]
     refute @page.driver.browser.headers.get.key?("Referer")
+  end
+
+  def test_removing_a_cookie_by_name_clears_every_path_on_its_host
+    @page.visit("/")
+    jar = @page.driver.browser.cookies
+    jar.set(name: "account", value: "root", path: "/")
+    jar.set(name: "account", value: "private", path: "/private")
+    jar.set(name: "account", value: "other", domain: "other.example")
+    jar.remove(name: "account")
+    assert_equal ["other"], jar.select { |item| item.name == "account" }.map(&:value)
   end
 
   def test_login_cookie_before_visit_and_scoped_cookie_removal
@@ -165,6 +186,18 @@ class CupriteContractTest < Minitest::Test
     failed = network.traffic.find { |hop| hop.request&.url&.end_with?("/closed") }
     assert_predicate failed, :finished?
     assert failed.error
+  end
+end
+
+# Cuprite 0.20.1 boots Chrome when an unused driver receives quit. These
+# registration checks run without a session or browser teardown.
+class CupriteRegistrationTest < Minitest::Test
+  def test_registration_rejects_endpoints_the_transport_cannot_connect_to
+    ["wss://remote.example", "ws://local host", "ws://host:99999", nil].each do |endpoint|
+      assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:remote, ws_url: endpoint) }
+    end
+    Capybara::Lightpanda.register_cuprite_driver(:remote, ws_url: "ws://localhost:9222/cdp")
+    assert_equal "ws://localhost:9222/cdp", Capybara.drivers[:remote].call(nil).options[:ws_url]
   end
 
   def test_copied_remote_and_chrome_options_fail_before_launch

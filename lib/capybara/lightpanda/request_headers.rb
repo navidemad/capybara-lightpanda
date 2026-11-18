@@ -15,15 +15,16 @@ module Capybara
 
       def set(headers) # rubocop:disable Naming/PredicateMethod
         apply(headers)
-        @referrer = nil
+        @referrer = headers[header_key(headers, "Referer")]
         true
       end
 
       # Ferrum applies a non-permanent Referer to Page.navigate calls only.
       def add(headers, permanent: true) # rubocop:disable Naming/PredicateMethod
         additions = headers.dup
-        key = header_key(additions, "Referer") unless permanent
-        referrer = additions.delete(key) if key
+        key = header_key(additions, "Referer")
+        referrer = additions[key]
+        additions.delete(key) unless permanent
         merged = get.reject { |name, _| header_key(additions, name) }
         apply(merged.merge(additions))
         @referrer = referrer if key
@@ -52,12 +53,23 @@ module Capybara
           raise ArgumentError, 'Lightpanda refuses a User-Agent containing "Mozilla"'
         end
 
+        previous = get
         if agent || language || @navigator_defaults
           @navigator_defaults ||= @browser.evaluate("[navigator.userAgent, navigator.language]")
+        end
+        @browser.network.headers = headers
+        update_navigator(agent, language, previous) if @navigator_defaults
+      end
+
+      def update_navigator(agent, language, previous)
+        begin
           @browser.page_command("Emulation.setUserAgentOverride", userAgent: agent || @navigator_defaults.first,
                                                                   acceptLanguage: language || @navigator_defaults.last)
+        rescue BrowserError
+          @browser.network.headers = previous
+          raise
         end
-        @browser.network.headers = headers.dup
+        @navigator_defaults = nil unless agent || language
       end
     end
   end
