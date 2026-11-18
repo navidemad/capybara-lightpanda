@@ -413,6 +413,15 @@ Three independent issues:
 - **Drop-on-fix**: nothing in the gem; refresh the Campfire real-apps baseline (the 15 entries drop).
 - **Upstream issue**: #3961, **Upstream PRs**: #3963 (parser: end nested rules at their own block) and #3962 (cascade: support nesting), all filed 2026-10-14 by us, open as of 2026-10-16. Verified on the branch build (10560): the repro (`browser:repro/css-nesting/`, `lightpanda fetch --dump html`) exits 0, and the Campfire suite goes from 24 to 9 failures. Gaps left on purpose: declarations after a nested rule fold into the parent rule (no `CSSNestedDeclarations`), top-level `&`, nested `@supports`/`@container`, `parentRule` still `null`.
 
+### A65. `ClipboardEvent` interface missing — `new ClipboardEvent("paste", {clipboardData})` throws ReferenceError
+
+- **Today (verified 2026-11-08 on 1.0.3, nightly 10552, and by source on `main` `d2f387cae` / 11912)**: `ClipboardEvent` is not a global — no `webapi/event/ClipboardEvent.zig`, no `Event.Type` variant, nothing in `js/bridge.zig`. `DataTransfer` exists (#2671) and `DragEvent` already carries one, so only the event interface is missing. Chrome/Firefox/Safari all ship the constructor.
+- **Real-world impact**: the standard way to simulate a paste from page script is a `DataTransfer` wrapped in `new ClipboardEvent("paste", …)`. Campfire's `rich_text_editor_helper.rb` does exactly that from `execute_script`: 3 system tests (`campfire-clipboard-event` in `.github/real-apps/causes.yml`).
+- **Want**: [Clipboard API § clipboard event interfaces](https://w3c.github.io/clipboard-apis/#clipboard-event-interfaces) — `ClipboardEvent : Event` (not `UIEvent`), constructor with `ClipboardEventInit`, `clipboardData` returns the caller's `DataTransfer` (same object) and defaults to `null`. Constructor only: Lightpanda has no clipboard, so no trusted `copy`/`cut`/`paste`.
+- **Gem workaround**: none, deliberately (the gem doesn't polyfill Web APIs).
+- **Drop-on-fix**: nothing in the gem; once a real-apps run uses a nightly carrying the fix, retire the 3 Campfire baseline entries and the `campfire-clipboard-event` cause.
+- **Upstream issue**: #4526, **Upstream PR**: #4527 (open as of 2026-11-08, filed by us). Branch `feat-clipboard-event` on the fork (worktree `~/code/upstream/browser-clipboard-event`) implements it on the `DragEvent` pattern (ref-counted nullable `DataTransfer`), fixture `src/browser/tests/event/clipboard.html`; repro `browser:repro/clipboard-event/` (`fetch --dump html`) exits 1 on 1.0.3/10552, 0 on the branch build (11912 + fix).
+
 ## C. Inherent limitations (out of scope — no rendering engine)
 
 These exist because Lightpanda has no rendering engine, no compositor, no real layout. They are by design: specs that depend on them need a real browser, not this gem.
