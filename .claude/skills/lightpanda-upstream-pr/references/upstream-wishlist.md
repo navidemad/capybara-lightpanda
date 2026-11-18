@@ -371,7 +371,7 @@ Three independent issues:
 - **Want**: [CSS Conditional 3 § 2](https://www.w3.org/TR/css-conditional-3/#processing): apply the block's rules where the block is when the condition is true, drop them otherwise.
 - **Gem workaround**: none possible (the cascade can't be rebuilt in JS). Documented in `docs/content/docs.md` and `.claude/rules/lightpanda-io.md` (#263).
 - **Drop-on-fix**: nothing in the gem; update the limitation rows once the fix is in the floor.
-- **Upstream issue / PR**: drafted, not filed yet (waiting for the go-ahead). Branch `css-supports-cascade` (worktree `~/code/upstream/browser-supports-cascade`, local commit, not pushed): a `.supports` arm calling `applySupportsRule`, which evaluates the prelude with `css/supports.zig#rule` and reuses `applyGroupRules`. Fixture `src/browser/tests/css/supports_at_rule_cascade.html` (every expectation checked on Chrome 156). Repro `browser:repro/css-supports-cascade/` (`lightpanda fetch --dump html`): exit 1 on 1.0.4 and nightly 12253, exit 0 on the branch build; `WebApi` 219/219, `StyleManager` 77/77. Limit kept on purpose: the condition is the one `CSS.supports()` gives, so a declaration's value isn't checked (`@supports (display: not-a-value)` applies). No `CSSSupportsRule` interface (`conditionText`, `cssRules`).
+- **Upstream issue**: #4705, **Upstream PR**: #4708 (both open as of 2026-11-18, filed by us). Branch `css-supports-cascade` on the fork (worktree `~/code/upstream/browser-supports-cascade`): a `.supports` arm calling `applySupportsRule`, which evaluates the prelude with `css/supports.zig#rule` and reuses `applyGroupRules`. Fixture `src/browser/tests/css/supports_at_rule_cascade.html` (every expectation checked on Chrome 156). Repro `browser:repro/css-supports-cascade/` (`lightpanda fetch --dump html`): exit 1 on 1.0.4 and nightly 12253, exit 0 on the branch build; `WebApi` 219/219, `StyleManager` 77/77. Limit kept on purpose: the condition is the one `CSS.supports()` gives, so a declaration's value isn't checked (`@supports (display: not-a-value)` applies). No `CSSSupportsRule` interface (`conditionText`, `cssRules`).
 
 ### B26. `var()` is never substituted — a declaration that references a custom property counts for nothing
 
@@ -380,7 +380,7 @@ Three independent issues:
 - **Want**: [CSS Variables 1 § 3](https://www.w3.org/TR/css-variables-1/#using-variables): substitute at computed-value time with the custom property as the element sees it, fallback included; an unresolvable value behaves as `unset`.
 - **Gem workaround**: none possible. Documented in `docs/content/docs.md` and `.claude/rules/lightpanda-io.md` (#263).
 - **Drop-on-fix**: nothing in the gem; update the limitation rows.
-- **Upstream issue**: drafted, not filed yet (waiting for the go-ahead). Issue first, no PR: the value depends on the element, so it can't be folded at rule time like the others, and a custom property write would have to reach the memos. The draft asks the maintainers to pick the scope (tracked properties only, or `getComputedStyle` for every property too). Repro `browser:repro/css-var-substitution/`: exit 1 on 1.0.4 and nightly 12253, eleven `PASS` on Chrome 156.
+- **Upstream issue**: #4706 (open as of 2026-11-18, filed by us). Issue first, no PR: the value depends on the element, so it can't be folded at rule time like the others, and a custom property write would have to reach the memos. It asks the maintainers to pick the scope (tracked properties only, or `getComputedStyle` for every property too). Repro `browser:repro/css-var-substitution/`: exit 1 on 1.0.4 and nightly 12253, eleven `PASS` on Chrome 156.
 
 ### B27. `text-transform: capitalize` not applied to `innerText` — reported by `getComputedStyle`, text left in source case
 
@@ -390,7 +390,7 @@ Three independent issues:
 - **Want**: [CSS Text 3 § 2.1](https://www.w3.org/TR/css-text-3/#text-transform-property): first letter of each word in titlecase, the rest untouched. Chrome 156's word rule, measured: letters, digits, `_` and `'` continue a word; a space, a hyphen or a quote starts one; a word spans text nodes (`foo<b>bar</b>` → `Foobar`).
 - **Gem workaround**: none, deliberately (no text rewriting in the gem). Documented in `docs/content/docs.md` and `.claude/rules/lightpanda-io.md` (#263).
 - **Drop-on-fix**: nothing in the gem; update the limitation rows.
-- **Upstream issue**: drafted, not filed yet (waiting for the go-ahead). Issue first, no PR until the maintainers say yes: it brings the beta-suite numbers and proposes a one-flag version (a `bool` in `InnerTextState`, the length-preserving mapping `uppercase` already uses, no UAX 29). `::first-letter` is left out. Repro `browser:repro/css-text-transform-capitalize/`: exit 1 on 1.0.4 and nightly 12253, eight `PASS` on Chrome 156.
+- **Upstream issue**: #4707 (open as of 2026-11-18, filed by us). Issue first, no PR until the maintainers say yes: it brings the beta-suite numbers and proposes a one-flag version (a `bool` in `InnerTextState`, the length-preserving mapping `uppercase` already uses, no UAX 29). `::first-letter` is left out. Repro `browser:repro/css-text-transform-capitalize/`: exit 1 on 1.0.4 and nightly 12253, eight `PASS` on Chrome 156.
 
 ### A63. `Element.scrollIntoView()` ignores its options — always aligns the element's top with the viewport's
 
