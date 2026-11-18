@@ -11,57 +11,52 @@ You write the same Capybara tests as before. You do not need Chromium. Each test
 
 The gem comes with its own CDP client, so you do not need another browser gem. Each week, we run the driver on the tests of [seven real Rails apps](https://navidemad.github.io/capybara-lightpanda/docs/#validation).
 
-Read the [docs](https://navidemad.github.io/capybara-lightpanda/docs/) for setup, options, Turbo and help with errors.
+**[Read the docs on the website →](https://navidemad.github.io/capybara-lightpanda/docs/)**<br>
+You will find all the options there, setup recipes, Turbo, and help with errors.
 
 ## Install
 
-Add the gem, then name the driver in your system tests:
+Add the gem to your `Gemfile`, then run `bundle install`:
 
 ```ruby
-# Gemfile
 gem "capybara-lightpanda", group: :test
+```
 
+Then name the driver. Choose the part that fits your tests.
+
+### Minitest
+
+```ruby
 # test/application_system_test_case.rb
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :lightpanda
 end
 ```
 
-Run `bundle install`. The first time you run a test, the gem gets the Lightpanda browser for you.
-
-Do you use RSpec, or Capybara without Rails? Then use this code:
+### RSpec
 
 ```ruby
 # spec/support/capybara.rb
-require "capybara-lightpanda"
-
-Capybara.javascript_driver = :lightpanda
-
-# rspec-rails system specs pick their driver through driven_by:
 RSpec.configure do |config|
   config.before(:each, type: :system) { driven_by :lightpanda }
 end
 ```
 
-You can try it next to your current driver. [BETA_TESTING.md](BETA_TESTING.md) shows how to turn it on with one env var. To go back, drop the env var.
-
-## Configure
-
-Each option has a default value. Change only what you need:
+### Capybara without Rails
 
 ```ruby
-Capybara::Lightpanda.configure do |config|
-  config.window_size = [375, 812] # what @media / matchMedia evaluate against (default 1920×1080)
-  config.timeout = 30             # per-command and navigation timeout, in seconds (default 15)
-end
+require "capybara-lightpanda"
+
+Capybara.default_driver = :lightpanda
+Capybara.javascript_driver = :lightpanda
 ```
 
-The docs list [all the options](https://navidemad.github.io/capybara-lightpanda/docs/#configuration).
-
-Each gem version gets one Lightpanda version. Today it is 1.0.4. We test the gem with that one. The browser changes only when you change the gem version. You can also [choose another browser version](https://navidemad.github.io/capybara-lightpanda/docs/#pinning).
+The first time you run a test, the gem gets the Lightpanda browser for you.
 
 > [!TIP]
 > Do your tests block HTTP calls with VCR or WebMock? Then get the browser before the tests start. Run `bundle exec capybara-lightpanda install` in `bin/setup` and in CI.
+
+You can try the gem next to your current driver. [BETA_TESTING.md](BETA_TESTING.md) shows how to turn it on with one env var. To go back, drop the env var.
 
 ## What to expect
 
