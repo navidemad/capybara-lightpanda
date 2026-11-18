@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "cuprite_cookies"
+
 module Capybara
   module Lightpanda
     # An application-owned registration lets a suite keep its driven_by name
@@ -12,6 +14,14 @@ module Capybara
     end
 
     class CupriteDriver < Driver
+      def cookies
+        browser.cookies.all
+      end
+
+      def set_cookie(name, value, options = {})
+        browser.cookies.set(options.merge(name: name, value: value))
+      end
+
       def self.validate_options!(settings)
         if settings.key?(:url)
           raise ArgumentError, "url: is a Cuprite HTTP endpoint. Pass ws_url: with a Lightpanda WebSocket endpoint."
@@ -21,10 +31,21 @@ module Capybara
         end
         raise ArgumentError, "Lightpanda requires headless mode" if settings[:headless] == false
 
-        unsupported = settings.keys - Options.new.to_h.keys - [:ws_url]
+        unsupported = settings.keys - Options.new.to_h.keys - %i[ws_url base_url]
         return if unsupported.empty?
 
         raise ArgumentError, "Unsupported Lightpanda driver options: #{unsupported.map(&:inspect).join(', ')}"
+      end
+
+      private
+
+      def build_browser
+        Browser.new(options) do |instance|
+          CupriteCookies.new(instance) do
+            safe_uri_host(instance.current_url) || safe_uri_host(options[:base_url]) ||
+              safe_uri_host(session_options.app_host) || session&.server&.host || "127.0.0.1"
+          end
+        end
       end
     end
   end

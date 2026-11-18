@@ -89,6 +89,24 @@ class CupriteContractTest < Minitest::Test
     refute @page.driver.browser.headers.get.key?("Referer")
   end
 
+  def test_login_cookie_before_visit_and_scoped_cookie_removal
+    jar = @page.driver.browser.cookies
+    assert jar.set({ name: "session", value: "before", httponly: true, samesite: "Lax" })
+    assert_includes echoed_headers.fetch("HTTP_COOKIE"), "session=before"
+    cookie = jar.all.fetch("session")
+    assert jar.set(cookie), "a saved cookie can be reapplied to the browser"
+    assert cookie.httponly?
+    assert_equal "Lax", cookie.samesite
+
+    jar.set(name: "session", value: "scoped", path: "/account")
+    assert_equal %w[before scoped], jar.select { |item| item.name == "session" }.map(&:value).sort
+    jar.remove(name: "session", path: "/account")
+    assert_equal ["before"], jar.select { |item| item.name == "session" }.map(&:value)
+    assert_equal "before", jar["session"].value
+    @page.reset_session!
+    assert_nil @page.driver.browser.cookies["session"]
+  end
+
   def test_copied_remote_and_chrome_options_fail_before_launch
     error = assert_raises(ArgumentError) { Capybara::Lightpanda.register_cuprite_driver(:remote, url: "http://remote") }
     assert_includes error.message, "ws_url:"

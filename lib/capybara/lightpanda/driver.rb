@@ -30,7 +30,7 @@ module Capybara
           @browser = nil
           dead.quit
         end
-        @browser ||= Browser.new(@options)
+        @browser ||= build_browser
       end
 
       def browser_alive?
@@ -401,6 +401,10 @@ module Capybara
       end
 
       private
+
+      def build_browser
+        Browser.new(@options)
+      end
 
       # A node found while a frame is switched to lives in that frame's
       # document, which Node#call checks for a frame navigation.
