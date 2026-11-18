@@ -18,6 +18,19 @@ module Capybara
     end
 
     class CupriteDriver < Driver
+      def visit(url)
+        @started = true
+        browser.go_to(url) do |result|
+          error = result&.fetch("errorText", nil)
+          next if error.to_s.empty? || error == "net::ERR_ABORTED"
+
+          message = "Request to #{url} failed (#{error})"
+          raise ::Ferrum::StatusError.new(url, message) if defined?(::Ferrum::StatusError)
+
+          raise StatusError, message
+        end
+      end
+
       def wait_for_reload(timeout = 1)
         browser.wait_for_reload(timeout)
       end
