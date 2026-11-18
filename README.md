@@ -34,7 +34,7 @@ require "capybara-lightpanda"
 
 Capybara.javascript_driver = :lightpanda
 
-# rspec-rails system specs don't read javascript_driver either:
+# rspec-rails system specs pick their driver through driven_by:
 RSpec.configure do |config|
   config.before(:each, type: :system) { driven_by :lightpanda }
 end
