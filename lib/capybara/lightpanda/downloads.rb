@@ -33,6 +33,7 @@ module Capybara
         @browser = browser
         @path = nil
         @enabled = false
+        @destination_unknown = false
         @mutex = Mutex.new
         @configuration_mutex = Mutex.new
         @pending = {}  # guid => absolute path when the download began
@@ -81,18 +82,27 @@ module Capybara
 
       # Absolute paths of downloads completed this session (newest last).
       def files
-        @mutex.synchronize { @files.dup }
+        @mutex.synchronize do
+          check_destination!
+          @files.dup
+        end
       end
 
       # Monotonic count of downloads that have begun this session. Used by
       # #wait to detect "a download started since I was called" even after the
       # event queue has drained and @pending is empty again.
       def started_count
-        @mutex.synchronize { @started }
+        @mutex.synchronize do
+          check_destination!
+          @started
+        end
       end
 
       def in_progress?
-        @mutex.synchronize { @pending.any? }
+        @mutex.synchronize do
+          check_destination!
+          @pending.any?
+        end
       end
 
       # Block until in-flight downloads finish, then return the completed-file
@@ -116,6 +126,7 @@ module Capybara
         loop do
           now = Utils::Wait.monotonic_time
           @mutex.synchronize do
+            check_destination!
             began = @started > baseline
             return @files.dup if now >= deadline || (@pending.empty? && (began || now >= begin_deadline))
           end
@@ -139,7 +150,10 @@ module Capybara
           unsubscribe
           clear
           @enabled = false
-          @path = nil
+          @mutex.synchronize do
+            @path = nil
+            @destination_unknown = false
+          end
         end
       end
 
@@ -151,9 +165,13 @@ module Capybara
         @enabled = false
         @mutex.synchronize do
           @path = nil
+          @destination_unknown = false
           @pending.clear
         end
         result
+      rescue TimeoutError
+        invalidate_destination
+        raise
       end
 
       def allow_downloads(save_path, prepare_directory: true)
@@ -164,11 +182,32 @@ module Capybara
           params = { behavior: "allow", downloadPath: destination, eventsEnabled: true }
           browser.client.command("Browser.setDownloadBehavior", params,
                                  on_success: -> { @mutex.synchronize { @path = destination } })
+        rescue TimeoutError
+          invalidate_destination
+          raise
         rescue StandardError
           unsubscribe unless @enabled
           raise
         end
+        @mutex.synchronize { @destination_unknown = false }
         @enabled = true
+      end
+
+      def invalidate_destination
+        # The browser may already have applied a command whose reply timed out.
+        unsubscribe
+        @enabled = false
+        @mutex.synchronize do
+          @destination_unknown = true
+          @path = nil
+          @pending.clear
+        end
+      end
+
+      def check_destination!
+        return unless @destination_unknown
+
+        raise Error, "Download destination is unknown after a timeout. Set the destination again or reset the session."
       end
 
       def subscribe
