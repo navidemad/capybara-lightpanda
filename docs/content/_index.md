@@ -11,7 +11,7 @@ group :test do
 end
 ```
 
-Wire the driver in your test setup. In Rails 7+ / Rails 8 with system tests:
+Wire the driver in your test setup. In Rails system tests:
 
 ```ruby
 require "capybara-lightpanda"
@@ -21,16 +21,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 end
 ```
 
-Install the browser once:
-
-```bash
-# macOS
-brew install lightpanda-io/lightpanda/lightpanda
-
-# Linux x86_64
-curl -L -o lightpanda https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux
-chmod +x lightpanda
-```
+There is no browser to install. On first use the gem downloads the Lightpanda release it was validated against (one static binary of about 90 MB; no Chrome, no chromedriver, no Node) into `~/.cache/lightpanda/`, and the browser only changes when you upgrade the gem.
 
 ### Switch with `BROWSER=lightpanda`
 
@@ -46,6 +37,9 @@ if ENV["BROWSER"] == "lightpanda"
 else
   # your existing driver setup
 end
+
+# Rails system tests pick their driver through driven_by, so gate it too:
+driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
 ```
 
 ```bash
@@ -60,7 +54,7 @@ BROWSER=lightpanda bundle exec rails test test/system/
   </span>
 </aside>
 
-In **GitHub Actions**, drop the binary in once and set the env var:
+In **GitHub Actions**, fetch the browser in its own step (so HTTP stubs like WebMock/VCR never see the download) and set the env var:
 
 ```yaml
 # .github/workflows/system_tests.yml
@@ -71,11 +65,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: "3.3", bundler-cache: true }
-      - name: Install Lightpanda
-        run: |
-          curl -sSL -o /usr/local/bin/lightpanda \
-            https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux
-          chmod +x /usr/local/bin/lightpanda
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/lightpanda
+          key: lightpanda-${{ hashFiles('Gemfile.lock') }}
+      - run: bundle exec capybara-lightpanda install
       - run: bundle exec rails test test/system/
         env: { BROWSER: lightpanda }
 ```

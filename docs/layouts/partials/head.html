@@ -4,8 +4,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ $title }}{{ if .IsHome }} — faster Rails system tests{{ else }} — capybara-lightpanda{{ end }}</title>
 <meta name="description" content="{{ $desc }}">
-<meta property="og:title" content="{{ $title }}">
+{{ $ogTitle := cond .IsHome "capybara-lightpanda — faster Rails system tests, without Chromium" (printf "%s — capybara-lightpanda" $title) }}
+{{ $ogImage := "img/banner.png" | absURL }}
+<link rel="canonical" href="{{ .Permalink }}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="capybara-lightpanda">
+<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:title" content="{{ $ogTitle }}">
 <meta property="og:description" content="{{ $desc }}">
+<meta property="og:image" content="{{ $ogImage }}">
+<meta property="og:image:width" content="2316">
+<meta property="og:image:height" content="716">
+<meta property="og:image:alt" content="Capybara::Lightpanda — faster system tests for Rails, without Chromium">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ $ogTitle }}">
+<meta name="twitter:description" content="{{ $desc }}">
+<meta name="twitter:image" content="{{ $ogImage }}">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121212'/%3E%3Ctext x='16' y='22' font-family='Georgia, serif' font-size='20' font-weight='700' fill='%23E11D48' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

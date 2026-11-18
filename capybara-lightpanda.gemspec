@@ -10,8 +10,8 @@ Gem::Specification.new do |spec|
 
   spec.summary = "Capybara driver for the Lightpanda headless browser"
   spec.description = "A Capybara driver for Lightpanda, the fast headless browser built in Zig. " \
-                     "Provides a production-ready driver with XPath polyfill, reliable navigation, " \
-                     "and cookie management — ready for real-world Rails test suites."
+                     "Same Capybara DSL, a built-in CDP client, Turbo-aware waits, and no Chrome " \
+                     "to install: the gem downloads the browser it was validated against."
   spec.homepage = "https://navidemad.github.io/capybara-lightpanda"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.3"

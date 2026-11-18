@@ -2,10 +2,10 @@ baseURL = "https://navidemad.github.io/capybara-lightpanda/"
 locale = "en-us"
 title = "Capybara::Lightpanda"
 enableRobotsTXT = true
-disableKinds = ["taxonomy", "term", "RSS", "sitemap", "404"]
+disableKinds = ["taxonomy", "term", "RSS", "404"]
 
 [params]
-description = "A self-contained Capybara driver for the Lightpanda headless browser."
+description = "A Capybara driver for Lightpanda, the headless browser built in Zig. Same Capybara DSL, ~17 MB per worker instead of ~280 MB, no Chrome to install. Open beta: try it on your Rails system tests with one env var."
 github_url = "https://github.com/navidemad/capybara-lightpanda"
 rubygems_url = "https://rubygems.org/gems/capybara-lightpanda"
 # version-bearing — keep in sync with lib/capybara/lightpanda/version.rb

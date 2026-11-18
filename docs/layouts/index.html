@@ -91,23 +91,54 @@
         </div>
 
         <div class="hero__cta">
+          <a class="btn btn--primary" href="#join-beta">
+            <span>Try it in 5 minutes</span>
+            <span class="btn__arrow" aria-hidden="true">↘</span>
+          </a>
           <a
-            class="btn btn--primary"
             target="_blank"
+            rel="noopener"
+            class="btn btn--ghost"
             href="{{ .Site.Params.github_url }}"
           >
             <span>Source on GitHub</span>
             <span class="btn__arrow" aria-hidden="true">↗</span>
           </a>
-          <a
-            target="_blank"
-            class="btn btn--ghost"
-            href="{{ .Site.Params.rubygems_url }}"
+          <a class="btn btn--text" href="{{ "docs/#validation" | relURL }}"
+            >See it run 7 real apps →</a
           >
-            <span>gem on RubyGems</span>
-            <span class="btn__arrow" aria-hidden="true">↗</span>
-          </a>
-          <a class="btn btn--text" href="#join-beta">Join the beta ↘</a>
+        </div>
+
+        <div class="hero__receipts">
+          <p class="hero__receipts-eyebrow">
+            <span class="hero__receipts-eyebrow-glyph" aria-hidden="true">§</span>
+            Receipts, not promises
+          </p>
+          <ul class="hero__receipts-list">
+            <li class="receipt">
+              <span class="receipt__num">674<small>&thinsp;/&thinsp;681</small></span>
+              <span class="receipt__head">real-app examples pass</span>
+              <span class="receipt__foot"
+                >Forem, Solidus, Spree, Decidim, Campfire, Mastodon, alonetone
+                — their own specs, in our CI</span
+              >
+            </li>
+            <li class="receipt">
+              <span class="receipt__num">~17<em>&thinsp;MB</em></span>
+              <span class="receipt__head">memory per worker</span>
+              <span class="receipt__foot"
+                >vs ~280&nbsp;MB for Chrome on the same Rails 8 suite</span
+              >
+            </li>
+            <li class="receipt">
+              <span class="receipt__num">0</span>
+              <span class="receipt__head">install steps</span>
+              <span class="receipt__foot"
+                >The gem downloads a pinned Lightpanda release; no Chrome, no
+                chromedriver</span
+              >
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -334,9 +365,10 @@
         </h2>
         <p class="section__deck">
           <strong>capybara-lightpanda</strong> is in public beta. Real Rails
-          suites are how we find the edges. The cost to try it is one Gemfile
-          line and one env var — the cost to abandon it is unsetting that env
-          var.
+          suites are how we find the edges: CI already runs it against seven
+          open-source apps, and yours will exercise paths none of them do. The
+          cost to try it is one Gemfile line and one env var — the cost to
+          abandon it is unsetting that env var.
         </p>
       </header>
 
@@ -370,13 +402,18 @@
 if ENV["BROWSER"] == "lightpanda"
   require "capybara-lightpanda"
   Capybara.javascript_driver = :lightpanda
-end` "ruby" "" }}
+end
+
+# Rails system tests choose their driver with driven_by:
+driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless` "ruby" "" }}
               </div>
             </li>
             <li class="beta__step-row">
               <span class="beta__step-no" aria-hidden="true">3</span>
               <div class="beta__step-body">
-                <p class="beta__step-line">Run one suite. Decide.</p>
+                <p class="beta__step-line">
+                  Run one suite. The browser downloads itself on the first run.
+                </p>
 {{ transform.Highlight `$ BROWSER=lightpanda bundle exec rails test test/system/` "console" "" }}
               </div>
             </li>
@@ -418,6 +455,18 @@ end` "ruby" "" }}
               <span class="beta__q-text"
                 >How much <strong>CI memory</strong> did you free up — and could
                 you raise parallelism?</span
+              >
+            </li>
+            <li class="beta__q">
+              <span class="beta__q-no" aria-hidden="true">Q4</span>
+              <span class="beta__q-text"
+                >It all passed? <strong>Tell us too</strong> — a two-minute
+                <a
+                  href="{{ .Site.Params.github_url }}/issues/new?template=it-worked.yml"
+                  rel="noopener"
+                  >success report</a
+                >
+                is as useful as a bug.</span
               >
             </li>
           </ol>
