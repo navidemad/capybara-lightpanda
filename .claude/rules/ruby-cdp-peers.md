@@ -20,7 +20,7 @@ Unreleased main audited, no change needed: #674 `Node#click(wait:)` (N/A until C
 - `ferrum/headers.rb` ↔ `request_headers.rb`: get/set/add/clear; `add(permanent: false)` keeps a Referer off subrequests and sends it with `Page.navigate` only, as Ferrum does. Session reset clears overrides.
 - Ferrum `Page#wait_for_reload` ↔ `browser/navigation.rb#wait_for_reload`: returns on a main-frame load, a same-document navigation or expiry, truthy either way.
 - `ferrum/contexts.rb#reset` ↔ `browser.rb#reset`, `driver.rb#reset!`: context disposal isolates sessions; Network#reset must forget the disposed domain's enabled state. Failed reset discards the browser.
-- `ferrum/utils/attempt.rb` ↔ `utils/attempt.rb`: bounded retry reused by with_default_context_wait; six attempts at 0.1 s, matching the peer defaults.
+- `ferrum/utils/attempt.rb` ↔ `utils/attempt.rb`: bounded retry with the peer's 6 × 0.1 s defaults, which no caller uses: `browser.rb#with_default_context_wait` passes 3 tries with no sleep (it waits on executionContextCreated instead), `client/web_socket.rb#connect_with_retry` 10 × 0.1 s on a refused TCP connect.
 - `ferrum/errors.rb` ↔ `errors.rb`: CDP error hierarchy, response/code/data and JavaScript stack formatting; compat-only classes remain valid rescue constants.
 - Ferrum callback dispatch ↔ `client/subscriber.rb#dispatch`: per-callback rescue prevents one handler from blocking others.
 - `ferrum/frame/runtime.rb` ↔ `browser/runtime.rb`: evaluate awaits promises, execute discards values, evaluate_async supplies Capybara's callback. Ferrum's named-argument API differs; keep Capybara positional arguments here.

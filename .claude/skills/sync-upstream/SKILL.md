@@ -41,7 +41,7 @@ Tell the user which targets you've picked and why before starting recon. They ca
 Read both rules files unconditionally — the answers to "what changed?" depend on knowing what we already know:
 
 - `.claude/rules/lightpanda-io.md` — current understanding of the browser
-- `.claude/rules/ruby-cdp-peers.md` — adopted/outstanding patterns from Ferrum and Cuprite
+- `.claude/rules/ruby-cdp-peers.md` — the single source of peer state: last reviewed release and `main` SHA, open PRs already audited, adopted/outstanding/diverged patterns for Ferrum and Cuprite. `references/{ferrum,cuprite}.md` hold recon recipes only, no state.
 
 Also read the **previous run's state** if it exists:
 
@@ -56,9 +56,9 @@ The state file is absent on first run; that's fine — just skip the carry-forwa
 
 Then read the gem source surfaces relevant to the targets you picked:
 
-- Lightpanda → `lib/capybara/lightpanda/browser.rb`, `node.rb`, `cookies.rb`, `frame.rb` (workarounds depend on browser quirks)
-- Ferrum → `lib/capybara/lightpanda/node.rb`, `frame.rb`, `cookies.rb`, `errors.rb`, `utils/event.rb`, `client.rb` (the surfaces where Ferrum's design directly competes with ours)
-- Cuprite → `lib/capybara/lightpanda/driver.rb`, `javascripts/index.js` (driver-layer error mapping + JS bundle)
+- Lightpanda → `lib/capybara/lightpanda/browser.rb` (lifecycle, frames via `Browser#frame_stack`) and its modules under `browser/`, `node.rb`, `cookies.rb` (workarounds depend on browser quirks)
+- Ferrum → `lib/capybara/lightpanda/node.rb`, `browser.rb` + `browser/runtime.rb`, `cookies.rb`, `errors.rb`, `utils/{event,attempt}.rb`, `client.rb` + `client/` (the surfaces where Ferrum's design directly competes with ours)
+- Cuprite → `lib/capybara/lightpanda/driver.rb`, `javascripts/{attach,banner,predicates,turbo}.js` linked by `auto_scripts.rb` (driver-layer error mapping + JS bundle)
 
 ## Step 2: Per target, follow its reference file
 
@@ -93,13 +93,13 @@ Open PRs feed the last three buckets, never the first two, because nothing has l
 
 ## Step 4: Prune-and-densify pass
 
-Both rules files are loaded into Claude's context on every conversation in this project (`CLAUDE.md` includes them). They cost ~10K tokens, every turn — stale or verbose entries pay that cost forever. This pass runs BEFORE Step 5 (apply new findings) so the prune is a separate, auditable diff from the new-content edits.
+Both rules files are loaded into Claude's context on every conversation in this project (`.claude/rules/*.md` without a `paths` glob is auto-loaded). They cost ~10K tokens, every turn — stale or verbose entries pay that cost forever. This pass runs BEFORE Step 5 (apply new findings) so the prune is a separate, auditable diff from the new-content edits.
 
 For each entry in `lightpanda-io.md` and `ruby-cdp-peers.md`, ask three questions:
 
 1. **Still current?** Re-verify the underlying claim:
-   - "Open Issues That Affect This Gem" rows → `gh issue view <N> --repo lightpanda-io/browser --json state` for every issue listed; if `CLOSED`, delete the row.
-   - "CDP Methods Used by This Gem" entries → grep the gem source (`git grep -nE "command\(.Network\.getCookies"` etc.); if no gem caller, move to the available-but-unused list or drop.
+   - "Upstream open issues that affect this gem" rows → `gh issue view <N> --repo lightpanda-io/browser --json state` for every issue listed; if `CLOSED`, delete the row.
+   - "CDP commands used by the gem" entries → grep the gem source (`git grep -nE "command\(.Network\.getCookies"` etc.); if no gem caller, move to the available-but-unused list or drop.
    - PR references (`PR #NNNN`) embedded in rules text → `gh pr view <N> --json state,mergedAt`. If merged > 30 days ago AND the gem floor in `process.rb` covers it AND no gem-side TODO mentions the PR number, the inline `(PR #N, …)` parenthetical can be dropped — the floor comment in `process.rb` is the authoritative record.
    - "Outstanding adoption candidates" (ruby-cdp-peers.md) → grep the gem for the named pattern (e.g. `git grep -n "wait_for_stop_moving" lib/`); if it exists, move "Outstanding" → "Adopted".
    - "Adopted" entries → verify the cited gem file:line still exists (`git grep -n "<symbol>" lib/`). If the symbol moved, update the pointer; if the symbol was deleted, drop the entry.
@@ -109,8 +109,8 @@ For each entry in `lightpanda-io.md` and `ruby-cdp-peers.md`, ask three question
    - No (subtle invariant, hidden constraint, past-incident reason) → keep, but compress.
 
 3. **Densable?** Hold each surviving entry against these targets:
-   - "Open Issues" table row: ≤ 1 line, columns `Issue | Impact | Description`.
-   - "CDP Methods Used" entries: bare method name, no prose unless the gem does something non-obvious with it.
+   - "Upstream open issues" table row: ≤ 1 line, columns `Issue | Impact | Description`.
+   - "CDP commands used" entries: bare method name, no prose unless the gem does something non-obvious with it.
    - Adopted / Outstanding / Diverged entry: `peer_file ↔ our_file ↔ one-clause why` — usually one line, two at most.
    - "Limitation" sections: lead with the one-line claim; supporting prose only when a reader would otherwise re-discover a bug we already paid for.
    - If an entry has multiple paragraphs of historical narrative ("originally we did X, then PR #N landed, then we tried Y, …"), keep the current behavior in one sentence and delete the history. `git log` is the changelog.
