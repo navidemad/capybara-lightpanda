@@ -142,3 +142,28 @@ campfire-lexxy-composer-state:
     programmatic insert path calls.
   patterns:
     - 'test_an_unsent_message_is_kept_as_a_draft'
+
+goodjob-runtime-timezone:
+  confidence: confirmed
+  summary: >-
+    The browser acknowledges Emulation.setTimezoneOverride but keeps the process zone.
+    Ten GoodJob Performance examples pass on the local build of upstream browser PR 4701.
+  patterns:
+    - 'Lightpanda did not apply timezone'
+
+goodjob-chart-drag:
+  confidence: confirmed
+  summary: >-
+    The chart range helper uses Cuprite's coordinate-based mouse API to drag between ticks.
+    The gem has no equivalent mouse object.
+  patterns:
+    - "undefined method 'mouse'"
+
+goodjob-chart-rendering:
+  confidence: confirmed
+  summary: >-
+    The responsive table assertion compares rendered column offsets. The range controls
+    assertion computes text contrast from resolved styles. Both require a rendering browser.
+  patterns:
+    - 'Performance Page keeps every performance column aligned'
+    - 'Performance Page presents standard-size range controls'

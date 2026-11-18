@@ -1,0 +1,49 @@
+diff --git a/Gemfile b/Gemfile
+index 17a2912..fc8c6c6 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -93,3 +93,5 @@
+     gem "thruster"
+   end
+ end
++
++gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__", require: false
+diff --git a/spec/support/system.rb b/spec/support/system.rb
+index 8f87806..d43a5c8 100644
+--- a/spec/support/system.rb
++++ b/spec/support/system.rb
+@@ -1,6 +1,6 @@
+ # frozen_string_literal: true
+ 
+-require "capybara/cuprite"
++require "capybara-lightpanda"
+ 
+ Capybara.default_max_wait_time = 5
+ Capybara.disable_animation = true
+@@ -43,17 +43,15 @@ def #{method}(...)                 # def accept_alert(...)
+ 
+ # NOTE: The name :cuprite is already registered by Rails.
+ # See https://github.com/rubycdp/cuprite/issues/180
+-Capybara.register_driver(:cuprite_custom) do |app|
+-  Capybara::Cuprite::Driver.new(
+-    app,
+-    window_size: [1024, 800],
+-    process_timeout: 30,
+-    timeout: 15,
+-    headless: ENV['SHOW_BROWSER'] ? false : true,
+-    slowmo: ENV["SLOWMO"]&.to_f,
+-    browser_options: ENV["DOCKER"] || ENV["CI"] ? { "no-sandbox" => nil } : {}
+-  )
+-end
++Capybara::Lightpanda.register_cuprite_driver(
++  :cuprite_custom,
++  window_size: [1024, 800],
++  process_timeout: 30,
++  timeout: 15,
++  headless: ENV["SHOW_BROWSER"] ? false : true,
++  slowmo: ENV["SLOWMO"]&.to_f,
++  timezone: "UTC"
++)
+ 
+ Capybara.javascript_driver = :cuprite_custom
+ 
