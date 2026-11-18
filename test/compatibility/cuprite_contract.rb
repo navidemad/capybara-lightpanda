@@ -172,6 +172,24 @@ class CupriteContractTest < Minitest::Test
     assert_includes error.message, "application rejected the edit"
   end
 
+  def test_wait_for_reload_observes_a_new_document_at_the_same_url
+    @page.visit("/")
+    @page.execute_script("window.oldDocument = true; setTimeout(() => location.reload(), 200)")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    @page.driver.browser.wait_for_reload(5)
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 4
+    assert_nil @page.evaluate_script("window.oldDocument"), "reload must replace the original document"
+  end
+
+  def test_driver_reload_wait_expires_without_reloading_the_page
+    @page.visit("/")
+    @page.execute_script("window.unsaved = 'draft'")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    assert @page.driver.wait_for_reload(0.15)
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.12
+    assert_equal "draft", @page.evaluate_script("window.unsaved")
+  end
+
   def test_redirect_and_iframe_keep_distinct_responses
     @page.visit("/redirect")
     network = @page.driver.browser.network

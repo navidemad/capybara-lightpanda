@@ -54,6 +54,14 @@ module Capybara
         end
         alias reload refresh
 
+        # Observe an outstanding or upcoming main-frame load, including a
+        # same-URL reload. Ferrum's return value is truthy even on expiry.
+        def wait_for_reload(timeout = 1) # rubocop:disable Naming/PredicateMethod
+          enable_page_events
+          with_main_frame_load { |loaded| loaded.wait(timeout) }
+          true
+        end
+
         private
 
         def navigation_params(url)
@@ -139,22 +147,27 @@ module Capybara
         def await_navigation
           starting_url = safe_current_url
           deadline = monotonic_time + @options.timeout
-          loaded = Utils::Event.new
-          handler = proc { |params| loaded.set if params["frameId"] == @target_id }
-          @client.on("Page.frameStoppedLoading", &handler)
-
-          begin
+          with_main_frame_load do |loaded|
             yield
 
             unless loaded.wait([2, @options.timeout].min)
               remaining = deadline - monotonic_time
               poll_ready_state(remaining, loaded_event: loaded, starting_url: starting_url) if remaining.positive?
             end
-          ensure
-            @client.off("Page.frameStoppedLoading", handler)
           end
-
           deadline
+        end
+
+        def with_main_frame_load
+          loaded = Utils::Event.new
+          handler = proc { |params| loaded.set if params["frameId"] == @target_id }
+          client = @client
+          client.on("Page.frameStoppedLoading", &handler)
+          begin
+            yield loaded
+          ensure
+            client.off("Page.frameStoppedLoading", handler)
+          end
         end
 
         # Poll document.readyState as a fallback when Page.loadEventFired

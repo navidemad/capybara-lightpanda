@@ -14,6 +14,10 @@ module Capybara
     end
 
     class CupriteDriver < Driver
+      def wait_for_reload(timeout = 1)
+        browser.wait_for_reload(timeout)
+      end
+
       def network_traffic(type = nil)
         if type.to_s == "blocked"
           raise Capybara::NotSupportedByDriverError, "Lightpanda does not track Cuprite request interception"
