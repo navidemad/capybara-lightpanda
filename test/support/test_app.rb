@@ -1077,7 +1077,21 @@ class TestApp
           <div id="seq"></div>
           <div id="widget">choose…</div>
           <div id="panel" style="display: none"><span id="option">Option A</span></div>
+          <!-- select2 v3 MULTI with one choice already picked (solidus's
+               product taxons picker). select2 opens on a click on the choices
+               list but ignores a click inside an existing choice. -->
+          <div id="multi" class="select2-container select2-container-multi">
+            <ul id="multi-choices" class="select2-choices">
+              <li class="select2-search-choice"><div>Brand 1</div><a href="#" class="select2-search-choice-close"></a></li>
+              <li class="select2-search-field"><input class="select2-input"></li>
+            </ul>
+          </div>
+          <div id="multi-drop" style="display: none">Clothing</div>
           <script>
+            document.getElementById('multi-choices').addEventListener('click', function(e) {
+              if (e.target.closest('.select2-search-choice')) return;
+              document.getElementById('multi-drop').style.display = 'block';
+            });
             ['mousedown', 'mouseup', 'click'].forEach(function(name) {
               document.getElementById('btn').addEventListener(name, function() {
                 var seq = document.getElementById('seq');
