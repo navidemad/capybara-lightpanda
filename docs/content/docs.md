@@ -431,35 +431,36 @@ External `<link rel="stylesheet">` files are fetched and parsed by default — t
 ## Validated against real apps { #validation }
 
 Capability tables are self-reported, so here is the other kind of evidence: CI
-patches six production Rails codebases to run *their own* specs on this driver,
+patches seven production Rails codebases to run *their own* specs on this driver,
 against a pinned upstream SHA, weekly and on demand.
 [The patches](https://github.com/navidemad/capybara-lightpanda/tree/main/.github/real-apps/patches)
 double as worked migration examples, Gemfile and driver-registration diff
 included.
 
-| App | Specs exercised | Known failures |
-|---|---|---|
-| [mastodon](https://github.com/mastodon/mastodon) | `home`, `log_in`, `log_out` system specs | **0** |
-| [alonetone](https://github.com/sudara/alonetone) | `pages`, `account_requests`, `users` features | **0** |
-| [spree](https://github.com/spree/spree) | admin: getting-started, settings, API keys, … | 1 |
-| [forem](https://github.com/forem/forem) | `homepage`, `comments`, `articles`, `authentication` system specs | 11 |
-| [decidim](https://github.com/decidim/decidim) | `accesslist`, `account` system specs | 16 |
-| [solidus](https://github.com/solidusio/solidus) | all of `spec/features/admin` | 68 |
+| App | Was on | Specs exercised | Examples | Known failures |
+|---|---|---|---|---|
+| [forem](https://github.com/forem/forem) | Chrome (CDP) | `homepage`, `comments`, `articles`, `authentication` system specs | 228 | **0** |
+| [solidus](https://github.com/solidusio/solidus) | Selenium | all of `spec/features/admin` | 338 | 3 |
+| [spree](https://github.com/spree/spree) | Selenium | admin: getting-started, settings, API keys, option types, customers | 40 | **0** |
+| [decidim](https://github.com/decidim/decidim) | Selenium | `accesslist`, `account` system specs | 32 | 2 |
+| [campfire](https://github.com/basecamp/once-campfire) | Selenium | the whole system suite (Minitest, ActionCable + Turbo Streams) | 27 | 1 |
+| [mastodon](https://github.com/mastodon/mastodon) | Playwright | `home`, `log_in`, `log_out` system specs | 11 | **0** |
+| [alonetone](https://github.com/sudara/alonetone) | Playwright | `pages`, `account_requests`, `users` features | 5 | **0** |
 
-These are deliberate spec subsets, not whole suites — chosen to cover the
-interactive surface without a 40-minute job. Every known failure is catalogued in
+That is 681 examples with 6 known failures (baselines as of 2026-11-16).
+Apart from Solidus's admin features and Campfire's system suite, these are
+deliberate spec subsets, not whole suites — chosen to cover the interactive
+surface without a 40-minute job. Every known failure is catalogued in
 [`causes.yml`](https://github.com/navidemad/capybara-lightpanda/blob/main/.github/real-apps/causes.yml)
 with its mechanism, a confidence level (`confirmed` / `likely` / `unknown`) and a
 link to the upstream gap. A failure matching *no* recorded cause fails the job,
 so an unexplained regression can't hide inside an accepted baseline.
 
-Read the table as a shape rather than a score. Solidus's count is dominated by a
-single mechanism: its admin Tabs component measures `offsetWidth` to decide
-whether to collapse tabs into a `:hover` dropdown, and against synthetic geometry
-it always concludes "overflowed", hiding most tabs behind a menu that `:hover`
-can't open. One missing capability, dozens of failures. That's the profile to
-expect — failures cluster onto a few root causes instead of scattering, which is
-also why triaging your own suite goes faster than the raw count suggests.
+Read the table as a shape rather than a score. The failures that remain cluster
+onto a few root causes — no `xhr.upload` progress events (Decidim's avatar
+upload), synthetic layout geometry (Solidus), Selenium-only semantics — instead
+of scattering. That's the profile to expect on your own suite too, and it's why
+triaging goes faster than a raw count suggests.
 
 ## Troubleshooting { #troubleshooting }
 

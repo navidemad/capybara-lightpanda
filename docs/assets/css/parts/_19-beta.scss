@@ -29,6 +29,7 @@
 .beta__try,
 .beta__ask {
   position: relative;
+  min-width: 0; /* let a long code line scroll inside its block instead of widening the grid */
   padding: clamp(14px, 2vh, 24px) clamp(18px, 2.2vw, 30px);
   border: 1px solid var(--ink-line);
   border-radius: var(--radius);

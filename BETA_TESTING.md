@@ -99,9 +99,9 @@ The gem's default `:lightpanda` registration reads this configuration, so `Capyb
 
 ## What we expect to fail (don't file these)
 
-These are browser-level limitations of Lightpanda itself, not bugs in the gem. The driver raises `Capybara::NotImplementedError` so you can `skip` cleanly.
+These are browser-level limitations of Lightpanda itself, not bugs in the gem. Where the driver can't do something it raises `Capybara::NotSupportedByDriverError` (or `NotImplementedError` for a legacy coordinate drag) so you can `skip` cleanly.
 
-- **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` returns a hardcoded 1920×1080 PNG.
+- **Real screenshots** — Lightpanda has no compositor. `page.save_screenshot` writes a blank image instead of raising, so screenshot-on-failure hooks keep working.
 - **Visual regression / pixel tests** — same reason.
 - **Scroll, pixel geometry, full `getComputedStyle`** — no layout engine. `@media` / `matchMedia` *do* work and evaluate against the `window_size` you configure; what's missing is reflow, so `getBoundingClientRect` stays synthetic.
 - **Service Workers, SharedWorker** — not implemented; Web Worker support is partial ([lightpanda#2017](https://github.com/lightpanda-io/browser/issues/2017)).
@@ -147,11 +147,12 @@ When you file feedback, three signals matter most:
 
 ## What's coming
 
-The known matrix of in-flight upstream work that affects this gem is tracked in [`.claude/rules/lightpanda-io.md`](./.claude/rules/lightpanda-io.md). Highlights:
+The upstream gaps that still affect this gem are tracked in [`.claude/rules/lightpanda-io.md`](./.claude/rules/lightpanda-io.md), and every real-app failure CI knows about is explained in [`causes.yml`](./.github/real-apps/causes.yml). The ones you're most likely to meet:
 
-- **[#2017](https://github.com/lightpanda-io/browser/issues/2017)** — SharedWorker and the remaining Web Worker APIs (partial Worker support landed in PR #2078).
-- **[#1801](https://github.com/lightpanda-io/browser/issues/1801)** — `Page.loadEventFired` may never fire on JS-heavy pages; the gem's `readyState` polling fallback covers it, at the cost of some latency.
-- **[#2173](https://github.com/lightpanda-io/browser/issues/2173)** — browser crash navigating to some React apps over CDP; the gem auto-reconnects, but heavy SPA suites may still surface `DeadBrowserError`.
+- **[#4263](https://github.com/lightpanda-io/browser/issues/4263)** — fixed full-screen overlays keep synthetic bounds, so `obscured?` can be wrong around modals.
+- **[#4298](https://github.com/lightpanda-io/browser/issues/4298)** — `innerText` line breaks follow the tag, not the computed `display`, so multi-line text assertions can differ from Chrome.
+- **[#4251](https://github.com/lightpanda-io/browser/issues/4251)** — Ctrl+Backspace / Ctrl+arrows don't do word-wise editing.
+- No `xhr.upload` progress events yet — upload widgets that wait on them (Decidim's avatar field) stall.
 
 ## What's _not_ on the roadmap
 

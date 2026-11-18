@@ -80,8 +80,8 @@ body:
     id: lightpanda-version
     attributes:
       label: Lightpanda binary
-      description: Output of `lightpanda --version`, or "nightly YYYY-MM-DD".
-      placeholder: "nightly 2026-04-24"
+      description: What `page.driver.browser.version` prints (or `bundle exec capybara-lightpanda version`).
+      placeholder: "1.0.4"
     validations:
       required: true
 
@@ -116,7 +116,7 @@ body:
     attributes:
       label: Quick checks
       options:
-        - label: I'm running on Lightpanda nightly or `>= 0.2.6` (older versions are not supported by the gem)
+        - label: I'm on the latest `capybara-lightpanda` release, with the Lightpanda version it downloads by default (or a newer nightly)
           required: true
         - label: This is reproducible — not a one-time flake
           required: false
