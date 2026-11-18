@@ -93,6 +93,10 @@ LOCAL_OVERRIDES = {
   # kt-paperclip pulls mimemagic, whose native build refuses to compile
   # without the freedesktop MIME database. Ubuntu runners ship it
   # (shared-mime-info is preinstalled); macOS does not.
+  "goodjob" => {
+    "services" => "postgres",
+    "env" => { "BUNDLE_WITHOUT" => "debug:lint", "DATABASE_URL" => "postgresql:///good_job_lightpanda_test" },
+  },
   "solidus" => { "services" => "", "native" => "shared-mime-info" },
   "spree" => { "services" => "", "native" => "shared-mime-info" },
   "decidim" => { "services" => "postgres" },

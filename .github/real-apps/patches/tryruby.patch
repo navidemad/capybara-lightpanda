@@ -1,0 +1,49 @@
+diff --git a/Gemfile b/Gemfile
+index 754dad4..56a58cd 100644
+--- a/Gemfile
++++ b/Gemfile
+@@ -20,3 +20,5 @@
+   gem "cuprite"
+   gem "puma"
+ end
++
++gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__", require: false
+diff --git a/spec/spec_helper.rb b/spec/spec_helper.rb
+index 0dec783..05f2ade 100644
+--- a/spec/spec_helper.rb
++++ b/spec/spec_helper.rb
+@@ -4,7 +4,7 @@
+ 
+ require 'middleman/rack'
+ require "capybara/rspec"
+-require "capybara/cuprite"
++require "capybara-lightpanda"
+ 
+ # Prefetch the first load, so that we don't timeout
+ Middleman.server.call("PATH_INFO" => "/javascripts/application.js", "SCRIPT_NAME" => "/")
+@@ -25,19 +25,12 @@
+ 
+   config.expect_with(:rspec) { |c| c.syntax = :should }
+ 
+-  Capybara.javascript_driver = :cuprite
+-  Capybara.register_driver(:cuprite) do |app|
+-    Capybara::Cuprite::Driver.new(app,
+-      window_size: [1200, 800],
+-      browser_options: { 'no-sandbox': nil },
+-      inspector: ENV['INSPECTOR'],
+-      headless: !ENV['NO_HEADLESS'],
+-      timeout: 20,
+-      # It is quite a heavy website iframed on playground
+-      # and for testing, we don't need it to be present.
+-      # This should spare us from random test failures.
+-      url_blocklist: %r{https://docs.ruby-lang.org/},
+-    )
++  Capybara.javascript_driver = :tryruby
++  Capybara::Lightpanda.register_cuprite_driver(:tryruby, window_size: [1200, 800], timeout: 20)
++
++  config.before(:each, js: true) do
++    # opal-browser detects its engine from navigator.userAgent during boot.
++    page.driver.browser.headers.set("User-Agent" => "Lightpanda (WebKit compatibility probe)")
+   end
+ 
+   Capybara.app = Middleman.server

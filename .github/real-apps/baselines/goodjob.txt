@@ -1,0 +1,13 @@
+./spec/system/performance_spec.rb # Performance Page can select a custom page range by dragging the index chart
+./spec/system/performance_spec.rb # Performance Page disambiguates repeated fall-back chart ticks and exact endpoints in browser time
+./spec/system/performance_spec.rb # Performance Page does not lock a still-untouched fall-back endpoint into a stale reciprocal bound
+./spec/system/performance_spec.rb # Performance Page keeps both endpoints in one consistent zone when only one is near the four-digit year boundary
+./spec/system/performance_spec.rb # Performance Page keeps exact repeated-hour ranges continuous when their local values are not ordered
+./spec/system/performance_spec.rb # Performance Page keeps the widget and index axis in browser time while retaining exact canonical endpoints
+./spec/system/performance_spec.rb # Performance Page localizes sub-minute and multi-year chart labels at their required precision
+./spec/system/performance_spec.rb # Performance Page permits a start edit across an ordered fall-back fold range
+./spec/system/performance_spec.rb # Performance Page prepares browser-local edits submitted directly through the form
+./spec/system/performance_spec.rb # Performance Page presents standard-size range controls with accessible, start-aligned narrow wrapping
+./spec/system/performance_spec.rb # Performance Page re-engages reciprocal ordering constraints after editing away from a loaded fall-back range
+./spec/system/performance_spec.rb # Performance Page rejects a browser-local endpoint in a DST gap
+./spec/system/performance_spec.rb # Performance Page serializes an upper-edge drag without crossing the four-digit canonical boundary
