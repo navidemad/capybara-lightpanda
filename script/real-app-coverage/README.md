@@ -25,7 +25,7 @@ the private app path stays out of this tracked script).
 
 ```bash
 # Full suite. Rebuilds the browser from upstream main first (a few minutes),
-# installs it into the gem's binary cache, then runs all of test/system/.
+# installs it as the gem's cached nightly, then runs all of test/system/.
 APP_DIR=/path/to/app script/real-app-coverage/run.sh
 
 # Reuse whatever binary is already cached (skip the git-pull + zig build):
@@ -46,6 +46,11 @@ script/real-app-coverage/diff.sh results/OLD.json results/NEW.json
   fixes merged but not yet in a published nightly. The first build backs up your
   previously-cached binary to `~/.cache/lightpanda/lightpanda.published.bak`.
   Pass `SKIP_BUILD=1` to reuse the cached binary.
+  - **The suite runs with `LIGHTPANDA_VERSION=nightly`.** The gem defaults to
+    the release it pins, cached as `lightpanda-<version>`, so without this the
+    app would test that release while the summary printed the local build. The
+    run also sets a year-long `LIGHTPANDA_CACHE_TIME`, so the gem never
+    re-downloads the published nightly over the local build.
   - **Needs full Xcode, not just Command Line Tools.** A from-scratch V8 build
     (triggered when V8's gn config is stale) calls `xcodebuild`, which CLT-only
     machines can't satisfy (`tool 'xcodebuild' requires Xcode`). When the build

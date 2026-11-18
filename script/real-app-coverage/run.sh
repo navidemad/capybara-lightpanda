@@ -8,9 +8,13 @@
 #
 # What it does, in order:
 #   1. Rebuilds the Lightpanda browser from the latest upstream `main`
-#      (git pull + zig build) and installs it into the gem's binary cache, so
+#      (git pull + zig build) and installs it as the gem's cached nightly, so
 #      every run tests the freshest upstream — including fixes merged but not
-#      yet in a published nightly.
+#      yet in a published nightly. The suite runs with LIGHTPANDA_VERSION=nightly
+#      (the gem defaults to its pinned release, whose cache file is
+#      lightpanda-<version>, so without it the build would sit unused) and a
+#      year-long LIGHTPANDA_CACHE_TIME, so the gem never re-downloads the
+#      published nightly over the local build.
 #   2. Warms the app's fixture_kit cache (required before system tests).
 #   3. Runs `test/system/` single-process (PARALLEL_WORKERS=0) under
 #      BROWSER=lightpanda, never stopping on failure, with a JSON reporter
@@ -119,6 +123,8 @@ set +e
   cd "$APP_DIR" &&
   PARALLEL_WORKERS=0 \
   BROWSER=lightpanda \
+  LIGHTPANDA_VERSION=nightly \
+  LIGHTPANDA_CACHE_TIME=31536000 \
   RUBYOPT="-r$REPORTER" \
   LIGHTPANDA_JSON_OUT="$OUT_JSON" \
   LIGHTPANDA_BUILD="$BROWSER_BUILD" \

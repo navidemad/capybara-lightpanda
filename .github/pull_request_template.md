@@ -5,9 +5,10 @@
 ## Checklist
 
 - [ ] `bundle exec rubocop` passes
-- [ ] `bundle exec rake spec:incremental` passes locally
-- [ ] If behavior against Lightpanda changed, `.claude/rules/lightpanda-io.md` (Known Bugs / CDP table) is updated
+- [ ] `bundle exec rake test:incremental` passes locally
+- [ ] If driver behavior changed, `bundle exec rake spec:shared:parallel` passes locally (PR CI doesn't run the Capybara shared battery)
+- [ ] If behavior against Lightpanda changed, `.claude/rules/lightpanda-io.md` (constraints / CDP tables) is updated
 - [ ] If a workaround was added or removed, `CLAUDE.md` Architecture Rules reflect it
 - [ ] If a peer-gem pattern was adopted or diverged from, `.claude/rules/ruby-cdp-peers.md` is updated
 
-<!-- Add `[ci skip]` to the PR title for docs-only changes to skip the CI matrix. -->
+<!-- CI skips changes that only touch Markdown files or docs/ (paths-ignore in ci.yml). -->
