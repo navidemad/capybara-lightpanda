@@ -60,6 +60,21 @@ class SeleniumContractTest < Minitest::Test
     assert_equal "", @page.find("#scope").native.attribute("validationMessage")
   end
 
+  def test_native_attribute_uses_live_properties_and_preserves_svg_link_values
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input value="live" data-kind="field">' +
+        '<svg><a href="report"><text>Report</text></a></svg>';
+      document.querySelector("input").getAttribute = () => { throw Error("overridden") };
+    JS
+    input = @page.find("input").native
+    assert_equal "live", input.attribute("value")
+    assert_equal "field", input.attribute("data-kind")
+    assert_nil input.attribute("data-absent")
+    link = @page.find("svg a", visible: :all).native
+    assert_equal({ "baseVal" => "report", "animVal" => "report" }, link.attribute("href"))
+    assert_equal link.attribute("href"), link.attribute("HREF")
+  end
+
   def test_browser_log_exposes_uncaught_errors_to_system_test_teardown
     @page.execute_script(<<~JS)
       setTimeout(() => { throw new Error("migration exception"); }, 0);

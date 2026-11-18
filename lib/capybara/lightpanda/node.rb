@@ -983,10 +983,14 @@ module Capybara
         function(name) {
           const key = name.toLowerCase();
           const tag = this.localName;
-          const raw = this.getAttribute(name);
+          const markup = attr => this.getAttributeNode(attr)?.value ?? null;
           if (key === 'style') return this.style?.cssText ?? null;
           if ((tag === 'a' && key === 'href') || (tag === 'img' && key === 'src')) {
-            return raw ? this[key] : raw;
+            const raw = markup(key);
+            if (!raw) return raw;
+            const url = this[key];
+            if (url && typeof url === 'object') return { baseVal: url.baseVal, animVal: url.animVal };
+            return url;
           }
           if (key === 'selected' || key === 'checked') {
             if (tag === 'option') return this.selected ? 'true' : null;
@@ -994,12 +998,14 @@ module Capybara
               return this.checked ? 'true' : null;
             }
           }
-          if (key === 'spellcheck' && /^(true|false)$/i.test(raw)) return raw.toLowerCase();
+          if (key === 'spellcheck') {
+            const raw = markup(key);
+            return /^(true|false)$/i.test(raw) ? raw.toLowerCase() : String(this.spellcheck);
+          }
           const prop = name === 'class' ? 'className' : name === 'readonly' ? 'readOnly' : name;
           let value;
-          try { value = this[prop]; } catch (_) { return raw; }
-          if (key === 'spellcheck') return String(this.spellcheck);
-          if (value == null || typeof value === 'object' || typeof value === 'function') return raw;
+          try { value = this[prop]; } catch (_) { return markup(name); }
+          if (value == null || typeof value === 'object' || typeof value === 'function') return markup(name);
           return String(value);
         }
       JS
