@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require_relative "session_isolation"
 require "tmpdir"
 require "json"
 require "cgi"
@@ -16,6 +17,8 @@ else
 end
 
 class CupriteContractTest < Minitest::Test
+  include SessionIsolationContract
+
   APP = lambda do |env|
     case env["PATH_INFO"]
     when "/editor"

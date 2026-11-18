@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require_relative "session_isolation"
 require "capybara-lightpanda"
 require "selenium-webdriver"
 
 class SeleniumContractTest < Minitest::Test
+  include SessionIsolationContract
+
   APP = lambda do |env|
     body = env["PATH_INFO"] == "/" ? '<iframe src="/admin/frame"></iframe>' : "<title>Consent</title>"
     [200, { "content-type" => "text/html" }, [body]]
