@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "singleton"
+require "securerandom"
 
 module Capybara
   module Lightpanda
@@ -104,28 +105,27 @@ module Capybara
         # the callback as its last argument (`arguments[arguments.length - 1]`),
         # matching Capybara's evaluate_async_script contract.
         def evaluate_async(expression, *args, wait: @options.timeout, frame: nil)
-          timeout_ms = (wait * 1000).to_i
+          # A private scalar lets the timer report expiry without interpreting
+          # an application's exception class or changing its callback value.
+          expired = SecureRandom.uuid
           wrapped = <<~JS
             function() {
-              var __args = Array.prototype.slice.call(arguments);
-              return new Promise(function(__resolve, __reject) {
-                var __timer = setTimeout(function() {
-                  __reject(new (class LightpandaCallbackTimeout extends Error {})());
-                }, #{timeout_ms});
-                var __done = function(val) { clearTimeout(__timer); __resolve(val); };
-                __args.push(__done);
-                try { (function() { #{expression} }).apply(null, __args); }
-                catch (error) { clearTimeout(__timer); __reject(error); }
+              var __args = Array.from(arguments), __timer;
+              var __deadline = new Promise(__resolve => {
+                __timer = setTimeout(() => __resolve('#{expired}'), #{(wait * 1000).to_i});
               });
+              var __result = new Promise(__done => {
+                __args.push(__done);
+                (function() { #{expression} }).apply(null, __args);
+              });
+              return Promise.race([__result, __deadline]).finally(() => clearTimeout(__timer));
             }
           JS
-          # Give the browser's timer time to report a missing callback over CDP.
-          # A disconnected socket or an unanswered command keeps its own error.
-          call_with_args(wrapped, args, frame: frame, command_timeout: wait + 1)
-        rescue JavaScriptError => e
-          raise unless e.class_name == "LightpandaCallbackTimeout"
+          # Give the browser time to return the result of the race over CDP.
+          result = call_with_args(wrapped, args, frame: frame, command_timeout: wait + 1)
+          raise ScriptTimeoutError, "Async script callback timed out after #{wait}s" if result == expired
 
-          raise ScriptTimeoutError, "Async script callback timed out after #{wait}s"
+          result
         end
 
         # Evaluate JS and return a RemoteObject reference (for DOM nodes, arrays).
