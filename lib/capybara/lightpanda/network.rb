@@ -96,21 +96,18 @@ module Capybara
       def headers=(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = headers
-        browser.page_command("Network.setExtraHTTPHeaders", headers: headers)
+        apply_extra_headers(headers)
       end
 
       def add_headers(headers)
         enable
         warn_on_refused_user_agent(headers)
-        @extra_headers = (@extra_headers || {}).merge(headers)
-        browser.page_command("Network.setExtraHTTPHeaders", headers: @extra_headers)
+        apply_extra_headers(extra_headers.merge(headers))
       end
 
       def clear_headers
         enable
-        @extra_headers = {}
-        browser.page_command("Network.setExtraHTTPHeaders", headers: {})
+        apply_extra_headers({})
       end
 
       # Lightpanda refuses a user agent containing "Mozilla" by design, and
@@ -165,6 +162,10 @@ module Capybara
       end
 
       private
+
+      def apply_extra_headers(headers)
+        browser.page_command("Network.setExtraHTTPHeaders", headers: headers).tap { @extra_headers = headers.dup }
+      end
 
       def warn_on_refused_user_agent(headers)
         value = headers.find { |name, _| name.to_s.casecmp?("user-agent") }&.last

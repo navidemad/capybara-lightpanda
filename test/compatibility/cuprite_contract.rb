@@ -52,6 +52,16 @@ class CupriteContractTest < Minitest::Test
     assert_equal [900, 700], @page.current_window.size
   end
 
+  def test_permanent_referer_replaces_the_navigation_only_referer
+    @page.visit("/")
+    headers = @page.driver.browser.headers
+    base = @page.current_url
+    headers.add({ "Referer" => "#{base}first" }, permanent: false)
+    headers.add({ "Referer" => "#{base}second" })
+    assert_equal "#{base}second", echoed_headers["HTTP_REFERER"]
+    assert_equal "#{base}second", @page.evaluate_script("document.referrer")
+  end
+
   def echoed_headers
     @page.visit("/headers")
     JSON.parse(@page.find("pre").text)
