@@ -32,7 +32,6 @@ Gate the driver on an env var while you try it out. Your current setup stays the
 if ENV["BROWSER"] == "lightpanda"
   require "capybara-lightpanda"
 
-  Capybara.default_driver    = :lightpanda
   Capybara.javascript_driver = :lightpanda
 else
   # your existing driver setup
@@ -54,6 +53,8 @@ RSpec.configure do |config|
   end
 end
 ```
+
+If your suite sets `Capybara.default_driver` itself, or calls `Capybara.use_default_driver` in setup or teardown blocks, gate `Capybara.default_driver` the same way. Otherwise those tests keep running on your old driver.
 
 ```bash
 BROWSER=lightpanda bundle exec rails test test/system/
