@@ -2,6 +2,7 @@
 ./spec/system/performance_spec.rb # Performance Page disambiguates repeated fall-back chart ticks and exact endpoints in browser time
 ./spec/system/performance_spec.rb # Performance Page does not lock a still-untouched fall-back endpoint into a stale reciprocal bound
 ./spec/system/performance_spec.rb # Performance Page keeps both endpoints in one consistent zone when only one is near the four-digit year boundary
+./spec/system/performance_spec.rb # Performance Page keeps every performance column aligned with its header and labels cells on narrow viewports
 ./spec/system/performance_spec.rb # Performance Page keeps exact repeated-hour ranges continuous when their local values are not ordered
 ./spec/system/performance_spec.rb # Performance Page keeps the widget and index axis in browser time while retaining exact canonical endpoints
 ./spec/system/performance_spec.rb # Performance Page localizes sub-minute and multi-year chart labels at their required precision

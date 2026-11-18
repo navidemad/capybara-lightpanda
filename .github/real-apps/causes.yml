@@ -147,7 +147,7 @@ goodjob-runtime-timezone:
   confidence: confirmed
   summary: >-
     The browser acknowledges Emulation.setTimezoneOverride but keeps the process zone.
-    Nine GoodJob Performance examples pass on the local build of upstream browser PR 4701.
+    Ten GoodJob Performance examples pass on the local build of upstream browser PR 4701.
   patterns:
     - 'Lightpanda did not apply timezone'
 
