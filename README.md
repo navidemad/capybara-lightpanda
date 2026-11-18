@@ -36,6 +36,8 @@ Then name the driver. Choose the part that fits your tests.
 
 ```ruby
 # test/application_system_test_case.rb
+require "capybara-lightpanda"
+
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :lightpanda
 end
@@ -45,6 +47,8 @@ end
 
 ```ruby
 # spec/support/capybara.rb
+require "capybara-lightpanda"
+
 RSpec.configure do |config|
   config.before(:each, type: :system) { driven_by :lightpanda }
 end
