@@ -209,11 +209,9 @@ Where to find things in this repo:
 Run `bundle exec rake readme:readability` after you change this file.<br>
 It checks that the text is still easy to read.
 
-## License
+## Migrate a test suite
 
-[MIT License](LICENSE.txt)
-
-### Migrating a Cuprite registration
+### From Cuprite
 
 Keep your application's driver name and register it with Lightpanda in test setup.
 
@@ -242,3 +240,25 @@ Lightpanda’s `downloads.files` returns absolute paths. Existing click-then-wai
 Run the shared compatibility examples with `bundle exec ruby test/compatibility/cuprite_contract.rb`.
 Run them again with `CONTRACT_DRIVER=cuprite` for the Chrome reference. Set `CHROME_BIN` or
 `LIGHTPANDA_BIN` to select a local executable.
+
+
+### From Selenium
+
+If your Rails tests say `driven_by :selenium`, change it to `driven_by :lightpanda`.
+If they already use an app-owned name, keep the name and change its setup.
+
+```ruby
+require "capybara-lightpanda"
+
+Capybara.register_driver(:store_system) do |app|
+  Capybara::Lightpanda::Driver.new(app, window_size: [1200, 800])
+end
+```
+
+Keep a Chrome driver for tests that need screenshots, live layout changes, or more than one tab.
+The [migration audit](CUPRITE_COMPATIBILITY.md) lists the helpers that pass on both drivers,
+the original app specs we ran, and the edits those suites still need.
+
+## License
+
+[MIT License](LICENSE.txt)

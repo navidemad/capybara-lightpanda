@@ -1,11 +1,14 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require_relative "session_isolation"
 require "capybara-lightpanda"
 require "selenium-webdriver"
 require "tmpdir"
 
 class SeleniumContractTest < Minitest::Test
+  include SessionIsolationContract
+
   APP = lambda do |env|
     if env["PATH_INFO"] == "/export"
       headers = { "content-type" => "application/octet-stream",
