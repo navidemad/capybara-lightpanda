@@ -404,7 +404,9 @@ if ENV["BROWSER"] == "lightpanda"
   Capybara.javascript_driver = :lightpanda
 end
 
-# Rails system tests choose their driver with driven_by:
+# Rails system tests choose their driver with driven_by. Put this line in
+# ApplicationSystemTestCase (Minitest) or in a before(:each, type: :system)
+# block (RSpec):
 driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless` "ruby" "" }}
               </div>
             </li>
@@ -494,6 +496,13 @@ driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headle
               rel="noopener"
             >
               BETA_TESTING.md ↗
+            </a>
+            <a
+              class="btn btn--text"
+              href="{{ .Site.Params.github_url }}#test-it-with-your-ai-agent"
+              rel="noopener"
+            >
+              Let your AI agent try it ↗
             </a>
           </div>
 

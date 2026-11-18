@@ -32,15 +32,29 @@ Gate the driver on an env var while you try it out. Your current setup stays the
 if ENV["BROWSER"] == "lightpanda"
   require "capybara-lightpanda"
 
-  Capybara.default_driver    = :lightpanda
   Capybara.javascript_driver = :lightpanda
 else
   # your existing driver setup
 end
-
-# Rails system tests pick their driver through driven_by, so gate it too:
-driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
 ```
+
+Rails system tests pick their driver through `driven_by`, so gate it too:
+
+```ruby
+# Minitest: test/application_system_test_case.rb
+class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
+  driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
+end
+
+# RSpec: spec/support/system.rb
+RSpec.configure do |config|
+  config.before(:each, type: :system) do
+    driven_by ENV["BROWSER"] == "lightpanda" ? :lightpanda : :selenium_chrome_headless
+  end
+end
+```
+
+If your suite sets `Capybara.default_driver` itself, or calls `Capybara.use_default_driver` in setup or teardown blocks, gate `Capybara.default_driver` the same way. Otherwise those tests keep running on your old driver.
 
 ```bash
 BROWSER=lightpanda bundle exec rails test test/system/
@@ -62,10 +76,10 @@ jobs:
   headless:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: "3.3", bundler-cache: true }
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/lightpanda
           key: lightpanda-${{ hashFiles('Gemfile.lock') }}

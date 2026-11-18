@@ -1,4 +1,4 @@
-{{ $home := "/" | relURL }}
+{{ $home := .Site.Home.RelPermalink }}
 <header class="nav">
   <div class="nav__inner wrap wrap--wide">
     <a class="nav__brand" href="{{ $home }}{{ if .IsHome }}#top{{ end }}" aria-label="capybara-lightpanda home">

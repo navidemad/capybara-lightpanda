@@ -190,10 +190,12 @@ if ENV["BROWSER"] == "lightpanda"
     config.timeout = 15
   end
 
-  Capybara.default_driver = :lightpanda
   Capybara.javascript_driver = :lightpanda
 end
 ```
+
+Only `javascript_driver` moves, so tests that run on `rack_test` stay where they
+are. If your suite sets `Capybara.default_driver` itself, or calls `Capybara.use_default_driver` in setup or teardown blocks, gate `Capybara.default_driver` the same way. Otherwise those tests keep running on your old driver.
 
 ```bash
 BROWSER=lightpanda bundle exec rspec spec/system/
