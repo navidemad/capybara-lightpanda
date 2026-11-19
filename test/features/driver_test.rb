@@ -873,6 +873,42 @@ describe Capybara::Lightpanda::Driver do
       assert_equal "context-menu", session.find(:css, "#result").text
     end
 
+    # Chrome and Cuprite press the target before dblclick: a double-clicked
+    # link is followed and a checkbox toggles. Until 0.20 only `dblclick` was
+    # dispatched here, so these suites saw a different page than on Chrome.
+    it "activates the target before dblclick, as a pointer does" do
+      session.execute_script(<<~JS)
+        var box = document.createElement('input');
+        box.type = 'checkbox';
+        box.id = 'dbl-box';
+        window.boxEvents = [];
+        ['mousedown', 'mouseup', 'click', 'dblclick'].forEach(function(type) {
+          box.addEventListener(type, function(e) { window.boxEvents.push(type + ':' + e.detail); });
+        });
+        document.body.appendChild(box);
+      JS
+      session.find(:css, "#dbl-box").double_click
+
+      assert_equal %w[mousedown:2 mouseup:2 click:2 dblclick:2], session.evaluate_script("window.boxEvents")
+      assert session.find(:css, "#dbl-box").checked?
+    end
+
+    it "right clicks with a press and no click" do
+      session.execute_script(<<~JS)
+        window.ctxEvents = [];
+        ['mousedown', 'mouseup', 'click', 'contextmenu'].forEach(function(type) {
+          document.getElementById('ctx-menu').addEventListener(type, function(e) {
+            window.ctxEvents.push(type + ':' + e.button);
+          });
+        });
+      JS
+      session.find(:css, "#ctx-menu").right_click
+
+      events = session.evaluate_script("window.ctxEvents")
+      assert_equal %w[contextmenu:2 mousedown:2 mouseup:2], events.sort
+      assert_operator events.index("mousedown:2"), :<, events.index("contextmenu:2")
+    end
+
     it "hovers over an element" do
       session.find(:css, "#hoverable").hover
       assert_equal "hovered", session.find(:css, "#result").text
