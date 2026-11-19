@@ -404,6 +404,13 @@ module Capybara
         end
       end
 
+      # Whether `text` keeps the tab innerText puts between table cells.
+      # Selenium's text has a space there, so the stock driver does too; the
+      # Cuprite registration overrides this (see Node#visible_text).
+      def keep_cell_tabs?
+        false
+      end
+
       private
 
       def build_browser

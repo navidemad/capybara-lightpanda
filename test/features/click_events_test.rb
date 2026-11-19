@@ -70,11 +70,25 @@ describe "Capybara::Lightpanda::Node#click event sequence" do
     assert_equal "cleared", session.find(:css, "#clearable-log").text
   end
 
-  # innerText separates table cells with a tab, and Chrome drivers return it:
-  # suites assert "Total due\t$0.00". Collapsing every run of blanks to one
-  # space turned the tab into a space.
-  it "keeps the tab between table cells in text" do
-    assert_equal "Total due\t$0.00", session.find(:css, "#total-row").text
-    assert session.has_text?("Total due\t$0.00", wait: 0)
+  # innerText separates table cells with a tab. Selenium/Chrome returns a
+  # space there and Cuprite the tab (verified 2026-11-19, Chrome for Testing
+  # 158). The stock driver follows Selenium: Solidus asserts "Tracking Number
+  # FOOBAR" across a row, and every released version returned the space.
+  it "separates table cells with a space, as Selenium does" do
+    assert_equal "Total due $0.00", session.find(:css, "#total-row").text
+    assert session.has_text?("Total due $0.00", wait: 0)
+  end
+
+  # The Cuprite registration keeps the tab, so a migrating Cuprite suite's
+  # "Total due\t$0.00" assertions keep passing.
+  it "keeps the tab between table cells under the Cuprite registration" do
+    Capybara::Lightpanda.register_cuprite_driver(:cell_tabs, browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
+    cuprite = Capybara::Session.new(:cell_tabs, TestApp)
+    cuprite.visit("/lightpanda/click_events_test")
+
+    assert_equal "Total due\t$0.00", cuprite.find(:css, "#total-row").text
+    assert cuprite.has_text?("Total due\t$0.00", wait: 0)
+  ensure
+    cuprite&.driver&.quit
   end
 end

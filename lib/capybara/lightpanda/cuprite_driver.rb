@@ -37,6 +37,11 @@ module Capybara
         browser.wait_for_reload(timeout)
       end
 
+      # Cuprite returns innerText's tab between table cells ("Total due\t$0.00").
+      def keep_cell_tabs?
+        true
+      end
+
       def network_traffic(type = nil)
         if type.to_s == "blocked"
           raise Capybara::NotSupportedByDriverError, "Lightpanda does not track Cuprite request interception"
