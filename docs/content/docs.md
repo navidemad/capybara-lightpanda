@@ -314,7 +314,7 @@ page.driver.wait_for_download(timeout: 10)   # blocks, returns the file list
 page.driver.downloads                        # => ["/…/tmp/downloads/export.csv"]
 ```
 
-Coming from Cuprite, `page.driver.browser.downloads.set_behavior(save_path: dir)`
+Coming from Cuprite (0.20.0 or newer), `page.driver.browser.downloads.set_behavior(save_path: dir)`
 works as it does there: it sends later downloads to `dir` until the next
 `reset!` (`behavior: :deny` turns them off). `page.driver.resize(width, height)`
 is accepted too, and is the same call as `current_window.resize_to`.
@@ -327,13 +327,17 @@ page.driver.network.traffic                    # [{request_id:, url:, method:, r
 page.driver.network.pending_connections        # in-flight count
 page.driver.network.clear
 
+# 0.20.0+: a request is in flight until its body arrives, so a page holding
+# an EventSource open never goes idle. Allow for the stream:
+page.driver.wait_for_network_idle(timeout: 5, connections: 1)
+
 page.driver.headers = { "X-Tenant" => "acme" } # cleared by reset! — set per session
 page.driver.add_headers("Accept-Language" => "fr")
 ```
 
 Header overrides ride `Network.setExtraHTTPHeaders`. A `User-Agent` set this way
 changes the request header only. To change `navigator.userAgent` as well, use
-`user_agent=`:
+`user_agent=` (0.20.0 or newer):
 
 ```ruby
 page.driver.user_agent = "Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile"

@@ -226,6 +226,7 @@ Capybara::Lightpanda.register_cuprite_driver(:store_system, window_size: [1200, 
 
 The registration checks copied options before a browser starts. Use `ws_url:` for a remote Lightpanda
 WebSocket endpoint. A Cuprite HTTP `url:`, Chrome flags and proxy settings raise an option error.
+So does `inspector: true`. Keep a Chrome driver for the inspector, or pass `inspector: ENV["INSPECTOR"]`.
 Both `:cuprite` and `:lightpanda` remain available when you load both gems.
 
 With this registration, existing helpers can call `browser.headers.set/add/get/clear`,
