@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [0.20.0] - 2026-11-19
+
+> **Migrating from Cuprite or Selenium?** Keep your driver name with `Capybara::Lightpanda.register_cuprite_driver`, and your Selenium helpers (`manage.cookie_named`, `logs.get(:browser)`, `action.send_keys`, `download_path=`) now work as they are. **Already on `:lightpanda`?** Four defaults changed, listed under Changed: `evaluate_async_script` now times out at Capybara's wait, `wait_for_network_idle` waits for response bodies, `right_click` / `double_click` press the target first, and `logs.get(:browser)` includes uncaught errors.
 
 ### Added
 
@@ -21,7 +23,6 @@
 - **`wait_for_network_idle` waits for response bodies.** A request now counts as in flight until its body has arrived, not just its headers, as in Chrome and Cuprite. A page holding a stream open (`EventSource`, a long download) therefore never goes idle: `wait_for_network_idle` returns `false` after its timeout where it used to return `true`. Pass `connections: 1` (or the number of streams) on such pages. Redirect hops and failed requests still close at once.
 - **`right_click` and `double_click` send the whole press.** They now dispatch `mousedown` and `mouseup` around the `contextmenu` or `click`, and move focus, as a pointer does. `double_click` also activates its target once before `dblclick`, as Chrome and Cuprite do: a double-clicked link is followed and a double-clicked checkbox is toggled. They used to dispatch `contextmenu` or `dblclick` alone.
 - **`logs.get(:browser)` reports uncaught errors.** Uncaught exceptions and unhandled promise rejections now appear as `SEVERE` entries next to console messages, as in Chrome's browser log, so a teardown that fails on `SEVERE` entries catches them. Entry timestamps are wall-clock milliseconds (Lightpanda's own event clock counts seconds since the host booted) and `to_s` reads `"<time> <LEVEL>: <message>"`. `console_logs` and `page_errors` entries gain `received_at` (epoch milliseconds).
-
 - **Typing sends key events.** `send_keys("NT")` now fires `keydown`, `keypress` and `keyup` for each character a US keyboard types, as a user's typing does; it used to fire `input` alone. `fill_in` still writes the value in one step, and now fires one `keydown` and one `keyup` around it. A table filter, autocomplete or counter bound to `keyup` or `keydown` runs as it does on Selenium and Cuprite. A page that cancels `keydown` to refuse a character now refuses it under `send_keys` too.
 - **A user agent the browser refuses is no longer silent.** Lightpanda ignores any user agent containing `Mozilla` and answers as if it had applied it, so the suite ran on `Lightpanda/1.0` with no signal. `user_agent=` raises on such a value and `headers=` / `add_headers` print a warning. Drop the `Mozilla/5.0` prefix and keep the device tokens: the `browser` and `device_detector` gems read `Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile` as an iPhone.
 
