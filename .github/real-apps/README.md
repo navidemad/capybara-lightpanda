@@ -75,6 +75,14 @@ The number to drive down is the unattributed count, then the `unknown` and
 `REFRESH=1` rewrites those wholesale. After a refresh, retire any cause that no
 longer matches an entry (see the header of `causes.yml`).
 
+A baseline names examples, not failures, so an example in it that starts
+failing for another reason still passes the gate. Once every entry of a
+target's baseline has a cause, set `strict_causes: true` on its matrix entry:
+`check_baseline.rb` then runs with `STRICT_CAUSES=1` and fails the job when a
+known example's message matches no cause. GoodJob, TryRuby and AlchemyCMS run
+strict. The roll-up job also lists the targets that produced no report, since
+a target left out of a `targets` subset still shows a green job.
+
 ## Running locally
 
 Use the boot harness — it is this workflow ported step for step, reading the

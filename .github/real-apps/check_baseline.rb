@@ -13,6 +13,9 @@
 #   - the report is missing/unreadable (rspec crashed before writing it)
 #   - rspec recorded errors outside of examples, or ran 0 examples
 #   - any example fails that is NOT in the baseline (a regression)
+#   - STRICT_CAUSES=1 and a baseline example fails with a message no cause in
+#     causes.yml matches: the example is known, but this failure is not the
+#     diagnosed one, so a different regression may be hiding under its name
 #
 # Exit 0 otherwise. Baseline entries that now pass are reported as warnings —
 # refresh the baseline file to lock in the improvement. To refresh: download
@@ -104,6 +107,13 @@ unattributed = []
   slug ? attributed[slug] << key : unattributed << key
 end
 
+# A strict target's baseline is fully diagnosed, so a known example whose
+# message matches no cause now fails for some other reason: treat it as a
+# regression instead of letting the baseline hide it.
+strict = ENV["STRICT_CAUSES"] == "1"
+unexplained = strict ? unattributed : []
+failing = !new_failures.empty? || !unexplained.empty?
+
 # JSON mode: emit the comparison as one machine-readable object and skip the
 # human-readable / step-summary output. The cross-target aggregate job
 # (real-apps.yml) re-runs this per downloaded report so the roll-up shares this
@@ -122,9 +132,10 @@ if ENV["CHECK_FORMAT"] == "json"
     # its cause without re-implementing the matcher (script/real-app/spec.sh).
     # The aggregate job reads only the counts above; this is additive.
     "attributions" => attributed.each_with_object({}) { |(slug, keys), acc| keys.each { |k| acc[k] = slug } },
-    "unattributed" => unattributed
+    "unattributed" => unattributed,
+    "unexplained" => unexplained
   )
-  exit(new_failures.empty? ? 0 : 1)
+  exit(failing ? 1 : 0)
 end
 
 if ENV["REFRESH"] == "1"
@@ -172,6 +183,13 @@ unless new_failures.empty?
   new_failures.each { |k| step_summary << "- :x: #{k}" }
 end
 
+unless unexplained.empty?
+  puts "\nKnown examples failing for an undiagnosed reason (STRICT_CAUSES):"
+  unexplained.each { |k| puts "  FAIL #{k}" }
+  step_summary << "\n**#{unexplained.size} known examples failing for an undiagnosed reason** (STRICT_CAUSES):"
+  unexplained.each { |k| step_summary << "- :x: #{k}" }
+end
+
 File.write(ENV["GITHUB_STEP_SUMMARY"], "#{step_summary.join("\n")}\n", mode: "a") if ENV["GITHUB_STEP_SUMMARY"]
 
-exit 1 unless new_failures.empty?
+exit 1 if failing

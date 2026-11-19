@@ -9,7 +9,7 @@ index 754dad4..56a58cd 100644
 +
 +gem "capybara-lightpanda", path: "__CAPYBARA_LIGHTPANDA_PATH__", require: false
 diff --git a/spec/spec_helper.rb b/spec/spec_helper.rb
-index 0dec783..05f2ade 100644
+index 0dec783..815cc1e 100644
 --- a/spec/spec_helper.rb
 +++ b/spec/spec_helper.rb
 @@ -4,7 +4,7 @@
@@ -21,7 +21,7 @@ index 0dec783..05f2ade 100644
  
  # Prefetch the first load, so that we don't timeout
  Middleman.server.call("PATH_INFO" => "/javascripts/application.js", "SCRIPT_NAME" => "/")
-@@ -25,19 +25,12 @@
+@@ -25,19 +25,17 @@
  
    config.expect_with(:rspec) { |c| c.syntax = :should }
  
@@ -39,7 +39,12 @@ index 0dec783..05f2ade 100644
 -      url_blocklist: %r{https://docs.ruby-lang.org/},
 -    )
 +  Capybara.javascript_driver = :tryruby
-+  Capybara::Lightpanda.register_cuprite_driver(:tryruby, window_size: [1200, 800], timeout: 20)
++  Capybara::Lightpanda.register_cuprite_driver(:tryruby,
++    window_size: [1200, 800],
++    inspector: ENV['INSPECTOR'],
++    headless: !ENV['NO_HEADLESS'],
++    timeout: 20,
++  )
 +
 +  config.before(:each, js: true) do
 +    # opal-browser detects its engine from navigator.userAgent during boot.

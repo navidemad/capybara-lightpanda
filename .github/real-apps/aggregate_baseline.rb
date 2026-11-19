@@ -66,6 +66,26 @@ ok.each do |r|
 end
 errored.each { |r| lines << "| #{r['target']} | — | — | — | ⚠️ report missing/crashed | — |" }
 
+# Matrix entries skipped by the `targets` input (or that died before writing a
+# report) leave no artifact, yet their jobs show green. Name them.
+expected = ENV.fetch("EXPECTED_TARGETS", "").split(",").map(&:strip).reject(&:empty?)
+not_run = expected - results.map { |r| r["target"] }
+unless not_run.empty?
+  lines << ""
+  lines << "**Not run in this workflow run (no report):** #{not_run.join(', ')}"
+end
+
+unexplained_targets = ok.select { |r| r["unexplained"]&.any? }
+unless unexplained_targets.empty?
+  lines << ""
+  lines << "## ❌ Known examples failing for an undiagnosed reason (STRICT_CAUSES)"
+  unexplained_targets.each do |r|
+    lines << ""
+    lines << "**#{r['target']}**"
+    r["unexplained"].each { |k| lines << "- #{k}" }
+  end
+end
+
 fixed_targets = ok.select { |r| r["fixed"].any? }
 unless fixed_targets.empty?
   lines << ""
