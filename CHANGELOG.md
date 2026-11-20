@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.20.1] - 2026-11-20
+
+> **The gem now downloads Lightpanda 1.0.5** (was 1.0.4). It lands in a new file in `~/.cache/lightpanda/`, so the next run after `bundle update` fetches it. To stay on 1.0.4, set `LIGHTPANDA_VERSION=1.0.4`.
+
+### Changed
+
+- **Element positions follow the page's layout more closely.** Lightpanda 1.0.5 places boxes by block flow, `position: absolute/relative` and grid instead of stacking them at fixed offsets, so `obscured?`, `wait_for_stop_moving` and HTML5 `drag_to` see different rectangles than on 1.0.4. The gem's own suites and Capybara's shared specs pass unchanged.
+
+### Fixed
+
+- **`obscured?` no longer reports an element as covered by an empty block or an `inert` overlay** that follows it in the page.
+- **Pages that wait on upload progress now finish:** `xhr.upload` fires its `loadstart`/`progress`/`load`/`loadend` events.
+
 ## [0.20.0] - 2026-11-19
 
 > **Migrating from Cuprite or Selenium?** Keep your driver name with `Capybara::Lightpanda.register_cuprite_driver`, and your Selenium helpers (`manage.cookie_named`, `logs.get(:browser)`, `action.send_keys`, `download_path=`) now work as they are. **Already on `:lightpanda`?** Four defaults changed, listed under Changed: `evaluate_async_script` now times out at Capybara's wait, `wait_for_network_idle` waits for response bodies, `right_click` / `double_click` press the target first, and `logs.get(:browser)` includes uncaught errors.
