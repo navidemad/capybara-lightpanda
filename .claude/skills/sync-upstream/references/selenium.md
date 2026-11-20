@@ -27,17 +27,18 @@ should copy". A Selenium method we don't answer is a feature request, not drift.
 ## The only surface in scope
 
 Each entry point with its Selenium counterpart (paths under
-`rb/lib/selenium/webdriver/common/`; surface as of 2026-11-18, PRs #277–#283):
+`rb/lib/selenium/webdriver/common/`; surface as of 2026-11-20, PRs #277–#283, #287, #288):
 
 | Ours | Selenium counterpart | What must stay true |
 | --- | --- | --- |
-| `selenium_compat.rb#logs` → `Logs#get(:browser)`, `#available_types` | `logs.rb`, `log_entry.rb` | entries answer `level` / `message` / `timestamp`; `level` is the severity string (`SEVERE`/`WARNING`/`INFO`/`DEBUG`), not the CDP console type; uncaught page errors are SEVERE entries |
+| `selenium_compat.rb#logs` → `Logs#get(:browser)`, `#available_types` | `logs.rb`, `log_entry.rb` | entries answer `level` / `message` / `timestamp` (wall-clock epoch ms) and `time` / `as_json` / `to_s` (`"#{time} #{level}: #{message}"`), matching `LogEntry` exactly (checked 2026-11-20); `level` is the severity string (`SEVERE`/`WARNING`/`INFO`/`DEBUG`), not the CDP console type; uncaught page errors are SEVERE entries |
 | `#manage.window.resize_to` | `manager.rb`, `window.rb` | `(width, height)` integers; we reject zero |
 | `#manage.all_cookies` / `cookie_named` / `delete_all_cookies` | `manager.rb` | document-scoped; Hash keys `name value domain path expires(DateTime) secure http_only same_site`; `cookie_named` raises `NoSuchCookieError` |
 | `#download_path=` | `driver_extensions/downloads_files.rb` | directory path |
 | `#execute_async_script` | `driver.rb` | script receives a completion callback as its last argument |
 | `#execute_cdp` | `driver_extensions/has_cdp.rb` | `(method_string, **params)`, page-session scoped |
 | `#switch_to` | `target_locator.rb` | we raise `NotSupportedByDriverError` with a migration message; only revisit if Lightpanda ever gains post-hoc dialog handling |
+| `#action.send_keys(*keys).perform` | `driver.rb#action(**)`, `action_builder.rb` | arrow keys and Enter only, others raise `NotSupportedByDriverError`; ours takes no keywords where Selenium's `action(**)` takes `async:`/`devices:`/`duration:` |
 | `node.rb#native` (self) + `#attribute` | `element.rb` | `attribute` reads live properties (e.g. `validationMessage`) as strings |
 
 ```bash
