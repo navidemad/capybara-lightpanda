@@ -81,7 +81,7 @@ body:
     attributes:
       label: Lightpanda binary
       description: What `page.driver.browser.version` prints (or `bundle exec capybara-lightpanda version`).
-      placeholder: "1.0.4"
+      placeholder: "1.0.5"
     validations:
       required: true
 

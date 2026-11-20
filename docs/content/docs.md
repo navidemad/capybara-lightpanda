@@ -100,8 +100,8 @@ end
 ### Choosing the browser version { #pinning }
 
 Each version of the gem downloads one Lightpanda release: the one it was
-validated against (1.0.4 for this version). It lands in its own
-version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.4`) and is never
+validated against (1.0.5 for this version). It lands in its own
+version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.5`) and is never
 refreshed on age, so the browser changes only when you upgrade the gem. Cache
 that directory in CI and the browser is as reproducible as your `Gemfile.lock`.
 
