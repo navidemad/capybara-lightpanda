@@ -1,6 +1,6 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-18 at `786d715f8` (build 12255). The published nightly is 12253 (`166f503a7`, 2026-11-18); latest release 1.0.4 (2026-11-13) is 12015 (`44d096b9a`, the 1.0.4-rc1 commit), and `Binary::DEFAULT_VERSION` pins it.
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-20 at `f3a9e6abb` (build 12335). The published nightly is 12329 (`0eb33c8c9`, 2026-11-20); latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit). `Binary::DEFAULT_VERSION` still pins 1.0.4 (12015, `44d096b9a`); 1.0.5 is validated (below) and ready to pin.
 
 ## Version and transport constraints
 
@@ -12,7 +12,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## CDP commands used by the gem
 
-All **36 distinct literal commands** below are admitted by the dispatch enums at 12253 and at the audited SHA (12255). Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **36 distinct literal commands** below are admitted by the dispatch enums at 1.0.5 (12297) and at the audited SHA (12335), and the 14 Zig-emitted events below are still emitted there. Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
 **Multi-target CDP (#3945, 11844, in the floor):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither.
 
@@ -28,7 +28,7 @@ All **36 distinct literal commands** below are admitted by the dispatch enums at
 | Runtime | `callFunctionOn`, `enable`, `evaluate`, `getProperties`, `releaseObject` |
 | Target | `attachToTarget`, `createBrowserContext`, `createTarget`, `disposeBrowserContext` |
 
-Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The `LP.getMarkdown` (driver.rb) and `Network.setBlockedURLs` (selenium_compat.rb) strings are doc-comment examples, not built-in calls.
+Caller-controlled `command`, `page_command` and `execute_cdp` accept arbitrary names; these escape hatches are not a finite inventory. The opt-in Cuprite page's `cuprite_page.rb#command` forwards one of them, `Emulation.setTimezoneOverride`, then checks `Intl`'s zone and raises `NotSupportedByDriverError` when the browser ignored it (all releases until our #4701). The `LP.getMarkdown` (driver.rb) and `Network.setBlockedURLs` (selenium_compat.rb) strings are doc-comment examples, not built-in calls.
 
 ### Subscribed events (15 distinct names)
 
@@ -54,7 +54,7 @@ DOM.querySelector            DOM.querySelectorAll (finds go through JS in Runtim
 Page.stopLoading (stub)    Page.close
 Page.printToPDF (fake PDF)
 DOM.getDocument              DOM.resolveNode
-DOM.getBoxModel (returns real getBoundingClientRect geometry)
+DOM.getBoxModel (real getBoundingClientRect geometry; Chrome's error under display:none from #4684, 12280)
 DOM.scrollIntoViewIfNeeded
 DOM.performSearch            DOM.getSearchResults        DOM.discardSearchResults
 DOM.getContentQuads          DOM.requestChildNodes
@@ -99,9 +99,9 @@ LP.configureCDP              LP.getContentSignal
 - **Resources:** CLI resource loading defaults off. Process passes `--load-resources stylesheet` (+ image when requested); create_page sends LP.configureLoading with subFrame/worker true. Keep iframe/worker configuration on the existing per-context CDP path; the frame-loading/build-args tests prevent CLI/CDP drift. `subFrame: false` is not a cheap middle ground: from #4515 (11917) such an iframe gets an about:blank window whose HTTP and WebSocket requests are all refused.
 - **External CSS:** loaded synchronously into the cascade; a sheet over 4 MiB is dropped whole. A large development sheet can expose normally hidden menus.
 - **Viewport:** Emulation changes innerWidth/Height, matchMedia and layout metrics; rects remain approximate. Resizing fires MediaQueryList changes, but stylesheet @media cascade was only re-resolved after navigation in the verified viewport tests. Default 1920×1080 mirrors the browser; changing it shifts existing media branches.
-- **Hit testing:** retain owning-frame and outer-to-inner shadow checks. ShadowRoot hit testing (#4184, 11071) is in the floor; predicates.js still feature-detects it. Native shadow visibility excludes unslotted light DOM/replaced slot fallback (#4190). Hit testing ignores stacking/positioning. In the floor (#4371, not in 1.0.1; block boxes start at the parent's left edge since #4342, 11478) an empty following block can cover an absolutely positioned sibling's overflow, and isObscured then reports true. CLICK_JS never hit-tests, so clicks are unaffected.
-- **Styles/text:** checkVisibility uses active stylesheets and UA rules, including hidden inputs, closed details and popovers. getComputedStyle does not resolve arbitrary cascade properties; do not replace native visibility with a JS cascade walk. Position/offsetParent obey stylesheet position (#4142). Screenshots are text-layout PNGs, not visual-regression output; printToPDF remains fake. Cascade gaps on 1.0.4 (verified 2026-11-18): rules inside `@supports` are dropped, a `var()` value is not resolved (`display: var(--d)` does not hide, `text-transform: var(--tt)` does not apply), and `text-transform: capitalize` and `::first-letter` leave innerText as written (uppercase/lowercase apply), so `text` casing can differ from Chrome.
-- **Emulation stubs:** `Emulation.setTimezoneOverride` answers `{}` and does nothing; the `timezone` option sets `TZ` on the spawned process instead (per process). `Emulation.setUserAgentOverride` answers `{}` even when it refuses a `Mozilla` value; a Mozilla-less value moves the header and `navigator.userAgent` until the context is disposed, and `Network#user_agent=` raises on a refused one (verified 2026-11-18 on 1.0.4, `emulation_test.rb`).
+- **Hit testing:** retain owning-frame and outer-to-inner shadow checks. ShadowRoot hit testing (#4184, 11071) is in the floor; predicates.js still feature-detects it. Native shadow visibility excludes unslotted light DOM/replaced slot fallback (#4190). On 1.0.4 hit testing ignores stacking/positioning (layered from 12260, see below). In the floor (#4371, not in 1.0.1; block boxes start at the parent's left edge since #4342, 11478) an empty following block can cover an absolutely positioned sibling's overflow, and isObscured then reports true. CLICK_JS never hit-tests, so clicks are unaffected.
+- **Styles/text:** checkVisibility uses active stylesheets and UA rules, including hidden inputs, closed details and popovers. getComputedStyle does not resolve arbitrary cascade properties; do not replace native visibility with a JS cascade walk. Position/offsetParent obey stylesheet position (#4142). Screenshots are text-layout PNGs, not visual-regression output; printToPDF remains fake. Cascade gaps on 1.0.4 (verified 2026-11-18): rules inside `@supports` are dropped (applied from 12324, #4708), a `var()` value is not resolved (`display: var(--d)` does not hide, `text-transform: var(--tt)` does not apply), and `text-transform: capitalize` and `::first-letter` leave innerText as written (uppercase/lowercase apply), so `text` casing can differ from Chrome.
+- **Emulation stubs:** `Emulation.setTimezoneOverride` answers `{}` and does nothing (our #4701 open); the `timezone` option sets `TZ` on the spawned process instead (per process). `Emulation.setUserAgentOverride` answers `{}` even when it refuses a `Mozilla` value; a Mozilla-less value moves the header and `navigator.userAgent` until the context is disposed, and `Network#user_agent=` raises on a refused one (verified 2026-11-18 on 1.0.4, `emulation_test.rb`).
 - **Scrolling:** positions exist and rects follow window scroll, but element/window scrolling and alignment do not model a real layout. Keep scroll_to/scroll_by no-ops and the scroll skip. Short pages clamp at zero, so scrolling to the bottom may emit no event.
 - **Pointer focus:** untrusted mousedown does not focus; CLICK_JS must focus the enabled target (labels resolve to controls, contenteditable to the editing host), or blur when appropriate. A non-focusable send_keys target must blur the previous field.
 - **Typing:** a US-layout character goes out as keyDown (with `text`) + keyUp so keydown/keypress/keyup fire; Lightpanda inserts the keyDown's text itself. Other characters and newlines stay on Input.insertText (`input` only; a newline keyDown would be Enter). Keys follow the chain of focused `<iframe>` elements (`user_input.zig#focusedFrame`): `focus()` on a `<body>` editing host does not focus its iframe, so SEND_KEYS_FOCUS_JS focuses each owning iframe itself (`key_listeners_test.rb`).
@@ -134,21 +134,26 @@ LP.configureCDP              LP.getContentSignal
 
 ## Behavior above the floor (12015)
 
-Published nightly only (12016–12253; main adds nothing gem-relevant through 12255):
+In release 1.0.5 (12297) and the nightly, not in the 1.0.4 pin. Validated 2026-11-20 on the 1.0.5 aarch64-macos binary: `test:all` 810 runs and `spec:shared:parallel` green; the skip audit passed none of its 43 examples, so no skip pattern is obsolete.
 
 - `elementFromPoint` and trusted mouse input skip `inert` subtrees (#4548, 12019), so isObscured stops reporting an inert overlay as covering what is beneath it (Chrome parity).
 - `xhr.upload` dispatches `loadstart`/`progress`/`load`/`loadend` (or `error`/`abort`/`timeout`) (#4529, ours, 12116); below it a page waiting on upload progress never saw the upload finish.
 - Style invalidation is selective (#4583, 12029, then #4610–#4641, extended to layout caches by #4651, 12226): an attribute write clears the style cache only when a stylesheet selector names that attribute, and DOM insertion/removal invalidates the parent's subtree unless `:has`/`:empty`/form pseudo-classes reach further. An `isVisible` that stays stale after a DOM mutation on a nightly but not on 1.0.4 is an upstream invalidation bug, not a predicate bug.
 - Navigation API `NavigateEvent.intercept()` (#4243, 12199) keeps an intercepted cross-document navigation in the document: a same-document commit that emits only `Page.navigatedWithinDocument`, never `frameStartedNavigating`, so the click sniff sees no navigation, as for `pushState`.
-- Layout rewrite (#4650, 12212; it supersedes the closed #4549/#4561): box tops follow block flow and `position: absolute/relative`, heights follow content (a text line is 20px; an empty block keeps a fallback height, #4679 open) instead of the 5px-per-element stack, and widths are text-aware. Hit testing still picks the last element in tree order whose box holds the point (no z-index), on these boxes. isObscured, `wait_for_stop_moving`, HTML5_DRAG_JS and `DOM.getBoxModel` see other rects than on 1.0.4. Validated 2026-11-18 on nightly 12226 (aarch64-macos): `test:all` 742 runs and `spec:shared:parallel` green, no regression; the skip audit passed only `#obscured? should see overlapped elements as obscured`, which passes on 1.0.4 too.
-- `display: grid` layout, and text wraps at the computed width rather than only an explicit one (#4673, 12238), so rects shift again. Not yet validated on 12253.
+- Layout rewrite (#4650, 12212; it supersedes the closed #4549/#4561): box tops follow block flow and `position: absolute/relative`, heights follow content (a text line is 20px; an empty block keeps a fallback height, #4679 open) instead of the 5px-per-element stack, and widths are text-aware. isObscured, `wait_for_stop_moving`, HTML5_DRAG_JS and `DOM.getBoxModel` see other rects than on 1.0.4. Validated 2026-11-18 on nightly 12226 (aarch64-macos): `test:all` 742 runs and `spec:shared:parallel` green, no regression; the skip audit passed only `#obscured? should see overlapped elements as obscured`, which passes on 1.0.4 too.
+- `display: grid` layout, and text wraps at the computed width rather than only an explicit one (#4673, 12238); `em`/`rem`/basic `calc()` lengths (#4692, 12263) and `min-height`/`max-height` (#4693, 12266). Rects shift again.
+- Hit testing layers paint order (#4689, 12260): a positioned box and its subtree win over the normal flow even earlier in the tree, a negative `z-index` loses to it; other `z-index` values count as `auto`. Within a layer the last element in tree order still wins. It clears #4371's symptom: on the issue's page the empty `#out` block still overlaps `#knob` on 1.0.5, but `elementFromPoint` returns the knob and `#knob.obscured?` is false (true on 1.0.4; verified 2026-11-20).
+
+Nightly only (12298–12329):
+
+- Rules inside `@supports` apply (#4708, ours, 12324); 1.0.5 still drops them.
 
 ## Upstream open issues that affect this gem
 
 | Issue | Impact | Description |
 |---|---|---|
 | #4263 | Hit testing | Fixed inset overlays retain synthetic bounds; fixes #4264/#4293 closed unmerged, maintainer wants the design settled in issues. |
-| #4371 | Hit testing | Regression in the floor (1.0.1 OK): an empty block after a positioned element spans the viewport and wins elementFromPoint. |
+| #4371 | Hit testing | Regression in the floor (1.0.1 OK): an empty block after a positioned element spans the viewport and wins elementFromPoint. Symptom cleared from 12260 by layered hit testing (#4689, verified on 1.0.5); still open, still hits the 1.0.4 pin. |
 | #4298 | Text | innerText line breaks follow the tag, not computed display, so visible_text newlines can differ from Chrome. |
 | #4251 | Keyboard | Ctrl deletion/arrows do not perform word editing. |
 | (wishlist A63) | Drag | scrollIntoView ignores alignment options; HTML5_DRAG_JS centers manually to avoid pushing neighbours offscreen. |
