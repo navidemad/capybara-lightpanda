@@ -1,6 +1,6 @@
 ---
 name: release-rubygems
-description: Cut a new release of the capybara-lightpanda gem end-to-end — bump version.rb, prepend a CHANGELOG section drafted from commits since the last tag, run the same pre-flight as CI (rubocop + test:unit), commit the bump on a release branch, merge a release PR, tag the squash-merge SHA, push the tag, and surface the GitHub Actions URL so the user can approve the rubygems environment. Use this skill whenever the user says "cut a release", "release the gem", "ship the gem", "ship 0.2.0" / any specific version, "bump and release", "tag a new version of capybara-lightpanda", "publish to rubygems", or otherwise signals they want to push a new version of capybara-lightpanda to RubyGems via the Trusted Publishing workflow. Do NOT use for: editing CHANGELOG.md outside a release flow, bumping VERSION without releasing, releases of any other gem (this skill is hardcoded to capybara-lightpanda and refuses to run elsewhere), or fixing a release that already failed mid-flight (handle that manually — the steps here are not idempotent past the tag push).
+description: Cut a new release of the capybara-lightpanda gem end-to-end — bump version.rb, prepend a CHANGELOG section drafted from commits since the last tag, run the same pre-flight as CI (rubocop + test:unit), commit the bump on a release branch, merge a release PR, tag the squash-merge SHA, push the tag (which publishes to RubyGems with no further approval), and surface the GitHub Actions URL. Use this skill whenever the user says "cut a release", "release the gem", "ship the gem", "ship 0.2.0" / any specific version, "bump and release", "tag a new version of capybara-lightpanda", "publish to rubygems", or otherwise signals they want to push a new version of capybara-lightpanda to RubyGems via the Trusted Publishing workflow. Do NOT use for: editing CHANGELOG.md outside a release flow, bumping VERSION without releasing, releases of any other gem (this skill is hardcoded to capybara-lightpanda and refuses to run elsewhere), or fixing a release that already failed mid-flight (handle that manually — the steps here are not idempotent past the tag push).
 user_invocable: true
 model: opus
 effort: high
@@ -115,6 +115,13 @@ If anything fails: stop, surface the error, do not commit. The repo is still cle
 
 This is the point of no return for the **tag push** specifically. The bump lands on `main` via a release branch + PR (nothing is committed or pushed to `main` directly). Then we tag the squash-merge SHA (`origin/main`) and push only the tag.
 
+**The tag push publishes the gem: there is no approval step after it.** Since 2026-11-20 the `rubygems` environment has no required reviewers. Its gate is the tag itself:
+
+- the environment deploys only from `v*` tags (its deployment policy), and
+- the repository ruleset "Release tags (v*)" lets only repository admins create, move or delete `v*` tags.
+
+So the user's release request plus their approval of the changelog (Step 2) is the go-ahead. Never push a `v*` tag in any other flow, and never to test something. The workflow still runs its checks (tag vs `version.rb` and `CHANGELOG.md`, rubocop, `test:unit`) before `rubygems/release-gem` publishes, so a failure there leaves the version unburned.
+
 ```bash
 # Stage the bump
 git add -u                                  # version.rb, CHANGELOG.md, version-bearing files, Gemfile.lock
@@ -153,14 +160,12 @@ Tag vX.Y.Z pushed. The release workflow is running:
 
   https://github.com/<owner>/capybara-lightpanda/actions/workflows/release.yml
 
-Next steps:
-1. The single 'release' job waits at the 'rubygems' environment if you set
-   required reviewers. Click "Review deployments" → Approve.
-2. It checks the tag against version.rb and CHANGELOG.md, runs rubocop and
-   test:unit, then rubygems/release-gem@v1 publishes to rubygems.org via OIDC.
-3. Its last step copies this version's CHANGELOG section into the GitHub
-   Release body (softprops/action-gh-release@v3, plus GitHub's generated
-   notes). No further action needed once approved.
+Nothing to approve. The single 'release' job:
+1. checks the tag against version.rb and CHANGELOG.md, runs rubocop and
+   test:unit, then rubygems/release-gem@v1 publishes to rubygems.org via OIDC;
+2. copies this version's CHANGELOG section into the GitHub Release body
+   (softprops/action-gh-release@v3, plus GitHub's generated notes).
+The gem is live once the run is green.
 
 If a check fails on the runner before publishing (shouldn't — we ran them locally), the tag is
 still on origin. Delete it with:
