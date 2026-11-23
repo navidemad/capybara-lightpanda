@@ -163,6 +163,29 @@ describe Capybara::Lightpanda::Process do
       refute_match(/iframe|worker/, value)
     end
 
+    # Without the flag a build that supports runtime zones still ignores
+    # Emulation.setTimezoneOverride, so a Cuprite suite's per-test zone raises.
+    # With it, a binary below #4701 exits at boot: the gate must hold exactly
+    # at 12374, and a release (no counter) never gets the flag.
+    describe "runtime timezone override" do
+      flag = "--cdp-allow-timezone-override"
+
+      it "is passed from build 12374" do
+        process.instance_variable_set(:@nightly_build, Gem::Version.new("12374"))
+        assert_includes process.send(:build_args), flag
+      end
+
+      it "is withheld from the build before" do
+        process.instance_variable_set(:@nightly_build, Gem::Version.new("12373"))
+        refute_includes process.send(:build_args), flag
+      end
+
+      it "is withheld from a release binary" do
+        process.instance_variable_set(:@release, Gem::Version.new("1.0.5"))
+        refute_includes process.send(:build_args), flag
+      end
+    end
+
     it "appends LIGHTPANDA_EXTRA_ARGS split on whitespace" do
       ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log-format pretty --log-filter telemetry"
       assert_equal %w[--log-format pretty --log-filter telemetry],
