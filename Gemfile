@@ -19,6 +19,6 @@ group :test do
   gem "ostruct"
   gem "puma", "~> 8"
   gem "rspec", "~> 3.0"
-  gem "selenium-webdriver", "4.52.0", require: false
+  gem "selenium-webdriver", "4.53.0", require: false
   gem "sinatra", "~> 4.2"
 end
