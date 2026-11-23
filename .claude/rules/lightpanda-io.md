@@ -144,7 +144,7 @@ In release 1.0.5 (12297, the pin) and the nightly, not in the 1.0.4 floor. Valid
 - `display: grid` layout, and text wraps at the computed width rather than only an explicit one (#4673, 12238); `em`/`rem`/basic `calc()` lengths (#4692, 12263) and `min-height`/`max-height` (#4693, 12266). Rects shift again.
 - Hit testing layers paint order (#4689, 12260): a positioned box and its subtree win over the normal flow even earlier in the tree, a negative `z-index` loses to it; other `z-index` values count as `auto`. Within a layer the last element in tree order still wins. It clears #4371's symptom: on the issue's page the empty `#out` block still overlaps `#knob` on 1.0.5, but `elementFromPoint` returns the knob and `#knob.obscured?` is false (true on 1.0.4; verified 2026-11-20).
 
-Nightly only (12298–12369), not validated against the suites:
+Nightly only (12298–12369). Validated 2026-11-23 on nightly 12369 (aarch64-macos): `test:all` 810 runs and `spec:shared:parallel` green; the skip audit passed none of its 43 examples.
 
 - Rules inside `@supports` apply (#4708, ours, 12324); 1.0.5 still drops them.
 - `navigator.clipboard.readText`/`writeText` exist (#4728, 12347), on a text buffer per CDP connection, never the system clipboard, kept across navigations. `writeText` succeeds unless `clipboard-write` is denied; `readText` rejects with NotAllowedError unless `Browser.grantPermissions` granted `clipboard-read`, which the gem never sends. Below it a copy button calling `writeText` threw.
