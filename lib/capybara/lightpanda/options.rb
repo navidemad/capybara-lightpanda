@@ -56,8 +56,8 @@ module Capybara
       # Network domain like any other — they show in `network.traffic` and
       # count toward `wait_for_network_idle`.
       # timezone: IANA zone ("America/New_York") the browser reports through
-      # Date and Intl. Lightpanda accepts Emulation.setTimezoneOverride but
-      # ignores it (verified 2026-11-18 on 1.0.4 and by source at 12238), so the
+      # Date and Intl. Releases accept Emulation.setTimezoneOverride but ignore
+      # it (runtime zones need build 12374, see Process#build_args), so the
       # zone is set through the TZ variable of the browser process alone: the
       # test process and the app it boots keep their own. It is per process,
       # not per test, and has no effect with ws_url (the gem spawns nothing).

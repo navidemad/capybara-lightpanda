@@ -610,8 +610,24 @@ module Capybara
         resources = ["stylesheet"]
         resources << "image" if @options.load_images
         base.push("--load-resources", resources.join(","))
+        base.push("--cdp-allow-timezone-override") if runtime_timezone_override?
         extra = ENV.fetch("LIGHTPANDA_EXTRA_ARGS", "").split
         base + extra
+      end
+
+      # Upstream #4701 (build 12374) makes Emulation.setTimezoneOverride move
+      # the target's Date and Intl zone (the opt-in Cuprite page sends it), but
+      # only under this flag, because ICU's zone is process-wide. One process
+      # serves one driver here, and disposing the context on reset restores the
+      # process zone, so the override stays per test. A binary below 12374
+      # exits on the flag ("unknown argument"), so it is gated on the build
+      # counter. No release carries it yet (1.0.5 is 12297): gate the first one
+      # that does here, then drop the gate once the floor covers it.
+      TIMEZONE_OVERRIDE_BUILD = Gem::Version.new("12374")
+      private_constant :TIMEZONE_OVERRIDE_BUILD
+
+      def runtime_timezone_override?
+        !@nightly_build.nil? && @nightly_build >= TIMEZONE_OVERRIDE_BUILD
       end
 
       def wait_for_ready
