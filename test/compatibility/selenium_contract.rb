@@ -78,6 +78,15 @@ class SeleniumContractTest < Minitest::Test
                  @page.evaluate_script("window.keys.map(e => e.slice(1))")
   end
 
+  # Shared helpers pass Selenium's ActionBuilder keywords; a driver that
+  # rejects them fails the helper before any key is sent.
+  def test_action_takes_seleniums_keywords_and_rejects_unknown_ones
+    @page.execute_script("window.keys = []; document.onkeydown = e => window.keys.push(e.key);")
+    @browser.action(async: true, devices: [], duration: 0).send_keys(:arrow_down).perform
+    assert_equal ["ArrowDown"], @page.evaluate_script("window.keys")
+    assert_raises(ArgumentError) { @browser.action(asynchronous: true) }
+  end
+
   def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
     @page.execute_script(<<~JS)
       window.keys = [];
