@@ -54,7 +54,11 @@ module Capybara
           end
         end
 
-        def action
+        # Takes Selenium's keywords so `action(async: true)` doesn't raise, and
+        # an unknown one still does. They only tune how a remote end replays
+        # pointer input: keys here go out in order and #perform waits for the
+        # page either way.
+        def action(async: false, devices: [], duration: 250) # rubocop:disable Lint/UnusedMethodArgument
           KeyboardActions.new(self)
         end
 
