@@ -44,7 +44,6 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026
 ### Outstanding adoption candidates
 
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
-- **[medium]** Ferrum 0.21 API ↔ `browser/navigation.rb`, `request_headers.rb#add`, `network.rb`, `downloads.rb`, `cuprite_driver.rb`: `go_to(url, referrer:)` replaces `headers.add(permanent:)` (`5743cc85dc`), `network.emulate(user_agent:, accept_language:)` replaces navigator overrides through headers (`4702d99a79`), and the wait family becomes `await_navigation { }`, `await_download { }`, `network.wait_idle(!)`, `go_to!`/`refresh!`/`back!`/`forward!` (#716, #717; the 0.20 names forward with a warning until 0.22). Cuprite 0.21 docs show the new names (#367–#370), so a suite written against them gets ArgumentError/NoMethodError on our Cuprite page. Keep `permanent:` and the 0.20 names for native callers; the private `browser/navigation.rb#await_navigation` (returns a deadline) must be renamed before a Ferrum-shaped one is exposed. Ferrum's go_to Referer-resend fix doesn't transfer: `RequestHeaders#set` already resets `@referrer`. Ferrum 0.21.0 shipped 2026-11-24 and Cuprite main requires it (`1c21c997ff`); ship before Cuprite 0.21 releases.
 
 ### Diverged on purpose
 
