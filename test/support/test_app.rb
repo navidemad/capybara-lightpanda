@@ -467,6 +467,13 @@ class TestApp
     request.user_agent.to_s
   end
 
+  # Echoes the headers Ferrum 0.21's go_to(referrer:) and network.emulate set
+  # (ferrum_021_api_test.rb).
+  get "/lightpanda/request-headers" do
+    content_type "text/plain"
+    [request.referer, request.env["HTTP_ACCEPT_LANGUAGE"], request.user_agent].join("|")
+  end
+
   get "/lightpanda/image.png" do
     content_type "image/png"
     Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")

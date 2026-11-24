@@ -28,6 +28,8 @@ module Capybara
       # own wait_for_idle has already returned). Once a download has begun we
       # wait the full `timeout` for it to finish.
       DOWNLOAD_BEGIN_GRACE = 1.0
+      # Ferrum 0.21's await_download default.
+      DEFAULT_AWAIT_TIMEOUT = 5
 
       def initialize(browser)
         @browser = browser
@@ -132,6 +134,34 @@ module Capybara
           end
           sleep 0.02
         end
+      end
+
+      # Ferrum 0.21's await_download: runs the block and waits until the
+      # download it starts has finished. Returns that file's absolute path
+      # (Ferrum returns its metadata hash), or nil when `timeout` passes first.
+      def await_download(timeout: DEFAULT_AWAIT_TIMEOUT)
+        raise ArgumentError, "await_download needs a block that starts the download" unless block_given?
+
+        completed = @mutex.synchronize do
+          check_destination!
+          @files.size
+        end
+        yield
+        deadline = Utils::Wait.deadline(timeout)
+        loop do
+          @mutex.synchronize do
+            check_destination!
+            return @files[completed] if @files.size > completed
+          end
+          return nil if Utils::Wait.monotonic_time >= deadline
+
+          sleep 0.02
+        end
+      end
+
+      def await_download!(timeout: DEFAULT_AWAIT_TIMEOUT, &)
+        await_download(timeout: timeout, &) ||
+          raise(TimeoutError, "No download finished within #{timeout}s")
       end
 
       def clear
