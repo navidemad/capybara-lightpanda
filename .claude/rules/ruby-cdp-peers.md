@@ -32,6 +32,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026
 - Ferrum CyclicObject ↔ `browser/runtime.rb#serialize_remote_object`: ours replaces the whole refused value; Ferrum's deep serializer can preserve everything but the back-reference.
 - Ferrum lone-surrogate recovery ↔ `client/web_socket.rb#parse_message`: replace unpaired UTF-16 escapes with U+FFFD only after JSON parse failure, so the response is delivered rather than lost.
 - Ferrum cross-world error mapping ↔ `client.rb#handle_error`: stale argument handles map to NodeNotFoundError, allowing Capybara reload.
+- Ferrum #723 connect bounds ↔ `client/web_socket.rb#connect_with_retry`, `#connect`: the TCP connect shares `handshake_timeout` (an unreachable `ws_url` host no longer waits out the OS timeout), and a connect that fails before the reader starts closes its socket.
 
 ### Transport constraints
 
@@ -44,7 +45,6 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026
 
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 - **[medium]** Ferrum 0.21 API ↔ `browser/navigation.rb`, `request_headers.rb#add`, `network.rb`, `downloads.rb`, `cuprite_driver.rb`: `go_to(url, referrer:)` replaces `headers.add(permanent:)` (`5743cc85dc`), `network.emulate(user_agent:, accept_language:)` replaces navigator overrides through headers (`4702d99a79`), and the wait family becomes `await_navigation { }`, `await_download { }`, `network.wait_idle(!)`, `go_to!`/`refresh!`/`back!`/`forward!` (#716, #717; the 0.20 names forward with a warning until 0.22). Cuprite 0.21 docs show the new names (#367–#370), so a suite written against them gets ArgumentError/NoMethodError on our Cuprite page. Keep `permanent:` and the 0.20 names for native callers; the private `browser/navigation.rb#await_navigation` (returns a deadline) must be renamed before a Ferrum-shaped one is exposed. Ferrum's go_to Referer-resend fix doesn't transfer: `RequestHeaders#set` already resets `@referrer`. Ferrum 0.21.0 shipped 2026-11-24 and Cuprite main requires it (`1c21c997ff`); ship before Cuprite 0.21 releases.
-- **[tiny]** Ferrum #723 (0.21) ↔ `client/web_socket.rb#connect`/`#connect_with_retry`: `TCPSocket.new` has no `connect_timeout:`, so a `ws_url` on an unreachable host blocks for the OS connect timeout (~75 s macOS, ~130 s Linux) instead of `handshake_timeout`; and a handshake that times out or is reset raises without closing `@socket` (one descriptor per failed attempt until GC; no thread leak, the reader starts after the handshake). The spawned process connects to localhost, so `ws_url` users only. Verified by reading 2026-11-24, not reproduced.
 
 ### Diverged on purpose
 

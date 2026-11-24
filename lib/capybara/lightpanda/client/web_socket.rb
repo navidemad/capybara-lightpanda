@@ -172,7 +172,12 @@ module Capybara
           # Already torn down by the peer; nothing left to release.
         end
 
+        # A connection that fails before the reader thread starts closes its
+        # socket here: the caller gets an exception, not an object to #close,
+        # so the descriptor otherwise stayed open until GC (ferrum #723). The
+        # `ensure` also covers Interrupt and Timeout.timeout.
         def connect
+          connected = false
           uri = self.class.endpoint_uri(@url)
 
           @socket = connect_with_retry(uri.hostname, uri.port)
@@ -184,12 +189,23 @@ module Capybara
 
           read_handshake_response
           start_reader_thread
+          connected = true
+        ensure
+          @socket.close if !connected && @socket && !@socket.closed?
         end
 
+        # The TCP connect shares handshake_timeout. Unbounded, a ws_url on an
+        # unreachable host blocked for the OS connect timeout (~75 s on macOS,
+        # ~130 s on Linux) before the handshake budget even started (ferrum #723).
+        # A refused connection fails at once and is retried, as the spawned
+        # browser may not listen yet.
         def connect_with_retry(host, port)
           Utils::Attempt.with_retry(errors: Errno::ECONNREFUSED, max: 10, wait: 0.1) do
-            TCPSocket.new(host, port)
+            TCPSocket.new(host, port, connect_timeout: @options.handshake_timeout)
           end
+        rescue IO::TimeoutError
+          raise TimeoutError, "Couldn't connect to the browser at #{host}:#{port} " \
+                              "within #{@options.handshake_timeout}s (handshake_timeout)"
         end
 
         def setup_callbacks

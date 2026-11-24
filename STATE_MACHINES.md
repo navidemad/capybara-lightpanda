@@ -68,6 +68,7 @@ Invariants:
 |---|---|---|---|
 | `:closed` (initial) | handshake done | `:open` | `@driver.on(:open)` during `read_handshake_response` (main) |
 | `:closed` (initial) | handshake EOF / timeout | (raise) | `DeadBrowserError` / `TimeoutError` from `connect` |
+| `:closed` (initial) | TCP connect exceeds `handshake_timeout` | (raise) | `TimeoutError` from `connect_with_retry`; any failure before the reader starts closes the socket in `connect`'s `ensure` |
 | `:open` | peer close frame | `:closed` | `on(:close)` → `mark_dead` (reader) |
 | `:open` | protocol error | `:error` | `on(:error)` → `mark_dead(:error)` (reader) |
 | `:open` | EOF / `ECONNRESET` / `EPIPE` | `:closed` | reader rescue → `mark_dead` |
