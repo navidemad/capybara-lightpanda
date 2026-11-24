@@ -57,6 +57,42 @@ describe Capybara::Lightpanda::Client::WebSocket do
     server&.close
   end
 
+  # An endpoint that accepts the upgrade and never answers: the caller gets a
+  # TimeoutError and no object to close, so the client must close the socket
+  # itself. The server seeing EOF is the proof; a leaked socket keeps it open
+  # until GC.
+  it "closes its socket when the handshake times out" do
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.addr[1]
+    peer_closed = Queue.new
+    accepter = serve_once(server) do |sock|
+      sock.readpartial(4096)
+      peer_closed << (sock.wait_readable(5) && sock.read_nonblock(1, exception: false).nil?)
+    ensure
+      sock&.close
+    end
+
+    assert_raises(Capybara::Lightpanda::TimeoutError) do
+      Capybara::Lightpanda::Client::WebSocket.new("ws://127.0.0.1:#{port}/",
+                                                  Capybara::Lightpanda::Options.new(handshake_timeout: 0.3))
+    end
+    assert peer_closed.pop, "the failed handshake left the client socket open"
+  ensure
+    accepter&.join
+    server&.close
+  end
+
+  # A ws_url on an unreachable host blocked for the OS connect timeout
+  # (~75 s on macOS) before the handshake budget started.
+  it "bounds the TCP connect by handshake_timeout and names the endpoint" do
+    TCPSocket.expects(:new).with("10.255.255.1", 9222, connect_timeout: 2).raises(IO::TimeoutError)
+
+    error = assert_raises(Capybara::Lightpanda::TimeoutError) do
+      Capybara::Lightpanda::Client::WebSocket.new("ws://10.255.255.1:9222/", options)
+    end
+    assert_match(/10\.255\.255\.1:9222 within 2s \(handshake_timeout\)/, error.message)
+  end
+
   # A completed handshake whose reader then hits an error outside the narrow
   # IO rescue. With abort_on_exception that error was re-raised on the main
   # thread — wherever it happened to be — and took the process down. The
