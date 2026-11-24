@@ -29,6 +29,8 @@ module Capybara
         @request_handler = @response_handler = @failure_handler = nil
         @last_navigation_response = nil
         @document_request_id = nil
+        @emulation = {}
+        @emulation_defaults = nil
       end
 
       # The domain toggle is connection-scoped (browser.command), while
@@ -106,6 +108,8 @@ module Capybara
         @extra_headers = nil # the fresh context never received setExtraHTTPHeaders
         @last_navigation_response = nil
         @document_request_id = nil
+        @emulation = {}
+        @emulation_defaults = nil
       end
 
       # Headers applied via headers= / add_headers. Backs Driver#headers.
@@ -143,13 +147,36 @@ module Capybara
       # the browser would silently drop, rather than let a spec run on the
       # default user agent.
       def user_agent=(value)
-        if Network.refused_user_agent?(value)
-          raise ArgumentError,
-                "Lightpanda refuses a user agent containing \"Mozilla\" (got #{value.inspect}). Keep the device " \
-                "tokens and drop the prefix, e.g. \"Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile\"."
-        end
-
+        check_user_agent!(value)
+        emulation_defaults
+        @emulation[:user_agent] = value.to_s
         browser.page_command("Emulation.setUserAgentOverride", userAgent: value.to_s)
+      end
+
+      EMULATE_KEYS = %i[user_agent accept_language].freeze
+
+      # Ferrum 0.21's network.emulate: overrides the User-Agent and
+      # Accept-Language headers together with what navigator reports. A key
+      # given nil goes back to the browser's own value; keys left out keep
+      # theirs. Lightpanda keeps an empty userAgent literally and the previous
+      # language when acceptLanguage is omitted (verified 2026-11-24 on 1.0.5),
+      # so both are always sent, the defaults read from navigator before the
+      # first override. Ends with the BrowserContext, like #user_agent=.
+      # Ferrum's platform: and metadata: have no Lightpanda counterpart.
+      def emulate(**overrides)
+        unknown = overrides.keys - EMULATE_KEYS
+        unless unknown.empty?
+          raise ArgumentError, "unknown keywords: #{unknown.map(&:inspect).join(', ')} " \
+                               "(Lightpanda emulates user_agent: and accept_language:)"
+        end
+        check_user_agent!(overrides[:user_agent]) if overrides[:user_agent]
+
+        defaults = emulation_defaults
+        @emulation.merge!(overrides).compact!
+        browser.page_command("Emulation.setUserAgentOverride",
+                             userAgent: @emulation.fetch(:user_agent, defaults[:user_agent]).to_s,
+                             acceptLanguage: @emulation.fetch(:accept_language, defaults[:accept_language]).to_s)
+        nil
       end
 
       # Count through body completion, including requests evicted from the traffic history.
@@ -161,6 +188,19 @@ module Capybara
       # True when no more than `connections` requests are in-flight.
       def idle?(connections = 0)
         pending_connections <= connections
+      end
+
+      # Ferrum 0.21's names. `timeout` defaults to the browser timeout; returns
+      # true, or nil when requests are still pending (wait_idle! raises).
+      def wait_idle(connections: 0, timeout: nil, interval: 0.1)
+        wait_idle!(connections: connections, timeout: timeout, interval: interval)
+      rescue TimeoutError
+        nil
+      end
+
+      def wait_idle!(connections: 0, timeout: nil, interval: 0.1)
+        enable # Ferrum's network is always on; a disabled one counts nothing as pending.
+        wait_for_idle!(timeout: timeout || browser.options.timeout, connections: connections, duration: interval)
       end
 
       def wait_for_idle(timeout: 5, connections: 0, duration: 0.1)
@@ -183,6 +223,26 @@ module Capybara
       end
 
       private
+
+      def check_user_agent!(value)
+        return unless Network.refused_user_agent?(value)
+
+        raise ArgumentError,
+              "Lightpanda refuses a user agent containing \"Mozilla\" (got #{value.inspect}). Keep the device " \
+              "tokens and drop the prefix, e.g. \"Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile\"."
+      end
+
+      NAVIGATOR_DEFAULTS_JS = "[navigator.userAgent, navigator.languages.join(',')]"
+      private_constant :NAVIGATOR_DEFAULTS_JS
+
+      # The browser's own values, read once per context before any override.
+      def emulation_defaults
+        @emulation_defaults ||= begin
+          agent, languages = browser.page_command("Runtime.evaluate", expression: NAVIGATOR_DEFAULTS_JS,
+                                                                      returnByValue: true).dig("result", "value")
+          { user_agent: agent, accept_language: languages }
+        end
+      end
 
       def apply_extra_headers(headers)
         browser.page_command("Network.setExtraHTTPHeaders", headers: headers).tap { @extra_headers = headers.dup }

@@ -21,13 +21,16 @@ module Capybara
         #
         # Uses a single shared deadline so the worst-case wait is 1x timeout,
         # not 2x (lightpanda-io/browser#1849).
-        def go_to(url, wait: true)
+        #
+        # `referrer:` (Ferrum 0.21) sends a Referer with this navigation only,
+        # over one set through `headers.add(permanent: false)`.
+        def go_to(url, wait: true, referrer: nil)
           enable_page_events
 
           result = if wait
-                     wait_for_page_load(url)
+                     wait_for_page_load(url, referrer: referrer)
                    else
-                     page_command("Page.navigate", **navigation_params(url))
+                     page_command("Page.navigate", **navigation_params(url, referrer))
                    end
           check_unhandled_modal!
           yield result if block_given?
@@ -63,28 +66,78 @@ module Capybara
           true
         end
 
-        private
+        # Ferrum 0.21's await_navigation: runs the block and waits until the
+        # page it reloads or navigates to has loaded (the main frame's load, or
+        # a same-document navigation). Returns true, or nil when `timeout`
+        # (the browser timeout by default) passes first. With `watch:`, returns
+        # true at once when nothing navigates within that many seconds, for an
+        # action that may or may not navigate.
+        def await_navigation(watch: nil, timeout: nil)
+          raise ArgumentError, "await_navigation needs a block that starts the navigation" unless block_given?
 
-        def navigation_params(url)
-          { url: url, referrer: headers&.referrer }.compact
+          enable_page_events
+          deadline = monotonic_time + (timeout || @options.timeout)
+          started = Utils::Event.new
+          start_handler = proc { |params| started.set if main_frame_navigation_start?(params) }
+          client = @client
+          client.on("Page.frameStartedNavigating", &start_handler)
+          begin
+            with_main_frame_load("Page.navigatedWithinDocument") do |loaded|
+              yield
+              return true if watch && !navigation_seen?(started, loaded, [monotonic_time + watch, deadline].min)
+
+              loaded.wait([deadline - monotonic_time, 0].max) || nil
+            end
+          ensure
+            client.off("Page.frameStartedNavigating", start_handler)
+          end
         end
 
-        def wait_for_page_load(url, retried: false)
+        def await_navigation!(watch: nil, timeout: nil, &)
+          await_navigation(watch: watch, timeout: timeout, &) ||
+            raise(TimeoutError, "Navigation did not finish within #{timeout || @options.timeout}s")
+        end
+
+        # Ferrum 0.21 delegates these to the page's downloads.
+        def await_download(timeout: Downloads::DEFAULT_AWAIT_TIMEOUT, &)
+          downloads.await_download(timeout: timeout, &)
+        end
+
+        def await_download!(timeout: Downloads::DEFAULT_AWAIT_TIMEOUT, &)
+          downloads.await_download!(timeout: timeout, &)
+        end
+
+        private
+
+        def navigation_seen?(started, loaded, until_time)
+          loop do
+            return true if started.set? || loaded.set?
+            return false if monotonic_time >= until_time
+
+            sleep 0.02
+          end
+        end
+
+        def navigation_params(url, referrer = nil)
+          { url: url, referrer: referrer || headers&.referrer }.compact
+        end
+
+        def wait_for_page_load(url, referrer: nil, retried: false)
           deadline = nil
-          result = @client.observe_async_command("Page.navigate", navigation_params(url),
+          result = @client.observe_async_command("Page.navigate", navigation_params(url, referrer),
                                                  session_id: @session_id) do |send|
-            deadline = await_navigation(&send)
+            deadline = run_navigation(&send)
           end
           return result unless @client.closed?
 
-          handle_navigation_crash(url, deadline, retried: retried)
+          handle_navigation_crash(url, deadline, referrer: referrer, retried: retried)
         end
 
         # Lightpanda may kill the WebSocket or crash during complex page
         # navigation (lightpanda-io/browser#1849, #1854). Reconnect and
         # retry once. If the retry also crashes, raise a clear error
         # instead of leaving the client in a dead state.
-        def handle_navigation_crash(url, deadline, retried:)
+        def handle_navigation_crash(url, deadline, referrer:, retried:)
           if @client.closed? && !retried
             begin
               reconnect
@@ -94,7 +147,7 @@ module Capybara
                 # bookkeeping into its public signature. enable_page_events is
                 # needed again: reconnect's clear_session_state reset the flag.
                 enable_page_events
-                return wait_for_page_load(url, retried: true)
+                return wait_for_page_load(url, referrer: referrer, retried: true)
               end
             rescue DeadBrowserError
               raise
@@ -129,7 +182,7 @@ module Capybara
         # Uses the same loadEventFired + readyState fallback as go_to.
         def wait_for_navigation(&)
           enable_page_events
-          await_navigation(&)
+          run_navigation(&)
         end
 
         def traverse_history(expression)
@@ -149,7 +202,7 @@ module Capybara
         # The handler is unsubscribed via `ensure` so a raising trigger doesn't
         # leak a subscription onto the next navigation. Returns the deadline so
         # the caller can decide whether to attempt crash recovery.
-        def await_navigation
+        def run_navigation
           starting_url = safe_current_url
           deadline = monotonic_time + @options.timeout
           with_main_frame_load do |loaded|
@@ -193,7 +246,7 @@ module Capybara
           end
         rescue TimeoutError
           # Expected — readyState fallback exhausted its budget. The caller
-          # (await_navigation) keeps going and lets handle_navigation_crash
+          # (run_navigation) keeps going and lets handle_navigation_crash
           # decide whether the session is recoverable.
         end
 
