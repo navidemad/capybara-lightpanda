@@ -27,7 +27,7 @@ should copy". A Selenium method we don't answer is a feature request, not drift.
 ## The only surface in scope
 
 Each entry point with its Selenium counterpart (paths under
-`rb/lib/selenium/webdriver/common/`; surface as of 2026-11-20, PRs #277–#283, #287, #288):
+`rb/lib/selenium/webdriver/common/`; surface as of 2026-11-24, PRs #277–#283, #287, #288, #309):
 
 | Ours | Selenium counterpart | What must stay true |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ Each entry point with its Selenium counterpart (paths under
 | `#execute_async_script` | `driver.rb` | script receives a completion callback as its last argument |
 | `#execute_cdp` | `driver_extensions/has_cdp.rb` | `(method_string, **params)`, page-session scoped |
 | `#switch_to` | `target_locator.rb` | we raise `NotSupportedByDriverError` with a migration message; only revisit if Lightpanda ever gains post-hoc dialog handling |
-| `#action.send_keys(*keys).perform` | `driver.rb#action(**)`, `action_builder.rb` | arrow keys and Enter only, others raise `NotSupportedByDriverError`; ours takes no keywords where Selenium's `action(**)` takes `async:`/`devices:`/`duration:` |
+| `#action.send_keys(*keys).perform` | `driver.rb#action(**)`, `action_builder.rb` | arrow keys and Enter only, others raise `NotSupportedByDriverError`; takes and ignores Selenium's `async:`/`devices:`/`duration:` (`Remote::Bridge#action`), an unknown keyword raises (#309) |
 | `node.rb#native` (self) + `#attribute` | `element.rb` | `attribute` reads live properties (e.g. `validationMessage`) as strings |
 
 ```bash
