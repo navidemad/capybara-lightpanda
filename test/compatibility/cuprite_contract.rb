@@ -225,19 +225,61 @@ class CupriteContractTest < Minitest::Test
     end
   end
 
+  # Ferrum 0.21 dropped `headers.add(permanent: false)` for `go_to(referrer:)`.
+  # Lightpanda keeps the 0.20 form for suites that still call it.
   def test_permanent_referer_replaces_the_navigation_only_referer
     @page.visit("/")
-    headers = @page.driver.browser.headers
+    browser = @page.driver.browser
     base = @page.current_url
-    headers.add({ "Referer" => "#{base}first" }, permanent: false)
-    headers.add({ "Referer" => "#{base}second" })
+    browser.go_to("#{base}headers", referrer: "#{base}first")
+    browser.headers.add({ "Referer" => "#{base}second" })
     assert_equal "#{base}second", echoed_headers["HTTP_REFERER"]
     assert_equal "#{base}second", @page.evaluate_script("document.referrer")
+    return unless browser.is_a?(Capybara::Lightpanda::Browser)
+
+    browser.headers.clear
+    browser.headers.add({ "Referer" => "#{base}third" }, permanent: false)
+    browser.headers.add({ "Referer" => "#{base}fourth" })
+    assert_equal "#{base}fourth", echoed_headers["HTTP_REFERER"]
   end
 
   def echoed_headers
     @page.visit("/headers")
     JSON.parse(@page.find("pre").text)
+  end
+
+  # Ferrum 0.21 names a Cuprite 0.21 suite calls (rubycdp/ferrum#716, #717).
+  # Lightpanda-only edges stay in test/features/ferrum_021_api_test.rb.
+  def test_network_emulate_moves_the_request_and_navigator_together
+    @page.driver.browser.network.emulate(user_agent: "Probe/1.0", accept_language: "de-DE")
+    received = echoed_headers
+    assert_equal "Probe/1.0", received["HTTP_USER_AGENT"]
+    assert_includes received["HTTP_ACCEPT_LANGUAGE"], "de-DE"
+    assert_equal %w[Probe/1.0 de-DE], @page.evaluate_script("[navigator.userAgent, navigator.language]")
+  end
+
+  def test_await_navigation_waits_for_the_page_the_block_opens
+    @page.visit("/")
+    browser = @page.driver.browser
+    assert(browser.await_navigation { @page.execute_script("location.href = '/headers'") })
+    assert_match %r{/headers\z}, @page.current_url
+    # `watch:` is for an action that may not navigate: nothing starting within
+    # the window is success; without it, the wait expires falsy.
+    assert browser.await_navigation(watch: 0.2, timeout: 5) { @page.execute_script("1") }
+    refute browser.await_navigation(timeout: 0.3) { @page.execute_script("1") }
+    assert_raises(Ferrum::TimeoutError, Capybara::Lightpanda::TimeoutError) do
+      browser.await_navigation!(timeout: 0.3) { nil }
+    end
+    assert_raises(ArgumentError) { browser.await_navigation }
+  end
+
+  # Ferrum answers the download's metadata, Lightpanda its path: compare the file.
+  def test_await_download_waits_for_the_file_the_block_downloads
+    @page.visit("/reports")
+    browser = @page.driver.browser
+    assert(browser.await_download { @page.click_link("Download report") })
+    assert_equal "item,total\ncoffee,7\n", File.read(File.join(@directory, "report.csv"))
+    refute browser.await_download(timeout: 0.3) { nil }
   end
 
   def test_request_headers_reach_the_server_and_reset_between_examples
@@ -264,12 +306,21 @@ class CupriteContractTest < Minitest::Test
     assert_equal %w[TestAgent/1 fr-FR], @page.evaluate_script("[navigator.userAgent, navigator.language]")
   end
 
+  # The referrer belongs to that one navigation: a later visit must not carry
+  # it. Cuprite 0.21 removed `driver.add_header`; Lightpanda keeps it.
   def test_navigation_only_referer_is_excluded_from_persistent_headers
     @page.visit("/")
+    browser = @page.driver.browser
     source = "#{@page.current_url}source"
+    browser.go_to("#{@page.current_url}headers", referrer: source)
+    assert_equal source, JSON.parse(@page.find("pre").text)["HTTP_REFERER"]
+    refute browser.headers.get.key?("Referer")
+    assert_nil echoed_headers["HTTP_REFERER"]
+    return unless browser.is_a?(Capybara::Lightpanda::Browser)
+
     @page.driver.add_header("Referer", source, permanent: false)
     assert_equal source, echoed_headers["HTTP_REFERER"]
-    refute @page.driver.browser.headers.get.key?("Referer")
+    refute browser.headers.get.key?("Referer")
   end
 
   def test_removing_a_cookie_by_name_clears_every_path_on_its_host
@@ -283,11 +334,14 @@ class CupriteContractTest < Minitest::Test
   end
 
   def test_login_cookie_before_visit_and_scoped_cookie_removal
+    # Ferrum 0.21's `set` returns nil, so only the effect is compared.
     jar = @page.driver.browser.cookies
-    assert jar.set({ name: "session", value: "before", httponly: true, samesite: "Lax" })
+    jar.set({ name: "session", value: "before", httponly: true, samesite: "Lax" })
     assert_includes echoed_headers.fetch("HTTP_COOKIE"), "session=before"
     cookie = jar.all.fetch("session")
-    assert jar.set(cookie), "a saved cookie can be reapplied to the browser"
+    jar.clear
+    jar.set(cookie)
+    assert_includes echoed_headers.fetch("HTTP_COOKIE"), "session=before", "a saved cookie can be reapplied"
     assert cookie.httponly?
     assert_equal "Lax", cookie.samesite
 
@@ -351,10 +405,15 @@ class CupriteContractTest < Minitest::Test
   def test_driver_reload_wait_expires_without_reloading_the_page
     @page.visit("/")
     @page.execute_script("window.unsaved = 'draft'")
-    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    assert @page.driver.wait_for_reload(0.15)
-    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.12
-    assert_equal "draft", @page.evaluate_script("window.unsaved")
+    # Cuprite 0.21 removed `driver.wait_for_reload`; Lightpanda keeps it.
+    waits = [-> { @page.driver.browser.wait_for_reload(0.15) }]
+    waits << -> { @page.driver.wait_for_reload(0.15) } if @page.driver.browser.is_a?(Capybara::Lightpanda::Browser)
+    waits.each do |wait|
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      assert wait.call
+      assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :>=, 0.12
+      assert_equal "draft", @page.evaluate_script("window.unsaved")
+    end
   end
 
   def test_click_modifiers_reach_the_entire_mouse_sequence_and_reset
@@ -409,7 +468,10 @@ class CupriteContractTest < Minitest::Test
     assert_equal 200, network.response.status
     statuses = network.traffic.to_h { |hop| [URI(hop.request.url).path, hop.response&.status] }
     assert_equal [302, 200, 404], statuses.values_at("/redirect", "/parent", "/child")
-    assert_equal statuses.keys, @page.driver.network_traffic(:all).map { |hop| URI(hop.request.url).path }.uniq
+    # Cuprite 0.21 removed `driver.network_traffic`; Lightpanda keeps it.
+    if network.is_a?(Capybara::Lightpanda::Network)
+      assert_equal statuses.keys, @page.driver.network_traffic(:all).map { |hop| URI(hop.request.url).path }.uniq
+    end
     network.clear(:cache)
     refute_empty network.traffic
     network.clear(:traffic)

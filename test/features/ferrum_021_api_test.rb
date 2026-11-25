@@ -3,45 +3,18 @@
 require_relative "../test_helper"
 
 # Ferrum 0.21 renamed the calls a Cuprite suite makes through
-# page.driver.browser (rubycdp/ferrum#716, #717) and Cuprite 0.21's docs show
-# only the new names. A suite written against them must not hit NoMethodError
-# or ArgumentError on this driver. The 0.20 names stay (other tests pin them).
+# page.driver.browser (rubycdp/ferrum#716, #717). The shared contract
+# (test/compatibility/cuprite_contract.rb) runs go_to(referrer:), emulate,
+# await_navigation and await_download against Chrome too. This file keeps the
+# edges only Lightpanda has: its refusals, its nil-restore of the user agent,
+# its error classes and await_download's path.
 describe "Ferrum 0.21 browser API" do
   let(:session) { TestSessions::Lightpanda }
   let(:browser) { session.driver.browser }
 
   after { session.reset_session! }
 
-  def request_headers
-    session.visit("/lightpanda/request-headers")
-    session.find(:css, "body").text.split("|", -1)
-  end
-
-  describe "go_to(referrer:)" do
-    # The referrer belongs to that one navigation: a later visit must not
-    # carry it, unlike a header set for the session.
-    # Same-origin, so the default referrer policy keeps the full URL (an
-    # https referrer would be dropped on this http server, as in Chrome).
-    it "sends the Referer with that navigation only" do
-      referrer = "#{session.server.base_url}/lightpanda/links"
-      browser.go_to("#{session.server.base_url}/lightpanda/request-headers", referrer: referrer)
-      assert_equal referrer, session.find(:css, "body").text.split("|").first
-
-      assert_equal "", request_headers.first
-    end
-  end
-
   describe "network.emulate" do
-    # The header and navigator must move together: server-side detection
-    # reads one, client code the other.
-    it "overrides the user agent and language for requests and navigator" do
-      browser.network.emulate(user_agent: "Probe/1.0", accept_language: "de-DE")
-
-      _, language, agent = request_headers
-      assert_equal ["Probe/1.0", "de-DE"], [agent, language]
-      assert_equal ["Probe/1.0", "de-DE"], session.evaluate_script("[navigator.userAgent, navigator.language]")
-    end
-
     # Ferrum semantics: nil restores the browser's value for that key and
     # keeps the other override. Lightpanda keeps an empty user agent
     # literally, so the driver must send the default back itself.
@@ -83,33 +56,14 @@ describe "Ferrum 0.21 browser API" do
     end
   end
 
-  describe "await_navigation" do
-    it "returns true once the page the block navigates to has loaded" do
-      session.visit("/lightpanda/links")
-      navigated = browser.await_navigation { session.execute_script("location.href = '/lightpanda/request-headers'") }
-      assert_equal true, navigated
-      assert_match %r{/lightpanda/request-headers\z}, session.current_url
-    end
-
-    # `watch:` is for an action that may or may not navigate: nothing starting
-    # within the window is success, not a timeout.
-    it "returns true at once with watch: when nothing navigates, nil without it" do
-      session.visit("/lightpanda/links")
-
-      assert_equal true, browser.await_navigation(watch: 0.2, timeout: 5) { session.execute_script("1") }
-      assert_nil browser.await_navigation(timeout: 0.3) { session.execute_script("1") }
-      assert_raises(Capybara::Lightpanda::TimeoutError) { browser.await_navigation!(timeout: 0.3) { nil } }
-      assert_raises(ArgumentError) { browser.await_navigation }
-    end
-  end
-
   describe "await_download" do
-    it "returns the file the block downloads, nil when none finishes" do
+    # Ferrum returns the download's metadata hash; a path is what the
+    # 0.20 downloads.wait callers already handle.
+    it "returns the path of the file the block downloads, and await_download! raises" do
       session.visit("/lightpanda/download_page")
 
       path = browser.await_download { session.click_link("Download report") }
       assert_equal File.join(Capybara.save_path, "report.csv"), path
-      assert_nil browser.await_download(timeout: 0.3) { nil }
       assert_raises(Capybara::Lightpanda::TimeoutError) { browser.await_download!(timeout: 0.3) { nil } }
     end
   end

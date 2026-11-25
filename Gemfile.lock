@@ -25,12 +25,12 @@ GEM
     childprocess (5.1.0)
       logger (~> 1.5)
     concurrent-ruby (1.3.8)
-    cuprite (0.20.1)
+    cuprite (0.21)
       capybara (~> 3.0)
-      ferrum (~> 0.20.1)
+      ferrum (~> 0.21.0)
     diff-lcs (1.6.2)
     drb (2.2.3)
-    ferrum (0.20.1)
+    ferrum (0.21.0)
       addressable (~> 2.5)
       base64 (~> 0.2)
       concurrent-ruby (~> 1.1)
@@ -147,7 +147,7 @@ PLATFORMS
 
 DEPENDENCIES
   capybara-lightpanda!
-  cuprite (= 0.20.1)
+  cuprite (= 0.21)
   launchy (~> 3.1)
   logger
   minitest (~> 6.1)
@@ -169,10 +169,10 @@ CHECKSUMS
   capybara-lightpanda (0.20.1)
   childprocess (5.1.0) sha256=9a8d484be2fd4096a0e90a0cd3e449a05bc3aa33f8ac9e4d6dcef6ac1455b6ec
   concurrent-ruby (1.3.8) sha256=b2f1be836e968ccc78ccfce277ea79c72a88633f22306782c16ff23fb415d1e1
-  cuprite (0.20.1) sha256=98694e0ca7be79f066db4dcdb46fada42fb058c2c38aafd9c1d1567bc4b08994
+  cuprite (0.21) sha256=fa5b3232fda92d15eaf6a5404eefee4c7289aac33acd1e20462d1850e9bc58bf
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
-  ferrum (0.20.1) sha256=3a33d27f3e48ec66a36f7eaffa29180a9f1f4ff32694e8f2bc43d249f47612dc
+  ferrum (0.21.0) sha256=7e86981a13c8aad62d31dfb9d44894e071aadc7a09f3b913f19df6be1fe68b5e
   json (3.1.0) sha256=3ce7ccf8fde58960177a3a756c31f292a4c1e1dedee884547096a5b0604e3bd8
   language_server-protocol (3.17.0.6) sha256=5ef2c0c138f8267e1bc631d3328347d354f96724b0af22f2c79516120443b7f0
   launchy (3.1.1) sha256=72b847b5cc961589dde2c395af0108c86ff0119f42d4648d25b5440ebb10059e
