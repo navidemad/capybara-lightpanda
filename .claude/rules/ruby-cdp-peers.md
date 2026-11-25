@@ -44,7 +44,6 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-25; release v0.21.0 (2026
 
 ### Outstanding adoption candidates
 
-- **[tiny]** Ferrum #730 (main, 0.22) ↔ `keyboard.rb#dispatch_char`: a `"\n"` in a typed string goes through `Input.insertText`, so in an `<input>` it is dropped with no Enter `keydown` and `send_keys("q\n")` neither runs Enter handlers nor submits the form; Ferrum now types it as the Enter key, as chromedriver does (verified 2026-11-25 on 1.0.5: input `"ab"`, no submit; textarea gets the newline but no Enter `keydown`). Before mapping `"\n"` to the Enter definition, check that Lightpanda's Enter `keyDown` inserts a newline in a textarea.
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 
 ### Diverged on purpose
