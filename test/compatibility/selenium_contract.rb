@@ -107,6 +107,23 @@ class SeleniumContractTest < Minitest::Test
     assert_equal %w[notes query], @page.evaluate_script("window.enters")
   end
 
+  # A spec passing an Array to a single-value field has a bug; typing the
+  # Array's inspect string into the field hid it. Selenium raises instead, and
+  # a `multiple` file input still takes the Array.
+  def test_an_array_on_a_field_without_multiple_raises_instead_of_typing_it
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<input id="tags"><textarea id="notes"></textarea><input id="files" type="file" multiple>';
+    JS
+    %w[#tags #notes].each do |field|
+      error = assert_raises(ArgumentError) { @page.find(field).set(%w[a b]) }
+      assert_match(/Value cannot be an Array when 'multiple' attribute is not present/, error.message)
+      assert_equal "", @page.find(field).value
+    end
+    paths = [__FILE__, File.expand_path("session_isolation.rb", __dir__)]
+    @page.find("#files").set(paths)
+    assert_equal 2, @page.evaluate_script("document.getElementById('files').files.length")
+  end
+
   def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
     @page.execute_script(<<~JS)
       window.keys = [];
