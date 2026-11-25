@@ -1,20 +1,20 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-25 at `240f6b81a` (build 12447). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; main moved to `1.1.0-dev`, so nightlies print `1.1.0-nightly.<count>+<hash>`, which `Process.check_version!` already parses. Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-26 at `55944dbf0` (build 12453). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset as of 2026-11-26) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; main moved to `1.1.0-dev`, so nightlies print `1.1.0-nightly.<count>+<hash>`, which `Process.check_version!` already parses. Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
 
 ## Version and transport constraints
 
 - Floors: `Process::MINIMUM_NIGHTLY_BUILD = 12015`, `MINIMUM_RELEASE = 1.0.4`, the same commit (raised 2026-11-16; suites green on the 1.0.4 aarch64-macos binary). `process.rb` owns the floor rationale. Release binaries have no `nightly_build`; only gate behavior above the floor and remove gates when raising it.
 - A release prints bare semver; a nightly includes `git rev-list --count` and a hash. Keep both floors aligned. Only releases are reproducible pins: the rolling nightly tag is overwritten. A release candidate (#4480) prints `<semver>-rcN.<count>+<hash>` (`build.zig#resolveVersion`); `Process::RC_VERSION` checks its counter against the nightly floor, so an RC takes the nightly-gated paths (format derived from source, no RC binary run).
-- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Release aarch64-linux binaries need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them (#3852, documented in #4333, not rebuilt). 1.0.4 is the first release whose x86_64-macos binary doesn't SIGILL on CPUs without ADX (#4450).
+- Four binary targets: `{aarch64,x86_64}-{linux,macos}`. Keep all four in `Binary::PLATFORMS`; two-entry maps broke Intel Macs and Graviton runners. Release aarch64-linux binaries need glibc 2.38, x86_64 2.35, so Debian 12/Ubuntu 22.04 arm64 can't run them (#3852, documented in #4333, not rebuilt).
 - Zig 0.17 + V8, html5ever, libcurl and CSSOM; geometry and screenshots remain approximate, without a full layout/paint engine.
 - WebSocket upgrade rejects `Origin` unless `--remote-allow-origins` permits it. `Host` accepts IP literals, exact lowercase `localhost:<port>`, or explicit `--advertise-host`; bare/uppercase localhost and suffix attacks fail. Spawned clients use the logged address and send no Origin. From #4553 (11986) the same Host check guards every HTTP route (`/json/*`), not only upgrades.
 
 ## CDP commands used by the gem
 
-All **36 distinct literal commands** below are admitted by the dispatch enums at 1.0.5 (12297) and at the audited SHA (12447), and the 14 Zig-emitted events below are still emitted there. Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **36 distinct literal commands** below are admitted by the dispatch enums at 1.0.5 (12297) and at the audited SHA (12453), and the 14 Zig-emitted events below are still emitted there. Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
-**Multi-target CDP (#3945, 11844, in the floor):** per-page state moved from BrowserContext to a `Target` (up to 16 per context; `disposeBrowserContext` closes them all). A command reaches the target of its session; each target is its own inspector context group. Source-checked against the gem's single-target model: `target_id` still equals the root frame id (`target.zig` sets it from `id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on; console messages and exceptions now carry the frame they ran in (iframe `executionContextId`), and the gem reads neither.
+**Multi-target CDP (#3945, in the floor):** per-page state lives on a `Target` (up to 16 per context, all closed by `disposeBrowserContext`), each its own inspector context group. `target_id` still equals the root frame id (`target.zig#id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on.
 
 | Domain | Commands |
 |---|---|
@@ -152,6 +152,10 @@ Nightly and 1.0.6 RCs only (12298–12447). Validated 2026-11-23 on nightly 1236
 - `Emulation.setTimezoneOverride` works behind `--cdp-allow-timezone-override` (#4701, ours, 12374; see Emulation stubs). On nightly 12421 the gem passes the flag and `cuprite_contract.rb`'s per-test zone example takes the supported path (verified 2026-11-24).
 - `Access-Control-Allow-Headers: *` also covers `Authorization` (#4729, 12377), as every browser does against the spec.
 - `getComputedStyle().display` reports the value stylesheets set (#4762, 12427). A fixed or absolute box with `top` and `bottom` takes its height from both (#4765, 12434), closing #4263 (fixed inset overlays). Hit testing orders by every `z-index` (#4767, 12436). 12422–12447 not validated against the full suites.
+
+Main only (12448–12453, in no published build yet):
+
+- IntersectionObserver keeps every observation and re-checks it against layout geometry (#4772, 12451): an element that moves or scrolls into the viewport now fires later, where it used to get one entry and no more. Turbo lazy frames (`loading="lazy"`) ride this path. ResizeObserver honors `box` and fires on content changes (#4770, 12453).
 
 ## Upstream open issues that affect this gem
 
