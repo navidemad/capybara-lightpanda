@@ -124,6 +124,39 @@ class SeleniumContractTest < Minitest::Test
     assert_equal 2, @page.evaluate_script("document.getElementById('files').files.length")
   end
 
+  # Capybara's `fill_options: { clear: ... }` is Selenium's. A suite building a
+  # value across steps relies on :none appending; replacing it lost the text.
+  def test_fill_options_clear_appends_deletes_or_presses_keys_first
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<form onsubmit="event.preventDefault(); document.body.dataset.submitted = \\'yes\\'">' +
+        '<input id="name" value="Ada"><textarea id="notes">Line</textarea></form>';
+    JS
+    name = @page.find("#name")
+    name.set(" Lovelace", clear: :none)
+    assert_equal "Ada Lovelace", name.value
+    @page.find("#notes").set(" two", clear: :none)
+    assert_equal "Line two", @page.find("#notes").value
+
+    name.set("Grace", clear: :backspace)
+    assert_equal "Grace", name.value
+    name.set("y!", clear: %i[backspace backspace])
+    assert_equal "Gray!", name.value
+
+    assert_nil @page.evaluate_script("document.body.dataset.submitted")
+    name.set(" Hopper\n", clear: :none)
+    assert_equal "Gray! Hopper", name.value
+    assert_equal "yes", @page.evaluate_script("document.body.dataset.submitted")
+    return unless @page.driver.is_a?(Capybara::Lightpanda::Driver)
+
+    # Selenium treats an unknown clear: as nil; Lightpanda raises like Cuprite,
+    # and names an option it ignores instead of dropping it silently.
+    assert_raises(ArgumentError) { name.set("x", clear: :all) }
+    assert_equal "Gray! Hopper", name.value
+    _out, err = capture_io { name.set("Ada", rapid: false, typo: true) }
+    assert_match(/doesn't support :typo - ignoring/, err)
+    refute_match(/rapid/, err)
+  end
+
   def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
     @page.execute_script(<<~JS)
       window.keys = [];
