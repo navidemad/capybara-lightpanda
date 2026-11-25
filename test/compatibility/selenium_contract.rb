@@ -87,6 +87,26 @@ class SeleniumContractTest < Minitest::Test
     assert_raises(ArgumentError) { @browser.action(asynchronous: true) }
   end
 
+  # A typed "\n" is the Enter key in Chrome: `send_keys("query\n")` submits
+  # the search form and runs Enter handlers. Inserted as text, the newline
+  # vanished from the input and nothing submitted.
+  def test_a_typed_newline_is_the_enter_key
+    @page.execute_script(<<~JS)
+      document.body.innerHTML = '<form onsubmit="event.preventDefault(); document.body.dataset.submitted = \\'yes\\'">' +
+        '<input id="query"><textarea id="notes"></textarea></form>';
+      window.enters = [];
+      document.addEventListener('keydown', e => { if (e.key === 'Enter') window.enters.push(e.target.id) });
+    JS
+    @page.find("#notes").send_keys("a\nb")
+    assert_equal "a\nb", @page.find("#notes").value
+    assert_nil @page.evaluate_script("document.body.dataset.submitted")
+
+    @page.find("#query").send_keys("lightpanda\n")
+    assert_equal "lightpanda", @page.find("#query").value
+    assert_equal "yes", @page.evaluate_script("document.body.dataset.submitted")
+    assert_equal %w[notes query], @page.evaluate_script("window.enters")
+  end
+
   def test_a_dialog_after_dispatch_does_not_replay_the_shortcut
     @page.execute_script(<<~JS)
       window.keys = [];
