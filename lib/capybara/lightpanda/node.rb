@@ -205,7 +205,15 @@ module Capybara
         driver.browser.wait_for_idle if name == "click"
       end
 
+      # An Array for a field without `multiple` is a mistake in the spec:
+      # typing its inspect string (`["a", "b"]`) hid it. Selenium raises with
+      # this message (rack_test a TypeError), and Cuprite does since #389.
+      # `multiple?` is read only for an Array, so plain sets cost no extra call.
       def set(value, **_options)
+        if value.is_a?(Array) && !multiple?
+          raise ArgumentError, "Value cannot be an Array when 'multiple' attribute is not present. Not a #{value.class}"
+        end
+
         case tag_name
         when "input"
           fill_input(value)
