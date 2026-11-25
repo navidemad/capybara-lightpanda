@@ -11,7 +11,7 @@ group :development do
 end
 
 group :test do
-  gem "cuprite", "= 0.20.1", require: false
+  gem "cuprite", "= 0.21", require: false
   gem "launchy", "~> 3.1"
   gem "logger"
   gem "minitest", "~> 6.1"
