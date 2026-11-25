@@ -23,6 +23,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-25; release v0.21.0 (2026
 - `ferrum/utils/attempt.rb` ↔ `utils/attempt.rb`: bounded retry with the peer's 6 × 0.1 s defaults, which no caller uses: `browser.rb#with_default_context_wait` passes 3 tries with no sleep (it waits on executionContextCreated instead), `client/web_socket.rb#connect_with_retry` 10 × 0.1 s on a refused TCP connect.
 - `ferrum/errors.rb` ↔ `errors.rb`: CDP error hierarchy, response/code/data and JavaScript stack formatting; compat-only classes remain valid rescue constants.
 - Ferrum callback dispatch ↔ `client/subscriber.rb#dispatch`: per-callback rescue prevents one handler from blocking others.
+- Ferrum #730 newline as Enter ↔ `keyboard.rb#char_definition`: a typed `"\n"` is the Enter key, so `send_keys("query\n")` runs Enter handlers and submits the form, as with chromedriver.
 - `ferrum/frame/runtime.rb` ↔ `browser/runtime.rb`: evaluate awaits promises, execute discards values, evaluate_async supplies Capybara's callback. Ferrum's named-argument API differs; keep Capybara positional arguments here.
 - `ferrum/downloads.rb` ↔ `downloads.rb`: browser-level events and blocking wait; ours needs begin-grace because click may return before downloadWillBegin is processed. The block form (`wait { click }`) records the baseline before yielding and gives the download the full timeout to start.
 - Ferrum Process::Output ↔ `process.rb#output`, `browser/navigation.rb#crash_output`: retain bounded startup/runtime output for crash diagnosis.
@@ -43,7 +44,6 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-25; release v0.21.0 (2026
 
 ### Outstanding adoption candidates
 
-- **[tiny]** Ferrum #730 (main, 0.22) ↔ `keyboard.rb#dispatch_char`: a `"\n"` in a typed string goes through `Input.insertText`, so in an `<input>` it is dropped with no Enter `keydown` and `send_keys("q\n")` neither runs Enter handlers nor submits the form; Ferrum now types it as the Enter key, as chromedriver does (verified 2026-11-25 on 1.0.5: input `"ab"`, no submit; textarea gets the newline but no Enter `keydown`). Before mapping `"\n"` to the Enter definition, check that Lightpanda's Enter `keyDown` inserts a newline in a textarea.
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 
 ### Diverged on purpose

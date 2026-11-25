@@ -103,6 +103,12 @@ module Capybara
       # Key definition for a character a US keyboard can type, nil for any
       # other (accented letters, emoji, control characters).
       def self.char_definition(char)
+        # "\n" is the Enter key, as chromedriver and Ferrum (#730) type it:
+        # a newline in a textarea, a paragraph in an editing host, implicit
+        # submission in an input (verified 2026-11-25 on 1.0.5). Inserted as
+        # text it vanished from an input with no Enter keydown.
+        return KEYS[:enter] if char == "\n"
+
         base = UNSHIFT_MAP[char] || char.downcase
         code, key_code =
           case base
@@ -206,7 +212,7 @@ module Capybara
       # alone fired `input` only, so a filter or autocomplete bound to `keyup`
       # or `keydown` never ran. Lightpanda inserts the keyDown's `text` itself
       # (upstream #3542), so nothing is typed twice. Characters no US key
-      # produces (accents, emoji, newlines) stay on `Input.insertText`, the
+      # produces (accents, emoji) stay on `Input.insertText`, the
       # IME/paste path, as in Puppeteer.
       def dispatch_char(char)
         definition = self.class.char_definition(char)

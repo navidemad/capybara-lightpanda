@@ -155,12 +155,23 @@ describe Capybara::Lightpanda::Keyboard do
     end
 
     # No US key produces these, so there is no honest key event to send: they
-    # are inserted the way an IME or a paste would. A newline must stay here
-    # too: as a key press it would be Enter and submit the form.
-    it "inserts a character no US key produces, and a newline, as text" do
-      keyboard.type("é\n")
+    # are inserted the way an IME or a paste would.
+    it "inserts a character no US key produces as text" do
+      keyboard.type("é")
 
-      assert_equal([["Input.insertText", { text: "é" }], ["Input.insertText", { text: "\n" }]], browser.events)
+      assert_equal([["Input.insertText", { text: "é" }]], browser.events)
+    end
+
+    # chromedriver and Ferrum type "\n" as Enter. As inserted text it vanished
+    # from an input with no Enter keydown, so `send_keys("query\n")` neither
+    # ran an Enter handler nor submitted the form.
+    it "types a newline as the Enter key" do
+      keyboard.type("\n")
+
+      events = key_events.map { |e| e.values_at(:type, :key, :code) }
+      assert_equal [%w[keyDown Enter Enter], %w[keyUp Enter Enter]], events
+      assert_equal "\r", key_events.first[:text]
+      refute(browser.events.any? { |method, _| method == "Input.insertText" })
     end
 
     it "raises ArgumentError (not NoMethodError) for an unknown key symbol" do
