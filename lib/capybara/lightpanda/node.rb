@@ -209,16 +209,23 @@ module Capybara
       # typing its inspect string (`["a", "b"]`) hid it. Selenium raises with
       # this message (rack_test a TypeError), and Cuprite does since #389.
       # `multiple?` is read only for an Array, so plain sets cost no extra call.
-      def set(value, **_options)
+      #
+      # Options are Capybara's `fill_options` (defaults from
+      # `Capybara.default_set_options`). `clear:` is Selenium's, see
+      # #write_text. `rapid:` only tunes how fast Selenium and Cuprite type;
+      # the value is written from JS here, so it changes nothing. Anything else
+      # warns, as rack_test and Cuprite do, instead of being dropped silently.
+      def set(value, **options)
+        warn_unsupported_set_options(options)
         if value.is_a?(Array) && !multiple?
           raise ArgumentError, "Value cannot be an Array when 'multiple' attribute is not present. Not a #{value.class}"
         end
 
         case tag_name
         when "input"
-          fill_input(value)
+          fill_input(value, options[:clear])
         when "textarea"
-          call(SET_VALUE_JS, truncate_to_maxlength(value.to_s))
+          write_text(value.to_s, options[:clear])
         else
           # `contenteditable` cascades through descendants. Check
           # `isContentEditable`, then fall back to walking ancestors for
@@ -429,7 +436,7 @@ module Capybara
       TEXT_LIKE_INPUT_TYPES = %w[text email password url tel search number].freeze
       private_constant :TEXT_LIKE_INPUT_TYPES
 
-      def fill_input(value)
+      def fill_input(value, clear = nil)
         type = self["type"]
         case type
         when "checkbox", "radio"
@@ -453,21 +460,50 @@ module Capybara
         when "week"
           call(SET_VALUE_JS, format_week_value(value))
         else
-          fill_text_input(type, value.to_s)
+          fill_text_input(type, value.to_s, clear)
         end
       end
 
       # HTML implicit-submission: a trailing \n in a text-like input is like the
       # user pressing Enter — submits the form when there's a default submit
       # button OR exactly one text control. Strip the \n, set the value, then
-      # trigger submission via IMPLICIT_SUBMIT_JS.
-      def fill_text_input(type, str)
-        if str.end_with?("\n") && TEXT_LIKE_INPUT_TYPES.include?(type)
-          call(SET_VALUE_JS, truncate_to_maxlength(str.chomp))
-          implicit_submit
-        else
-          call(SET_VALUE_JS, truncate_to_maxlength(str))
+      # trigger submission via IMPLICIT_SUBMIT_JS. With `clear:` as an Array
+      # the value is typed, and a typed "\n" is already the Enter key.
+      def fill_text_input(type, str, clear = nil)
+        submit = str.end_with?("\n") && TEXT_LIKE_INPUT_TYPES.include?(type) && !clear.is_a?(Array)
+        write_text(submit ? str.chomp : str, clear)
+        implicit_submit if submit
+      end
+
+      SET_OPTIONS = %i[clear rapid].freeze
+      CLEAR_ERROR = "clear: takes nil, :none, :backspace or an Array of keys"
+      private_constant :SET_OPTIONS, :CLEAR_ERROR
+
+      # Selenium's `clear:` for text fields (Capybara::Selenium::Node#set_text,
+      # Cuprite since 0.21):
+      # - nil replaces the value.
+      # - :none appends to it: a suite building a value across steps relies on
+      #   that, and replacing it loses the earlier text.
+      # - :backspace deletes the value key by key before typing. It ends with
+      #   the new value, so it is written like nil.
+      # - An Array of keys is pressed before the value is typed at the caret,
+      #   as Selenium does (`[[:control, "a"], :backspace]` clears the field).
+      # Anything else raises before the field changes, as Cuprite does.
+      def write_text(str, clear)
+        case clear
+        when nil, :backspace then call(SET_VALUE_JS, truncate_to_maxlength(str))
+        when :none then call(SET_VALUE_JS, truncate_to_maxlength(value.to_s + str))
+        when Array then send_keys(*clear, str)
+        else raise ArgumentError, CLEAR_ERROR
         end
+      end
+
+      def warn_unsupported_set_options(options)
+        unsupported = options.keys - SET_OPTIONS
+        return if unsupported.empty?
+
+        warn "Options passed to Node#set but capybara-lightpanda doesn't support " \
+             "#{unsupported.map(&:inspect).join(', ')} - ignoring"
       end
 
       # Format helpers for Date/Time/DateTime values passed to date/time/datetime-local
