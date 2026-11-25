@@ -1,6 +1,6 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-25 at `240f6b81a` (build 12447). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; main moved to `1.1.0-dev`, so nightlies print `1.1.0-nightly.<count>+<hash>`, which `Process.check_version!` already parses. Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-26 at `55944dbf0` (build 12453). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset as of 2026-11-26) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; main moved to `1.1.0-dev`, so nightlies print `1.1.0-nightly.<count>+<hash>`, which `Process.check_version!` already parses. Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
 
 ## Version and transport constraints
 
@@ -12,7 +12,7 @@ Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit veri
 
 ## CDP commands used by the gem
 
-All **36 distinct literal commands** below are admitted by the dispatch enums at 1.0.5 (12297) and at the audited SHA (12447), and the 14 Zig-emitted events below are still emitted there. Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
+All **36 distinct literal commands** below are admitted by the dispatch enums at 1.0.5 (12297) and at the audited SHA (12453), and the 14 Zig-emitted events below are still emitted there. Call sites are under `lib/capybara/lightpanda/`, including multiline command/page_command calls and the `execute_cdp` calls of `selenium_compat.rb`'s document-scoped cookie helpers (`Network.getCookies`/`setCookies`). Runtime's evaluate/callFunctionOn/getProperties/releaseObject go through `sendInspector` → `Target.callInspector` → V8, not separate Zig handlers.
 
 **Multi-target CDP (#3945, in the floor):** per-page state lives on a `Target` (up to 16 per context, all closed by `disposeBrowserContext`), each its own inspector context group. `target_id` still equals the root frame id (`target.zig#id.toFrameId`), which `browser.rb#subscribe_to_navigation` relies on.
 
@@ -152,6 +152,10 @@ Nightly and 1.0.6 RCs only (12298–12447). Validated 2026-11-23 on nightly 1236
 - `Emulation.setTimezoneOverride` works behind `--cdp-allow-timezone-override` (#4701, ours, 12374; see Emulation stubs). On nightly 12421 the gem passes the flag and `cuprite_contract.rb`'s per-test zone example takes the supported path (verified 2026-11-24).
 - `Access-Control-Allow-Headers: *` also covers `Authorization` (#4729, 12377), as every browser does against the spec.
 - `getComputedStyle().display` reports the value stylesheets set (#4762, 12427). A fixed or absolute box with `top` and `bottom` takes its height from both (#4765, 12434), closing #4263 (fixed inset overlays). Hit testing orders by every `z-index` (#4767, 12436). 12422–12447 not validated against the full suites.
+
+Main only (12448–12453, in no published build yet):
+
+- IntersectionObserver keeps every observation and re-checks it against layout geometry (#4772, 12451): an element that moves or scrolls into the viewport now fires later, where it used to get one entry and no more. Turbo lazy frames (`loading="lazy"`) ride this path. ResizeObserver honors `box` and fires on content changes (#4770, 12453).
 
 ## Upstream open issues that affect this gem
 
