@@ -38,6 +38,16 @@ Tell the user which targets you've picked and why before starting recon. They ca
 
 ## Step 1: Gather current state
 
+**Work from `origin/main`, not the primary checkout.** This skill, its references and both rules files are loaded from the primary checkout, which stays on `main` but is only updated when the user asks. Verified 2026-11-23: it sat 15 commits behind `origin/main`, so the loaded `SKILL.md` still named deleted files and the rules files in context missed a merged sync. Before anything else:
+
+```bash
+git fetch -q origin
+git rev-list --count HEAD..origin/main   # non-zero: what you loaded is stale
+git worktree add -q -b chore/sync-upstream-<date> .claude/worktrees/sync-upstream-<date> origin/main
+```
+
+If the count is non-zero, re-read `SKILL.md`, the reference you need and both rules files from the worktree (or `git show origin/main:<path>`) before trusting them, and tell the user their checkout is behind; updating it is their call. All rules edits and the PR happen in that worktree. The state file stays in the primary checkout (`.claude/skills/sync-upstream/state/last-sync.md`, gitignored), so read and write it by its absolute path there.
+
 Read both rules files unconditionally — the answers to "what changed?" depend on knowing what we already know:
 
 - `.claude/rules/lightpanda-io.md` — current understanding of the browser
@@ -133,6 +143,10 @@ Both rules files are **current-state references, not changelogs**. Edit affected
 
 **Verify before claiming.** Don't speculatively mark issues as fixed or methods as added without confirmation from the upstream issue/PR. For workaround-removal claims specifically, validation = specs green against `LIGHTPANDA_BIN` pointing at the locally-built `main` browser (see `references/lightpanda.md`).
 
+Commit the rules edits in the Step 1 worktree and open a docs-only PR; record its number in the state file's baseline line (Step 8).
+
+**Merge order with follow-up fixes.** A sync PR that adds an Outstanding entry and a fix PR that moves the same entry to Adopted conflict, and an automatic resolver can resurrect the deleted line: mergiraf did on 2026-11-24, and the 2026-11-25 sync PR plus two fix PRs all touched `ruby-cdp-peers.md`. When the user asks to implement a candidate in the same session, either merge the sync PR first and branch the fix from the new `origin/main`, or stack the fix on the sync branch. After any `git merge origin/main` into a branch that touches the rules files, grep them for entries that are both Outstanding and Adopted before pushing.
+
 ## Step 6: Generate report
 
 Use this exact template. Omit sections with no findings rather than leaving them empty.
@@ -215,6 +229,8 @@ LIGHTPANDA_BIN=/Users/navid/code/upstream/browser/zig-out/bin/lightpanda bundle 
 
 Don't run them yourself — they are long-running and the user decides when to validate.
 
+When the user does ask, follow `references/lightpanda.md` "Validate a published binary" for a nightly or release candidate, and "Probe a behavior" to settle what a peer or upstream change does on the pinned release before recommending a gem change. A cheap targeted check is fine unprompted when it decides a finding (one contract example, one probe), as long as the report says what ran.
+
 ## Step 8: Persist state for the next run
 
 After the report, **overwrite** `.claude/skills/sync-upstream/state/last-sync.md` with the report's open items so the next run can pick up where this one left off. Use this exact format:
@@ -224,6 +240,8 @@ After the report, **overwrite** `.claude/skills/sync-upstream/state/last-sync.md
 
 Last run: YYYY-MM-DD
 Last run targets: [Lightpanda / Ferrum / Cuprite / subset]
+
+Audit baseline: Lightpanda main `<sha>` (build N); published nightly N (`<sha>`, date); release X.Y.Z = N = `Binary::DEFAULT_VERSION`; floor X.Y.Z = N. Ferrum release + main `<sha>`; Cuprite release + main `<sha>`. Gem origin/main `<sha>`. Rules updates: PR #N (open/merged). Next run: diff from these SHAs.
 
 ## Open recommendations
 
@@ -240,6 +258,7 @@ Upstream PRs / issues to recheck next sync. Promote to findings if they move.
 
 Rules:
 
+- **The baseline line is what the next run diffs from**: every recon starts at these SHAs (Lightpanda `git log <sha>..origin/main`, the `src/server/cdp` diff, peer commits since `<sha>`, `selenium_compat.rb` changes since the gem SHA).
 - **One entry per slug** — slugs are short kebab-case identifiers (e.g. `htmldialog-polyfill-cleanup`, `pr-2431-frame-context-fix`). Stable across runs so reconciliation is trivial.
 - **No duplicates from the rules files.** Anything fully described in `lightpanda-io.md` (open issues table) or `ruby-cdp-peers.md` (outstanding adoption candidates) doesn't need to be in the state file — the rules files are the source of truth for those. State file is specifically for _follow-up actions_ (cleanup, validation, gem-side code changes) and _watch items_ (upstream PRs we expect to land soon).
 - **Always overwrite the whole file.** Don't append — Step 6's report is the authoritative source for what's still open after this run.

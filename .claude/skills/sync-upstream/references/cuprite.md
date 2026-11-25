@@ -47,7 +47,8 @@ Do not promote an open PR to an "Adopted"/"Diverged" edit in the rules file — 
 ### Releases and CHANGELOG
 
 ```bash
-gh release list --repo rubycdp/cuprite --limit 5
+curl -s https://rubygems.org/api/v1/versions/cuprite/latest.json   # the released version (GitHub releases lag: gem 0.20.1 vs release v0.20)
+git ls-remote --tags https://github.com/rubycdp/cuprite 'v0.2*'
 gh api repos/rubycdp/cuprite/contents/CHANGELOG.md --jq '.content' | base64 -d | head -60
 ```
 
@@ -62,6 +63,10 @@ Cuprite is small — only a handful of files of interest. Direct file-by-file co
 | `lib/capybara/cuprite/errors.rb` | `lib/capybara/lightpanda/errors.rb` | Driver-level error classes (distinct from Ferrum's), what they catch and re-raise as Capybara errors |
 | `lib/capybara/cuprite/javascripts/index.js` | `lib/capybara/lightpanda/javascripts/*.js` | Helpers injected per page. We ship the Turbo tracker (`turbo.js`) + DOM predicates (`predicates.js`); XPath is native (`Document.evaluate`), not polyfilled. What do they ship that we don't? |
 | `lib/capybara/cuprite/browser.rb`, `page.rb` | `lib/capybara/lightpanda/cuprite_{driver,page,cookies}.rb` | Public API a suite written for Cuprite calls; a new or renamed method is a compat gap |
+
+## Testing a peer API we adopt
+
+CI runs `test/compatibility/cuprite_contract.rb` against the Cuprite and Ferrum versions pinned in the `Gemfile` (`CONTRACT_DRIVER=cuprite`). A name that exists only in an unreleased or newer peer can't go in the shared contract until that pin moves: test it in `test/features/` (as `ferrum_021_api_test.rb` did for Ferrum 0.21) and record the move as a watch item for the peer's release.
 
 ## Skip these — Chrome-specific or Lightpanda-incompatible
 

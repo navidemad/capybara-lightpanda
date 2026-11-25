@@ -52,8 +52,11 @@ Read the PR body, not just the title — the bug description is the transferable
 
 ### Releases and CHANGELOG
 
+Don't read the release from `gh release list`: Ferrum doesn't publish a GitHub release for every tag (2026-11-24 it still showed 0.20.1 as Latest while v0.21.0 was tagged and on rubygems).
+
 ```bash
-gh release list --repo rubycdp/ferrum --limit 5
+curl -s https://rubygems.org/api/v1/versions/ferrum/latest.json   # the released version
+git ls-remote --tags https://github.com/rubycdp/ferrum 'v0.2*'     # tags, incl. ones without a GitHub release
 gh api repos/rubycdp/ferrum/contents/CHANGELOG.md --jq '.content' | base64 -d | head -150
 ```
 
