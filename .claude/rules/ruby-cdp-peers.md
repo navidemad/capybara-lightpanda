@@ -4,7 +4,7 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026-11-24, `58a7628760`), main `37592371c5` (0.22: #728 removes the 0.21 deprecations). Open: #685 (out-of-process iframe idle tracking) only.
+https://github.com/rubycdp/ferrum — reviewed 2026-11-25; release v0.21.0 (2026-11-24, `58a7628760`), main `a0460f5625` (0.22: #728 removes the 0.21 deprecations, #729 raises ArgumentError for bad arguments; #733 `new_window:` is N/A, single window). Open: #685 (out-of-process iframe idle tracking) only.
 
 0.21 audited, no change needed: #707 one `Deadline` per composite call (immune: `browser/navigation.rb#go_to` shares one deadline, `downloads.rb#wait` sets no latch on timeout, `client/subscriber.rb#unsubscribe` removes by block); `99b6c1710f` all-nil/false positional evaluate arguments dropped (immune: `browser/runtime.rb` tests `args.empty?`, not `any?`); `1b4c3686c0` `cookies.set` accepts `http_only`/`same_site` (ours takes those keywords natively, `cuprite_cookies.rb` maps the CDP spellings); #703/#710 callbacks and raw events yield the object/params alone (`client/subscriber.rb#dispatch` already does); #674 click wait, #696 quad fallback, `Node#moving?`, Fetch/auth, #705 CBOR depth, #704/#706, #711 `wait_for_new_page`, #714 Browser-facade delegation, #715 SameParty removal, #718 Fetch `request_id`/`post_data` renames, #719 toggles, #720 `click(button:, count:, modifiers:)`, #721 scroll `x:`/`y:`, #724 sub-second `request.time`, #725 objectId hashes, #726 `pinpoint`, #727 command return values (no geometry fallback, no interception, single target, no SameParty: N/A); #722 `html` replacing `body` (ours answers both: `browser.rb#body`, alias `html`). The 0.21 names a migrating suite calls are under Cuprite → Adopted. `page.cookies` becomes page-URL-scoped while `context.cookies` keeps every cookie; our `Cookies#all` stays context-wide.
 
@@ -43,6 +43,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026
 
 ### Outstanding adoption candidates
 
+- **[tiny]** Ferrum #730 (main, 0.22) ↔ `keyboard.rb#dispatch_char`: a `"\n"` in a typed string goes through `Input.insertText`, so in an `<input>` it is dropped with no Enter `keydown` and `send_keys("q\n")` neither runs Enter handlers nor submits the form; Ferrum now types it as the Enter key, as chromedriver does (verified 2026-11-25 on 1.0.5: input `"ab"`, no submit; textarea gets the newline but no Enter `keydown`). Before mapping `"\n"` to the Enter definition, check that Lightpanda's Enter `keyDown` inserts a newline in a textarea.
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 
 ### Diverged on purpose
@@ -58,7 +59,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-24; release v0.21.0 (2026
 
 ## Cuprite
 
-https://github.com/rubycdp/cuprite — reviewed 2026-11-24; release v0.20 (gem 0.20.1), main `91fd6fa8ba` (requires the released Ferrum ~> 0.21.0, Cuprite 0.21 unreleased). Open: #376 (device user agent through `network.emulate`; N/A: devices are skipped, Lightpanda refuses Mozilla UAs). Merged since v0.20, converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op), #366 (Ferrum 0.21 dialog chain and closed windows; N/A: LP pre-arm, single window). #373 `browser.html` (ours answers it), #374 `pinpoint` click points (N/A: no coordinate clicks); #367–#370 show the Ferrum 0.21 names adopted below (#369: `trigger("click")` now waits through `await_navigation!(watch:)`; ours sniffs `Browser::SNIFF_WINDOW`).
+https://github.com/rubycdp/cuprite — reviewed 2026-11-25; release v0.20 (gem 0.20.1), main `375860d48a` (requires the released Ferrum ~> 0.21.0, Cuprite 0.21 unreleased). Open: #392 (Cuprite settings out of Ferrum's Options; internal, N/A). Merged 2026-11-24/25: #376 device user agent through `network.emulate` (N/A: devices are skipped, Lightpanda refuses Mozilla UAs), #384 `open_new_window(:window)` (N/A, single window), #386 send_keys focuses instead of clicking (ours already, see Adopted), #387 optgroup options in a multiple select's value (immune: `node.rb`'s value JS reads `selectedOptions`), #388 number fields typed with real keys (see Diverged `set`), #389 → Outstanding. Merged since v0.20, converging on ours or N/A: #356 (reset!/quit without a started browser; ours since #208), #360 (ObsoleteNode before the click hit test; ours is immune, the isConnected guard runs inside CLICK_JS's own callFunctionOn, which never hit-tests), #353 (window url/title via `location.href`), #363 (await scrollIntoView/scrollTo; our scroll_to is a no-op), #366 (Ferrum 0.21 dialog chain and closed windows; N/A: LP pre-arm, single window). #373 `browser.html` (ours answers it), #374 `pinpoint` click points (N/A: no coordinate clicks); #367–#370 show the Ferrum 0.21 names adopted below (#369: `trigger("click")` now waits through `await_navigation!(watch:)`; ours sniffs `Browser::SNIFF_WINDOW`).
 
 ### Adopted
 
@@ -83,6 +84,7 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-24; release v0.20 (gem 0
 ### Outstanding adoption candidates
 
 - **[tiny]** Peer javascripts/index.js#setValue native HTMLInputElement setter ↔ node.rb#SET_VALUE_JS: bypass framework value interception only when a real-app regression motivates it.
+- **[tiny]** Peer `Node#set` Array guard (#389) ↔ `node.rb#fill_input`: an Array set on a field without `multiple` types its inspect string (`'["x", "y"]'`, verified 2026-11-25 on 1.0.5); Selenium and Cuprite raise `ArgumentError, "Value cannot be an Array when 'multiple' attribute is not present"`.
 - **[medium]** Peer driver.rb `url_blocklist`/`url_allowlist` options (#361, legacy `url_blacklist`/`url_whitelist`) ↔ options.rb/browser.rb: the gem has neither, and `register_cuprite_driver` rejects them before launch. Lightpanda's `Network.setBlockedURLs` takes only `urlPatterns: [{urlPattern, block}]` and sets browser-wide state that context disposal keeps, so a blocklist must be cleared in `reset!`; an allowlist needs Fetch interception. From Cuprite #375 string patterns raise ArgumentError (Regexp only).
 
 ### Diverged on purpose
