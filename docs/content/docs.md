@@ -287,7 +287,7 @@ it.
 | Cookies — `set_cookie`, `clear_cookies`, `remove_cookie` | ✓ |
 | HTTP response — `status_code`, `response_headers` | ✓ — from `Network.responseReceived` |
 | Cross-origin `fetch`/XHR — CORS | ✓ **enforced, like Chrome.** A request the server doesn't allow fails in the page (`TypeError`) and shows in `network.traffic` with `error: "CorsBlocked"`. Watch for `localhost` vs `127.0.0.1` or a second port — both are different origins |
-| Frames — `within_frame`, scoped finding | ✓ |
+| Frames — `within_frame`, scoped finding | ✓ **same-origin iframes only.** An iframe from another origin can't be entered (see [limitations](#limits)) |
 | Keyboard — `send_keys` with modifiers | ✓ |
 | Downloads — `Content-Disposition: attachment` responses | ✓ — streamed to `save_path` (build ≥7545) |
 | Drag-and-drop — `Element#drop` (files or typed data onto a dropzone) | ✓ — geometry-free `DataTransfer` + `DragEvent` (build ≥6699). Files are handed to the browser through `DOM.setFileInputFiles` (read off disk on the Lightpanda host, like `attach_file`), so there is no payload-size ceiling in the driver |
@@ -445,6 +445,7 @@ These are upstream Lightpanda limits, not driver bugs:
 | `scroll_to` | No-op. Lightpanda tracks a scroll position but `getBoundingClientRect` isn't scroll-aware, so `:top` / `:center` / element-relative alignment have no meaning |
 | `resize` | Wired — `page.current_window.resize_to(w, h)` drives the same viewport `window_size` does. **Resize, then visit**: the cascade is fixed at parse time, so `@media` rules don't re-resolve for a document already on screen |
 | CSS `:hover` | Never matches — there is no pointer, so no hover state enters the cascade. `hover` *does* dispatch real `mouseover` + `mouseenter` events, so a menu opened by a JS listener (every Stimulus `mouseenter->` action, Floating UI, tippy) works; one revealed only by a `:hover` CSS rule does not. A dropdown that "isn't there" after `hover` is usually this |
+| Cross-origin iframes | An iframe served from another origin (another host, port or scheme: `localhost` and `127.0.0.1` count as two) is out of reach. Its document is `null` to the page and its window has no `eval`, so `within_frame` enters it but finds nothing (`Capybara::ElementNotFound`), and `evaluate_script` inside it raises a `TypeError`. Payment fields (Stripe Elements), video embeds and third-party widgets are the usual cases. Serve a same-origin stub of the embed in the test environment, or keep that spec on Chrome |
 | Tabs and windows | One window per session. `open_new_window` / `close_window` raise `NotSupportedByDriverError` and `switch_to_window` raises `NoSuchPageError` — upstream serves a single target per CDP connection ([browser#1962](https://github.com/lightpanda-io/browser/issues/1962)). Drive a second page in its own Capybara session |
 | Shadow DOM | `shadow_root` and `tag_name` on a root work, and finding inside an open shadow root works. `Node#path` doesn't cross shadow boundaries, so Capybara's `:shadow_dom` shared specs stay opted out — treat shadow DOM as usable but not certified |
 | Element geometry | `getBoundingClientRect` is synthesized, not measured — zero for non-rendered elements. So `obscured?` outside the viewport, spatial finders (`near:`, `above:`) and pixel assertions can't work |
