@@ -17,7 +17,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-26 (main unmoved since 20
 - `ferrum/node.rb#wait_for_stop_moving` ↔ `node.rb`: consecutive rect samples; our timeout behavior deliberately differs below.
 - `ferrum/network.rb` ↔ `network.rb`: traffic, idle and headers; close redirectResponse hops and loadingFailed entries to avoid stranded pending requests. Only wait_for_idle! raises.
 - `ferrum/network/exchange.rb` ↔ `network/exchange.rb`: Exchange/Response answer `request.url`, `response.status`, `finished?`, but subclass Hash so symbol-key traffic assertions keep working.
-- `ferrum/headers.rb` ↔ `request_headers.rb`: get/set/add/clear; `add(permanent: false)` keeps a Referer off subrequests and sends it with `Page.navigate` only, as Ferrum 0.20 does (0.21 drops it, see Outstanding). Session reset clears overrides.
+- `ferrum/headers.rb` ↔ `request_headers.rb`: get/set/add/clear; `add(permanent: false)` keeps a Referer off subrequests and sends it with `Page.navigate` only, as Ferrum 0.20 does; 0.21 replaced it with `go_to(referrer:)`, and both work here. Session reset clears overrides.
 - Ferrum `Page#wait_for_reload` ↔ `browser/navigation.rb#wait_for_reload`: returns on a main-frame load, a same-document navigation or expiry, truthy either way.
 - `ferrum/contexts.rb#reset` ↔ `browser.rb#reset`, `driver.rb#reset!`: context disposal isolates sessions; Network#reset must forget the disposed domain's enabled state. Failed reset discards the browser.
 - `ferrum/utils/attempt.rb` ↔ `utils/attempt.rb`: bounded retry with the peer's 6 × 0.1 s defaults, which no caller uses: `browser.rb#with_default_context_wait` passes 3 tries with no sleep (it waits on executionContextCreated instead), `client/web_socket.rb#connect_with_retry` 10 × 0.1 s on a refused TCP connect.
@@ -29,7 +29,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-26 (main unmoved since 20
 - Ferrum Process::Output ↔ `process.rb#output`, `browser/navigation.rb#crash_output`: retain bounded startup/runtime output for crash diagnosis.
 - Ferrum WebSocket#force_close ↔ `client/web_socket.rb#close_socket`: release the socket even when the connection is already dead.
 - Ferrum bounded write ↔ `client/web_socket.rb#write`: nonblocking send with a no-progress timeout; a stalled browser must not freeze caller and close under the driver mutex.
-- `ferrum/cookies.rb#set` ↔ `cookies.rb#set`: preserve the browser's success verdict rather than claiming every cookie was accepted.
+- `ferrum/cookies.rb#set` (≤ 0.20) ↔ `cookies.rb#set`: return the browser's success verdict rather than claiming every cookie was accepted. Ferrum 0.21 returns nil and raises on a refusal (`Storage.setCookies`); ours keeps the verdict, so a caller testing truthiness still works.
 - Ferrum CyclicObject ↔ `browser/runtime.rb#serialize_remote_object`: ours replaces the whole refused value; Ferrum's deep serializer can preserve everything but the back-reference.
 - Ferrum lone-surrogate recovery ↔ `client/web_socket.rb#parse_message`: replace unpaired UTF-16 escapes with U+FFFD only after JSON parse failure, so the response is delivered rather than lost.
 - Ferrum cross-world error mapping ↔ `client.rb#handle_error`: stale argument handles map to NodeNotFoundError, allowing Capybara reload.

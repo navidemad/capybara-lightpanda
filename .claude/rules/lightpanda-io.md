@@ -1,6 +1,6 @@
 # Lightpanda Browser Reference
 
-Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-26 at `55944dbf0` (build 12453). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset as of 2026-11-26) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; main moved to `1.1.0-dev`, so nightlies print `1.1.0-nightly.<count>+<hash>`, which `Process.check_version!` already parses. Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
+Upstream: https://github.com/lightpanda-io/browser (AGPL-3.0). Source audit verified 2026-11-26 at `55944dbf0` (build 12453). The published nightly is 12438 (`714fa7e35`, 2026-11-25); release candidates 1.0.6-rc1 (12443, `ac1377086`) and rc2 (12447, `240f6b81a`, no aarch64-macos asset as of 2026-11-26) were cut from main on 2026-11-25, so 1.0.6 carries everything listed under "Behavior above the floor"; nightlies print `1.1.0-nightly.<count>+<hash>` (`Process.check_version!` parses it). Latest release 1.0.5 (2026-11-20) is 12297 (`8f220d5b4`, the 1.0.5-rc2 commit), and `Binary::DEFAULT_VERSION` pins it (#304).
 
 ## Version and transport constraints
 
