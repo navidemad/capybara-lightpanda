@@ -159,6 +159,7 @@ So a few kinds of tests still need your old driver:
 - tests with screenshots
 - tests with pixel positions or real scrolling
 - tests with a second tab
+- tests inside an iframe from another site, like a payment form
 - tests with a menu that only CSS `:hover` can open
 
 You can keep both drivers in the same app.<br>
