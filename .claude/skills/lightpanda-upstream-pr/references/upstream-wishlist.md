@@ -422,6 +422,14 @@ Three independent issues:
 - **Drop-on-fix**: nothing in the gem; once a real-apps run uses a nightly carrying the fix, retire the 3 Campfire baseline entries and the `campfire-clipboard-event` cause.
 - **Upstream issue**: #4526, **Upstream PR**: #4527 (open as of 2026-11-08, filed by us). Branch `feat-clipboard-event` on the fork (worktree `~/code/upstream/browser-clipboard-event`) implements it on the `DragEvent` pattern (ref-counted nullable `DataTransfer`), fixture `src/browser/tests/event/clipboard.html`; repro `browser:repro/clipboard-event/` (`fetch --dump html`) exits 1 on 1.0.3/10552, 0 on the branch build (11912 + fix).
 
+### A66. `window.frameElement` hands a cross-origin frame its parent's `<iframe>` instead of `null`
+
+- **Today (verified 2026-11-28 on 1.0.5 and main `db807425c` / 12587)**: `webapi/Window.zig#getFrameElement` returns `frame.iframe` whatever the origins. In a `localhost` child of a `127.0.0.1` page, `frameElement.id` and `frameElement.ownerDocument.body` work across origins; only `frameElement.ownerDocument.defaultView` throws (`TypeError: no access`, the V8 security token since #4778, 12515) and `parent.frameElement` gives `SecurityError`. The getter itself never throws: a "frameElement throws" seen from page code is the next step of an upward walk (`frame.ownerDocument.defaultView`).
+- **Want**: [HTML `frameElement` getter](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-frameelement) step 5 — `null` when the container's node document is not same origin-domain with the caller (Chrome).
+- **Gem workaround**: `node.rb#SEND_KEYS_FOCUS_JS` reads `frameElement` through a try/catch (`frameOf`), and `Browser#focus_unreachable_frames` focuses the `<iframe>` from the parent before typing (PR #330). The parent-side focus stays: Chrome also stops the walk at the boundary.
+- **Drop-on-fix**: `frameOf`'s try/catch once the floor includes the fix; check the walk's `frame.ownerDocument.defaultView` step can't run on a cross-origin element first.
+- **Upstream issue**: #4830, **Upstream PR**: #4831 (open as of 2026-11-28, filed by us). Branch `fix-cross-origin-frame-element` on the fork (worktree `~/code/upstream/browser-frame-element`); fixture `src/browser/tests/frames/cross_origin_frame_element.html` (`WebApi: Frames`); repro `browser:repro/cross-origin-frame-element/` (`fetch --dump html`) exits 1 on 1.0.5, 0 on the branch build (12587 + fix). Filed publicly by the user's choice although upstream `SECURITY.md` asks for private reports (it is a cross-origin DOM read).
+
 ## C. Inherent limitations (out of scope — no rendering engine)
 
 These exist because Lightpanda has no rendering engine, no compositor, no real layout. They are by design: specs that depend on them need a real browser, not this gem.
