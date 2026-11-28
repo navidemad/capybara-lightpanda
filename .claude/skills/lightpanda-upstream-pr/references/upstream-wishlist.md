@@ -344,7 +344,7 @@ Three independent issues:
 - **Want**: maintainers' call (the refusal is a product decision). At least document it; an error would break the Playwright path above, so a CDP-visible signal would have to be opt-in.
 - **Gem workaround**: `Network#user_agent=` raises on a Mozilla value, `headers=`/`add_headers` warn; docs give Mozilla-less strings that `browser` and `device_detector` parse (iPhone and desktop Chrome verified 2026-11-18).
 - **Drop-on-fix**: if upstream ever errors, map it and drop `Network.refused_user_agent?`.
-- **Upstream issue**: none filed.
+- **Upstream issue**: #4834 (filed 2026-11-28, no PR): keeps the #2704 decision and proposes an opt-in `serve --cdp-strict-user-agent` that answers `-32602` for a refused value, with a ~25-line sketch. An unconditional error was the original behavior and was reverted on purpose (`920ae57f9`, go-rod; `c55afc1df`, Playwright sends a Mozilla UA with its locale). `Network.setUserAgentOverride` shares the code path; `Network.setExtraHTTPHeaders` drops a refused `User-Agent` with only a debug log.
 
 ### B23. `document.execCommand` formatting commands unsupported — `bold`, `formatBlock`, `insertHTML`, … return `false`
 
@@ -353,7 +353,7 @@ Three independent issues:
 - **Want**: [execCommand spec](https://w3c.github.io/editing/docs/execCommand/) inline formatting first (`bold`, `italic`, `underline`, `strikeThrough`, with `queryCommandState`), then `insertHTML`, then block commands (`formatBlock`, lists). Large: the spec's range-splitting algorithms, one command family per PR.
 - **Gem workaround**: none, deliberately (the gem doesn't polyfill Web APIs).
 - **Drop-on-fix**: nothing in the gem; update the limitations rows in `docs/content/docs.md` and `BETA_TESTING.md`.
-- **Upstream issue**: none filed (#4216, closed, added the function itself).
+- **Upstream issue**: #4832, **Upstream PR**: #4833 (both filed 2026-11-28, open): `bold`, `italic`, `underline`, `strikeThrough` with `queryCommandSupported`/`Enabled`/`State`/`Indeterm`/`Value`, Chrome's markup (`<b>`/`<i>`/`<u>`/`<strike>`, CSS spans with `styleWithCSS`), `input` with `formatBold`…, and a collapsed caret formatting the next typed text. Still open after it: `insertHTML`, `formatBlock`, lists, `indent`/`outdent`, `createLink`/`unlink`, the other inline commands, and formatting state from stylesheets.
 
 ### B24. No media clock for `<audio>` / `<video>` — metadata never loads, `currentTime` never advances
 
@@ -362,7 +362,7 @@ Three independent issues:
 - **Want**: no decoding or output. Read the duration from the container header (WAV/MP3/MP4/WebM, or even WAV + MP4 first), fire `loadedmetadata`/`durationchange`/`canplay`, then advance `currentTime` on the page clock while playing, with `timeupdate` (~4 Hz), `seeking`/`seeked` and `ended`.
 - **Gem workaround**: none, deliberately.
 - **Drop-on-fix**: nothing in the gem; update the limitations rows.
-- **Upstream issue**: #4702, **Upstream PR**: #4703 (both open as of 2026-11-18). The PR gives a timeline only to a WAV file in a `data:` URL (duration from `webaudio/dsp/wav.zig`, nothing fetched): metadata events, clock at `playbackRate`, `timeupdate` every 250 ms, `seeking`/`seeked`, `loop`, `pause` + `ended`. Any other source keeps the faked playback (`duration NaN`, no clock). A second commit (`bc5604b57`, after an independent review of the first, `40b0b0a14`) ties the clock to the element's own frame (the first left a dangling task pointer once that frame was removed), leaves `networkState`/`paused` untouched for a source it can't read, pauses an element removed from its document, rejects a non-finite `currentTime`/`playbackRate` with a TypeError, and only decodes a `data:` URL typed as WAV. Follow-ups listed in #4702: `http(s):`/`blob:` sources through a `partial` request behind `--load-resources`, more containers (MP4, MP3, WebM, Ogg, FLAC), `error`/`MediaError` instead of faking, `buffered`/`seekable`/`played`, `autoplay`.
+- **Upstream issue**: #4702 and **PR** #4703, merged at 12329 (in release 1.0.6): a timeline only for a WAV in a `data:` URL (verified 2026-11-28 on 1.0.6 through the gem: `loadedmetadata`, `timeupdate` every 250 ms, `ended`). Follow-ups filed 2026-11-28: #4835 + PR #4836, a WAV with no samples loads as duration 0 instead of being dropped; #4837 (issue only), reading `http(s):` sources behind a new `--load-resources media` with a 16 KiB `Range: bytes=0-` prefix fetch (WAV and faststart MP4), implemented on local branch `media-http-duration` and held until the maintainers answer its design questions.
 
 ### B25. `@supports` blocks dropped from the cascade — every rule inside a feature query is lost
 
