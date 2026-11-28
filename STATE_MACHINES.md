@@ -259,9 +259,9 @@ Two cooperating slots plus a queue:
 | From | Event | To |
 |---|---|---|
 | Idle | `accept_modal` / `dismiss_modal` | Armed. LP slot filled, `@modal_armed`, older queued dialogs dropped (`arm_modal`) |
-| Armed | dialog opens | Idle. Slot consumed on both sides, entry queued |
-| Idle | dialog opens (unwrapped) | Idle. Entry queued (the next arm drops it), `@unhandled_modal` recorded |
-| any | `find_modal` claims a matching entry | returns its message |
+| Armed | dialog opens | Idle. Slot consumed on both sides, entry queued, `@modal_arrived` broadcast |
+| Idle | dialog opens (unwrapped) | Idle. Entry queued (the next arm drops it), `@unhandled_modal` recorded, `@modal_arrived` broadcast |
+| any | `find_modal` claims a matching entry | returns its message (checked on entry and on every `@modal_arrived` wake-up, no polling) |
 | Armed | `find_modal` times out | Idle. LP slot neutralised with Lightpanda's default `accept: false`, `@modal_armed` cleared (`disarm_modal`), then `ModalNotFound` |
 | any | `check_unhandled_modal!` | `@unhandled_modal` cleared, then warn or `UnhandledModalError` |
 | any | `clear_session_state` | everything cleared |
@@ -271,7 +271,7 @@ Invariants:
 - `@modal_armed` ⇔ the LP slot holds a response that Capybara asked for.
 - `find_modal` only returns a dialog that opened after its own arm (D4a, fixed).
 - A dialog nobody wrapped is reported (warning or `UnhandledModalError`) and gets Lightpanda's default answer, never a stale pre-arm (D4b, fixed).
-- `@modal_messages` and `@modal_armed` are only touched under `@modal_messages_mutex` (they are written on dispatch and read on main).
+- `@modal_messages` and `@modal_armed` are only touched under `@modal_messages_mutex` (they are written on dispatch and read on main). `find_modal` waits on `@modal_arrived` with that mutex, which the wait releases so the handler can queue; every queued dialog broadcasts, and the waiter re-checks the queue on each wake-up (non-matching dialog, spurious wake).
 
 ## 11. Network traffic entry and tracker
 

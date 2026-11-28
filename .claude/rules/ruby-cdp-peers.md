@@ -77,6 +77,7 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-28; release v0.21 (2026-
 - Peer trigger ↔ `node.rb#TRIGGER_JS`: constructor appropriate to mouse/focus/input; unknown custom names still dispatch a generic Event.
 - Peer invalid selector mapping ↔ `browser/finder.rb`: LIGHTPANDA_INVALID_SELECTOR marker wraps CSS parse errors, since Lightpanda may throw generic Error rather than DOMException.
 - Peer unhandled modal option ↔ `browser/modals.rb#check_unhandled_modal!`: accept and defer the error to the caller thread; LP pre-arm bookkeeping is single-shot.
+- Peer `page/modals.rb#find_modal` on a `Thread::Queue` (#394) ↔ `browser/modals.rb#find_modal`/`#wait_for_modal_message`: the `Page.javascriptDialogOpening` handler broadcasts `@modal_arrived` and the waiter claims the dialog on arrival instead of on a 50 ms poll. A ConditionVariable over the existing array, not a Queue, keeps the text-mismatch skip (non-matching dialogs stay queued for the ModalNotFound diagnostic) and `disarm_modal` on timeout.
 - Peer node attachment check ↔ `node.rb#wrap_with_attached_guard`: fold isConnected into the operation's own callFunctionOn, avoiding a check/use race and extra round-trip.
 - Peer page extension setup ↔ `browser.rb#register_auto_scripts`: register for future documents AND evaluate into the initial blank page; the idempotency guard permits both.
 - Peer HTML5 drag script ↔ `node.rb#HTML5_DRAG_JS`: drop only when accepted, otherwise dragleave; never both. Coordinate fallback is unsupported. Keep the port's corrected rect/key variables.
@@ -91,7 +92,6 @@ https://github.com/rubycdp/cuprite — reviewed 2026-11-28; release v0.21 (2026-
 
 - **[tiny]** Peer javascripts/index.js#setValue native HTMLInputElement setter ↔ node.rb#SET_VALUE_JS: bypass framework value interception only when a real-app regression motivates it.
 - **[medium]** Peer driver.rb `url_blocklist`/`url_allowlist` options (#361, legacy `url_blacklist`/`url_whitelist`) ↔ options.rb/browser.rb: the gem has neither, and `register_cuprite_driver` rejects them before launch. Lightpanda's `Network.setBlockedURLs` takes only `urlPatterns: [{urlPattern, block}]` and sets browser-wide state that context disposal keeps, so a blocklist must be cleared in `reset!`; an allowlist needs Fetch interception. Cuprite 0.21: string patterns raise ArgumentError (Regexp only, #375), both lists together raise ArgumentError, and an empty blocklist unblocks the current page (#393).
-- **[tiny]** Peer `page/modals.rb#find_modal` on a `Thread::Queue` (#394) ↔ `browser/modals.rb#find_modal`: ours polls `@modal_messages` every 50 ms; a ConditionVariable signalled from the `Page.javascriptDialogOpening` handler claims the dialog on arrival. Keep the text-mismatch skip and `disarm_modal` on timeout.
 
 ### Diverged on purpose
 
