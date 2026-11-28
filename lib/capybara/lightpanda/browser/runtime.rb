@@ -21,6 +21,11 @@ module Capybara
       # callFunctionOn dispatch, result serialization (Ferrum's
       # Frame::Runtime is the peer-gem equivalent).
       module Runtime
+        # Thrown by frame-scoped JS when `this` is an <iframe> whose document the
+        # page can't reach: a cross-origin frame (null contentDocument). See
+        # Browser#in_frame_scope.
+        CROSS_ORIGIN_FRAME_MARKER = "LIGHTPANDA_CROSS_ORIGIN_FRAME"
+
         # Evaluate JS and return a serialized value.
         # No-args fast path uses Runtime.evaluate; with args we wrap as a function
         # and dispatch via Runtime.callFunctionOn so `arguments[i]` is bound.
@@ -176,8 +181,11 @@ module Capybara
 
         # Compiles the declaration (first argument) with the frame's `eval` and
         # applies it to the rest. `this` is the `<iframe>` element.
-        FRAME_APPLY_JS = <<~JS
+        # A cross-origin frame throws the marker before compiling anything, so
+        # Browser#in_frame_scope can run the script in the frame's own context.
+        FRAME_APPLY_JS = <<~JS.freeze
           function(declaration) {
+            if (!this.contentDocument) throw new Error('#{CROSS_ORIGIN_FRAME_MARKER}');
             var fn = this.contentWindow.eval('(' + declaration + ')');
             return fn.apply(null, Array.prototype.slice.call(arguments, 1));
           }
@@ -220,18 +228,38 @@ module Capybara
         # callFunctionOn in the top context, so node handles found inside a
         # frame belong to that context and can't be passed into another
         # ("Argument should belong to the same JavaScript world").
+        #
+        # A cross-origin frame can't be reached from the <iframe> element: there
+        # the function runs on the frame's own document, in the frame's own
+        # context (Browser#in_frame_scope), and only nodes found in that frame
+        # can be passed to it.
         def call_with_args(function_declaration, args, return_by_value: false, frame: nil, command_timeout: nil)
           arguments = args.map { |a| serialize_argument(a) }
-          if frame
-            target = frame.remote_object_id
-            arguments.unshift({ value: function_declaration })
-            function_declaration = FRAME_APPLY_JS
-          else
-            # document_object_id returns a fresh RemoteObject handle every call.
-            # Release it on the way out so long-running shared-spec sessions
-            # don't accumulate orphaned V8 handles between resets.
-            target = doc_oid = document_object_id
+          return call_in_frame(frame, function_declaration, arguments, return_by_value, command_timeout) if frame
+
+          # document_object_id returns a fresh RemoteObject handle every call.
+          # Release it on the way out so long-running shared-spec sessions
+          # don't accumulate orphaned V8 handles between resets.
+          doc_oid = document_object_id
+          invoke_function(doc_oid, function_declaration, arguments, return_by_value, command_timeout)
+        ensure
+          release_object(doc_oid) if doc_oid
+        end
+
+        def call_in_frame(frame, function_declaration, arguments, return_by_value, command_timeout)
+          in_frame_scope(frame) do |scope|
+            raise NoExecutionContextError, "The frame hosts no document" unless scope
+
+            if scope == frame.remote_object_id
+              invoke_function(scope, FRAME_APPLY_JS, [{ value: function_declaration }, *arguments],
+                              return_by_value, command_timeout)
+            else
+              invoke_function(scope, function_declaration, arguments, return_by_value, command_timeout)
+            end
           end
+        end
+
+        def invoke_function(target, function_declaration, arguments, return_by_value, command_timeout)
           params = {
             objectId: target,
             functionDeclaration: function_declaration,
@@ -246,8 +274,6 @@ module Capybara
           return unwrap_call_result(response["result"]) unless return_by_value
 
           handle_evaluate_response(response, function_declaration)
-        ensure
-          release_object(doc_oid) if doc_oid
         end
 
         # Translate a non-by-value Runtime result into a plain Ruby value, surfacing
