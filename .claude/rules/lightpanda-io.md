@@ -122,15 +122,8 @@ LP.configureCDP              LP.getContentSignal
 - `navigator.sendBeacon` sends nothing: the gem enables no `beacon` resource loading (#4144).
 - An unsized iframe is 300×150 and is its own viewport (#4344), so isObscured reports content below 150px as obscured, as Chrome does.
 - Runtime.exceptionThrown lines are document-relative for parser-inserted inline scripts (#4340); dynamic, document.write and `sourceURL` scripts stay script-relative.
-- `postMessage` honors `targetOrigin` (#4382, 11676; an opaque origin may still post to itself, #4466, 11704): a mismatched target drops the message, as Chrome does.
-- Custom elements: `createElement`/`createElementNS` run CE reactions (#4459, 11702) and `:defined` follows the element's upgrade state (#4448, 11715). Turbo/Stimulus elements ride this path.
-- innerText follows CSS `white-space: pre|pre-wrap|break-spaces` (#4510, 11912) and breaks lines between table row groups (#4509, 11897), so `visible_text` changes for styled code blocks and `<thead>`/`<tbody>` tables (Chrome parity).
-- `history.pushState(undefined, '')` stores no state instead of the string `"undefined"`, and a non-cloneable state throws DataCloneError (#4499, 11887).
-- In-page WebSocket reassembles fragmented messages (#4492, 11847) and fails a handshake whose server subprotocol wasn't offered (#4462, 11793).
-- `ClipboardEvent` exists (#4527, 11923).
 - CSS animation events (#4496, 11948: trusted, bubbling `animationstart`/`animationend`/`animationcancel` after delay + duration × iterations, never for `infinite`) are opt-in from #4559 (11991) behind `--experimental-features animation`, for load cost. The gem doesn't pass it, so pages waiting on `animationend` stall; `LIGHTPANDA_EXTRA_ARGS="--experimental-features animation"` opts a suite in.
 - Trusted mouse events stop at the first disabled form control in the path (#4507, 11930). CLICK_JS dispatches untrusted events, so it is unaffected.
-- `import()` of an already-available module settles in a later task, after an earlier `setTimeout(fn, 0)` (#4531, 11969), as in Chrome.
 
 ## Behavior above the floor (12015)
 
