@@ -275,29 +275,39 @@ module Capybara
         false
       end
 
+      # The process stop and the state reset run in an ensure. `untrack` runs
+      # first, so an interrupt (Timeout.timeout { quit } against a hung
+      # browser, Ctrl-C, Thread#raise: none is a StandardError) that skipped
+      # them left Lightpanda running until the finalizer at exit, and
+      # `@started` true, so a later `start` returned early on a closed client
+      # (ferrum #740). The interrupt still reaches the caller afterwards.
       def quit
         self.class.untrack(self)
-        # Flip Network back to disabled so a later #start re-installs its
-        # subscriptions — without this, quit→start reuse of the same
-        # instance leaves @enabled true and create_page's network.enable
-        # no-ops, silently killing status_code/traffic capture. Guarded on
-        # @client: with no client the handlers are already moot and
-        # unsubscribe would have nothing to detach from. Downloads carries the
-        # same subscription contract, so it resets under the same guard.
-        if @client
-          @network&.reset
-          @downloads&.reset
-        end
         begin
-          @client&.close
-        rescue StandardError
-          nil
+          # Flip Network back to disabled so a later #start re-installs its
+          # subscriptions — without this, quit→start reuse of the same
+          # instance leaves @enabled true and create_page's network.enable
+          # no-ops, silently killing status_code/traffic capture. Guarded on
+          # @client: with no client the handlers are already moot and
+          # unsubscribe would have nothing to detach from. Downloads carries
+          # the same subscription contract, so it resets under the same guard.
+          if @client
+            @network&.reset
+            @downloads&.reset
+          end
+          close_client_silently
+        ensure
+          # Nested: the interrupt can also land in the SIGTERM grace wait,
+          # and an exception raised inside an ensure skips the rest of it.
+          begin
+            stop_process_silently
+          ensure
+            clear_quit_state
+          end
         end
-        begin
-          @process&.stop
-        rescue StandardError
-          nil
-        end
+      end
+
+      def clear_quit_state
         @client = nil
         @process = nil
         @started = false
@@ -544,7 +554,7 @@ module Capybara
       # Internal lifecycle steps defined above near their topical groups —
       # calling them out of order corrupts session state, so they are not API.
       private :connect, :create_browser_context, :create_page, :clear_session_state,
-              :enable_page_events
+              :enable_page_events, :clear_quit_state
 
       private
 
@@ -790,6 +800,12 @@ module Capybara
 
       def close_client_silently
         @client&.close
+      rescue StandardError
+        nil
+      end
+
+      def stop_process_silently
+        @process&.stop
       rescue StandardError
         nil
       end

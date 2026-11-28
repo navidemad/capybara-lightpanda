@@ -59,6 +59,7 @@ Invariants:
 - `alive?` is true only in Starting/Running. An Exited child must read as dead: `restart_process_if_dead` depends on it. `alive?` therefore reaps with `waitpid(WNOHANG)` instead of probing with `kill(0)` (D2, fixed).
 - Exactly one finalizer per instance, aimed at the latest pid (`register_finalizer`), and none after `stop`. A reaped pid is never signalled again, because it may belong to another process by then (D2b, fixed).
 - `stop` is safe in any state and on an already-reaped pid (`reap_within` treats `ECHILD` as reaped).
+- An interrupt (`Timeout.timeout`, Ctrl-C, `Thread#raise`) during the SIGTERM grace still sends SIGKILL and reaps, and `stop` still disarms the finalizer and drops `@pid`: both run in `ensure`s (D8, fixed).
 
 ## 2. WebSocket transport
 
@@ -83,7 +84,7 @@ Invariants:
 - **Dead implies the queue is closed.** Every path into `:closed`/`:error` goes through `mark_dead`, which sets the status *before* closing `@messages`. A woken waiter therefore already sees `closed?`.
 - `send_message` requires `:open`, and every frame write and parse holds `@driver_mutex`.
 - `closed?` covers every state in which no reply can still arrive, `:closing` included (D6b, fixed).
-- `close` always completes and releases the socket, even when writing the close frame fails: a stalled close frame is given up on, not raised (D6c, fixed).
+- `close` always completes and releases the socket, even when writing the close frame fails: a stalled close frame is given up on, not raised (D6c, fixed). An interrupt during the reader join still kills the reader and closes the socket (D8, fixed).
 
 ## 3. Client command
 
@@ -130,6 +131,7 @@ Invariants:
 - Per-session buffers (console, page errors, modal queue, frames, Network, Downloads) are wiped whenever the context is replaced (`clear_session_state`).
 - `@page_events_enabled` mirrors whether `Page.enable` was sent **on the current connection**. `quit` does not reset it. Lightpanda 1.0.3 still delivers Page events on the reused connection (dialogs and navigations were observed after `quit` → `start`), so this has no visible effect. It is a latent risk: see L1.
 - A Browser that failed to start leaves no process and no socket behind (D3, fixed).
+- `quit` reaches Quit even when interrupted: `Client#close` kills its message thread and releases pending commands in an `ensure`, and `quit` stops the process and clears its state in nested `ensure`s, so an interrupt in the client close or in the SIGTERM grace skips neither. The interrupt still reaches the caller (D8, fixed).
 
 ## 5. Driver browser slot
 
@@ -377,6 +379,7 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | D6a | Low | §14 Keyboard | A raising key leaves held modifiers down (`keyDown` with no `keyUp`) | `type(:shift, :no_such_key)` sends Shift `keyDown` only | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `holding_modifiers`; `test/unit/keyboard_test.rb` |
 | D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | a command released during `:closing` raised `TimeoutError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `closed?` includes `:closing`; `test/unit/client_test.rb` |
 | D6c | Low | §2 | A stalled close-frame write raises out of `WebSocket#close`, so `Client#close` skips its teardown | full socket buffers → `close` raised `DeadBrowserError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `close` rescues it; `test/unit/web_socket_test.rb` |
+| D8 | Medium | §1 Process, §2, §3, §4 | An interrupt (`Timeout.timeout { quit }` on a hung browser, Ctrl-C, `Thread#raise`) skipped every teardown step after the wait it landed in: none of them is a StandardError, and `quit` untracks first | SIGSTOPped browser, `Timeout.timeout(0.5) { quit }`: Lightpanda still running, `@started` true (1.0.5) | ferrum [#738](https://github.com/rubycdp/ferrum/pull/738), [#740](https://github.com/rubycdp/ferrum/pull/740) | fixed: `ensure`s in `WebSocket#close`, `Client#close`, `Browser#quit`, `Process#stop` and `.terminate`; `test/unit/interrupted_cleanup_test.rb`, `test/features/interrupted_quit_test.rb` |
 
 ### Latent, not fixed
 

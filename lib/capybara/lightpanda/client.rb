@@ -101,9 +101,15 @@ module Capybara
         @subscriber.clear
       end
 
+      # Everything after the socket close runs in an ensure: an interrupt
+      # (Timeout.timeout, Ctrl-C, Thread#raise) that lands while a hung browser
+      # keeps the joins waiting must not leave the message thread running or
+      # callers blocked on their pending commands (ferrum #738).
       def close
         @ws&.close
-        @message_thread&.join(1) || @message_thread&.kill
+        joined = @message_thread&.join(1)
+      ensure
+        @message_thread&.kill unless joined
         @subscriber.clear
         # Wake any in-flight callers blocked on `pending.value!(timeout)` so
         # they raise DeadBrowserError immediately (via the `@ws.closed?` check

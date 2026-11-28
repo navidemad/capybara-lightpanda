@@ -74,17 +74,14 @@ module Capybara
         # reading) is given up on, not raised: abandon_stalled_write already
         # marked the connection dead, and an error escaping here would cut
         # Client#close short before it released its thread and pending commands.
+        #
+        # A hung browser never answers the close frame, so the join below waits
+        # its full second. An interrupt landing there (Timeout.timeout, Ctrl-C,
+        # Thread#raise — none of them StandardError) still reaches the ensure:
+        # the reader is killed and the socket released (ferrum #738).
         def close
-          unless @status == :closed
-            @status = :closing
-            @messages.close
-            begin
-              @driver_mutex.synchronize { @driver&.close }
-            rescue DeadBrowserError
-              nil
-            end
-            @thread&.join(1) || @thread&.kill
-          end
+          shut_down_reader unless @status == :closed
+        ensure
           close_socket
           @status = :closed
         end
@@ -164,6 +161,21 @@ module Capybara
             delay = [delay * 2, 0.01].min
           end
           true
+        end
+
+        # Sends the close frame and gives the reader a second to see the reply.
+        # The kill is in an ensure so an interrupted join can't strand it.
+        def shut_down_reader
+          @status = :closing
+          @messages.close
+          begin
+            @driver_mutex.synchronize { @driver&.close }
+          rescue DeadBrowserError
+            nil
+          end
+          joined = @thread&.join(1)
+        ensure
+          @thread&.kill unless joined
         end
 
         def close_socket
