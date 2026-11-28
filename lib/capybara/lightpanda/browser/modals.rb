@@ -26,6 +26,7 @@ module Capybara
             entry = { type: params["type"], message: params["message"] }
             @modal_messages_mutex.synchronize do
               @modal_messages << entry
+              @modal_arrived.broadcast
               # The pre-arm slot is single-shot on both sides: Lightpanda
               # consumes its stashed response on this dialog, so we consume
               # ours. No pre-arm in flight means Lightpanda just applied its
@@ -80,19 +81,16 @@ module Capybara
         # asked for. Real suites wrap `data-confirm` deletes in `accept_alert`
         # (e.g. solidus admin) and expect it to work; only the message text is
         # matched.
+        #
+        # The dialog handler signals @modal_arrived, so a dialog is claimed the
+        # moment its event is processed instead of on the next 50 ms poll
+        # (cuprite #394). The wait releases the mutex, which is what lets the
+        # handler on the message thread queue the entry.
         def find_modal(type, text: nil, wait: options.timeout)
           regexp = text.is_a?(Regexp) ? text : (text && Regexp.new(Regexp.escape(text.to_s)))
-          last_seen_message = nil
-          claimed = nil
-          Utils::Wait.until(timeout: wait, interval: 0.05) do
-            claimed = pop_modal_message(regexp)
-            next true if claimed
+          claimed, last_seen_message = wait_for_modal_message(regexp, Utils::Wait.deadline(wait))
+          return claimed[:message] if claimed
 
-            last_seen_message = peek_last_modal_message || last_seen_message
-            false
-          end
-          claimed[:message]
-        rescue TimeoutError
           disarm_modal
           raise_modal_not_found(type, text, last_seen_message)
         end
@@ -143,22 +141,24 @@ module Capybara
             "— Lightpanda #{default} by default"
         end
 
-        # Pop the first queued dialog whose message matches the requested
-        # pattern (any dialog when `regexp` is nil). Returns the entry or nil.
-        # Serialized with the message-thread writer.
-        def pop_modal_message(regexp)
+        # Claims the first queued dialog matching `regexp` (any dialog when
+        # nil), waiting on @modal_arrived until `deadline`. Returns
+        # [entry, nil] on a match, or [nil, last queued message] at the
+        # deadline, the latter only for the ModalNotFound diagnostic. The
+        # loop re-checks after every wake-up: a broadcast can be for a dialog
+        # that doesn't match, and ConditionVariable#wait may wake spuriously.
+        def wait_for_modal_message(regexp, deadline)
           @modal_messages_mutex.synchronize do
-            match = @modal_messages.find do |m|
-              regexp.nil? || m[:message].to_s.match?(regexp)
-            end
-            @modal_messages.delete(match) if match
-            match
-          end
-        end
+            loop do
+              match = @modal_messages.find { |m| regexp.nil? || m[:message].to_s.match?(regexp) }
+              return [@modal_messages.delete(match), nil] if match
 
-        # Most recent dialog message of any type, for diagnostics.
-        def peek_last_modal_message
-          @modal_messages_mutex.synchronize { @modal_messages.last&.dig(:message) }
+              remaining = Utils::Wait.remaining(deadline)
+              return [nil, @modal_messages.last&.dig(:message)] if remaining.zero?
+
+              @modal_arrived.wait(@modal_messages_mutex, remaining)
+            end
+          end
         end
 
         def raise_modal_not_found(type, text, last_seen_message)

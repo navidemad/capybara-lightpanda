@@ -111,6 +111,7 @@ module Capybara
         @page_events_enabled = false
         @modal_messages = []
         @modal_messages_mutex = Mutex.new
+        @modal_arrived = ConditionVariable.new
         @modal_handler_installed = false
         @modal_armed = false
         @unhandled_modal = nil
