@@ -34,7 +34,7 @@ If your test helpers call `Capybara.use_default_driver` (a common pattern in
 setup/teardown blocks), gate `Capybara.default_driver` the same way too —
 otherwise those blocks silently switch you back to your old driver mid-suite.
 
-**The browser version is tied to the gem version.** Each gem release downloads the Lightpanda release it was validated against into a version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.5`), never refreshes it on age, and fetches the next one when you upgrade the gem. Cache that directory in CI. To run another release, or the rolling nightly (which moves daily and isn't archived), set it yourself:
+**The browser version is tied to the gem version.** Each gem release downloads the Lightpanda release it was validated against into a version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.6`), never refreshes it on age, and fetches the next one when you upgrade the gem. Cache that directory in CI. To run another release, or the rolling nightly (which moves daily and isn't archived), set it yourself:
 
 ```ruby
 Capybara::Lightpanda::Binary.required_version = "nightly"  # or a tag from lightpanda-io/browser/releases
@@ -111,7 +111,6 @@ These are browser-level limitations of Lightpanda itself, not bugs in the gem. W
 - **UA-based bot detection in your app** — Lightpanda identifies as `Lightpanda/1.0` and refuses any user agent containing `Mozilla`, by design, so the gem can't disguise it as Chrome. App code that gates signup, listens, or tracking on a browser-looking user agent will route the driver down the bot path — alonetone's `PreventAbuse` concern was the first real sighting. Allowlist `Lightpanda` (or skip the UA check) in your app's test environment. Device detection is different: `page.driver.user_agent = "Lightpanda/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile"` is accepted, and the `browser` and `device_detector` gems read it as an iPhone.
 - **Formatting through `document.execCommand`** (`bold`, `formatBlock`, `insertHTML`, …) — returns `false`. Text commands such as `insertText` work.
 - **`<audio>` / `<video>` playback** — no media pipeline: `duration` stays `NaN`, `currentTime` stays `0`, `loadedmetadata`/`timeupdate`/`ended` never fire.
-- **A time zone per test** — releases up to 1.0.5 ignore `Emulation.setTimezoneOverride`; nightly builds from 12374 apply it. On a release, the `timezone` driver option sets one zone per browser process.
 
 A clean way to skip those in a mixed suite:
 
