@@ -255,7 +255,9 @@ Three things change once the browser is yours:
   something else. `--cdp-max-message-size` lifts the 1 MiB default that a large
   `execute_script` payload — jQuery plus plugins, instrumentation bundles —
   exceeds, and an oversized message kills the whole CDP connection with no
-  protocol error to read. Add `--load-resources image` if the suite sets
+  protocol error to read. Keep it at 100 MiB: the driver accepts results up to
+  the same size, and a message over either limit raises `DeadBrowserError`
+  naming that limit. Add `--load-resources image` if the suite sets
   `load_images: true`.
 - **So is shutdown.** The driver closes its CDP connection at exit but never
   signals a process it did not start.

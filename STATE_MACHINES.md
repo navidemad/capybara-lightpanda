@@ -84,7 +84,7 @@ Invariants:
 - **Dead implies the queue is closed.** Every path into `:closed`/`:error` goes through `mark_dead`, which sets the status *before* closing `@messages`. A woken waiter therefore already sees `closed?`.
 - `send_message` requires `:open`, and every frame write and parse holds `@driver_mutex`.
 - `closed?` covers every state in which no reply can still arrive, `:closing` included (D6b, fixed).
-- `close` always completes and releases the socket, even when writing the close frame fails: a stalled close frame is given up on, not raised (D6c, fixed). An interrupt during the reader join still kills the reader and closes the socket (D8, fixed).
+- `close` always completes and releases the socket, even when writing the close frame fails: a stalled close frame is given up on, not raised (D6c, fixed). An interrupt during the reader join still kills the reader and closes the socket (D8, fixed). A message over `MAX_MESSAGE_SIZE` in either direction records `close_reason` before the connection is marked dead, so every DeadBrowserError raised afterwards names the limit (D9, fixed).
 
 ## 3. Client command
 
@@ -380,6 +380,7 @@ Ranked by impact. Evidence comes from probes against Lightpanda 1.0.3 through th
 | D6b | Low | §2/§3 | `:closing` is not `closed?`, so commands released by `close` raise `TimeoutError` instead of `DeadBrowserError` | a command released during `:closing` raised `TimeoutError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `closed?` includes `:closing`; `test/unit/client_test.rb` |
 | D6c | Low | §2 | A stalled close-frame write raises out of `WebSocket#close`, so `Client#close` skips its teardown | full socket buffers → `close` raised `DeadBrowserError` | [#222](https://github.com/navidemad/capybara-lightpanda/issues/222) | fixed: `close` rescues it; `test/unit/web_socket_test.rb` |
 | D8 | Medium | §1 Process, §2, §3, §4 | An interrupt (`Timeout.timeout { quit }` on a hung browser, Ctrl-C, `Thread#raise`) skipped every teardown step after the wait it landed in: none of them is a StandardError, and `quit` untracks first | SIGSTOPped browser, `Timeout.timeout(0.5) { quit }`: Lightpanda still running, `@started` true (1.0.5) | ferrum [#738](https://github.com/rubycdp/ferrum/pull/738), [#740](https://github.com/rubycdp/ferrum/pull/740) | fixed: `ensure`s in `WebSocket#close`, `Client#close`, `Browser#quit`, `Process#stop` and `.terminate`; `test/unit/interrupted_cleanup_test.rb`, `test/features/interrupted_quit_test.rb` |
+| D9 | Low | §2, §3 | A message between the reader's 64 MiB (websocket-driver default) and the browser's 100 MiB cap killed the session, and any 1009 close read as a crash: "Browser closed during X", then "WebSocket is not open" | a 70 MiB `evaluate` result on 1.0.5 | ferrum [#739](https://github.com/rubycdp/ferrum/pull/739) | fixed: one `MAX_MESSAGE_SIZE` for both, `close_reason` in the error; `test/features/message_size_limit_test.rb` |
 
 ### Latent, not fixed
 

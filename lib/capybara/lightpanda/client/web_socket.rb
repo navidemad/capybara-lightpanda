@@ -12,7 +12,29 @@ module Capybara
   module Lightpanda
     class Client
       class WebSocket
+        # One cap for both directions. Process#build_args raises Lightpanda's
+        # inbound cap (--cdp-max-message-size, 1 MiB by default) to this, and
+        # the reader takes messages up to the same size. Left at
+        # websocket-driver's 64 MiB default, a 64–100 MiB result the browser
+        # was willing to send killed the session (ferrum #739).
+        MAX_MESSAGE_SIZE = 100 * 1024 * 1024
+        MAX_MESSAGE_SIZE_LABEL = "#{MAX_MESSAGE_SIZE / 1024 / 1024} MiB".freeze
+        # Close code for a message over a side's size limit (RFC 6455 §7.4.1).
+        MESSAGE_TOO_BIG = 1009
+        # websocket-driver's text for a frame over max_length (hybi.rb).
+        FRAME_TOO_LARGE = "WebSocket frame length too large"
+
         attr_reader :url, :messages
+
+        # Why the connection died, when it says more than "closed": set for a
+        # message over MAX_MESSAGE_SIZE either way. Client and send_message
+        # append it to their DeadBrowserError, which otherwise reads as a crash.
+        attr_reader :close_reason
+
+        # A DeadBrowserError for `text`, naming close_reason when there is one.
+        def dead_error(text)
+          DeadBrowserError.new([text, close_reason].compact.join(": "))
+        end
 
         # The transport opens a TCP socket directly and cannot negotiate TLS.
         def self.endpoint_uri(url)
@@ -36,6 +58,7 @@ module Capybara
           @status = :closed
           @messages = Queue.new
           @driver_mutex = Mutex.new
+          @close_reason = nil
 
           connect
         end
@@ -47,7 +70,7 @@ module Capybara
         # and the connection stays usable; one cut off mid-write kills the
         # connection (see #write).
         def send_message(message, timeout: nil, deadline: nil)
-          raise DeadBrowserError, "WebSocket is not open" unless @status == :open
+          raise dead_error("WebSocket is not open") unless @status == :open
 
           deadline ||= Utils::Wait.deadline(timeout || @options.timeout)
           @logger&.puts("\n\n▶ #{@logger.elapsed_time} #{message}")
@@ -193,7 +216,7 @@ module Capybara
           uri = self.class.endpoint_uri(@url)
 
           @socket = connect_with_retry(uri.hostname, uri.port)
-          @driver = ::WebSocket::Driver.client(self)
+          @driver = ::WebSocket::Driver.client(self, max_length: MAX_MESSAGE_SIZE)
 
           setup_callbacks
 
@@ -233,7 +256,12 @@ module Capybara
             # Queue was closed during shutdown
           end
 
-          @driver.on(:close) do
+          # A 1009 close frame from the browser means it refused a message of
+          # ours over its --cdp-max-message-size. Our own refusal of an
+          # oversized message also ends in a 1009 close, but the :error before
+          # it has already named the reason, and ||= keeps that one.
+          @driver.on(:close) do |event|
+            note_close_code(event&.code)
             mark_dead
           end
 
@@ -241,10 +269,30 @@ module Capybara
             # Do NOT raise here. This callback fires synchronously from
             # @driver.parse(data) inside the reader thread. Mark the
             # connection dead and let Client#command surface DeadBrowserError
-            # on its next dispatch via closed?.
+            # on its next dispatch via closed?. The reason is recorded first:
+            # mark_dead wakes the waiters, which read it as they raise.
             @logger&.puts("✗ WebSocket error: #{event.message}")
+            note_protocol_error(event.message)
             mark_dead(:error)
           end
+        end
+
+        def note_protocol_error(message)
+          return unless message == FRAME_TOO_LARGE
+
+          keep_first_close_reason("Browser sent a message larger than the #{MAX_MESSAGE_SIZE_LABEL} receive limit")
+        end
+
+        def note_close_code(code)
+          return unless code == MESSAGE_TOO_BIG
+
+          keep_first_close_reason(
+            "Browser refused a message larger than its #{MAX_MESSAGE_SIZE_LABEL} --cdp-max-message-size"
+          )
+        end
+
+        def keep_first_close_reason(reason)
+          @close_reason = reason if @close_reason.nil?
         end
 
         # The reader must never take the host process down. With

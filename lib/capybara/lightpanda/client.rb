@@ -59,7 +59,7 @@ module Capybara
         response = pending.value!(Utils::Wait.remaining(deadline))
 
         if response.nil?
-          raise DeadBrowserError, "Browser closed during #{method}" if @ws.closed?
+          raise @ws.dead_error("Browser closed during #{method}") if @ws.closed?
 
           raise TimeoutError, "Command #{method} timed out after #{effective_timeout}s"
         end

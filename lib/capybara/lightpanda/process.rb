@@ -587,7 +587,8 @@ module Capybara
           "info",
           # Raise the inbound CDP WebSocket message cap from Lightpanda's 1 MiB
           # default (Config.zig `cdp_max_message_size`) to 100 MiB, matching
-          # Chrome's inbound DevTools buffer. An inbound message over the cap is
+          # Chrome's inbound DevTools buffer and our own receive limit
+          # (Client::WebSocket::MAX_MESSAGE_SIZE). An inbound message over the cap is
           # dropped with WS close 1009 and NO JSON-RPC error — the whole CDP
           # connection dies (wishlist A44). The 1 MiB default already covers
           # axe-core (~553 KB), but larger injected bundles (jQuery + plugins,
@@ -597,7 +598,7 @@ module Capybara
           # so a high cap costs nothing until a big message actually arrives.
           # Flag added in PR #2760 (build 7441) — below the floor, so guaranteed.
           "--cdp-max-message-size",
-          (100 * 1024 * 1024).to_s,
+          Client::WebSocket::MAX_MESSAGE_SIZE.to_s,
         ]
         # Sub-resource loading is one comma-separated `--load-resources` value
         # (Config.LoadResources is a packed struct the CLI parser fills from a
