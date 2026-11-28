@@ -203,6 +203,14 @@ describe Capybara::Lightpanda::Process do
       end
     end
 
+    # Two caps that drift apart kill the session on messages between them:
+    # the reader once stopped at 64 MiB while the browser accepted 100.
+    it "gives the browser the same message cap the reader enforces" do
+      cap = process.send(:build_args).each_cons(2).find { |flag, _| flag == "--cdp-max-message-size" }.last
+
+      assert_equal Capybara::Lightpanda::Client::WebSocket::MAX_MESSAGE_SIZE.to_s, cap
+    end
+
     it "appends LIGHTPANDA_EXTRA_ARGS split on whitespace" do
       ENV["LIGHTPANDA_EXTRA_ARGS"] = "--log-format pretty --log-filter telemetry"
       assert_equal %w[--log-format pretty --log-filter telemetry],

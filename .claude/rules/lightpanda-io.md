@@ -168,7 +168,7 @@ Nightly 12585 = main (12448–12585), not in 1.0.6. Not validated against the fu
 ## CLI details that affect the gem
 
 - Canonical flags are kebab-case, but snake_case aliases still parse; the gem's log_level remains valid.
-- --cdp-max-message-size is an inbound WS byte cap (browser default 1 MiB, gem 100 MiB).
+- --cdp-max-message-size is an inbound WS byte cap (browser default 1 MiB, gem 100 MiB = `Client::WebSocket::MAX_MESSAGE_SIZE`, also the reader's limit). Over it, Lightpanda closes the socket with 1009 and no JSON-RPC error; `close_reason` names it.
 - --http-header outranks CDP extra headers; --ca-cert/--ca-path replace the system trust store.
 - --storage-engine sqlite backs IndexedDB, not localStorage/sessionStorage. Web Storage is session-local.
 - LIGHTPANDA_DISABLE_TELEMETRY=true disables telemetry. Other optional flags belong in upstream CLI help, not this reference.
