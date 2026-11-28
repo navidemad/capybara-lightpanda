@@ -4,7 +4,7 @@ Current design comparisons maintained by sync-upstream. Paths on the gem side ar
 
 ## Ferrum
 
-https://github.com/rubycdp/ferrum — reviewed 2026-11-28; release v0.21.0 (2026-11-24, `58a7628760`), main `36cf0d91bc` (0.22: #728 removes the 0.21 deprecations, #729 raises ArgumentError for bad arguments; N/A with a single page: #733 `new_window:`, #734 `close_target`, #735 `on_page` (ours sets its page up in `browser.rb#create_page`), #736 drops `Target#page=`; #741 bounds the `wss://` TLS handshake, N/A: `client/web_socket.rb` accepts only `ws://`; #738/#739/#740 → Outstanding). Open: #685 (out-of-process iframe idle tracking) only.
+https://github.com/rubycdp/ferrum — reviewed 2026-11-28; release v0.21.0 (2026-11-24, `58a7628760`), main `36cf0d91bc` (0.22: #728 removes the 0.21 deprecations, #729 raises ArgumentError for bad arguments; N/A with a single page: #733 `new_window:`, #734 `close_target`, #735 `on_page` (ours sets its page up in `browser.rb#create_page`), #736 drops `Target#page=`; #741 bounds the `wss://` TLS handshake, N/A: `client/web_socket.rb` accepts only `ws://`; #738/#740 → Adopted, #739 → Outstanding). Open: #685 (out-of-process iframe idle tracking) only.
 
 0.21 audited, no change needed. Immune by design: one deadline per composite call (#707: `browser/navigation.rb#go_to` shares one, `downloads.rb#wait` sets no latch on timeout, `client/subscriber.rb#unsubscribe` removes by block) and all-nil positional evaluate arguments (`browser/runtime.rb` tests `args.empty?`, not `any?`). Already ours: cookie `http_only`/`same_site` keywords, block-only callbacks (`client/subscriber.rb#dispatch`), `html` beside `body`. The rest is N/A (geometry/coordinate APIs, Fetch interception, several targets, SameParty). The 0.21 names a migrating suite calls are under Cuprite → Adopted. 0.21's `page.cookies` is page-URL-scoped; our `Cookies#all` stays context-wide.
 
@@ -34,6 +34,7 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-28; release v0.21.0 (2026
 - Ferrum lone-surrogate recovery ↔ `client/web_socket.rb#parse_message`: replace unpaired UTF-16 escapes with U+FFFD only after JSON parse failure, so the response is delivered rather than lost.
 - Ferrum cross-world error mapping ↔ `client.rb#handle_error`: stale argument handles map to NodeNotFoundError, allowing Capybara reload.
 - Ferrum #723 connect bounds ↔ `client/web_socket.rb#connect_with_retry`, `#connect`: the TCP connect shares `handshake_timeout` (an unreachable `ws_url` host no longer waits out the OS timeout), and a connect that fails before the reader starts closes its socket.
+- Ferrum #738/#740 interrupted cleanup ↔ `client/web_socket.rb#close`, `client.rb#close`, `browser.rb#quit`, `process.rb#stop`/`.terminate`: thread kills, pending releases, the process stop (with its SIGKILL escalation) and the state reset run in `ensure`s, so an interrupt (`Timeout.timeout { quit }`, Ctrl-C) can't leave Lightpanda running or `@started` true. `quit` nests the state reset inside the stop's ensure, because the interrupt usually lands in the 3 s SIGTERM grace.
 
 ### Transport constraints
 
@@ -44,7 +45,6 @@ https://github.com/rubycdp/ferrum — reviewed 2026-11-28; release v0.21.0 (2026
 
 ### Outstanding adoption candidates
 
-- **[tiny]** Ferrum #738/#740 interrupted cleanup ↔ `client.rb#close`, `browser.rb#quit`: kill the message thread, fail pending commands, stop the process and reset state in `ensure`s. Ours has the pre-fix `join(1) || kill` and rescues only StandardError, so `Timeout.timeout { browser.quit }` against a hung browser left Lightpanda running and `@started` true (verified 2026-11-28 on 1.0.5); `untrack` already ran, so only the Process finalizer reaps it, at exit. `start`'s `ensure quit` has the same gap.
 - **[tiny]** Ferrum #739 receive-limit close reason ↔ `client/web_socket.rb#setup_callbacks`: our receive limit is websocket-driver's 64 MiB default while `process.rb#build_args` lifts the browser's inbound cap to 100 MiB, and a larger message closes the socket as "Browser closed during Runtime.evaluate", then "WebSocket is not open" (a 70 MiB string, verified 2026-11-28 on 1.0.5). Name the limit on a 1009 close; consider matching 100 MiB.
 - **[medium]** Ferrum Frame lifecycle events ↔ Network idle/Turbo tracking: Lightpanda exposes lifecycle events and, from 11698, `LP.waitUntil` with a `settled` state, but adopt another signal only after a real-app failure demonstrates a gap.
 

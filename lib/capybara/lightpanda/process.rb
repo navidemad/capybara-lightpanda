@@ -461,10 +461,16 @@ module Capybara
       def stop
         return unless @pid
 
-        self.class.send(:terminate, @pid) unless @reaped
-        disarm_finalizer
-        cleanup_pipes
-        @pid = nil
+        begin
+          self.class.send(:terminate, @pid) unless @reaped
+        ensure
+          # terminate reaps the child even when interrupted (see there), so
+          # the finalizer can be disarmed: left armed on a reaped pid it would
+          # TERM a stranger later.
+          disarm_finalizer
+          cleanup_pipes
+          @pid = nil
+        end
       end
 
       # A crashed Lightpanda is a zombie until someone reaps it, and `kill(0)`
@@ -737,16 +743,21 @@ module Capybara
         # SIGTERM the process group, then SIGKILL if it hasn't exited within
         # `grace` seconds; reap the child. Safe on an already-dead pid. The
         # SIGKILL escalation is what keeps teardown from hanging on builds that
-        # ignore SIGTERM after serving CDP (see STOP_GRACE_SECONDS).
+        # ignore SIGTERM after serving CDP (see STOP_GRACE_SECONDS). The
+        # escalation is in an ensure: an interrupt during the grace wait (an
+        # outer Timeout.timeout, Ctrl-C) still kills and reaps the child.
         def terminate(pid, grace: STOP_GRACE_SECONDS)
+          reaped = false
           signal(pid, "TERM")
-          return if reap_within(pid, grace)
-
-          signal(pid, "KILL")
-          begin
-            ::Process.wait(pid)
-          rescue Errno::ECHILD
-            nil
+          reaped = reap_within(pid, grace)
+        ensure
+          unless reaped
+            signal(pid, "KILL")
+            begin
+              ::Process.wait(pid)
+            rescue Errno::ECHILD
+              nil
+            end
           end
         end
 
