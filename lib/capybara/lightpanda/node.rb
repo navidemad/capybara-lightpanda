@@ -321,6 +321,7 @@ module Capybara
       # main frame to *start* navigating, then waits for the new document —
       # so a slow server round-trip is awaited, as after a click.
       def send_keys(*)
+        driver.browser.focus_unreachable_frames if @frame_scoped
         call(SEND_KEYS_FOCUS_JS)
         driver.browser.keyboard.type(*)
         driver.browser.wait_for_idle
@@ -1186,8 +1187,11 @@ module Capybara
         function() {
           var doc = this.ownerDocument;
           var frameFocused = true;
-          for (var w = doc.defaultView; w && w.frameElement; w = w.frameElement.ownerDocument.defaultView) {
-            var frame = w.frameElement;
+          // A cross-origin frame's frameElement is null in Chrome; Lightpanda
+          // throws ("no access"). Its <iframe> is focused from the page side
+          // instead (Browser#focus_unreachable_frames).
+          var frameOf = function(w) { try { return w.frameElement; } catch (e) { return null; } };
+          for (var w = doc.defaultView, frame; w && (frame = frameOf(w)); w = frame.ownerDocument.defaultView) {
             if (frame.ownerDocument.activeElement !== frame) {
               frameFocused = false;
               frame.focus();

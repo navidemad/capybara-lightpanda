@@ -384,6 +384,24 @@ class TestApp
     HTML
   end
 
+  # The same two frames from another origin: the page is served from the
+  # host Capybara visits (127.0.0.1), the frames from `localhost`, so the page
+  # can't reach their documents, as with a payment field or a video embed.
+  get "/lightpanda/with_cross_origin_frames" do
+    other_origin = "http://localhost:#{request.port}"
+    <<~HTML
+      <!DOCTYPE html>
+      <html>
+        <head><title>Page with Cross-Origin Frames</title></head>
+        <body>
+          <p id="outside">Outside the frames</p>
+          <iframe id="versioned-frame" src="#{other_origin}/lightpanda/frame_versioned?v=1"></iframe>
+          <iframe id="input-frame" src="#{other_origin}/lightpanda/frame_input_content"></iframe>
+        </body>
+      </html>
+    HTML
+  end
+
   # -- Cookie test pages --
 
   get "/lightpanda/set_test_cookie" do

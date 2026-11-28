@@ -117,6 +117,7 @@ module Capybara
         @unhandled_modal = nil
         initialize_console_buffers
         @frame_stack = []
+        @frame_contexts = Concurrent::Map.new
         @turbo_event = Utils::Event.new
         @turbo_event.set
 
@@ -532,25 +533,71 @@ module Capybara
 
       # Capybara::Driver::Base resolves frame_url/frame_title via the top
       # execution context, which always reports the parent document. Resolve
-      # them through the iframe element's contentWindow / contentDocument so
-      # they reflect the active frame.
+      # them through the active frame's document instead.
       def frame_url
         frame = frame_stack.last
         return current_url unless frame
 
-        call_function_on(frame.remote_object_id, FRAME_URL_JS)
+        in_frame_scope(frame) { |scope| call_function_on(scope, FRAME_URL_JS) }
       end
 
       def frame_title
         frame = frame_stack.last
         return title unless frame
 
-        call_function_on(frame.remote_object_id, FRAME_TITLE_JS)
+        in_frame_scope(frame) { |scope| call_function_on(scope, FRAME_TITLE_JS) }
       end
 
-      FRAME_URL_JS = "function() { return this.contentWindow.location.href }"
-      FRAME_TITLE_JS = "function() { return this.contentDocument.title }"
-      private_constant :FRAME_URL_JS, :FRAME_TITLE_JS
+      FRAME_DOCUMENT_JS = <<~JS.freeze
+        var doc = this.nodeType === 9 ? this : this.contentDocument;
+        if (!doc) throw new Error('#{CROSS_ORIGIN_FRAME_MARKER}');
+      JS
+      FRAME_URL_JS = "function() { #{FRAME_DOCUMENT_JS} return doc.location.href }".freeze
+      FRAME_TITLE_JS = "function() { #{FRAME_DOCUMENT_JS} return doc.title }".freeze
+      CROSS_WORLD_ARGUMENT = /Argument should belong to the same JavaScript world/i
+      private_constant :FRAME_DOCUMENT_JS, :FRAME_URL_JS, :FRAME_TITLE_JS, :CROSS_WORLD_ARGUMENT
+
+      # Trusted keys follow the chain of focused <iframe> elements. Code inside a
+      # cross-origin frame can't reach its own <iframe> (SEND_KEYS_FOCUS_JS
+      # focuses the same-origin ones), so focus those from the parent side,
+      # with the frame-stack handles, which belong to the parent's context.
+      def focus_unreachable_frames
+        frame_stack.each { |frame| call_function_on(frame.remote_object_id, FOCUS_IF_UNREACHABLE_JS) }
+      end
+
+      FOCUS_IF_UNREACHABLE_JS = <<~JS
+        function() { if (!this.contentDocument && this.ownerDocument.activeElement !== this) this.focus(); }
+      JS
+      private_constant :FOCUS_IF_UNREACHABLE_JS
+
+      # Runs the block on a handle that scopes frame-level JS (find, scripts,
+      # url/title) to `frame`. First the <iframe> element itself, which reaches a
+      # same-origin document through contentDocument / contentWindow at no extra
+      # cost. A cross-origin frame's JS throws CROSS_ORIGIN_FRAME_MARKER before
+      # doing anything (so a script never runs twice), and the block runs again
+      # on a handle to the frame's own `document`, taken from the frame's own
+      # execution context: Lightpanda runs callFunctionOn in the context the
+      # handle belongs to, so the function's globals and every node it returns
+      # are the frame's (verified 2026-11-28 on 1.0.5). Yields nil for a frame
+      # with no browsing context at all.
+      #
+      # A node found in a cross-origin frame belongs to the frame's context, so
+      # passed as an argument from the <iframe> element (top context) it fails
+      # before any JS runs, with Lightpanda's cross-world error: that is the
+      # same signal. A genuinely stale node fails the same way on the retry, and
+      # still surfaces as NodeNotFoundError for Capybara to reload.
+      def in_frame_scope(frame)
+        yield frame.remote_object_id
+      rescue JavaScriptError, NodeNotFoundError => e
+        raise unless e.message.include?(CROSS_ORIGIN_FRAME_MARKER) || e.message.match?(CROSS_WORLD_ARGUMENT)
+
+        document_id = cross_origin_frame_document(frame)
+        begin
+          yield document_id
+        ensure
+          release_object(document_id) if document_id
+        end
+      end
 
       # Internal lifecycle steps defined above near their topical groups —
       # calling them out of order corrupts session state, so they are not API.
@@ -558,6 +605,25 @@ module Capybara
               :enable_page_events, :clear_quit_state
 
       private
+
+      # `frame`'s document as a handle in the frame's own execution context,
+      # for a frame the page can't reach. DOM.describeNode names the frame the
+      # <iframe> hosts; @frame_contexts maps it to that frame's default context.
+      # nil when the element hosts no frame; NoExecutionContextError while the
+      # frame's document isn't there yet, or when its context went away between
+      # the lookup and the evaluate (Client#handle_error maps "Cannot find
+      # context"): the frame is navigating, retried like a navigating page.
+      def cross_origin_frame_document(frame)
+        frame_id = page_command("DOM.describeNode", objectId: frame.remote_object_id).dig("node", "frameId")
+        return nil unless frame_id
+
+        context_id = @frame_contexts[frame_id]
+        raise NoExecutionContextError, "The frame's document is not ready yet" unless context_id
+
+        response = page_command("Runtime.evaluate", expression: "document", contextId: context_id)
+        raise_on_js_error!("cross_origin_frame_document", "document", response)
+        response.dig("result", "objectId")
+      end
 
       # Keep capability checks such as respond_to?(:mouse) accurate for suites
       # that already fall back to another driver.
@@ -674,9 +740,25 @@ module Capybara
         @default_context_event = Utils::Event.new
         @default_context_event.set
 
-        on("Runtime.executionContextsCleared") { @default_context_event.reset }
+        # frameId → that frame's default execution context, for frames the page
+        # can't reach (cross_origin_frame_document). Written on the message
+        # thread, read on the caller's.
+        @frame_contexts = Concurrent::Map.new
+        on("Runtime.executionContextsCleared") do
+          @default_context_event.reset
+          @frame_contexts.clear
+        end
         on("Runtime.executionContextCreated") do |params|
-          @default_context_event.set if params.dig("context", "auxData", "isDefault")
+          context = params["context"] || {}
+          aux = context["auxData"] || {}
+          next unless aux["isDefault"]
+
+          @default_context_event.set
+          @frame_contexts[aux["frameId"]] = context["id"] if aux["frameId"]
+        end
+        on("Runtime.executionContextDestroyed") do |params|
+          gone = params["executionContextId"]
+          @frame_contexts.each_pair { |frame_id, id| @frame_contexts.delete_pair(frame_id, id) if id == gone }
         end
 
         page_command("Runtime.enable")

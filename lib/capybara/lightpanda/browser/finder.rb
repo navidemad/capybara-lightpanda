@@ -115,11 +115,14 @@ module Capybara
         private_constant :FIND_WITHIN_JS
 
         # JS function for finding elements in an iframe's contentDocument.
+        # `this` is the <iframe> (same-origin) or, from Browser#in_frame_scope,
+        # a cross-origin frame's own document.
         FIND_IN_FRAME_JS = <<~JS.freeze
           function(method, selector, spec) {
             var doc;
-            try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {}
-            if (!doc) return [];
+            if (this.nodeType === 9) doc = this;
+            else { try { doc = this.contentDocument || (this.contentWindow && this.contentWindow.document); } catch(e) {} }
+            if (!doc) throw new Error('#{Runtime::CROSS_ORIGIN_FRAME_MARKER}');
             var nodes = (function() {
               if (method === 'xpath') {
                 #{format(XPATH_FIND_FRAGMENT, doc: 'doc', root: 'doc', selector: 'selector')}
@@ -172,9 +175,10 @@ module Capybara
 
         def find_in_frame(method, selector, spec)
           with_default_context_wait do
-            frame_node = @frame_stack.last
-            result = call_function_on(frame_node.remote_object_id, FIND_IN_FRAME_JS, method, selector, spec,
-                                      return_by_value: false)
+            result = in_frame_scope(@frame_stack.last) do |scope|
+              # nil: the <iframe> hosts no frame, so there is nothing to find.
+              scope && call_function_on(scope, FIND_IN_FRAME_JS, method, selector, spec, return_by_value: false)
+            end
             extract_hinted_nodes(result)
           end
         rescue JavaScriptError => e

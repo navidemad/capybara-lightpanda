@@ -322,6 +322,13 @@ Invariants:
 
 Invariant: the stack never outlives the context its nodes came from. Every context replacement clears it.
 
+Reaching the frame on top of the stack (`Browser#in_frame_scope`): first through the `<iframe>` handle (same origin). When the frame JS throws `CROSS_ORIGIN_FRAME_MARKER` or a frame node passed as an argument fails with the cross-world error (both before any JS runs), through a `document` handle evaluated in the frame's own context. `@frame_contexts` (frameId → default context id) follows `Runtime.executionContextCreated` / `Destroyed` / `Cleared` and is rebuilt per `create_page`.
+
+Invariants:
+
+- A frame-scoped call runs at most once: the fallback signals fire before the user's function executes.
+- A cross-origin frame's context is looked up on every call, never cached on the Node, so a frame that navigated is reached in its new document; a missing context raises `NoExecutionContextError`, retried like a navigating page.
+
 | From | Event | To |
 |---|---|---|
 | Top or nested frame | switch to frame Node | Push Node; nested scope |
