@@ -41,7 +41,7 @@ module Capybara
       #
       # INVARIANT: never below Process::MINIMUM_RELEASE (binary_test pins it),
       # or a fresh install would download a binary the driver then refuses.
-      DEFAULT_VERSION = "1.0.5"
+      DEFAULT_VERSION = "1.0.6"
 
       # required_version value (or LIGHTPANDA_VERSION) that opts back into the
       # rolling `nightly` tag.
