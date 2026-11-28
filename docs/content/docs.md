@@ -100,8 +100,8 @@ end
 ### Choosing the browser version { #pinning }
 
 Each version of the gem downloads one Lightpanda release: the one it was
-validated against (1.0.5 for this version). It lands in its own
-version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.5`) and is never
+validated against (1.0.6 for this version). It lands in its own
+version-scoped file (`~/.cache/lightpanda/lightpanda-1.0.6`) and is never
 refreshed on age, so the browser changes only when you upgrade the gem. Cache
 that directory in CI and the browser is as reproducible as your `Gemfile.lock`.
 
@@ -110,7 +110,7 @@ To run something else, name it:
 ```ruby
 # spec/support/capybara.rb · or test/support/capybara.rb
 Capybara::Lightpanda::Binary.configure do |binary|
-  binary.required_version = "1.0.5"     # a tag from lightpanda-io/browser/releases
+  binary.required_version = "1.0.6"     # a tag from lightpanda-io/browser/releases
   # binary.required_version = "nightly" # the rolling nightly, refreshed every 24 hours
 end
 ```
@@ -453,7 +453,7 @@ These are upstream Lightpanda limits, not driver bugs:
 | Text casing and whitespace | `text` applies `text-transform: uppercase` / `lowercase`, as Chrome does. It does not apply `capitalize` or `::first-letter`, and Lightpanda ignores rules inside `@supports` and values given as `var(--x)`, so a label styled that way reads as written in the HTML. Match with a case-insensitive regexp (`text: /total due/i`). Table cells are joined by a space, as on Selenium; Cuprite returns a tab there, so compare with `normalize_ws: true` when a suite must pass on both |
 | CSS: external `<link>`, `@media`, `matchMedia` | Fetched, parsed, and evaluated against the configured `window_size` — responsive variants resolve at the width you set. What's absent is reflow, not the media query |
 | User agent | `Lightpanda/1.0` by default. `page.driver.user_agent=` overrides it until `reset!`, but a value containing `Mozilla` is refused by design — keep the device tokens, drop the prefix (see [driver API](#driver-api)). App-side bot detection that wants a `Mozilla` prefix still flags the driver; allowlist `Lightpanda` in your test environment |
-| Time zone | Releases up to 1.0.5 accept `Emulation.setTimezoneOverride` and ignore it. Use the `timezone` driver option: one zone per browser process, not per test. Nightly builds from 12374 switch the zone per test through the Cuprite-compatible `page.command` |
+| Time zone | Per test from release 1.0.6 (the default download) and nightly 12374: the Cuprite-compatible `page.command("Emulation.setTimezoneOverride", timezoneId: zone)` switches it, and `reset!` restores the process zone. Releases up to 1.0.5 ignore the command, so it raises `NotSupportedByDriverError` there; use the `timezone` driver option instead, one zone per browser process |
 | `document.execCommand` | Text commands work (`insertText`, `delete`, `forwardDelete`, `selectAll`, `insertLineBreak`, `insertParagraph`). Formatting commands (`bold`, `formatBlock`, `insertHTML`, …) return `false` and change nothing, so rich-text editor toolbars built on them can't be tested |
 | `<audio>` / `<video>` playback | No media pipeline. `play()` resolves and fires `play`/`playing`, but metadata never loads: `duration` is `NaN`, `currentTime` stays `0`, and `loadedmetadata`/`timeupdate`/`ended` never fire |
 | Complex Stimulus controllers | Some may not execute fully |

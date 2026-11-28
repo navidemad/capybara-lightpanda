@@ -166,7 +166,8 @@ describe Capybara::Lightpanda::Process do
     # Without the flag a build that supports runtime zones still ignores
     # Emulation.setTimezoneOverride, so a Cuprite suite's per-test zone raises.
     # With it, a binary below #4701 exits at boot: the gate must hold exactly
-    # at 12374, and a release (no counter) never gets the flag.
+    # at 12374 for a nightly, and at 1.0.6 (the first release cut after 12374)
+    # for a release, which prints no counter.
     describe "runtime timezone override" do
       flag = "--cdp-allow-timezone-override"
 
@@ -180,8 +181,24 @@ describe Capybara::Lightpanda::Process do
         refute_includes process.send(:build_args), flag
       end
 
-      it "is withheld from a release binary" do
+      it "is passed from release 1.0.6" do
+        process.instance_variable_set(:@release, Gem::Version.new("1.0.6"))
+        assert_includes process.send(:build_args), flag
+      end
+
+      # A default install must get per-test zones, or a Cuprite suite's
+      # page.command("Emulation.setTimezoneOverride") raises out of the box.
+      it "is passed to the release a default install downloads" do
+        process.instance_variable_set(:@release, Gem::Version.new(Capybara::Lightpanda::Binary::DEFAULT_VERSION))
+        assert_includes process.send(:build_args), flag
+      end
+
+      it "is withheld from release 1.0.5, which exits on the flag" do
         process.instance_variable_set(:@release, Gem::Version.new("1.0.5"))
+        refute_includes process.send(:build_args), flag
+      end
+
+      it "is withheld when the version is unknown" do
         refute_includes process.send(:build_args), flag
       end
     end

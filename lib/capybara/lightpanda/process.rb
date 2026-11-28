@@ -627,13 +627,18 @@ module Capybara
       # serves one driver here, and disposing the context on reset restores the
       # process zone, so the override stays per test. A binary below 12374
       # exits on the flag ("unknown argument"), so it is gated on the build
-      # counter. No release carries it yet (1.0.5 is 12297): gate the first one
-      # that does here, then drop the gate once the floor covers it.
+      # counter. A release prints no counter, so it is gated on its semver:
+      # 1.0.6 (12447) is the first release to carry #4701, 1.0.5 (12297) exits
+      # on the flag. Drop both gates once the floor covers them.
       TIMEZONE_OVERRIDE_BUILD = Gem::Version.new("12374")
-      private_constant :TIMEZONE_OVERRIDE_BUILD
+      TIMEZONE_OVERRIDE_RELEASE = Gem::Version.new("1.0.6")
+      private_constant :TIMEZONE_OVERRIDE_BUILD, :TIMEZONE_OVERRIDE_RELEASE
 
       def runtime_timezone_override?
-        !@nightly_build.nil? && @nightly_build >= TIMEZONE_OVERRIDE_BUILD
+        return @nightly_build >= TIMEZONE_OVERRIDE_BUILD if @nightly_build
+        return @release >= TIMEZONE_OVERRIDE_RELEASE if @release
+
+        false
       end
 
       def wait_for_ready
