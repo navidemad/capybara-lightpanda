@@ -6,6 +6,39 @@ require "capybara-lightpanda"
 require "selenium-webdriver"
 require "tmpdir"
 
+# Chrome 158 rejects the "*" origin Capybara 3.40's reset! passes to Storage.clearDataForOrigin
+# (teamcapybara/capybara#2865, fixes unmerged), so the reference lane clears each origin it visited.
+class ChromeReferenceDriver < Capybara::Selenium::Driver
+  module PerOriginStorageReset
+    private
+
+    def execute_cdp(cmd, params = {})
+      return super unless cmd == "Storage.clearDataForOrigin" && params[:origin] == "*"
+
+      begin
+        super
+      rescue Selenium::WebDriver::Error::InvalidArgumentError
+        super("Network.clearBrowserCookies")
+        visited_origins.each { |origin| super(cmd, params.merge(origin: origin)) }
+      end
+    end
+
+    def visited_origins
+      execute_cdp("Page.getNavigationHistory").fetch("entries").filter_map do |entry|
+        uri = URI(entry.fetch("url"))
+        uri.origin if uri.is_a?(URI::HTTP)
+      end.uniq
+    end
+  end
+
+  private
+
+  def specialize_driver
+    super
+    extend PerOriginStorageReset
+  end
+end
+
 class SeleniumContractTest < Minitest::Test
   include SessionIsolationContract
 
@@ -28,7 +61,7 @@ class SeleniumContractTest < Minitest::Test
         options = Selenium::WebDriver::Chrome::Options.new(args: ["--headless", "--no-sandbox"])
         options.add_preference("download.default_directory", @default_directory)
         options.binary = ENV["CHROME_BIN"] if ENV["CHROME_BIN"]
-        Capybara::Selenium::Driver.new(app, browser: :chrome, options: options)
+        ChromeReferenceDriver.new(app, browser: :chrome, options: options)
       when "lightpanda"
         Capybara::Lightpanda::Driver.new(app, save_path: @default_directory, raise_on_unhandled_modal: true,
                                               browser_path: ENV.fetch("LIGHTPANDA_BIN", nil))
