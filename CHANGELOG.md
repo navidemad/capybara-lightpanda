@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.21.0] - 2026-11-28
+
+> **The gem now downloads Lightpanda 1.0.6** (was 1.0.5). It lands in a new file in `~/.cache/lightpanda/`, so the next run after `bundle update` fetches it. To stay on 1.0.5, set `LIGHTPANDA_VERSION=1.0.5`.
+
+### Added
+
+- **`within_frame` works on iframes from another site**, such as a payment form (Stripe Elements), a video embed, or a `localhost` frame inside a `127.0.0.1` page. Inside the frame, `find`, `fill_in`, `click`, `send_keys`, `evaluate_script` / `execute_script` / `evaluate_async_script` and `frame_url` / `frame_title` act on the frame's own page. Before, `find` found nothing there and scripts raised `TypeError`, so these specs had to stay on Chrome.
+- **A time zone per test.** On Lightpanda 1.0.6 (the new default), `page.driver.browser.page.command("Emulation.setTimezoneOverride", timezoneId: zone)` switches the zone `Date` and `Intl` report, and `reset!` restores it. On 1.0.5 and older it still raises `Capybara::NotSupportedByDriverError`; use the `timezone:` driver option there.
+- **Ferrum 0.21's browser API on the Cuprite-compatible driver.** A suite written for Cuprite 0.21 can call `go_to(url, referrer:)`, `network.emulate`, `network.wait_idle`, `await_navigation` and `await_download`. The 0.20 names keep working.
+- **`fill_in ..., fill_options: { clear: ... }` follows Selenium.** `clear: :none` appends to the field instead of replacing it. An Array of keys is pressed before the value is typed. Other options print a warning instead of being silently ignored.
+
+### Changed
+
+- **A `"\n"` in `send_keys` is the Enter key**, as with chromedriver: `send_keys("query\n")` runs Enter handlers and submits the form. Before, the newline vanished in an `<input>`.
+- **`set` with an Array on a field without `multiple` raises `ArgumentError`**, as Selenium and Cuprite do, instead of typing `'["x", "y"]'` into it.
+- **`accept_*` / `dismiss_*` return as soon as the dialog opens**, up to 50 ms sooner per call.
+
+### Fixed
+
+- **A large result no longer kills the session.** An `evaluate_script` result between 64 and 100 MiB now arrives. A message over 100 MiB, in either direction, raises `DeadBrowserError` naming the size limit, instead of an error that read like a browser crash.
+- **An interrupted `quit` still stops the browser.** If `quit` is cut short by `Timeout.timeout`, Ctrl-C or `Thread#raise` while the browser hangs, Lightpanda is still stopped and the driver can start again. Before, the browser kept running until your test process exited.
+- **A `ws_url` on an unreachable host fails within `handshake_timeout`**, with an error naming the host, instead of hanging for the OS connect timeout (about 75 s on macOS).
+- **Selenium-style `driver.action(async: true)` no longer raises `ArgumentError`**: Selenium's `async:`, `devices:` and `duration:` keywords are accepted and ignored.
+
 ## [0.20.1] - 2026-11-20
 
 > **The gem now downloads Lightpanda 1.0.5** (was 1.0.4). It lands in a new file in `~/.cache/lightpanda/`, so the next run after `bundle update` fetches it. To stay on 1.0.4, set `LIGHTPANDA_VERSION=1.0.4`.
